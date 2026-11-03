@@ -1,7 +1,6 @@
 //! Tron owns only workspace/business links. Session lifecycle and presentation
 //! history are stored through Framework services on the injected connection.
 use super::framework_storage::{blocking, chat_error};
-use super::chat_session_telemetry::delete_session_telemetry;
 use crate::{
     application::{agent::FrameworkHost, chat::ChatRepository},
     domain::chat::*,
@@ -154,7 +153,7 @@ impl SqliteChatRepository {
     }
     fn delete_session_internal(&mut self, id: &str, heartbeat_retention: bool) -> Result<(), ChatError> {
         blocking(async {
-            self.link(id).await?;
+            let link = self.link(id).await?;
             let db = self.host.shared_database().await.map_err(chat_error)?;
             let sessions = self
                 .framework()
@@ -162,15 +161,6 @@ impl SqliteChatRepository {
                 .sessions()
                 .map_err(|_| ChatError::StorageFailure)?;
             let code = id.to_owned();
-            if !heartbeat_retention {
-                self.host.telemetry().await.map_err(|_| ChatError::StorageFailure)?;
-                let telemetry_path = self.host.telemetry_database_path().to_string_lossy().into_owned();
-                db.call(move |c| {
-                    let attached: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM pragma_database_list WHERE name='telemetry')",[],|r|r.get(0))?;
-                    if !attached { c.execute("ATTACH DATABASE ?1 AS telemetry",[telemetry_path])?; }
-                    Ok::<_,rusqlite::Error>(())
-                }).await.map_err(|_| ChatError::StorageFailure)?;
-            }
             db.transaction(async {
                 let record=sessions.get(id).await?;
                 if record.status!=fw::SessionStatus::Archived {return Err(fw::StateError::Invalid("session must be archived".into()));}
@@ -197,9 +187,8 @@ impl SqliteChatRepository {
                 }
                 sessions.delete(id).await?;
                 db.call(move|c| {
-                    // Observability has its own retention policy. Avoid scanning the
-                    // telemetry database for each automatically expired heartbeat.
-                    if !heartbeat_retention { delete_session_telemetry(c, &code)?; }
+                    // Historical traces, logs and statistics have their own retention
+                    // policy and are independent of the chat session lifecycle.
                     c.execute("DELETE FROM dude_events WHERE source='Heartbeat' AND EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND (dude_events.session_code=s.session_code OR dude_events.event_id=s.correlation_key))",[&code])?;
                     c.execute("DELETE FROM dude_sessions WHERE session_code=?1 AND purpose='Heartbeat'",[&code])?;
                     c.execute("DELETE FROM resource_chat_session_attachments WHERE session_code=?1",[&code])?;
@@ -212,7 +201,10 @@ impl SqliteChatRepository {
                     }
                     c.execute("DELETE FROM workspace_session_links WHERE session_id=?1",[&code])?;
                     Ok::<_,rusqlite::Error>(())
-                }).await.map_err(|e|fw::StateError::Backend(e.to_string()))?; Ok(())
+                }).await.map_err(|e|fw::StateError::Backend(e.to_string()))?;
+                self.host.delete_session_working_directory(id, link.user_code.as_deref())
+                    .await.map_err(fw::StateError::Backend)?;
+                Ok(())
             }).await.map_err(chat_error)
         })
     }
@@ -1049,10 +1041,13 @@ mod shared_transaction_tests {
 
     #[test]
     fn delete_failure_rolls_back_session_history_and_business_link_then_can_retry() {
-        let (_directory, mut repository) = fixture();
+        let (directory, mut repository) = fixture();
         repository
             .create_session(&session("atomic-delete"))
             .unwrap();
+        let working_directory = directory.path().join("tron.workspaces/sessions/system/atomic-delete");
+        std::fs::create_dir_all(&working_directory).unwrap();
+        std::fs::write(working_directory.join("result.txt"), "keep until deletion succeeds").unwrap();
         let framework = blocking(repository.framework()).unwrap();
         blocking(
             framework
@@ -1075,6 +1070,7 @@ mod shared_transaction_tests {
         insert_span(&telemetry,"trace-atomic","root",None,Some("atomic-delete"));
         database.call_blocking(|c| c.execute_batch("CREATE TRIGGER reject_delete BEFORE DELETE ON workspace_session_links BEGIN SELECT RAISE(ABORT,'injected delete failure'); END;")).unwrap();
         assert!(repository.delete_session("atomic-delete").is_err());
+        assert!(working_directory.join("result.txt").is_file());
         let trace_count: i64 = telemetry.call_blocking(|c| c.query_row("SELECT count(*) FROM ef_telemetry_traces WHERE trace_id='trace-atomic'",[],|row|row.get(0))).unwrap();
         assert_eq!(trace_count,1);
         assert_eq!(
@@ -1091,8 +1087,9 @@ mod shared_transaction_tests {
             .call_blocking(|c| c.execute_batch("DROP TRIGGER reject_delete"))
             .unwrap();
         repository.delete_session("atomic-delete").unwrap();
+        assert!(!working_directory.exists());
         let trace_count: i64 = telemetry.call_blocking(|c| c.query_row("SELECT count(*) FROM ef_telemetry_traces WHERE trace_id='trace-atomic'",[],|row|row.get(0))).unwrap();
-        assert_eq!(trace_count,0);
+        assert_eq!(trace_count,1);
         assert!(matches!(
             blocking(framework.sessions().unwrap().get("atomic-delete")),
             Err(fw::StateError::NotFound)
@@ -1103,33 +1100,30 @@ mod shared_transaction_tests {
         ));
     }
     #[test]
-    fn deleting_archived_session_preserves_other_session_in_shared_trace() {
+    fn deleting_archived_session_preserves_all_historical_traces_and_statistics() {
         let (_directory, mut repository) = fixture();
         repository.create_session(&session("session-a")).unwrap();
         repository.create_session(&session("session-b")).unwrap();
         repository.update_session_status("session-a",ChatSessionStatus::Archived,"").unwrap();
         let database = seed_telemetry(&repository);
         database.call_blocking(|c| c.execute("INSERT INTO ef_telemetry_traces(trace_id,started_at,status_code,attributes) VALUES('shared',0,0,'{\"tron.session.code\":\"session-a\",\"tron.trace.page\":\"true\"}')",[])).unwrap();
-        database.call_blocking(|c| c.execute("INSERT INTO ef_telemetry_trace_rollups(trace_id,span_count) VALUES('shared',4)",[])).unwrap();
+        database.call_blocking(|c| c.execute("INSERT INTO ef_telemetry_trace_rollups(trace_id,span_count) VALUES('shared',5)",[])).unwrap();
         insert_span(&database,"shared","page",None,None);
         insert_span(&database,"shared","a",Some("page"),Some("session-a"));
         insert_span(&database,"shared","a-child",Some("a"),None);
         insert_span(&database,"shared","b",Some("a"),Some("session-b"));
         insert_span(&database,"shared","unrelated",Some("page"),Some("session-b"));
-        let lookup = super::super::chat_session_telemetry::SESSION_TRACE_LOOKUP_SQL.replace("telemetry.", "");
-        let plan: Vec<String> = database.call_blocking(move |c| {
-            c.prepare(&format!("EXPLAIN QUERY PLAN {lookup}"))?
-                .query_map(["session-a"], |row| row.get(3))?.collect()
+        database.call_blocking(|c| {
+            for table in ["ef_telemetry_traces", "ef_telemetry_spans", "ef_telemetry_trace_rollups", "ef_telemetry_span_rollups"] {
+                for operation in ["DELETE", "UPDATE"] {
+                    c.execute_batch(&format!("CREATE TRIGGER reject_{table}_{operation} BEFORE {operation} ON {table} BEGIN SELECT RAISE(ABORT,'chat deletion must preserve telemetry'); END;"))?;
+                }
+            }
+            Ok::<_, rusqlite::Error>(())
         }).unwrap();
-        assert!(plan.iter().any(|row| row.contains("tron_telemetry_spans_session")), "{plan:?}");
-        assert!(!plan.iter().any(|row| row.starts_with("SCAN ")), "session lookup must not scan unrelated telemetry: {plan:?}");
-        database.call_blocking(|c| c.execute_batch(
-            "CREATE TRIGGER reject_unrelated_rollup_write BEFORE UPDATE OF span_count,error_count,model_count,tool_count,input_tokens,cached_input_tokens,output_tokens ON ef_telemetry_span_rollups
-             WHEN OLD.span_id='unrelated' BEGIN SELECT RAISE(ABORT,'unrelated rollup must not be rewritten'); END;"
-        )).unwrap();
         repository.delete_session("session-a").unwrap();
         let survivors: Vec<(String,Option<String>)> = database.call_blocking(|c| c.prepare("SELECT span_id,json_extract(data,'$.parentSpanId') FROM ef_telemetry_spans WHERE trace_id='shared' ORDER BY span_id")?.query_map([],|row|Ok((row.get(0)?,row.get(1)?)))?.collect()).unwrap();
-        assert_eq!(survivors,vec![("b".into(),None),("page".into(),None),("unrelated".into(),Some("page".into()))]);
+        assert_eq!(survivors,vec![("a".into(),Some("page".into())),("a-child".into(),Some("a".into())),("b".into(),Some("a".into())),("page".into(),None),("unrelated".into(),Some("page".into()))]);
         let (session, trace_count, page_count): (Option<String>,i64,i64) = database.call_blocking(|c| {
             Ok::<_,rusqlite::Error>((
                 c.query_row("SELECT json_extract(attributes,'$.\"tron.session.code\"') FROM ef_telemetry_traces WHERE trace_id='shared'",[],|row|row.get(0))?,
@@ -1137,10 +1131,42 @@ mod shared_transaction_tests {
                 c.query_row("SELECT span_count FROM ef_telemetry_span_rollups WHERE trace_id='shared' AND span_id='page'",[],|row|row.get(0))?,
             ))
         }).unwrap();
-        assert_eq!(session,None);
-        assert_eq!(trace_count,3);
-        assert_eq!(page_count,2);
+        assert_eq!(session.as_deref(),Some("session-a"));
+        assert_eq!(trace_count,5);
+        assert_eq!(page_count,1);
         assert!(repository.get_session("session-b").is_ok());
+    }
+    #[test]
+    fn deleting_archived_session_does_not_attach_telemetry_storage_to_the_chat_transaction() {
+        let (_directory, mut repository) = fixture();
+        repository.create_session(&session("no-telemetry-delete")).unwrap();
+        repository.update_session_status("no-telemetry-delete", ChatSessionStatus::Archived, "").unwrap();
+        repository.delete_session("no-telemetry-delete").unwrap();
+        let database = blocking(repository.host.shared_database()).unwrap();
+        let attached: bool = database.call_blocking(|c| c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_database_list WHERE name='telemetry')", [], |row| row.get(0),
+        )).unwrap();
+        assert!(!attached, "chat deletion must not enlist the telemetry database");
+        assert!(matches!(repository.get_session("no-telemetry-delete"), Err(ChatError::SessionNotFound)));
+    }
+    #[test]
+    fn working_directory_cleanup_failure_keeps_the_session_retryable() {
+        let (directory, mut repository) = fixture();
+        let mut record = session("directory-retry");
+        record.user_code = Some("alice".into());
+        repository.create_session(&record).unwrap();
+        repository.update_session_status(&record.session_code, ChatSessionStatus::Archived, "").unwrap();
+        let sessions = directory.path().join("tron.workspaces/sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        std::fs::write(sessions.join("alice"), "invalid parent directory").unwrap();
+        assert!(repository.delete_session(&record.session_code).is_err());
+        assert_eq!(repository.get_session(&record.session_code).unwrap().status, ChatSessionStatus::Archived);
+        std::fs::remove_file(sessions.join("alice")).unwrap();
+        let working_directory = sessions.join("alice").join(&record.session_code);
+        std::fs::create_dir_all(&working_directory).unwrap();
+        std::fs::write(working_directory.join("result.txt"), "owned").unwrap();
+        repository.delete_session(&record.session_code).unwrap();
+        assert!(!working_directory.exists());
     }
     #[test]
     fn synchronous_business_sql_joins_the_framework_transaction() {

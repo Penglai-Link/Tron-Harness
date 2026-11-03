@@ -19,6 +19,60 @@ fn component(value: &str) -> String {
 }
 
 impl FrameworkHost {
+    fn managed_working_directory(&self, kind: &str, user: Option<&str>, id: &str) -> PathBuf {
+        self.0
+            .path
+            .with_extension("workspaces")
+            .join(kind)
+            .join(component(user.unwrap_or("system")))
+            .join(component(id))
+    }
+
+    /// Delete only this session's managed directory, never its selected project
+    /// or a Dude's shared directory. Reuse the creation path and reject symlinked
+    /// parents so a replaced path cannot redirect cleanup outside the managed root.
+    pub(crate) async fn delete_session_working_directory(
+        &self,
+        session: &str,
+        user: Option<&str>,
+    ) -> Result<(), String> {
+        let root = self.0.path.with_extension("workspaces");
+        let directory = self.managed_working_directory("sessions", user, session);
+        tokio::task::spawn_blocking(move || {
+            for parent in [
+                root.clone(),
+                root.join("sessions"),
+                directory.parent().unwrap().to_owned(),
+            ] {
+                let metadata = match fs::symlink_metadata(&parent) {
+                    Ok(metadata) => metadata,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                    Err(error) => {
+                        return Err(format!(
+                            "could not inspect session working directory: {error}"
+                        ));
+                    }
+                };
+                if !metadata.is_dir() || metadata.file_type().is_symlink() {
+                    return Err(format!(
+                        "session working directory parent is not a managed directory: {}",
+                        parent.display()
+                    ));
+                }
+            }
+            match fs::remove_dir_all(&directory) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(format!(
+                    "could not remove session working directory {}: {error}",
+                    directory.display()
+                )),
+            }
+        })
+        .await
+        .map_err(|error| format!("session working directory cleanup failed: {error}"))?
+    }
+
     pub(super) fn delegated_execution_scope(
         &self,
         context: &AgentRunContext,
@@ -107,7 +161,6 @@ impl FrameworkHost {
             );
             return Ok(());
         }
-        let user = component(context.user_code.as_deref().unwrap_or("system"));
         let (kind, id) = match context
             .collaboration_owner
             .as_ref()
@@ -122,13 +175,7 @@ impl FrameworkHost {
                     .unwrap_or(&context.run_code),
             ),
         };
-        let directory = self
-            .0
-            .path
-            .with_extension("workspaces")
-            .join(kind)
-            .join(user)
-            .join(component(id));
+        let directory = self.managed_working_directory(kind, context.user_code.as_deref(), id);
         fs::create_dir_all(&directory)
             .map_err(|error| format!("could not prepare session working directory: {error}"))?;
         let directory = directory
@@ -178,6 +225,74 @@ mod tests {
             first.execution_scope.local_directory,
             other_user.execution_scope.local_directory
         );
+    }
+    #[tokio::test]
+    async fn deletion_removes_only_the_session_owned_directory() {
+        let host = FrameworkHost::temporary(None).unwrap();
+        let mut deleted = context("deleted");
+        host.prepare_working_directory(&mut deleted).unwrap();
+        let directory = PathBuf::from(deleted.execution_scope.local_directory.as_ref().unwrap());
+        fs::create_dir(directory.join("nested")).unwrap();
+        fs::write(directory.join("nested/result.txt"), "session output").unwrap();
+        let mut other = context("other");
+        host.prepare_working_directory(&mut other).unwrap();
+        let mut other_user = context("deleted");
+        other_user.user_code = Some("another-user".into());
+        host.prepare_working_directory(&mut other_user).unwrap();
+        let mut dude = context("deleted");
+        dude.collaboration_owner = Some(AgentCollaborationOwner {
+            kind: "DUDE".into(),
+            code: "main-dude".into(),
+            origin_session_code: None,
+            task_code: None,
+        });
+        host.prepare_working_directory(&mut dude).unwrap();
+        let project = tempfile::tempdir().unwrap();
+        fs::write(project.path().join("source.rs"), "project source").unwrap();
+        let mut selected = context("project-session");
+        selected.execution_scope.local_directory =
+            Some(project.path().to_string_lossy().into_owned());
+        host.prepare_working_directory(&mut selected).unwrap();
+
+        host.delete_session_working_directory("deleted", deleted.user_code.as_deref())
+            .await
+            .unwrap();
+        assert!(!directory.exists());
+        for survivor in [other, other_user, dude, selected] {
+            assert!(Path::new(survivor.execution_scope.local_directory.as_ref().unwrap()).is_dir());
+        }
+        host.delete_session_working_directory("project-session", Some("user"))
+            .await
+            .unwrap();
+        assert!(project.path().join("source.rs").is_file());
+        host.delete_session_working_directory("deleted", deleted.user_code.as_deref())
+            .await
+            .unwrap();
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn deletion_does_not_follow_session_or_parent_symlinks() {
+        use std::os::unix::fs::symlink;
+        let host = FrameworkHost::temporary(None).unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("keep.txt"), "external data").unwrap();
+        let directory = host.managed_working_directory("sessions", Some("user"), "linked");
+        let parent = directory.parent().unwrap();
+        fs::create_dir_all(parent).unwrap();
+        symlink(outside.path(), &directory).unwrap();
+        host.delete_session_working_directory("linked", Some("user"))
+            .await
+            .unwrap();
+        assert!(fs::symlink_metadata(&directory).is_err());
+        assert!(outside.path().join("keep.txt").is_file());
+        fs::remove_dir(parent).unwrap();
+        symlink(outside.path(), parent).unwrap();
+        assert!(
+            host.delete_session_working_directory("linked", Some("user"))
+                .await
+                .is_err()
+        );
+        assert!(outside.path().join("keep.txt").is_file());
     }
     #[test]
     fn dude_directory_survives_session_rotation_and_is_separate_from_chat() {

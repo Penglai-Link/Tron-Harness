@@ -95,10 +95,6 @@ impl LocalTelemetry {
             .0
             .clone();
         let query_database = eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(path).await.map_err(|_| ObservabilityError::Storage)?;
-        query_database
-            .call(|c| crate::adapters::outbound::persistence::sqlite::initialize_session_telemetry_indexes(c))
-            .await
-            .map_err(|_| ObservabilityError::Storage)?;
         Ok(Self {
             query_database,
             store,
