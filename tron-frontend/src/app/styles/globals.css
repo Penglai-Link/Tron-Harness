@@ -219,6 +219,11 @@
   html {
     @apply font-sans;
   }
+  /* Stop pane-boundary gestures from bouncing the settings viewport. The
+     selector stops applying when the settings shell unmounts. */
+  html:has([data-tron-settings-shell]) {
+    overscroll-behavior-y: none;
+  }
   ::-webkit-scrollbar {
     width: 4px;
     height: 4px;
