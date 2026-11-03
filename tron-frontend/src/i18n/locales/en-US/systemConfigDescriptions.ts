@@ -32,6 +32,7 @@ export const systemConfigDescriptions = {
   "navigation_maxDepth": "Maximum nesting depth of sidebar menus, checked when menus are created or moved.",
   "systemAgents_codexCommand": "Command or executable path used to launch the Codex external agent. It must be available to the backend process.",
   "systemAgents_opencodeCommand": "Command or executable path used to launch the OpenCode external agent. It must be available to the backend process.",
+  "systemAgents_dshCommand": "Command or executable path for the DeepSeek Harness external agent; defaults to dsh. On macOS, the desktop bundle is checked if the default command is not on PATH. Leave empty to stop scanning. Login credentials are managed by dsh.",
   "variableCrypto_keyBase64": "Base64 encryption key for sensitive public-variable values. Migrate existing encrypted values before changing the key, or old values cannot be decrypted.",
   "resource_connectionVerificationTimeoutMs": "Maximum wait, in milliseconds, when verifying a file-storage connection. A timeout reports verification failure.",
   "resource_storage_defaultProfile": "Storage profile used by default for new file resources. It must reference a configured entry in profiles.",

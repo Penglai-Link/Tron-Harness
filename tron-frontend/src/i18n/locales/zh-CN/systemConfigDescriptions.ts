@@ -32,6 +32,7 @@ export const systemConfigDescriptions = {
   "navigation_maxDepth": "侧边栏菜单允许的最大嵌套层数；创建、移动菜单时会检查该限制。",
   "systemAgents_codexCommand": "启动 Codex 外部智能体时执行的命令或可执行文件路径。需在后端运行环境中可用。",
   "systemAgents_opencodeCommand": "启动 OpenCode 外部智能体时执行的命令或可执行文件路径。需在后端运行环境中可用。",
+  "systemAgents_dshCommand": "启动 DeepSeek Harness 外部智能体的命令或可执行文件路径，默认为 dsh。macOS 上默认命令不在 PATH 时会查找桌面安装包；留空停止扫描。登录凭据由 dsh 自身管理。",
   "variableCrypto_keyBase64": "公共变量敏感值的加密密钥，使用 Base64 编码。更换密钥前需迁移已有密文，否则旧值无法解密。",
   "resource_connectionVerificationTimeoutMs": "验证文件存储配置是否可连接时的最长等待时间，单位毫秒。超时会报告验证失败。",
   "resource_storage_defaultProfile": "新建文件资源默认使用的存储配置名称，必须对应 profiles 中已配置的项。",

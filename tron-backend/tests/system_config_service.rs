@@ -15,6 +15,50 @@ use tron_backend::application::system_config::{
 use tron_backend::config::AppConfig;
 
 #[test]
+fn system_agent_defaults_are_visible_and_dsh_saves_preserve_other_commands() {
+    let fixture = ConfigFixture::new("system-agents");
+    let mut yaml: serde_yaml::Value = serde_yaml::from_str(&fs::read_to_string(&fixture.path).unwrap()).unwrap();
+    for key in ["auth", "systemAgents"] {
+        yaml.as_mapping_mut().unwrap().remove(serde_yaml::Value::String(key.into()));
+    }
+    let sparse = serde_yaml::to_string(&yaml).unwrap();
+    fs::write(&fixture.path, &sparse).unwrap();
+    let doc = fixture.service.get().unwrap();
+    for (path, command) in [
+        ("systemAgents.codexCommand", "codex"),
+        ("systemAgents.opencodeCommand", "opencode"),
+        ("systemAgents.dshCommand", "dsh"),
+    ] {
+        let item = doc.items.iter().find(|item| item.path == path).unwrap();
+        assert_eq!(item.value, Some(command.into()));
+        assert_eq!(item.effect, "restart");
+        assert_eq!(item.effect_reason, "agentRegistry");
+    }
+    assert_eq!(fs::read_to_string(&fixture.path).unwrap(), sparse);
+
+    yaml["systemAgents"] = serde_yaml::from_str("codexCommand: /custom/codex\nopencodeCommand: ''\n").unwrap();
+    fs::write(&fixture.path, serde_yaml::to_string(&yaml).unwrap()).unwrap();
+    let doc = fixture.service.get().unwrap();
+    assert_eq!(doc.items.iter().find(|item| item.path == "systemAgents.codexCommand").unwrap().value, Some("/custom/codex".into()));
+    assert_eq!(doc.items.iter().find(|item| item.path == "systemAgents.opencodeCommand").unwrap().value, Some("".into()));
+    assert_eq!(doc.items.iter().find(|item| item.path == "systemAgents.dshCommand").unwrap().value, Some("dsh".into()));
+
+    for command in ["/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh", ""] {
+        let doc = fixture.service.get().unwrap();
+        let saved = fixture.service.update(&doc.revision, vec![change("systemAgents.dshCommand", command.into())], false).unwrap();
+        assert_eq!(saved.changed_paths, ["systemAgents.dshCommand"]);
+        assert_eq!(saved.restart_paths, ["systemAgents.dshCommand"]);
+        let stored: serde_yaml::Value = serde_yaml::from_str(&fs::read_to_string(&fixture.path).unwrap()).unwrap();
+        assert_eq!(stored["systemAgents"]["dshCommand"].as_str(), Some(command));
+        assert_eq!(stored["systemAgents"]["codexCommand"].as_str(), Some("/custom/codex"));
+        assert_eq!(stored["systemAgents"]["opencodeCommand"].as_str(), Some(""));
+        let current = fixture.service.get().unwrap();
+        assert_eq!(current.items.iter().find(|item| item.path == "systemAgents.dshCommand").unwrap().value, Some(command.into()));
+        assert_eq!(fixture.runtime.snapshot().system_agents.dsh_command, "dsh", "command changes require restarting the agent registry");
+    }
+}
+
+#[test]
 fn exposes_structured_items_and_masks_sensitive_values() {
     let fixture = ConfigFixture::new("structured");
     let document = fixture.service.get().expect("configuration should load");

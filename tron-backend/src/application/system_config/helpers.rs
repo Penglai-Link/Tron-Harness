@@ -287,7 +287,7 @@ fn path_segments(path: &str) -> Vec<String> {
     segments
 }
 
-/// Display effective context settings, but do not materialize defaults on GET.
+/// Display effective settings, but do not materialize defaults on GET.
 pub(super) fn effective_context_value(
     content: &str,
     path: &Path,
@@ -295,10 +295,16 @@ pub(super) fn effective_context_value(
 ) -> Result<Value, SystemConfigError> {
     use crate::application::short_term_memory::ContextProviderPolicy;
     use serde_json::json;
-    let invocation = AppConfig::effective_config(content, path)
-        .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?
-        .model_invocation;
-    set_value_at_path(&mut value, "modelInvocation", json!(invocation))?;
+    let effective = AppConfig::effective_config(content, path)
+        .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
+    set_value_at_path(&mut value, "modelInvocation", json!(effective.model_invocation))?;
+    for (field, command) in [
+        ("systemAgents.codexCommand", effective.system_agents.codex_command),
+        ("systemAgents.opencodeCommand", effective.system_agents.opencode_command),
+        ("systemAgents.dshCommand", effective.system_agents.dsh_command),
+    ] {
+        set_value_at_path(&mut value, field, json!(command))?;
+    }
     let config = AppConfig::effective_short_term_memory(content, path)
         .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
     let ratio = |bps: u32| format!("{}%", f64::from(bps) / 100.0);
