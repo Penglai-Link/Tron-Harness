@@ -1101,6 +1101,98 @@ async fn text_and_multimodal_vector_and_rerank_types_remain_distinct_through_sto
 }
 
 #[tokio::test]
+async fn auxiliary_text_requests_prefer_text_models_without_overriding_explicit_choices() {
+    use eliteforge_agent_core::{Modality, ModelChoice};
+    use tron_backend::domain::model::{AutoRouteSourceMode, AutoRouteSources, AutoRouterKind};
+    let fixture = Fixture::new();
+    let mut request = provider("modalities", "https://models.example.test/v1", None);
+    request["models"] = json!([]);
+    for (kind, logical) in [
+        ("MultimodalEmbedding", "a-multimodal-embedding"),
+        ("TextEmbedding", "z-text-embedding"),
+        ("MultimodalRerank", "a-multimodal-rerank"),
+        ("TextRerank", "z-text-rerank"),
+    ] {
+        let mut m = model(logical, logical);
+        m["modelType"] = json!(kind);
+        m["logicalModelCode"] = json!(logical);
+        if kind.ends_with("Embedding") {
+            m["dimension"] = json!(1024);
+        }
+        if kind.starts_with("Multimodal") {
+            m["inputCapabilities"] = json!(["Text", "Image"]);
+        }
+        request["models"].as_array_mut().unwrap().push(m);
+    }
+    let created = create(&fixture, request).await;
+    for (kind, suffix, dimensions, multi_index) in [
+        (AutoRouterKind::Embedding, "embedding", Some(1024), 0),
+        (AutoRouterKind::Rerank, "rerank", None, 2),
+    ] {
+        let text = format!("z-text-{suffix}");
+        let multi = format!("a-multimodal-{suffix}");
+        assert_eq!(
+            fixture.models.automatic_route_models(kind).unwrap()[0].model_code,
+            multi,
+            "the catalog order must reproduce the original regression"
+        );
+        let route = |choice: ModelChoice| {
+            fixture
+                .models
+                .route_auxiliary_model("workspace", kind, &choice, dimensions)
+                .unwrap()
+        };
+        assert_eq!(route(ModelChoice::default()).model_code, text);
+        assert_eq!(
+            route(ModelChoice {
+                required_modalities: vec![Modality::Text],
+                ..Default::default()
+            })
+            .model_code,
+            text
+        );
+        assert_eq!(
+            route(ModelChoice {
+                required_modalities: vec![Modality::Text, Modality::Image],
+                ..Default::default()
+            })
+            .model_code,
+            multi
+        );
+        assert_eq!(
+            route(ModelChoice {
+                model_code: Some(multi.clone()),
+                required_modalities: vec![Modality::Text],
+                ..Default::default()
+            })
+            .model_code,
+            multi
+        );
+        assert_eq!(
+            route(ModelChoice {
+                model_code: Some(code(&created, multi_index).into()),
+                ..Default::default()
+            })
+            .model_code,
+            code(&created, multi_index)
+        );
+        fixture
+            .models
+            .save_automatic_route_sources(
+                kind,
+                AutoRouteSources {
+                    mode: AutoRouteSourceMode::SelectedModels,
+                    provider_ids: vec![],
+                    model_codes: vec![multi.clone()],
+                },
+            )
+            .unwrap();
+        // A text request can still use multimodal when that is the configured pool.
+        assert_eq!(route(ModelChoice::default()).model_code, multi);
+    }
+}
+
+#[tokio::test]
 async fn unified_routes_group_explicit_logical_models_and_keep_wire_ids_and_spaces_separate() {
     use eliteforge_agent_core::{Modality, ModelChoice};
     use tron_backend::domain::model::AutoRouterKind;

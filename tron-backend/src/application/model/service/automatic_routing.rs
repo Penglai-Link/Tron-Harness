@@ -499,11 +499,23 @@ impl ModelService {
                     && model.allowed_by(&sources)
             })
             .collect::<Vec<_>>();
-        let first = eligible.first().ok_or_else(|| {
-            ModelError::RuntimeResolutionFailed(
-                "no authorized model satisfies the route constraints".into(),
-            )
-        })?;
+        // A text-only request should not change vector spaces merely because
+        // a multimodal model sorts before the text model in the catalog.
+        // Explicit model/provider constraints have already filtered this pool.
+        let first = eligible
+            .iter()
+            .min_by_key(|model| {
+                model
+                    .input_modalities
+                    .iter()
+                    .filter(|modality| !choice.required_modalities.contains(modality))
+                    .count()
+            })
+            .ok_or_else(|| {
+                ModelError::RuntimeResolutionFailed(
+                    "no authorized model satisfies the route constraints".into(),
+                )
+            })?;
         let group_code = first.model_code.clone();
         let fixed_binding = requested == Some(first.binding_id.as_str());
         let logical = if fixed_binding {
