@@ -26,11 +26,17 @@
   padding-inline: var(--dude-chat-inline-padding);
 }
 
-.dude-session-chat .ef-chat__transcript-inner,
-.dude-session-chat .ef-chat__footer > .ef-composer,
-.dude-session-chat .ef-chat__footer > .ef-chat__pending-annotations,
-.dude-session-chat .ef-chat__footer > .ef-chat-goal {
+.dude-session-chat .ef-chat__transcript-inner {
   max-width: var(--dude-chat-content-width);
   min-width: 0;
   margin-inline: auto;
+}
+
+.dude-session-chat .ef-chat__footer > .ef-composer,
+.dude-session-chat .ef-chat__footer > .ef-chat__pending-annotations,
+.dude-session-chat .ef-chat__footer > .ef-chat-goal {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin-inline: 0;
 }
