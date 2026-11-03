@@ -48,7 +48,6 @@ export function ContextLayoutPage() {
   );
   const total = Object.values(shares).reduce((sum, value) => sum + value, 0);
   const valid = total === 10_000 && order.every(id => Number.isSafeInteger(shares[id]) && shares[id] >= 1 && shares[id] <= 10_000) && Object.keys(shares).length === order.length;
-  const validationMessage = t(total > 10_000 ? "contextLayout.shareExcess" : "contextLayout.shareMissing", { value: Math.abs(total - 10_000) / 100 });
   const number = new Intl.NumberFormat(i18n.language);
 
   function moveBlock(sourceId: string, targetId: string) {
@@ -142,9 +141,6 @@ export function ContextLayoutPage() {
               })}
             </ol>
           </section>
-        </div>
-        <div role="status" className={`mt-3 flex justify-end gap-3 text-xs tabular-nums ${valid ? "text-[var(--color-on-surface-variant)]" : "text-[var(--color-error)]"}`}>
-          <span>{t("contextLayout.totalShare", { value: total / 100 })}</span><span>{valid ? t("contextLayout.totalValid") : total === 10_000 ? t("contextLayout.positiveShareRequired") : validationMessage}</span>
         </div>
       </> : null}
       <ConfirmDialog
