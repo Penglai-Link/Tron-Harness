@@ -21,7 +21,7 @@ export const pages = {
     resetDraft: "Built-in default order and shares restored. Save to apply.",
     allocationColumn: "Allocation",
     allocationHelp: "Shares must total at most 100%, with at least 0.01% per block. Capacity may remain unallocated. After other blocks are kept or reduced, history receives the remainder and may exceed its configured share. Summary capacity is reserved during compaction; the final request must still fit the input window. Instructions remain intact; insufficient capacity returns an error.",
-    estimatedTokens: "Token preview",
+    estimatedTokens: "Token budget",
     estimatedTokensHelp: "Derived from the preview budget, not an independent token cap. Runtime quotas follow the current model's available input capacity.",
     totalShare: "Total {{value}}%",
     totalValid: "100% allocated",

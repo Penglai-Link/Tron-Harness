@@ -21,7 +21,7 @@ export const pages = {
     resetDraft: "已恢复内置默认顺序和比例，保存后生效。",
     allocationColumn: "占比分配",
     allocationHelp: "合计不能超过 100%，每块至少 0.01%，可保留未分配额度。其他块完成保留或裁剪后，剩余预算供对话历史使用，因此历史可超过配置占比。摘要在压缩时先预留额度，最终仍校验总窗口。系统提示词完整保留，额度不足时返回错误。",
-    estimatedTokens: "预览 Token 数",
+    estimatedTokens: "Token 预算",
     estimatedTokensHelp: "仅按上方预览预算换算，不是独立 Token 上限。实际额度随当前模型的可分配输入预算变化。",
     totalShare: "合计 {{value}}%",
     totalValid: "已分配 100%",
