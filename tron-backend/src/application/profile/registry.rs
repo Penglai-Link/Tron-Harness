@@ -15,7 +15,7 @@ const CONTROL_DATABASE_ENV: &str = "TRON_BACKEND_CONTROL_DATABASE_URL";
 
 #[derive(Clone)]
 pub struct ProfileRegistryService {
-    connection: Arc<Mutex<Connection>>,
+    pub(super) connection: Arc<Mutex<Connection>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -42,6 +42,9 @@ pub struct PersonAiAccountSummary {
     pub nickname: Option<String>,
     pub vip_level: Option<i32>,
     pub remaining_points: Option<f64>,
+    pub today_checked_in: Option<bool>,
+    pub today_reward_points: Option<f64>,
+    pub updated_at: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -177,6 +180,10 @@ impl ProfileRegistryService {
             })?
         };
         Ok(BootstrapProfileStatus {
+            account: match &active_profile {
+                Some(profile) => self.cached_account(&profile.person_ai_user_id)?,
+                None => None,
+            },
             time_zone: match &active_profile {
                 Some(profile) => self.time_zone(&profile.person_ai_user_id)?,
                 None => "Asia/Shanghai".into(),
@@ -187,7 +194,6 @@ impl ProfileRegistryService {
                 .map(|profile| profile.profile_id.clone()),
             active_profile,
             avatar_url,
-            account: None,
         })
     }
 
@@ -476,7 +482,9 @@ impl ProfileRegistryService {
              ON CONFLICT(person_ai_user_id) DO UPDATE SET
                   content_type = excluded.content_type,
                   image_bytes = excluded.image_bytes,
-                  updated_at = excluded.updated_at",
+                  updated_at = excluded.updated_at
+             WHERE profile_avatar_cache.content_type <> excluded.content_type
+                OR profile_avatar_cache.image_bytes <> excluded.image_bytes",
             params![
                 person_ai_user_id,
                 content_type.trim(),

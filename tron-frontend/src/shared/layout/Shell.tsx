@@ -877,9 +877,6 @@ export function TronShell({
   function handleUtilityPanelClick(panel: string) {
     setAgentOpen(false);
     setTopbarToolsMenuOpen(false);
-    if (panel === "user" && utilityPanel !== "user") {
-      void ensureSessionFresh();
-    }
     toggleUtilityPanel(panel);
   }
 

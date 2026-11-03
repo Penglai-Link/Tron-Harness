@@ -1,9 +1,8 @@
-use super::{ModelProviderError, ModelProviderService, server_api_error};
 use super::storage_read::read_connection;
+use super::{ModelProviderError, ModelProviderService, server_api_error};
 use crate::domain::model_provider::ModelProviderCode;
 use crab_serverapi::{
-    ServerApiError,
-    AuthorizedClientContext,
+    AuthorizedClientContext, ServerApiError,
     base::PageResult,
     checkin::{CheckinClient, CheckinRecord, CheckinStatus},
     skin::{SkinMarketClient, SkinMarketItem, SkinMarketQuery},
@@ -16,15 +15,54 @@ impl ModelProviderService {
         &self,
         user: &str,
     ) -> Result<(AuthorizedClientContext, String), ModelProviderError> {
+        self.person_ai_profile_session(user).await
+    }
+
+    async fn person_ai_profile_session(
+        &self,
+        user: &str,
+    ) -> Result<(AuthorizedClientContext, String), ModelProviderError> {
         let credentials = self.active_credentials(ModelProviderCode::PersonAi).await?;
         let active = self.connection.call(
             move |connection| read_connection(connection, ModelProviderCode::PersonAi),
             || ModelProviderError::Storage,
         )?;
-        if active.and_then(|row| row.person_ai_user_id).as_deref() != Some(user) {
+        let active = active.ok_or(ModelProviderError::AuthenticationRequired)?;
+        let current = active
+            .credentials_encrypted
+            .as_deref()
+            .and_then(|value| self.decrypt_credentials(value).ok())
+            .ok_or(ModelProviderError::AuthenticationRequired)?;
+        if active.person_ai_user_id.as_deref() != Some(user)
+            || current.token != credentials.token
+            || current.client_id != credentials.client_id
+        {
             return Err(ModelProviderError::AuthenticationRequired);
         }
         Ok((credentials.context(), credentials.server_base_url))
+    }
+
+    /// Both reads use the same captured account credentials, even if the active
+    /// profile changes while either request is in flight.
+    pub async fn profile_account_snapshot(
+        &self,
+        user: &str,
+    ) -> Result<(crab_serverapi::auth::AccountInfo, CheckinStatus), ModelProviderError> {
+        let (context, base) = self.person_ai_profile_session(user).await?;
+        let account =
+            crab_serverapi::auth::AccountClient::new(base.clone()).map_err(server_api_error)?;
+        let checkin = CheckinClient::new(base).map_err(server_api_error)?;
+        let (info, status) = tokio::join!(account.get_info(&context), checkin.status(&context));
+        Ok((
+            info.map_err(server_api_error)?,
+            status.map_err(server_api_error)?,
+        ))
+    }
+
+    pub async fn checkin_profile(&self, user: &str) -> Result<CheckinRecord, ModelProviderError> {
+        let (context, base) = self.person_ai_profile_session(user).await?;
+        let client = CheckinClient::new(base).map_err(server_api_error)?;
+        self.person_ai_service_result(client.checkin(&context).await)
     }
     fn person_ai_service_result<T>(
         &self,

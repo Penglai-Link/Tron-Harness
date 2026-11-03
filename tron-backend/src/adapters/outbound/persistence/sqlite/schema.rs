@@ -131,6 +131,7 @@ mod tests {
         assert!(!table_exists(&business, "profiles"));
         assert!(table_exists(&profiles, "profiles"));
         assert!(table_exists(&profiles, "profile_avatar_cache"));
+        assert!(table_exists(&profiles, "profile_account_cache"));
         assert!(!table_exists(&profiles, "tasks"));
         initialize_profiles(&profiles).unwrap();
     }

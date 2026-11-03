@@ -183,7 +183,7 @@ export function ProfileSelectionPage() {
     const controller = new AbortController();
     Promise.all([
       fetchProfiles(controller.signal),
-      fetchBootstrapProfileStatus(controller.signal, false),
+      fetchBootstrapProfileStatus(controller.signal),
     ])
       .then(([nextProfiles, nextBootstrap]) => {
         // With no authorized account this is the first entrance, before soul
@@ -268,7 +268,7 @@ export function ProfileSelectionPage() {
         closeAuthorizationWindow();
         const [nextProfiles, nextBootstrap] = await Promise.all([
           fetchProfiles(),
-          fetchBootstrapProfileStatus(undefined, false),
+          fetchBootstrapProfileStatus(),
         ]);
         if (!active) return;
         // Keep authorization pending until the session is usable. Clearing it
@@ -414,7 +414,7 @@ export function ProfileSelectionPage() {
       await removeProfile(profileToRemove.profileId);
       const [nextProfiles, nextBootstrap] = await Promise.all([
         fetchProfiles(),
-        fetchBootstrapProfileStatus(undefined, false),
+        fetchBootstrapProfileStatus(),
       ]);
       setProfiles(nextProfiles);
       setBootstrap(nextBootstrap);

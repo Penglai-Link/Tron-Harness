@@ -3,56 +3,69 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CheckinButton } from "./CheckinButton";
 import { checkinApi } from "../api/checkinApi";
-import { fetchBootstrapProfileStatus } from "@/domain/profile/api/profileApi";
+import { useAuthStore } from "@/store/authStore";
 
-const mocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), update: vi.fn() }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+const mocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), refresh: vi.fn() }));
+vi.mock("react-i18next", async (importOriginal) => ({ ...await importOriginal<typeof import("react-i18next")>(), useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/components/ui/toast", () => ({ useToast: () => mocks }));
 vi.mock("../api/checkinApi", () => ({ checkinApi: { status: vi.fn(), checkin: vi.fn() } }));
-vi.mock("@/domain/profile/api/profileApi", () => ({ fetchBootstrapProfileStatus: vi.fn() }));
-vi.mock("@/store/authStore", () => ({ useAuthStore: Object.assign(() => "user-1", { getState: () => ({ session: { user: { userCode: "user-1" } }, updateSessionUser: mocks.update }) }) }));
 beforeEach(() => {
-  vi.mocked(checkinApi.status).mockResolvedValue({ todayCheckedIn: false, todayRewardPoints: 10 });
-  vi.mocked(fetchBootstrapProfileStatus).mockResolvedValue({ activeProfile: { personAiUserId: "user-1" }, account: { vipLevel: 1, remainingPoints: 110 } } as Awaited<ReturnType<typeof fetchBootstrapProfileStatus>>);
+  useAuthStore.setState({ status: "authenticated", refreshAccountSnapshot: mocks.refresh, session: {
+    authMethod: "internal", authenticated: true, provider: null,
+    user: { userCode: "user-1", username: "User", displayName: "User", email: "", avatarUrl: null, status: "active", vipLevel: 1, remainingPoints: 100, todayCheckedIn: false },
+  } });
+  mocks.refresh.mockResolvedValue(true);
 });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
-it("prevents duplicate clicks, shows the result and refreshes points", async () => {
+it("uses the shared snapshot immediately across remounts without querying on open", () => {
+  useAuthStore.getState().updateSessionUser({ todayCheckedIn: true });
+  const view = render(<CheckinButton />);
+  expect(screen.getByRole("button").textContent).toBe("userMenu.checkedIn");
+  view.unmount();
+  render(<CheckinButton />);
+  expect(screen.getByRole("button").textContent).toBe("userMenu.checkedIn");
+  expect(checkinApi.status).not.toHaveBeenCalled();
+  expect(mocks.refresh).not.toHaveBeenCalled();
+});
+
+it("prevents duplicate clicks and preserves the balance until an actual snapshot arrives", async () => {
   let finish!: (result: { points: number; continuousDays: number }) => void;
   vi.mocked(checkinApi.checkin).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
   render(<CheckinButton />);
-  await waitFor(() => expect(screen.getByRole("button").textContent).toBe("userMenu.checkin"));
   const button = screen.getByRole("button");
   fireEvent.click(button);
   fireEvent.click(button);
   expect(checkinApi.checkin).toHaveBeenCalledTimes(1);
-  vi.mocked(checkinApi.status).mockResolvedValue({ todayCheckedIn: true, todayRewardPoints: 10 });
   await act(async () => { finish({ points: 10, continuousDays: 2 }); });
-  await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ vipLevel: 1, remainingPoints: 110 }));
+  expect(useAuthStore.getState().session?.user).toMatchObject({ remainingPoints: 100, todayCheckedIn: true });
+  expect(mocks.refresh).toHaveBeenCalledTimes(1);
   expect(mocks.success).toHaveBeenCalledWith("userMenu.checkinSuccess");
   expect((button as HTMLButtonElement).disabled).toBe(true);
-  expect(button.textContent).toBe("userMenu.checkedIn");
 });
 
-it("shows errors and recovers the already checked-in state from the server", async () => {
+it("shows an error without clearing known account information", async () => {
+  vi.mocked(checkinApi.checkin).mockRejectedValue(new Error("Unavailable"));
   render(<CheckinButton />);
-  await waitFor(() => expect(screen.getByRole("button").textContent).toBe("userMenu.checkin"));
-  vi.mocked(checkinApi.checkin).mockRejectedValue(new Error("Already checked in"));
-  vi.mocked(checkinApi.status).mockResolvedValue({ todayCheckedIn: true, todayRewardPoints: 10 });
   fireEvent.click(screen.getByRole("button"));
-  await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("Already checked in"));
-  await waitFor(() => expect(screen.getByRole("button").textContent).toBe("userMenu.checkedIn"));
-  expect(mocks.update).not.toHaveBeenCalled();
+  await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("Unavailable"));
+  expect(useAuthStore.getState().session?.user).toMatchObject({ remainingPoints: 100, todayCheckedIn: false });
 });
 
-it("does not offer check-in until the server status is known", async () => {
-  let finish!: (result: { todayCheckedIn: boolean; todayRewardPoints: number }) => void;
-  vi.mocked(checkinApi.status).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+it("does not offer check-in before the first cached status is known", () => {
+  useAuthStore.getState().updateSessionUser({ todayCheckedIn: null });
   render(<CheckinButton />);
-  const button = screen.getByRole("button") as HTMLButtonElement;
-  expect(button.disabled).toBe(true);
-  expect(button.textContent).toBe("userMenu.checkinStatusLoading");
-  await act(async () => finish({ todayCheckedIn: true, todayRewardPoints: 10 }));
-  expect(button.textContent).toBe("userMenu.checkedIn");
-  expect(button.disabled).toBe(true);
+  expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
+  expect(checkinApi.status).not.toHaveBeenCalled();
+});
+
+it("discards a successful response after switching accounts", async () => {
+  let finish!: (result: { points: number; continuousDays: number }) => void;
+  vi.mocked(checkinApi.checkin).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  render(<CheckinButton />);
+  fireEvent.click(screen.getByRole("button"));
+  act(() => useAuthStore.getState().updateSessionUser({ userCode: "user-2" }));
+  await act(async () => finish({ points: 10, continuousDays: 2 }));
+  expect(useAuthStore.getState().session?.user.todayCheckedIn).toBe(false);
+  expect(mocks.success).not.toHaveBeenCalled();
 });

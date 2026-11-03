@@ -16,6 +16,8 @@ export function useAuthSession() {
 export function useBootstrapAuthSession() {
   const initialize = useAuthStore((state) => state.initialize);
   const ensureSessionFresh = useAuthStore((state) => state.ensureSessionFresh);
+  const userCode = useAuthStore((state) => state.session?.user.userCode);
+  const refreshAccountSnapshot = useAuthStore((state) => state.refreshAccountSnapshot);
   const handleForegroundResume = useEffectEvent(() => {
     void ensureSessionFresh();
   });
@@ -23,6 +25,16 @@ export function useBootstrapAuthSession() {
   useEffect(() => {
     void initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    if (!userCode) return;
+    // Reads the local persisted snapshot, never the upstream provider. Keep it
+    // independent of the user-menu's mounting and open/closed state.
+    const refresh = () => { if (document.visibilityState === "visible") void refreshAccountSnapshot(); };
+    refresh();
+    const timer = window.setInterval(refresh, 15_000);
+    return () => window.clearInterval(timer);
+  }, [userCode, refreshAccountSnapshot]);
 
   useEffect(() => {
     function handleVisibilityChange() {

@@ -29,6 +29,44 @@ beforeEach(() => {
 });
 
 describe("401 recovery", () => {
+  it("does not roll back a check-in receipt with an older in-flight snapshot", async () => {
+    mocks.token.mockResolvedValue({ token: "fresh" });
+    await useAuthStore.getState().ensureSessionFresh();
+    let finish!: (value: unknown) => void;
+    mocks.bootstrap.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const reading = useAuthStore.getState().refreshAccountSnapshot();
+    useAuthStore.getState().updateSessionUser({ todayCheckedIn: true });
+    finish({ activeProfile: { personAiUserId: "u", personAiUsername: "User" }, account: { vipLevel: 1, remainingPoints: 10, todayCheckedIn: false } });
+    expect(await reading).toBe(false);
+    expect(useAuthStore.getState().session?.user.todayCheckedIn).toBe(true);
+  });
+  it("refreshes account values from a shared cached read without reloading credentials", async () => {
+    mocks.token.mockResolvedValue({ token: "fresh" });
+    await useAuthStore.getState().ensureSessionFresh();
+    mocks.token.mockClear();
+    mocks.bootstrap.mockResolvedValue({ activeProfile: { personAiUserId: "u", personAiUsername: "User" }, avatarUrl: null,
+      account: { nickname: "Name", vipLevel: 1, remainingPoints: 12.5, todayCheckedIn: true } });
+    const first = useAuthStore.getState().refreshAccountSnapshot();
+    expect(useAuthStore.getState().refreshAccountSnapshot()).toBe(first);
+    await first;
+    expect(useAuthStore.getState().session?.user).toMatchObject({ displayName: "Name", remainingPoints: 12.5, todayCheckedIn: true });
+    expect(mocks.token).not.toHaveBeenCalled();
+    mocks.bootstrap.mockRejectedValueOnce(new Error("Unavailable"));
+    await useAuthStore.getState().refreshAccountSnapshot();
+    expect(useAuthStore.getState().session?.user.remainingPoints).toBe(12.5);
+  });
+
+  it("ignores account responses that arrive after logout", async () => {
+    mocks.token.mockResolvedValue({ token: "fresh" });
+    await useAuthStore.getState().ensureSessionFresh();
+    let finish!: (value: unknown) => void;
+    mocks.bootstrap.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const refreshing = useAuthStore.getState().refreshAccountSnapshot();
+    await useAuthStore.getState().logout();
+    finish({ activeProfile: { personAiUserId: "u" }, account: { vipLevel: 1, remainingPoints: 100 } });
+    expect(await refreshing).toBe(false);
+    expect(useAuthStore.getState().session).toBeNull();
+  });
   it("displays a nickname while preserving the account identifier", async () => {
     mocks.token.mockResolvedValue({ token: "fresh" });
     mocks.bootstrap.mockResolvedValue({ activeProfile: { status: "ACTIVE", personAiUserId: "u", personAiUsername: "account" }, avatarUrl: null, account: { nickname: "昵称", vipLevel: 1, remainingPoints: 12.5 } });

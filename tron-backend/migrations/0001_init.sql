@@ -1542,5 +1542,17 @@ CREATE TABLE IF NOT EXISTS profile_preferences (
     FOREIGN KEY (person_ai_user_id) REFERENCES profiles(person_ai_user_id) ON DELETE CASCADE
 );
 
+CREATE TABLE profile_account_cache (
+    person_ai_user_id TEXT PRIMARY KEY NOT NULL REFERENCES profiles(person_ai_user_id) ON DELETE CASCADE,
+    nickname TEXT,
+    vip_level INTEGER,
+    remaining_points REAL,
+    account_updated_at INTEGER,
+    checkin_date TEXT,
+    today_checked_in INTEGER,
+    today_reward_points REAL,
+    checkin_updated_at INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS tron_schema_initialized (scope TEXT PRIMARY KEY);
 INSERT INTO tron_schema_initialized (scope) VALUES ('profiles');

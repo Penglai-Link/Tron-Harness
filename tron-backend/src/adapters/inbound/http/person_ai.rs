@@ -65,7 +65,7 @@ impl IntoResponse for PersonAiApiError {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckinStatusVo {
-    today_checked_in: bool,
+    today_checked_in: Option<bool>,
     today_reward_points: Option<f64>,
 }
 #[derive(Serialize)]
@@ -82,14 +82,13 @@ async fn status(
     State(state): State<AppState>,
     auth: RequestAuthContext,
 ) -> Result<Json<ApiResponse<CheckinStatusVo>>, PersonAiApiError> {
-    let result = state
-        .model_providers
-        .checkin_status()
-        .await
-        .map_err(|error| PersonAiApiError(error, auth.locale))?;
+    let cached = state
+        .profiles
+        .cached_account(&auth.user().user_code)
+        .map_err(|_| PersonAiApiError(ModelProviderError::Storage, auth.locale))?;
     Ok(Json(ApiResponse::protocol_success(CheckinStatusVo {
-        today_checked_in: result.today_checked_in,
-        today_reward_points: result.today_reward_points,
+        today_checked_in: cached.as_ref().and_then(|account| account.today_checked_in),
+        today_reward_points: cached.and_then(|account| account.today_reward_points),
     })))
 }
 async fn checkin(
@@ -97,8 +96,8 @@ async fn checkin(
     auth: RequestAuthContext,
 ) -> Result<Json<ApiResponse<CheckinVo>>, PersonAiApiError> {
     let result = state
-        .model_providers
-        .checkin()
+        .account_sync
+        .checkin(&auth.user().user_code)
         .await
         .map_err(|error| PersonAiApiError(error, auth.locale))?;
     Ok(Json(ApiResponse::protocol_success(CheckinVo {

@@ -20,11 +20,14 @@ interface AuthState {
   logout: () => Promise<void>;
   recoverFromUnauthorized: () => Promise<boolean>;
   updateSessionUser: (patch: Partial<AuthenticatedUser>) => void;
+  refreshAccountSnapshot: () => Promise<boolean>;
 }
 
 let initializePromise: Promise<void> | null = null;
 let sessionLoadGeneration = 0;
 let recoveryPromise: Promise<boolean> | null = null;
+let accountRefresh: { userCode: string; promise: Promise<boolean> } | null = null;
+let accountStateRevision = 0;
 
 function sessionFromProfile(profile: {
   personAiUserId: string;
@@ -33,6 +36,7 @@ function sessionFromProfile(profile: {
   nickname?: string | null;
   vipLevel: number | null;
   remainingPoints: number | null;
+  todayCheckedIn?: boolean | null;
 } | null): AuthSession {
   return {
     authMethod: "internal",
@@ -47,6 +51,7 @@ function sessionFromProfile(profile: {
       username: profile.personAiUsername,
       vipLevel: account?.vipLevel ?? null,
       remainingPoints: account?.remainingPoints ?? null,
+      todayCheckedIn: account?.todayCheckedIn ?? null,
     },
   };
 }
@@ -63,6 +68,7 @@ async function loadActiveProfile(
   set: (state: Partial<AuthState>) => void,
   generation: number,
 ): Promise<boolean> {
+  const accountRevision = accountStateRevision;
   try {
     const bootstrap = await fetchBootstrapProfileStatus();
     if (generation !== sessionLoadGeneration) {
@@ -79,8 +85,15 @@ async function loadActiveProfile(
     }
     setApiAccessToken(token.token);
     useTimeZoneStore.getState().setTimeZone(bootstrap.timeZone ?? DEFAULT_TIME_ZONE);
+    const session = sessionFromProfile(activeProfile, bootstrap.avatarUrl, bootstrap.account);
+    const current = useAuthStore.getState().session;
+    if (accountRevision !== accountStateRevision && current?.user.userCode === session.user.userCode) {
+      // A sign-in receipt or a newer snapshot arrived while credentials loaded.
+      // Refresh the token without rolling visible account values backwards.
+      session.user = { ...current.user, username: session.user.username };
+    }
     set({
-      session: sessionFromProfile(activeProfile, bootstrap.avatarUrl, bootstrap.account),
+      session,
       status: "authenticated",
     });
     return true;
@@ -100,6 +113,33 @@ async function loadActiveProfile(
 export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   status: "checking",
+  refreshAccountSnapshot: (): Promise<boolean> => {
+    const session = useAuthStore.getState().session;
+    if (!session) return Promise.resolve(false);
+    const userCode = session.user.userCode;
+    if (accountRefresh && accountRefresh.userCode === userCode) return accountRefresh.promise;
+    const generation = sessionLoadGeneration;
+    const revision = accountStateRevision;
+    const promise = fetchBootstrapProfileStatus().then((profile) => {
+      const activeProfile = profile.activeProfile;
+      if (generation !== sessionLoadGeneration || revision !== accountStateRevision || useAuthStore.getState().session?.user.userCode !== userCode
+          || !activeProfile || activeProfile.personAiUserId !== userCode) return false;
+      // Only merge a real cached snapshot. An unavailable read never clears the
+      // account already shown by either the sidebar or its menu.
+      if (profile.account) useAuthStore.getState().updateSessionUser({
+        displayName: profile.account.nickname?.trim() || activeProfile.personAiUsername,
+        vipLevel: profile.account.vipLevel,
+        remainingPoints: profile.account.remainingPoints,
+        todayCheckedIn: profile.account.todayCheckedIn ?? null,
+        avatarUrl: profile.avatarUrl,
+      });
+      return true;
+    }).catch(() => false).finally(() => {
+      if (accountRefresh?.promise === promise) accountRefresh = null;
+    });
+    accountRefresh = { userCode, promise };
+    return promise;
+  },
   ensureSessionFresh: () => loadActiveProfile(set, ++sessionLoadGeneration),
   initialize: async () => {
     if (initializePromise) return initializePromise;
@@ -120,6 +160,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     return recoveryPromise;
   },
   updateSessionUser: (patch) => {
+    accountStateRevision += 1;
     set((state) => state.session ? {
       session: {
         ...state.session,

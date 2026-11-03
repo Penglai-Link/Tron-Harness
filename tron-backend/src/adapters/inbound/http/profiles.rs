@@ -1,15 +1,12 @@
 use crate::{
     app::AppState,
-    application::{
-        model_provider::ModelProviderError,
-        profile::{PersonAiAccountSummary, ProfileRecord, ProfileRegistryError},
-    },
+    application::{model_provider::ModelProviderError, profile::ProfileRegistryError},
     response::{ApiResponse, EmptyData},
 };
 use axum::{
     Json, Router,
     body::Body,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::{HeaderValue, StatusCode, header},
     response::{
         IntoResponse, Response, Sse,
@@ -19,14 +16,6 @@ use axum::{
 };
 use serde::Deserialize;
 use std::{convert::Infallible, time::Duration};
-
-const MAX_PROFILE_AVATAR_BYTES: usize = 2 * 1024 * 1024;
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BootstrapStatusQuery {
-    refresh_account: Option<bool>,
-}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -113,8 +102,27 @@ async fn server_auth_events(State(state): State<AppState>) -> Response {
 }
 
 async fn active_profile_token(State(state): State<AppState>) -> Response {
+    let profile = match state.profiles.current_context() {
+        Ok(profile) => profile,
+        Err(error) => return profile_error_response(error),
+    };
+    if let Err(error) = state
+        .model_providers
+        .activate_person_ai_profile(&profile.person_ai_user_id, &profile.person_ai_username)
+    {
+        return active_profile_token_error(error);
+    }
     match state.model_providers.get_person_ai_access_token().await {
         Ok(token) => {
+            if state
+                .profiles
+                .cached_account(&profile.person_ai_user_id)
+                .ok()
+                .flatten()
+                .is_none()
+            {
+                state.account_sync.request_sync();
+            }
             Json(ApiResponse::success(serde_json::json!({ "token": token }))).into_response()
         }
         Err(error) => active_profile_token_error(error),
@@ -146,53 +154,27 @@ fn active_profile_token_error(error: ModelProviderError) -> Response {
 
 async fn remove_profile(State(state): State<AppState>, Path(profile_id): Path<String>) -> Response {
     match state.profiles.remove(&profile_id) {
-        Ok(()) => Json(ApiResponse::success(serde_json::json!({}))).into_response(),
+        Ok(()) => {
+            if let Ok(Some(profile)) = state.profiles.active() {
+                if let Err(error) = state.model_providers.activate_person_ai_profile(
+                    &profile.person_ai_user_id,
+                    &profile.person_ai_username,
+                ) {
+                    return provider_activation_error_response(error);
+                }
+            }
+            state.account_sync.request_sync();
+            Json(ApiResponse::success(serde_json::json!({}))).into_response()
+        }
         Err(error) => profile_error_response(error),
     }
 }
 
-async fn bootstrap_status(
-    State(state): State<AppState>,
-    Query(query): Query<BootstrapStatusQuery>,
-) -> Response {
-    let mut status = match state.profiles.bootstrap_status() {
-        Ok(status) => status,
-        Err(error) => return profile_error_response(error),
-    };
-
-    if query.refresh_account.unwrap_or(true)
-        && let Some(profile) = status.active_profile.clone()
-    {
-        let username = profile.person_ai_username.clone();
-        if state
-            .model_providers
-            .activate_person_ai_profile(&profile.person_ai_user_id, &profile.person_ai_username)
-            .is_ok()
-            && let Ok(account) = state.model_providers.get_person_ai_account_info().await
-        {
-            if account
-                .username
-                .as_deref()
-                .map(str::trim)
-                .is_some_and(|account_username| account_username == username)
-            {
-                let avatar_url =
-                    refresh_cached_profile_avatar(&state, &profile, account.avatar_url.as_deref())
-                        .await;
-                status.avatar_url = avatar_url.clone();
-                if let Some(active_profile) = status.active_profile.as_mut() {
-                    active_profile.avatar_url = avatar_url;
-                }
-                status.account = Some(PersonAiAccountSummary {
-                    nickname: account.nickname.clone(),
-                    vip_level: account.vip_level,
-                    remaining_points: account.remaining_tokens,
-                });
-            }
-        }
+async fn bootstrap_status(State(state): State<AppState>) -> Response {
+    match state.profiles.bootstrap_status() {
+        Ok(status) => Json(ApiResponse::success(status)).into_response(),
+        Err(error) => profile_error_response(error),
     }
-
-    Json(ApiResponse::success(status)).into_response()
 }
 
 async fn profile_avatar(State(state): State<AppState>, Path(profile_id): Path<String>) -> Response {
@@ -215,77 +197,6 @@ async fn profile_avatar(State(state): State<AppState>, Path(profile_id): Path<St
         HeaderValue::from_static("private, max-age=3600"),
     );
     response
-}
-
-async fn refresh_cached_profile_avatar(
-    state: &AppState,
-    profile: &ProfileRecord,
-    source_avatar_url: Option<&str>,
-) -> Option<String> {
-    let Some(source_avatar_url) = source_avatar_url.filter(|url| !url.trim().is_empty()) else {
-        let _ = state
-            .profiles
-            .clear_cached_avatar(&profile.person_ai_user_id);
-        return None;
-    };
-    let Ok(source_url) = url::Url::parse(source_avatar_url) else {
-        return profile.avatar_url.clone();
-    };
-    if source_url.scheme() != "https" {
-        return profile.avatar_url.clone();
-    }
-
-    let Ok(mut response) = state.runtime_http_client.get(source_url).send().await else {
-        return profile.avatar_url.clone();
-    };
-    if response.url().scheme() != "https"
-        || !response.status().is_success()
-        || response
-            .content_length()
-            .is_some_and(|length| length > MAX_PROFILE_AVATAR_BYTES as u64)
-    {
-        return profile.avatar_url.clone();
-    }
-    let Some(content_type) = response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(';').next())
-        .map(str::trim)
-        .filter(|value| value.starts_with("image/"))
-        .map(str::to_owned)
-    else {
-        return profile.avatar_url.clone();
-    };
-
-    let mut image_bytes = Vec::new();
-    loop {
-        let chunk = match response.chunk().await {
-            Ok(chunk) => chunk,
-            Err(_) => return profile.avatar_url.clone(),
-        };
-        let Some(chunk) = chunk else {
-            break;
-        };
-        if image_bytes.len().saturating_add(chunk.len()) > MAX_PROFILE_AVATAR_BYTES {
-            return profile.avatar_url.clone();
-        }
-        image_bytes.extend_from_slice(&chunk);
-    }
-    if image_bytes.is_empty()
-        || state
-            .profiles
-            .cache_avatar(&profile.person_ai_user_id, &content_type, &image_bytes)
-            .is_err()
-    {
-        return profile.avatar_url.clone();
-    }
-    state
-        .profiles
-        .cached_avatar_url(&profile.profile_id)
-        .ok()
-        .flatten()
-        .or_else(|| profile.avatar_url.clone())
 }
 
 async fn list_profiles(State(state): State<AppState>) -> Response {
@@ -311,7 +222,10 @@ async fn activate_profile(
             .model_providers
             .activate_person_ai_profile(&record.person_ai_user_id, &record.person_ai_username)
         {
-            Ok(()) => Json(ApiResponse::success(record)).into_response(),
+            Ok(()) => {
+                state.account_sync.request_sync();
+                Json(ApiResponse::success(record)).into_response()
+            }
             Err(error) => provider_activation_error_response(error),
         },
         Err(error) => profile_error_response(error),

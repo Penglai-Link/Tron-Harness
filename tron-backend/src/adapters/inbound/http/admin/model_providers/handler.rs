@@ -231,6 +231,7 @@ async fn poll_authorization(
                     tracing::error!("[person-ai] login heartbeat failed: {error}");
                 }
             }
+            state.account_sync.request_sync();
             Json(ApiResponse::success(AuthorizationPollResponse {
                 completed: true,
                 session: result.session,

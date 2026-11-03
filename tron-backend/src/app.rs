@@ -140,6 +140,7 @@ pub struct AppStateInner {
     pub model_providers: ModelProviderService,
     pub prompts: PromptService,
     pub profiles: ProfileRegistryService,
+    pub account_sync: crate::application::profile::ProfileAccountSync,
     pub llm_runtime: LlmRuntimeService,
     pub llm_router: LlmModelRouter,
     pub mcp: McpService,
@@ -632,6 +633,9 @@ impl AppState {
             crate::adapters::outbound::skin::FileSkinStore::new(skin_root),
         ));
         let disk_usage = crate::adapters::outbound::observability::disk_usage::LocalDiskUsage::new(&config);
+        let account_sync = crate::application::profile::ProfileAccountSync::new(
+            profiles.clone(), model_providers.clone(), runtime_http_client.clone(),
+        );
         Ok(Self(Arc::new(AppStateInner {
             dude_memory,
             dudes,
@@ -664,6 +668,7 @@ impl AppState {
             model_providers,
             prompts,
             profiles,
+            account_sync,
             llm_runtime,
             llm_router,
             mcp,
@@ -702,6 +707,7 @@ where
 /// Assemble routes from the same state owned by the host lifecycle.
 pub fn build_router_with_state(state: AppState) -> Result<Router, AppBootstrapError> {
     dude_runner::start(state.clone());
+    state.account_sync.start();
     state.model_providers.start_background_sync();
     state.model_providers.start_person_ai_heartbeat();
     let protected_routes = build_protected_routes(&state);

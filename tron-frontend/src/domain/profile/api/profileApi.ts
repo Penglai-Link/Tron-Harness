@@ -18,6 +18,9 @@ export interface PersonAiAccountSummary {
   nickname?: string | null;
   vipLevel: number | null;
   remainingPoints: number | null;
+  todayCheckedIn?: boolean | null;
+  todayRewardPoints?: number | null;
+  updatedAt?: number | null;
 }
 
 export interface BootstrapProfileStatus {
@@ -58,9 +61,8 @@ export const profileApiEndpoints = {
   activate: "POST /api/v1/profiles/{profileId}/activate",
 } as const;
 
-export function fetchBootstrapProfileStatus(signal?: AbortSignal, refreshAccount = true) {
+export function fetchBootstrapProfileStatus(signal?: AbortSignal) {
   return requestApi<BootstrapProfileStatus>(profileApiEndpoints.bootstrapStatus, {
-    queryParams: refreshAccount ? undefined : { refreshAccount: false },
     retryOnUnauthorized: false,
     signal,
   });

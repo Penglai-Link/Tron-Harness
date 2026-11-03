@@ -13,6 +13,7 @@ export interface AuthenticatedUser {
   username: string;
   vipLevel: number | null;
   remainingPoints: number | null;
+  todayCheckedIn?: boolean | null;
 }
 
 export interface AuthSession {
