@@ -219,7 +219,7 @@ function BusinessGraphPage() {
             edges={graph.selectedNodeEdges}
             node={graph.selectedNode}
             scope={graph.scope}
-            onClose={() => setInspectorOpen(false)}
+            onClose={clearSelectedNode}
             onExpandNode={(nodeCode) => {
               void graph.expandNode(nodeCode);
             }}

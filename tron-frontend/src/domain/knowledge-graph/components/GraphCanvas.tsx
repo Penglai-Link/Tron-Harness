@@ -31,6 +31,7 @@ import {
 } from "@/domain/knowledge-graph/model";
 import { cn } from "@/shared/lib/utils";
 import { useTheme } from "@/shared/theme/ThemeProvider";
+import { graphEdgeSelectionStyle, graphNodeSelectionStyle, resolveGraphSelection } from "../model/graphSelection";
 
 interface GraphCanvasProps {
   edges: GraphEdgeView[];
@@ -193,12 +194,6 @@ function scaleToZoom(scale: number) {
 
 function labelViewportScale(zoom: number) {
   return 1 / zoomToScale(zoom);
-}
-
-function edgeActive(edge: EdgeLike, selectedNodeCode: string, highlightedEdgeCodes: string[]) {
-  return edge.sourceNodeCode === selectedNodeCode
-    || edge.targetNodeCode === selectedNodeCode
-    || highlightedEdgeCodes.includes(edge.edgeCode);
 }
 
 function propertyText(node: GraphNodeView) {
@@ -851,14 +846,14 @@ function buildG6Data(
   nodeLabelProperty: string,
   graphCanvasTheme: GraphCanvasTheme,
 ): GraphData {
-  const highlightedNodes = new Set(highlightedNodeCodes);
+  const selection = resolveGraphSelection(nodes, edges, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes);
   const nodeByCode = new Map(nodes.map((node) => [node.nodeCode, node]));
   const center = graphCenter(bounds);
 
   return {
     nodes: nodes.map((node) => {
       const selected = node.nodeCode === selectedNodeCode;
-      const highlighted = selected || highlightedNodes.has(node.nodeCode);
+      const highlighted = selection.nodes.has(node.nodeCode);
       const palette = graphNodeColorForGroup(node.colorGroup);
       const point = graphPointForNode(node);
       return {
@@ -882,7 +877,7 @@ function buildG6Data(
           labelPadding: 0,
           labelPlacement: "right",
           labelText: resolveGraphNodeLabel(node, nodeLabelProperty),
-          opacity: selected || highlighted ? 1 : 0.92,
+          ...graphNodeSelectionStyle(selection, node.nodeCode),
           stroke: selected ? graphCanvasTheme.selectedNodeStroke : highlighted ? graphCanvasTheme.highlightedNodeStroke : "transparent",
           x: point.x,
           y: point.y,
@@ -895,7 +890,7 @@ function buildG6Data(
     edges: edges.map((edge) => {
       const source = nodeByCode.get(edge.sourceNodeCode);
       const target = nodeByCode.get(edge.targetNodeCode);
-      const active = edgeActive(edge, selectedNodeCode, highlightedEdgeCodes);
+      const active = selection.edges.has(edge.edgeCode);
       const sourcePoint = source ? graphPointForNode(source) : graphCenter(bounds);
       const targetPoint = target ? graphPointForNode(target) : graphCenter(bounds);
       return {
@@ -927,7 +922,7 @@ function buildG6Data(
           labelPlacement: "center",
           labelText: edge.relationship,
           labelTextBaseline: "middle",
-          opacity: active ? 0.72 : 0.38,
+          ...graphEdgeSelectionStyle(selection, edge.edgeCode),
           stroke: active ? graphCanvasTheme.activeEdgeColor : graphCanvasTheme.edgeStroke,
           zIndex: active ? 4 : 1,
           ...buildEdgeZoomStyle(edge, active, zoom),
@@ -947,24 +942,24 @@ function buildG6ZoomStyleData(
   highlightedEdgeCodes: string[],
   zoom: number,
 ): GraphZoomStyleData {
-  const highlightedNodes = new Set(highlightedNodeCodes);
+  const selection = resolveGraphSelection(nodes, edges, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes);
 
   return {
     edges: edges.map((edge) => {
-      const active = edgeActive(edge, selectedNodeCode, highlightedEdgeCodes);
+      const active = selection.edges.has(edge.edgeCode);
       return {
         id: edge.edgeCode,
         source: edge.sourceNodeCode,
-        style: buildEdgeZoomStyle(edge, active, zoom),
+        style: { ...buildEdgeZoomStyle(edge, active, zoom), ...graphEdgeSelectionStyle(selection, edge.edgeCode) },
         target: edge.targetNodeCode,
       };
     }),
     nodes: nodes.map((node) => {
       const selected = node.nodeCode === selectedNodeCode;
-      const highlighted = selected || highlightedNodes.has(node.nodeCode);
+      const highlighted = selection.nodes.has(node.nodeCode);
       return {
         id: node.nodeCode,
-        style: buildNodeZoomStyle(node, selected, highlighted, zoom),
+        style: { ...buildNodeZoomStyle(node, selected, highlighted, zoom), ...graphNodeSelectionStyle(selection, node.nodeCode) },
       };
     }),
   };
@@ -1118,6 +1113,10 @@ export function GraphCanvas({
   const renderEdges = useMemo(
     () => edges.filter((edge) => visibleNodeCodes.has(edge.sourceNodeCode) && visibleNodeCodes.has(edge.targetNodeCode)),
     [edges, visibleNodeCodes],
+  );
+  const selection = useMemo(
+    () => resolveGraphSelection(positionedNodes, renderEdges, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes),
+    [positionedNodes, renderEdges, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes],
   );
   const g6Data = useMemo(
     () => buildG6Data(positionedNodes, renderEdges, graphBounds, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoomRef.current, nodeLabelProperty, graphCanvasTheme),
@@ -1489,6 +1488,7 @@ export function GraphCanvas({
               key={`mini-${node.nodeCode}`}
               style={{
                 backgroundColor: graphNodeColorForGroup(node.colorGroup).color,
+                opacity: graphNodeSelectionStyle(selection, node.nodeCode).opacity,
                 boxShadow: node.nodeCode === selectedNodeCode ? "0 0 0 2px color-mix(in srgb, var(--color-focus-ring) 28%, transparent)" : undefined,
                 ...minimapNodePosition(node, graphBounds),
               }}

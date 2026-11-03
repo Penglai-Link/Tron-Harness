@@ -28,10 +28,9 @@ it("searches on submit, shows original references, and continues with cursor alo
   fireEvent.click(screen.getByRole("button", { name: "Alpha" }));
   const sources = within(screen.getByRole("region", { name: "Original sources" }));
   expect(await sources.findByText("manual.md")).toBeTruthy(); expect(sources.getByText("Alpha calls Beta.")).toBeTruthy(); expect(screen.getByText("Page: 4")).toBeTruthy();
-  expect(screen.getByText("Alpha → CALLS → Beta")).toBeTruthy();
-  const evidence = screen.getByText("1 original references").closest("details")!;
-  fireEvent.click(screen.getByText("1 original references"));
-  expect(within(evidence).getByText("Alpha calls Beta.")).toBeTruthy();
+  const related = screen.getByRole("button", { name: "Inspect related entity: Beta" });
+  expect(related.title).toBe("Alpha → CALLS → Beta");
+  expect(screen.getAllByText("Alpha calls Beta.")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "Load more" }));
   await waitFor(() => expect(api.expand).toHaveBeenCalledTimes(1)); expect(api.expand.mock.calls[0][0]).toEqual({ cursor: "cursor" });
   await waitFor(() => expect(screen.queryByRole("button", { name: "Load more" })).toBeNull());
@@ -56,4 +55,41 @@ it("loads published graphs before a question is entered and can refresh the over
   expect(api.search).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Browse graph" }));
   await waitFor(() => expect(api.browse).toHaveBeenCalledTimes(2));
+});
+
+it("shows useful details once and omits traversal diagnostics and storage identifiers", async () => {
+  const data = fixture();
+  data.nodes[0].descriptions = [
+    { text: "Alpha", referenceId: "r1" },
+    { text: "A useful service description.", referenceId: "r1" },
+    { text: "A useful service description.", referenceId: "r2" },
+    { text: " ", referenceId: "r2" },
+  ];
+  data.nodes[0].aliases = [
+    { text: "Alpha", referenceId: "r1" },
+    { text: "First service", referenceId: "r1" },
+    { text: "First service", referenceId: "r2" },
+  ];
+  data.nodes[0].hops = Array.from({ length: 20 }, (_, index) => ({ seedId: `debug-seed-${index}`, nodeId: "alpha", direction: "Incoming", hops: 1 }));
+  data.nodes[0].referenceIds.push("r2", "r3");
+  data.references.push({ ...data.references[0], id: "r2", chunkCode: "debug-chunk-id" });
+  data.references.push({ ...data.references[0], id: "r3", quote: "Another useful source passage.", location: { page: 5 } });
+  api.browse.mockResolvedValue(data);
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Alpha" }));
+  expect(screen.getByRole("heading", { name: "Alpha" })).toBeTruthy();
+  expect(screen.getAllByText("A useful service description.")).toHaveLength(1);
+  expect(screen.getByText("Aliases: First service")).toBeTruthy();
+  expect(screen.queryByText("Hit reasons")).toBeNull();
+  expect(screen.queryByText(/hops along/)).toBeNull();
+  expect(screen.queryByText(/debug-seed|debug-chunk-id/)).toBeNull();
+  const sources = within(screen.getByRole("region", { name: "Original sources" }));
+  expect(sources.getAllByText("manual.md")).toHaveLength(2);
+  expect(sources.getAllByText("Alpha calls Beta.")).toHaveLength(1);
+  expect(sources.getByText("Another useful source passage.")).toBeTruthy();
+  expect(sources.getByText("Page: 5")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Inspect related entity: Beta" }));
+  expect(screen.getByRole("heading", { name: "Beta" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Close node inspector" }));
+  expect(screen.queryByRole("heading", { name: "Beta" })).toBeNull();
 });
