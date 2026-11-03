@@ -1,7 +1,7 @@
 //! Host-owned context descriptions. Plugin text comes from ContextContributor metadata.
 use std::collections::BTreeMap;
 
-use eliteforge_agent_core::ContextBlockMetadata;
+use eliteforge_agent_core::{ContextBlockMetadata, ContextBlockUpdateMode};
 
 use crate::application::agent::framework_runtime::ContextLayoutContributorInfo;
 
@@ -16,15 +16,12 @@ pub(crate) fn context_block_catalog(
 ) -> BTreeMap<String, ContextBlockCatalogEntry> {
     let mut catalog = HOST_BLOCKS
         .iter()
-        .map(|(id, name, description, zh_name, zh_description)| {
+        .map(|(id, ..)| {
             (
                 (*id).to_owned(),
                 ContextBlockCatalogEntry {
-                    metadata: ContextBlockMetadata::new(*name, *description).with_locale(
-                        "zh-CN",
-                        *zh_name,
-                        *zh_description,
-                    ),
+                    metadata: native_context_block_metadata(id)
+                        .expect("declared host context block"),
                     provider_id: None,
                 },
             )
@@ -55,6 +52,24 @@ pub(crate) fn context_block_catalog(
         }
     }
     catalog
+}
+
+/// Metadata used both by native contributors and the presentation catalog.
+pub(crate) fn native_context_block_metadata(id: &str) -> Option<ContextBlockMetadata> {
+    let (_, name, description, zh_name, zh_description) =
+        HOST_BLOCKS.iter().find(|(block, ..)| *block == id)?;
+    let mode = match id {
+        "current_session_history" => ContextBlockUpdateMode::Append,
+        "seed_prompt_prefix" | "agent.directory-guidance" | "dude.guidance" => {
+            ContextBlockUpdateMode::Fixed
+        }
+        _ => ContextBlockUpdateMode::Replace,
+    };
+    Some(
+        ContextBlockMetadata::new(*name, *description)
+            .with_locale("zh-CN", *zh_name, *zh_description)
+            .with_update_mode(mode),
+    )
 }
 
 const HOST_BLOCKS: &[(&str, &str, &str, &str, &str)] = &[
@@ -117,9 +132,9 @@ const HOST_BLOCKS: &[(&str, &str, &str, &str, &str)] = &[
     (
         "page_context",
         "Page context",
-        "Page content, selected text and attached page annotations explicitly supplied for this conversation.",
+        "The latest user input's page location snapshot: title, path, workspace and selected object. An input without a page snapshot clears this block.",
         "页面上下文",
-        "本次对话明确提供的页面内容、选中文本及页面批注。",
+        "最新一条用户消息发送时的页面位置快照，包括标题、路径、工作区和选中对象；该条消息没有页面快照时清空本块。",
     ),
     (
         "application_context",

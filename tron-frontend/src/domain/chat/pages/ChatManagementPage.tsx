@@ -1,4 +1,4 @@
-import { contextBlockName } from "@/shared/context/contextBlockPresentation";
+import { contextBlockName, type ContextBlockUpdateMode } from "@/shared/context/contextBlockPresentation";
 import { ContextBlockHelp } from "@/shared/context/ContextBlockHelp";
 import { useContextBlockCatalog, type ContextBlockCatalog } from "@/shared/context/useContextBlockCatalog";
 import {
@@ -1379,6 +1379,7 @@ interface ContextMemoryBlockItem {
   limitTokens: number | null;
   name: string;
   description?: string;
+  updateMode?: ContextBlockUpdateMode;
   stat: string;
   tokens: number;
 }
@@ -1411,6 +1412,7 @@ export function buildReportedContextMemoryBlocks(
     limitTokens: block.configuredTokens,
     name: label(block.id),
     description: catalog?.get(block.id)?.description,
+    updateMode: catalog?.get(block.id)?.updateMode,
     tokens: block.finalTokens,
     stat: translate(prefix + "messageCount", { count: block.messageCount }),
     limitDescription: block.reason || (block.originalTokens !== null && block.originalTokens > block.finalTokens
@@ -1427,6 +1429,7 @@ export function buildReportedContextMemoryBlocks(
     snapshotSequence: snapshot.snapshotSequence,
     name: label("protocol") === "protocol" ? translate(prefix + "protocolName") : label("protocol"),
     description: catalog?.get("protocol")?.description,
+    updateMode: catalog?.get("protocol")?.updateMode,
     stat: "",
     allocationTokens: null,
     limitTokens: typeof protocolLimit === "number" && Number.isSafeInteger(protocolLimit) && protocolLimit >= 0
@@ -1667,7 +1670,7 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
             <span className="min-w-0 break-words text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]" title={block.code === "protocol" ? undefined : block.code}>{block.name}</span>
             {block.stat ? <span className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</span> : null}
           </button>
-          <ContextBlockHelp name={block.name} description={block.description}>
+          <ContextBlockHelp name={block.name} description={block.description} updateMode={block.updateMode}>
             {block.sources?.length ? <div>
                 <p className="mb-1">{t("chat.shortTermMemory.contextPanel.mergedSourcesNote")}</p>
                 <ol className="space-y-1">

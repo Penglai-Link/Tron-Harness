@@ -79,7 +79,7 @@ export function ContextLayoutPage() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : t("contextLayout.saveFailed")); }
     finally { setSaving(false); }
   }
-  const columns = "grid grid-cols-[minmax(8rem,1fr)_10rem_6rem] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_18rem_9rem] sm:gap-5";
+  const columns = "grid grid-cols-[minmax(8rem,1fr)_4rem_10rem_6rem] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_4.5rem_16rem_9rem] sm:gap-5";
   const tokenPreview = allocateContextShares(shares, previewWindow);
   const budgets = order.map(id => ({ id, name: blocksById.get(id)?.displayName || contextBlockName(id, t), share: shares[id] ?? 0, tokens: tokenPreview[id] ?? 0 }));
 
@@ -99,6 +99,7 @@ export function ContextLayoutPage() {
           <section aria-label={t("contextLayout.title")} className="min-w-[30rem] overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
             <div className={`${columns} border-b border-[var(--color-outline-variant)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]`}>
               <span className="pl-6">{t("contextLayout.blockColumn")}</span>
+              <span className="text-center">{t("contextLayout.updateMode")}</span>
               <span className="flex items-center justify-end gap-1">{t("contextLayout.allocationColumn")} <InfoTooltip ariaLabel={t("contextLayout.allocationColumn")}>{t("contextLayout.allocationHelp")}</InfoTooltip></span>
               <span className="text-right">{t("contextLayout.estimatedTokens")}</span>
             </div>
@@ -130,10 +131,11 @@ export function ContextLayoutPage() {
                     <span className="flex w-4 shrink-0 justify-center">{movable ? <GripVertical size={14} className="cursor-grab text-[var(--color-on-surface-variant)] opacity-40 group-hover:opacity-90" aria-hidden="true" /> : null}</span>
                     <span aria-hidden="true" className="size-2.5 shrink-0 rounded-[2px]" style={{ background: contextBlockColor(id) }} />
                     <span className="truncate text-sm font-medium" title={name}>{name}</span>
-                    <ContextBlockHelp name={name} description={block?.description} />
+                    <ContextBlockHelp name={name} description={block?.description} updateMode={block?.updateMode} />
                     {block?.plugin ? <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-on-surface-variant)] ring-1 ring-inset ring-[var(--color-outline-variant)]" title={block.providerId ?? undefined}>{t("contextLayout.plugin")}</span> : null}
                     {block?.unavailable ? <Button variant="ghost" size="icon-xs" disabled={saving} aria-label={t("contextLayout.removeUnavailable", { name })} onClick={() => removeBlock(id)}><Trash2 /></Button> : null}
                   </div>
+                  <span className="text-center text-xs text-[var(--color-on-surface-variant)]">{t(`contextLayout.updateModes.${block?.updateMode ?? "Unspecified"}`)}</span>
                   <BudgetShareControl value={shares[id] ?? null} disabled={saving} label={t("contextLayout.ratioLimitFor", { name })} placeholder="0"
                     onChange={value => { setShares(current => ({ ...current, [id]: value ?? 0 })); setError(""); setNotice(""); }} />
                   <span className="text-right text-sm tabular-nums text-[var(--color-on-surface-variant)]" title={t("contextLayout.estimatedTokensHelp")}>{number.format(tokenPreview[id] ?? 0)}</span>

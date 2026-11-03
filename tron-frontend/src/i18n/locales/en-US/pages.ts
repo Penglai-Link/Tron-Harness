@@ -5,6 +5,14 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 export const pages = {
   automaticRouters: {"routeHelp": {"Chat": "Agent conversation models", "TextGeneration": "Select models for text generation that support disabling reasoning.", "TextEmbedding": "Candidate dimension is 1024. An index pins its model and dimension; changes may require rebuilding the index.", "MultimodalEmbedding": "Candidate dimension is 1024. An index pins its model and dimension; changes may require rebuilding the index.", "TextRerank": "Select rerankers for text search results; multimodal rerankers accepting text can also be candidates.", "MultimodalRerank": "Select rerankers for results containing media; execution depends on provider support."}, "title": "Automatic Routers", "refresh": "Refresh", "loading": "Loading…", "save": "Save", "saved": "Router sources saved for the next run", "failed": "Could not load or save router settings", "source": "Data sources", "providers": "Providers", "models": "Models", "choose": "Search and select multiple", "unavailable": "Unavailable: {{id}}", "empty": "No available candidate models", "candidates": "Candidate models ({{count}})", "help": "Automatically include enabled provider models by model type, or restrict sources to selected providers or models. An empty selection leaves no candidates. Chat also respects Agent authorization and context limits. Existing runs keep their snapshot. Indexes retain their embedding model and dimensions.", "modes": {"AllProviders": "All providers (automatic)", "SelectedProviders": "Selected providers", "SelectedModels": "Selected models"}, "kinds": {"Chat": "Conversation", "TextGeneration": "Text generation", "TextEmbedding": "Text embedding", "MultimodalEmbedding": "Multimodal embedding", "TextRerank": "Text rerank", "MultimodalRerank": "Multimodal rerank"}},
   contextLayout: {
+    updateMode: "Updates",
+    updateModes: { Fixed: "Fixed", Append: "Append", Replace: "Replace", Unspecified: "Unspecified" },
+    updateModeDescriptions: {
+      Fixed: "Fixed: unchanged within a run and reloaded for a new run.",
+      Append: "Append: new messages follow existing ones. History may still be compressed or trimmed to its budget.",
+      Replace: "Replace: each request uses this block's latest snapshot without accumulating old snapshots. Other blocks and conversation records are unaffected.",
+      Unspecified: "The provider has not declared how this block updates.",
+    },
     resetTitle: "Reset context configuration?",
     resetDescription: "Restore the built-in default order and shares, replacing your unsaved changes. You will still need to save to apply the reset.",
     resetCancel: "Cancel",

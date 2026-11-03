@@ -1,7 +1,7 @@
 //! Tron scope checks, business state and display projections over Framework stores.
 mod context_assembly;
 mod block_metadata;
-pub(crate) use block_metadata::context_block_catalog;
+pub(crate) use block_metadata::{context_block_catalog, native_context_block_metadata};
 pub use context_assembly::{SavedContextAssembly, context_assembly_error_descriptor};
 mod assembler;
 mod config;

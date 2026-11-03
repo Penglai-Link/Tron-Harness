@@ -5,6 +5,14 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 export const pages = {
   automaticRouters: {"routeHelp": {"Chat": "智能体对话模型", "TextGeneration": "为文本生成任务选择模型，应选择支持关闭思考的模型。", "TextEmbedding": "候选维度为 1024。索引创建后会固定模型和维度。修改后，可能导致需要重建索引。", "MultimodalEmbedding": "候选维度为 1024。索引创建后会固定模型和维度。修改后，可能导致需要重建索引。", "TextRerank": "为文本检索结果选择重排模型，支持文本输入的多模态重排模型也可作为候选。", "MultimodalRerank": "为包含图片等内容的检索结果选择多模态重排模型，实际执行取决于供应商适配。"}, "title": "自动路由器", "refresh": "刷新", "loading": "加载中…", "save": "保存", "saved": "路由来源已保存，新一轮运行将使用当前配置", "failed": "无法读取或保存路由配置", "source": "数据来源", "providers": "供应商", "models": "模型", "choose": "搜索并选择（可多选）", "unavailable": "已不可用：{{id}}", "empty": "没有可用候选模型", "candidates": "候选模型（{{count}}）", "help": "默认按模型类型纳入所有已启用供应商的可用模型。可限定供应商或模型；空选择会停用该路由的候选。对话还受 Agent 授权和上下文长度约束。运行中的选择保持不变。索引创建后会固定向量模型和维度。", "modes": {"AllProviders": "所有供应商（自动）", "SelectedProviders": "指定供应商", "SelectedModels": "指定模型"}, "kinds": {"Chat": "对话", "TextGeneration": "文本生成", "TextEmbedding": "文本向量", "MultimodalEmbedding": "多模态向量", "TextRerank": "文本重排", "MultimodalRerank": "多模态重排"}},
   contextLayout: {
+    updateMode: "更新方式",
+    updateModes: { Fixed: "固定", Append: "追加", Replace: "替换", Unspecified: "未声明" },
+    updateModeDescriptions: {
+      Fixed: "固定：一次运行内保持不变，新的运行会重新加载。",
+      Append: "追加：新消息接在已有消息之后；对话历史仍可能按预算压缩或裁剪。",
+      Replace: "替换：每次请求使用本块的最新快照，旧快照不会重复累积；不影响其他块或对话记录。",
+      Unspecified: "提供方尚未声明更新方式。",
+    },
     resetTitle: "重置上下文配置？",
     resetDescription: "将恢复内置默认顺序和比例，并替换当前未保存的修改。重置后仍需点击“保存”才能生效。",
     resetCancel: "取消",

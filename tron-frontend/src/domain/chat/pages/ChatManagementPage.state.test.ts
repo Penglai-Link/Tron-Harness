@@ -40,11 +40,11 @@ describe("saved plugin context budgets", () => {
       blocks: [{ id: "skills.catalog", position: 0, sources: [{ id: "skills.catalog" }], allocated_tokens: 20, final_tokens: 20, final_message_count: 1 }],
     } })!;
     const catalog = new Map([
-      ["skills.catalog", { id: "skills.catalog", displayName: "Plugin-owned name", description: "Plugin-owned description", providerId: "skills" }],
-      ["protocol", { id: "protocol", displayName: "Tool definitions", description: "Protocol description", providerId: null }],
+      ["skills.catalog", { id: "skills.catalog", displayName: "Plugin-owned name", description: "Plugin-owned description", updateMode: "Replace" as const, providerId: "skills" }],
+      ["protocol", { id: "protocol", displayName: "Tool definitions", description: "Protocol description", updateMode: "Replace" as const, providerId: null }],
     ]);
     const rows = buildReportedContextMemoryBlocks(snapshot, key => key, catalog);
-    expect(rows[0]).toMatchObject({ name: "Plugin-owned name", description: "Plugin-owned description" });
+    expect(rows[0]).toMatchObject({ name: "Plugin-owned name", description: "Plugin-owned description", updateMode: "Replace" });
     expect(rows[1]).toMatchObject({ name: "Tool definitions", description: "Protocol description" });
     expect(buildReportedContextMemoryBlocks(JSON.parse(JSON.stringify(snapshot)), key => key, catalog)).toEqual(rows);
   });

@@ -24,16 +24,22 @@ async fn context_layout_saves_only_shares_and_requires_exactly_one_hundred_perce
     let response = authenticated_request(&app, Method::GET, "/api/v1/context-blocks", None).await;
     assert_eq!(response.status(), StatusCode::OK);
     let catalog = response_json(response).await["data"].clone();
+    assert!(catalog.as_array().unwrap().iter().all(|block| matches!(block["updateMode"].as_str(), Some("Fixed" | "Append" | "Replace"))), "every shipped source must declare its update mode");
     for block in document["blocks"].as_array().unwrap() {
         assert!(!block["description"].as_str().unwrap().is_empty(), "{}", block["id"]);
         let metadata = catalog.as_array().unwrap().iter().find(|item| item["id"] == block["id"]).unwrap();
         assert_eq!(block["displayName"], metadata["displayName"]);
         assert_eq!(block["description"], metadata["description"]);
+        assert_eq!(block["updateMode"], metadata["updateMode"]);
     }
     let skills = catalog.as_array().unwrap().iter().find(|item| item["id"] == "skills.catalog").unwrap();
     assert_eq!(skills["displayName"], "技能目录");
     assert!(skills["providerId"].is_string());
     assert!(skills["description"].as_str().unwrap().contains("已授权技能"));
+    assert_eq!(skills["updateMode"], "Replace");
+    for (id, mode) in [("seed_prompt_prefix", "Fixed"), ("current_session_history", "Append"), ("conversation_history_summary", "Replace"), ("page_context", "Replace"), ("application_context", "Replace")] {
+        assert_eq!(catalog.as_array().unwrap().iter().find(|item| item["id"] == id).unwrap()["updateMode"], mode);
+    }
     use tower::ServiceExt;
     let response = app.clone().oneshot(axum::http::Request::builder()
         .uri("/api/v1/context-blocks")

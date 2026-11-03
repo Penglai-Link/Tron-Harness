@@ -14,6 +14,9 @@ pub(super) struct DudeContributor {
 
 #[async_trait::async_trait]
 impl fw::ContextContributor for DudeContributor {
+    fn layout_metadata(&self) -> fw::ContextBlockMetadata {
+        crate::application::short_term_memory::native_context_block_metadata(self.block_id()).expect("native Dude context metadata")
+    }
     fn block_id(&self) -> &str {
         self.id
     }
@@ -163,6 +166,9 @@ impl DudeGuidance {
 }
 #[async_trait::async_trait]
 impl fw::ContextContributor for DudeGuidance {
+    fn layout_metadata(&self) -> fw::ContextBlockMetadata {
+        crate::application::short_term_memory::native_context_block_metadata(self.block_id()).expect("native Dude guidance metadata")
+    }
     fn kind(&self) -> fw::ContextSourceKind {
         fw::ContextSourceKind::Instruction
     }

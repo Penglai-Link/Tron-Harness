@@ -27,6 +27,9 @@ impl Directory {
 pub(super) struct AgentDirectoryContributor(pub Runtime);
 #[async_trait::async_trait]
 impl fw::ContextContributor for AgentDirectoryContributor {
+    fn layout_metadata(&self) -> fw::ContextBlockMetadata {
+        crate::application::short_term_memory::native_context_block_metadata(self.block_id()).expect("native agent directory metadata")
+    }
     fn block_id(&self) -> &str {
         "agent_directory"
     }

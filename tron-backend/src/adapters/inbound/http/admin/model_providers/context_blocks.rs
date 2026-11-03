@@ -18,6 +18,7 @@ pub(super) struct ContextBlockMetadataVo {
     id: String,
     display_name: String,
     description: String,
+    update_mode: eliteforge_agent_core::ContextBlockUpdateMode,
     provider_id: Option<String>,
 }
 
@@ -56,6 +57,7 @@ pub(super) async fn list(
                 id,
                 display_name: text.display_name,
                 description: text.description,
+                update_mode: entry.metadata.update_mode,
                 provider_id: entry.provider_id,
             }
         })

@@ -36,6 +36,7 @@ const NATIVE_IDS: &[&str] = &[
 #[serde(rename_all = "camelCase")]
 pub(super) struct ContextLayoutBlockVo {
     id: String, display_name: String, description: String,
+    update_mode: eliteforge_agent_core::ContextBlockUpdateMode,
     plugin: bool, unavailable: bool, provider_id: Option<String>,
 }
 #[derive(Debug, Serialize)]
@@ -202,12 +203,13 @@ fn build_layout(
         let text = catalog.get(id).map(|entry| entry.metadata.resolve(locale.as_str()));
         let display_name = text.as_ref().map(|text| text.display_name.clone()).unwrap_or_else(|| id.clone());
         let description = text.map(|text| text.description).unwrap_or_default();
+        let update_mode = catalog.get(id).map(|entry| entry.metadata.update_mode).unwrap_or_default();
         if let Some(item) = contributors.get(id) {
-            ContextLayoutBlockVo { id: id.clone(), display_name, description,
+            ContextLayoutBlockVo { id: id.clone(), display_name, description, update_mode,
                 plugin: true, unavailable: false, provider_id: Some(item.provider_id.clone()) }
         } else {
             let native = NATIVE_IDS.contains(&id.as_str());
-            ContextLayoutBlockVo { id: id.clone(), display_name, description,
+            ContextLayoutBlockVo { id: id.clone(), display_name, description, update_mode,
                 plugin: !native, unavailable: !native, provider_id: None }
         }
     }).collect();

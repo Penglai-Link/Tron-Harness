@@ -2,11 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { requestApi } from "@/shared/api/httpClient";
 import { useAuthStore } from "@/store/authStore";
+import type { ContextBlockUpdateMode } from "./contextBlockPresentation";
 
 export interface ContextBlockMetadata {
   id: string;
   displayName: string;
   description: string;
+  updateMode: ContextBlockUpdateMode;
   providerId: string | null;
 }
 

@@ -1,3 +1,5 @@
+export type ContextBlockUpdateMode = "Fixed" | "Append" | "Replace" | "Unspecified";
+
 const contextBlockLabelKeys: Record<string, string> = {
   "framework.instructions": "systemPromptName",
   seed_prompt_prefix: "systemPromptName",
