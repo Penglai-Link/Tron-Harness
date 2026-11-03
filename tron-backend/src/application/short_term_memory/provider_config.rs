@@ -33,7 +33,7 @@ impl ContextProviderPolicy {
 pub struct ContextProvidersConfig {
     /// Actual message block order. Tools retain their provider-native protocol location.
     pub order: Vec<String>,
-    /// One complete percentage allocation; no independently configured token caps.
+    /// Percentage shares totaling at most 100%; no independently configured token caps.
     pub shares: std::collections::BTreeMap<String, u32>,
     pub data_blocks: std::collections::BTreeMap<String, ContextDataBlockConfig>,
     /// Optional per-plugin token caps. Missing entries preserve plugin defaults.

@@ -73,7 +73,7 @@ impl LayoutError {
     }
 
     fn invalid_total(headers: &HeaderMap) -> Self {
-        Self { status: StatusCode::BAD_REQUEST, english: is_english(headers), message: "Context shares must total exactly 100%." }
+        Self { status: StatusCode::BAD_REQUEST, english: is_english(headers), message: "Context shares must be positive and total at most 100%." }
     }
     fn unavailable(headers: &HeaderMap) -> Self {
         Self {
@@ -99,7 +99,7 @@ impl IntoResponse for LayoutError {
         } else {
             match self.message {
                 "The context configuration is invalid." => "上下文配置无效。",
-                "Context shares must total exactly 100%." => "所有上下文块的占比合计必须恰好为 100%。",
+                "Context shares must be positive and total at most 100%." => "每块占比至少为 0.01%，合计不能超过 100%。",
                 "Context configuration changed elsewhere. Refresh and try again." => {
                     "上下文配置已被其他操作修改，请刷新后重试。"
                 }

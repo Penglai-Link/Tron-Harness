@@ -47,7 +47,7 @@ export function ContextLayoutPage() {
     || JSON.stringify(shares) !== JSON.stringify(layout.defaults.shares)
   );
   const total = Object.values(shares).reduce((sum, value) => sum + value, 0);
-  const valid = total === 10_000 && order.every(id => Number.isSafeInteger(shares[id]) && shares[id] >= 1 && shares[id] <= 10_000) && Object.keys(shares).length === order.length;
+  const valid = total <= 10_000 && order.every(id => Number.isSafeInteger(shares[id]) && shares[id] >= 1 && shares[id] <= 10_000) && Object.keys(shares).length === order.length;
   const number = new Intl.NumberFormat(i18n.language);
 
   function moveBlock(sourceId: string, targetId: string) {

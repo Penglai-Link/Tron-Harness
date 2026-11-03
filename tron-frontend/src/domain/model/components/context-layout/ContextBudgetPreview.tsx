@@ -26,8 +26,8 @@ export function ContextBudgetPreview({ budgets, windowTokens, onWindowChange, hi
   })).filter(budget => budget.tokens > 0);
   const totalShare = budgets.reduce((sum, budget) => sum + budget.share, 0);
   const validShares = budgets.every(budget => Number.isSafeInteger(budget.share) && budget.share >= 1 && budget.share <= 10_000);
-  const validationMessage = totalShare !== 10_000
-    ? t(totalShare > 10_000 ? "contextLayout.shareExcess" : "contextLayout.shareMissing", { value: Math.abs(totalShare - 10_000) / 100 })
+  const validationMessage = totalShare > 10_000
+    ? t("contextLayout.shareExcess", { value: (totalShare - 10_000) / 100 })
     : !validShares ? t("contextLayout.positiveShareRequired") : null;
   const active = segments.find(segment => segment.id === highlightedId);
   const label = (segment: typeof segments[number]) => `${segment.name} · ${number.format(segment.tokens)} tokens · ${percentage(segment.tokens)}`;
@@ -49,6 +49,7 @@ export function ContextBudgetPreview({ budgets, windowTokens, onWindowChange, hi
         <span className={validationMessage ? "text-[var(--color-error)]" : ""}>{t("contextLayout.totalShare", { value: totalShare / 100 })}</span>
         <span>{t("contextLayout.previewBlockCount", { count: budgets.length })}</span>
         {validationMessage ? <span className="text-[var(--color-error)]">{validationMessage}</span> : null}
+        {!validationMessage && totalShare < 10_000 ? <span>{t("contextLayout.shareUnallocated", { value: (10_000 - totalShare) / 100 })}</span> : null}
         {active ? <span className="truncate">{label(active)}</span> : null}
       </div>
       <div className="flex h-12 overflow-hidden rounded-md bg-[var(--color-outline-variant)]" aria-label={t("contextLayout.previewDetails")}>

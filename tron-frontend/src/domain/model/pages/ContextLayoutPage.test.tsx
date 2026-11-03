@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { pages } from "@/i18n/locales/zh-CN/pages";
 import { updateContextLayout } from "../api/contextLayoutApi";
 import { ContextLayoutPage } from "./ContextLayoutPage";
+import { allocateContextShares } from "../components/context-layout/contextShares";
 
 vi.mock("@/shared", () => ({
   PageHeader: ({ title, actions }: { title: string; actions: ReactNode }) => <header><h1>{title}</h1>{actions}</header>,
@@ -25,7 +26,7 @@ vi.mock("../api/contextLayoutApi", () => ({
   }),
   updateContextLayout: vi.fn().mockImplementation(async payload => payload),
 }));
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 it("shows the renamed configuration page with the same product block names as short-term memory", async () => {
   const i18n = createInstance();
@@ -41,7 +42,7 @@ it("shows the renamed configuration page with the same product block names as sh
   }
 });
 
-it("saves only percentage shares, validates exactly 100%, and keeps instructions first", async () => {
+it("saves shares below 100%, rejects totals above 100%, and keeps instructions first", async () => {
   const i18n = createInstance();
   await i18n.init({ lng: "zh-CN", resources: { "zh-CN": { pages } }, defaultNS: "pages" });
   render(<I18nextProvider i18n={i18n}><ContextLayoutPage /></I18nextProvider>);
@@ -58,15 +59,30 @@ it("saves only percentage shares, validates exactly 100%, and keeps instructions
   const handle = screen.getByRole("button", { name: "拖动排序 Custom plugin" });
   expect(handle.draggable).toBe(true);
   fireEvent.keyDown(handle, { key: "ArrowUp", altKey: true });
-  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }), { target: { value: "4" } });
-  expect(screen.getByRole("button", { name: "保存" }).hasAttribute("disabled")).toBe(true);
-  expect(screen.getByText("还需分配 1%")).toBeTruthy();
+  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }), { target: { value: "4.5" } });
+  expect(screen.getByRole("button", { name: "保存" }).hasAttribute("disabled")).toBe(false);
+  expect(screen.getByText("未分配 0.5%").className).not.toContain("color-error");
+  expect(screen.queryByText(/还需分配/)).toBeNull();
+  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史 的占比（%）" }), { target: { value: "50.5" } });
+  expect(screen.getByRole("button", { name: "保存" }).hasAttribute("disabled")).toBe(false);
   fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史 的占比（%）" }), { target: { value: "51" } });
+  expect(screen.getByRole("button", { name: "保存" }).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByText("超出 0.5%")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "保存" }));
+  expect(updateContextLayout).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史 的占比（%）" }), { target: { value: "50" } });
   fireEvent.click(screen.getByRole("button", { name: "保存" }));
   await waitFor(() => expect(updateContextLayout).toHaveBeenCalledWith(expect.objectContaining({
     order: ["seed_prompt_prefix", "conversation_history_summary", "tool_domains", "current_session_history", "custom.plugin", "knowledge_base"],
-    shares: { seed_prompt_prefix: 2500, conversation_history_summary: 400, tool_domains: 1000, current_session_history: 5100, knowledge_base: 500, "custom.plugin": 500 },
+    shares: { seed_prompt_prefix: 2500, conversation_history_summary: 450, tool_domains: 1000, current_session_history: 5000, knowledge_base: 500, "custom.plugin": 500 },
   })));
+});
+
+it("rounds only the allocated portion of the preview window", () => {
+  expect(allocateContextShares({ a: 4000, b: 2000 }, 9)).toEqual({ a: 3, b: 2 });
+  expect(allocateContextShares({ a: 5000, b: 4999 }, 1_000_000)).toEqual({ a: 500_000, b: 499_900 });
+  expect(allocateContextShares({ a: 5000, b: 4999 }, 1)).toEqual({ a: 0, b: 0 });
+  expect(allocateContextShares({ a: 3333, b: 6667 }, 1)).toEqual({ a: 0, b: 1 });
 });
 
 it("changes budget shares without reordering, and only starts sorting from a drag handle", async () => {
@@ -115,14 +131,14 @@ it("resets invalid draft shares and ordering to server defaults without saving a
   await i18n.init({ lng: "zh-CN", resources: { "zh-CN": { pages } }, defaultNS: "pages" });
   render(<I18nextProvider i18n={i18n}><ContextLayoutPage /></I18nextProvider>);
   await screen.findByRole("spinbutton", { name: "对话历史摘要 的占比（%）" });
-  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }), { target: { value: "4" } });
+  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }), { target: { value: "6" } });
   expect(screen.getByRole("button", { name: "保存" }).hasAttribute("disabled")).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "重置" }));
   expect(screen.getByRole("dialog", { name: "重置上下文配置？" })).toBeTruthy();
-  expect((screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }) as HTMLInputElement).value).toBe("4");
+  expect((screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }) as HTMLInputElement).value).toBe("6");
   fireEvent.click(screen.getByRole("button", { name: "取消" }));
   expect(screen.queryByRole("dialog")).toBeNull();
-  expect((screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }) as HTMLInputElement).value).toBe("4");
+  expect((screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }) as HTMLInputElement).value).toBe("6");
   fireEvent.click(screen.getByRole("button", { name: "重置" }));
   fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
   expect(screen.queryByRole("dialog")).toBeNull();

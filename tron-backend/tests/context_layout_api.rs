@@ -6,7 +6,7 @@ use std::fs;
 use tron_backend::config::AppConfig;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn context_layout_saves_only_shares_and_requires_exactly_one_hundred_percent() {
+async fn context_layout_saves_shares_up_to_one_hundred_percent() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("application.yaml");
     fs::write(&path, "port: 8080\n").unwrap();
@@ -64,15 +64,26 @@ async fn context_layout_saves_only_shares_and_requires_exactly_one_hundred_perce
     assert_eq!(loaded.context.providers.shares["conversation_history_summary"], 300);
     assert_eq!(loaded.model_context_budget_plan(Some(1_000_000), Some(0)).block_budgets.conversation_history_summary.effective_limit_tokens, 30_000);
     let response = authenticated_request(&app, Method::GET, "/api/v1/context-layout", None).await;
+    let mut partial = response_json(response).await["data"].clone();
+    assert_eq!(partial["defaults"], defaults, "saved overrides must not change reset defaults");
+    partial.as_object_mut().unwrap().remove("blocks");
+    partial.as_object_mut().unwrap().remove("defaults");
+    partial["shares"]["conversation_history_summary"] = json!(250);
+    let response = authenticated_request(&app, Method::PUT, "/api/v1/context-layout", Some(partial)).await;
+    assert_eq!(response.status(), StatusCode::OK);
     let mut invalid = response_json(response).await["data"].clone();
-    assert_eq!(invalid["defaults"], defaults, "saved overrides must not change reset defaults");
+    let loaded = AppConfig::from_yaml_file(&path).unwrap().short_term_memory;
+    assert_eq!(loaded.context.providers.shares["conversation_history_summary"], 250);
+    assert_eq!(loaded.context.providers.shares.values().sum::<u32>(), 9950);
+    assert_eq!(loaded.model_context_budget_plan(Some(1_000_000), Some(0)).block_budgets.conversation_history_summary.effective_limit_tokens, 25_000);
     invalid.as_object_mut().unwrap().remove("blocks");
     invalid.as_object_mut().unwrap().remove("defaults");
     let before = fs::read(&path).unwrap();
-    for share in [299, 301] {
+    for share in [0, 301] {
         invalid["shares"]["conversation_history_summary"] = json!(share);
         let response = authenticated_request(&app, Method::PUT, "/api/v1/context-layout", Some(invalid.clone())).await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response_json(response).await["message"], "每块占比至少为 0.01%，合计不能超过 100%。");
         assert_eq!(fs::read(&path).unwrap(), before);
     }
     let response = authenticated_request(&app, Method::PUT, "/api/v1/context-layout", Some(json!({

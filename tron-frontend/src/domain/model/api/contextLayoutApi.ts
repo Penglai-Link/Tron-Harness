@@ -19,7 +19,7 @@ export interface ContextLayoutDefaults {
 export interface ContextLayoutState {
   revision: string;
   order: string[];
-  /** Basis points; the complete distribution must total exactly 10,000. */
+  /** Basis points; the distribution must total at most 10,000. */
   shares: Record<string, number>;
   blocks: ContextLayoutBlock[];
   defaults: ContextLayoutDefaults;
