@@ -252,7 +252,6 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
             </dl>
             <Tabs value={detailTab} onValueChange={value => setDetailTab(String(value))}>
               <TabsList className="max-w-full overflow-x-auto" aria-label={t("spanDetail")}>
-                <TabsTrigger value="logs">{t("logs")}</TabsTrigger>
                 <TabsTrigger value="attributes">{t("attributes")}</TabsTrigger>
                 <TabsTrigger value="events">
                   {t("events")} ({formatNumber(span.events.length)})
@@ -260,6 +259,7 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
                 <TabsTrigger value="links">
                   {t("links")} ({formatNumber(span.links.length)})
                 </TabsTrigger>
+                <TabsTrigger value="logs">{t("logs")}</TabsTrigger>
               </TabsList>
               <TabsContent value="logs">
                 {detailTab === "logs" && <TraceSpanLogs key={`${trace.traceId}:${span.spanId}`} traceId={trace.traceId} workspaceCode={span.attributes["tron.workspace.code"] ?? trace.workspaceCode} span={span} />}
