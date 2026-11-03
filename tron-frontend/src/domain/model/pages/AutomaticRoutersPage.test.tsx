@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AutomaticRouter } from "../api/automaticRouterApi";
 
 const fixture = vi.hoisted(() => ({ list: vi.fn(), save: vi.fn(), toast: { success: vi.fn(), error: vi.fn() }, t: (key: string) => key }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: fixture.t }) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: fixture.t, i18n: { language: "en-US" } }) }));
 vi.mock("../api/automaticRouterApi", () => ({ fetchAutomaticRouters: fixture.list, updateAutomaticRouter: fixture.save }));
 vi.mock("@/components/ui/toast", () => ({ useToast: () => fixture.toast }));
 vi.mock("@/components/info-tooltip", () => ({ InfoTooltip: () => null }));

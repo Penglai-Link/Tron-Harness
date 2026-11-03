@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Field, SelectInput } from "@/components/forms";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Combobox, ComboboxInput, ComboboxPopup, ComboboxList, ComboboxEmpty, ComboboxItem } from "@/components/ui/combobox";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/shared";
@@ -33,7 +35,7 @@ export function AutomaticRoutersPage() {
 }
 
 function RouterEditor({ route }: { route: AutomaticRouter }) {
-  const { t } = useTranslation("pages");
+  const { t, i18n } = useTranslation("pages");
   const toast = useToast();
   const [sources, setSources] = useState<RouteSources>(route.sources);
   const [saved, setSaved] = useState(route.sources);
@@ -78,7 +80,26 @@ function RouterEditor({ route }: { route: AutomaticRouter }) {
       </Field>}
     </div>
     <details className="text-sm"><summary className="cursor-pointer text-[var(--color-on-surface-variant)]">{t("automaticRouters.candidates", { count: effective.length })}</summary>
-      <ul className="mt-2 space-y-1">{effective.map(m => <li key={`${m.providerId}:${m.bindingId}`} className="flex flex-wrap items-baseline gap-x-2 break-words"><span>{m.providerName} / {m.modelName}</span><span className="text-xs text-[var(--color-on-surface-variant)]">{m.modelCode} · {m.inputModalities?.map(input => t(`configuredProviders.inputs.${input}`)).join(" / ")}{m.dimension ? ` · ${m.dimension}D` : ""}</span></li>)}</ul>
+      {effective.length > 0 && <ul className="mt-3 divide-y divide-[var(--color-outline-variant)] border-y border-[var(--color-outline-variant)]">
+        {effective.map(m => <li key={`${m.providerId}:${m.bindingId}`} className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
+          <div className="min-w-0 flex-1 basis-48">
+            <Tooltip>
+              <TooltipTrigger render={<span tabIndex={0} />} className="cursor-help rounded-sm font-medium leading-5 break-words [overflow-wrap:anywhere] hover:underline hover:decoration-dotted hover:underline-offset-4 focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)]">
+                {m.modelName}<span className="sr-only"> · {m.modelCode}</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <span className="mb-1 block text-xs">{t("automaticRouters.modelCode")}</span>
+                <code className="block break-all text-xs">{m.modelCode}</code>
+              </TooltipContent>
+            </Tooltip>
+            <p className="mt-1 break-words text-xs text-[var(--color-on-surface-variant)] [overflow-wrap:anywhere]">{m.providerName}</p>
+          </div>
+          <div className="flex max-w-full flex-wrap items-center gap-3 text-xs text-[var(--color-on-surface-variant)]">
+            {m.inputModalities?.length > 0 && <Badge variant="secondary" className="h-auto max-w-full px-2 py-1 font-normal whitespace-normal">{m.inputModalities.map(input => t(`configuredProviders.inputs.${input}`)).join(" / ")}</Badge>}
+            {m.dimension ? <span className="whitespace-nowrap tabular-nums">{t("automaticRouters.dimensions", { value: new Intl.NumberFormat(i18n.language).format(m.dimension) })}</span> : null}
+          </div>
+        </li>)}
+      </ul>}
       {sources.mode === "SelectedModels" && selected.filter(item => !effective.some(m => m.modelCode === item.id)).map(item => <p key={item.id} className="mt-1 break-words">{item.label}</p>)}
       {!effective.length && (sources.mode !== "SelectedModels" || !selected.length) && <p className="mt-2">{t("automaticRouters.empty")}</p>}
     </details>
