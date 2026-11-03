@@ -42,7 +42,6 @@ export const pages = {
     loading: "加载中…",
     save: "保存",
     saving: "保存中…",
-    saved: "上下文配置已保存，新运行将使用当前配置",
     loadFailed: "无法读取上下文配置",
     saveFailed: "无法保存上下文配置",
     plugin: "插件提供",

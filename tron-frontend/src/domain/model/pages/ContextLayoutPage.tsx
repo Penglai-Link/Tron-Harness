@@ -75,7 +75,7 @@ export function ContextLayoutPage() {
     setSaving(true); setError(""); setNotice("");
     try {
       const updated = await updateContextLayout({ revision: layout.revision, order, shares });
-      setLayout(updated); setOrder(updated.order); setShares(updated.shares); setNotice(t("contextLayout.saved"));
+      setLayout(updated); setOrder(updated.order); setShares(updated.shares);
     } catch (reason) { setError(reason instanceof Error ? reason.message : t("contextLayout.saveFailed")); }
     finally { setSaving(false); }
   }

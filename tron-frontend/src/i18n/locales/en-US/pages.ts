@@ -42,7 +42,6 @@ export const pages = {
     loading: "Loading…",
     save: "Save",
     saving: "Saving…",
-    saved: "Context configuration saved; new runs will use this configuration",
     loadFailed: "Could not load context configuration",
     saveFailed: "Could not save context configuration",
     plugin: "Plugin-provided",
