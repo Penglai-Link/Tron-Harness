@@ -99,7 +99,7 @@ fn all_dude_tools_have_closed_typed_provider_schemas_and_localized_descriptions(
     for locale in ["en-US", "zh-CN"] {
         let tools: Vec<_> = BusinessToolCatalog::list_tools(None, None, locale)
             .into_iter().filter(|tool| tool.category.as_ref().is_some_and(|category| category.code == "tron.dude")).collect();
-        assert_eq!(tools.len(), 13);
+        assert_eq!(tools.len(), 16);
         for tool in tools {
             assert!(tool.tool_name.starts_with("dude_"));
             assert!(tool.domain_code.starts_with("dude_"));
@@ -167,4 +167,24 @@ fn soul_schema_rejects_invalid_shapes_and_describes_utf8_budget() {
             .unwrap()
             .contains("UTF-8 bytes")
     );
+}
+
+#[test]
+fn dude_task_contracts_keep_status_discovery_and_reopen_guidance() {
+    for locale in ["en-US", "zh-CN"] {
+        for code in ["dude.task_page", "dude.task_create"] {
+            let description = BusinessToolCatalog::tool(code, locale).unwrap().description;
+            assert!(!description.contains("workspace") && !description.contains("工作区"));
+        }
+        let get = BusinessToolCatalog::tool("dude.task_get", locale).unwrap();
+        assert!(get.description.contains("taskFlow.statuses"));
+        assert!(get.description.contains("dude_task_update"));
+        let update = BusinessToolCatalog::tool("dude.task_update", locale).unwrap();
+        let description = update.input_schema["properties"]["status"]["description"].as_str().unwrap();
+        for status in ["NOT_STARTED", "IN_PROGRESS", "REOPEN", "CLOSED"] {
+            assert!(description.contains(status), "{locale}: {description}");
+        }
+        assert!(description.contains("dude_task_get"));
+        assert!(update.input_schema["properties"]["status"].get("enum").is_none(), "custom flows remain valid");
+    }
 }

@@ -631,7 +631,12 @@ tx.commit().map_err(storage)})
             let json = tx.query_row("SELECT record_json FROM dude_work_changes WHERE dude_code=?1 AND change_id=?2", params![dude,id], |r| r.get(0)).optional().map_err(storage)?;
             let mut change: DudeWorkChange = decode(json.ok_or(DudeError::NotFound)?)?;
             // Receipt survives archive/deletion: replay never recreates a dismissed notice.
-            if let Some(notice) = change.notification { return Ok(notice); }
+            if let Some(notice) = change.notification {
+                if notice.title != title || notice.body != body {
+                    return Err(DudeError::Runtime("NOTIFICATION_CONTENT_CONFLICT: this changeId already has a notification with different title/body; inspect dude_notification_get. The original notification was not changed or resent.".into()));
+                }
+                return Ok(notice);
+            }
             if change.resolved_at.is_some() { return Err(DudeError::Conflict); }
             validate_work_snapshot(&tx, &change)?;
             let notice = PlatformNotification {
@@ -649,6 +654,18 @@ tx.commit().map_err(storage)})
 
     fn notifications(&mut self) -> Result<Vec<PlatformNotification>, DudeError> {
         self.call(|c|{let mut q=c.prepare("SELECT record_json FROM platform_notifications ORDER BY created_at DESC LIMIT 500").map_err(storage)?;q.query_map([],|r|r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect()})
+    }
+    fn scoped_notifications(&mut self, dude: &str, user: &str, id: Option<&str>, current: usize, size: usize, include_archived: bool)
+        -> Result<(usize, Vec<PlatformNotification>), DudeError> {
+        let (dude, user, id) = (dude.to_owned(), user.to_owned(), id.map(str::to_owned));
+        self.call(move |c| {
+            let predicate = "json_extract(n.record_json,'$.dudeCode')=?1 AND (EXISTS(SELECT 1 FROM workspace_session_links s WHERE s.session_id=json_extract(n.record_json,'$.target.sessionCode') AND json_extract(s.business_json,'$.user_code')=?2) OR EXISTS(SELECT 1 FROM collaboration_threads t WHERE t.session_id=json_extract(n.record_json,'$.target.sessionCode') AND t.user_code=?2 AND t.owner_kind='DUDE' AND t.owner_code=?1)) AND (?3 IS NULL OR n.notification_id=?3) AND (?4 OR json_extract(n.record_json,'$.archivedAt') IS NULL)";
+            let from = "platform_notifications n";
+            let total: i64 = c.query_row(&format!("SELECT COUNT(*) FROM {from} WHERE {predicate}"), params![dude,user,id,include_archived], |r| r.get(0)).map_err(storage)?;
+            let mut q = c.prepare(&format!("SELECT n.record_json FROM {from} WHERE {predicate} ORDER BY n.created_at DESC,n.notification_id DESC LIMIT ?5 OFFSET ?6")).map_err(storage)?;
+            let records = q.query_map(params![dude,user,id,include_archived,size as i64,((current-1)*size) as i64], |r| r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect::<Result<Vec<_>,_>>()?;
+            Ok((total as usize, records))
+        })
     }
     fn update_notification(
         &mut self,

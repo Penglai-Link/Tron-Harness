@@ -37,6 +37,8 @@ impl Fixture {
         state.knowledge_bases.stop_ingestion_workers();
         let code = state.dudes.main().unwrap().dude_code;
         let (soul, _) = state.dudes.begin_awakening(&code, "USR-AUTH-0001").unwrap();
+        let session = state.dudes.session(soul.session_code.as_deref().unwrap()).unwrap().unwrap();
+        state.chats.ensure_dude_session(&session, Some("USR-AUTH-0001".into())).unwrap();
         let registry = ToolRegistry::default();
         register_dude_tools(
             &registry,
@@ -703,4 +705,72 @@ async fn a_new_concrete_result_is_a_new_milestone_and_stale_results_cannot_notif
     }
     assert_eq!(f.state.dudes.notifications().unwrap().len(), 3,
         "distinct decisions must not be merged merely because they share a task/result");
+}
+
+
+#[tokio::test]
+async fn notification_content_conflicts_are_explicit_and_reads_use_current_scoped_state() {
+    let f = Fixture::new();
+    let context = f.context("Check notification receipt");
+    let task = f.task();
+    let change = f.call("dude_work_change", json!({"operation":"record","taskCode":task,"changeKey":"receipt","kind":"NeedsDecision","summary":"Choose the deployment window","evidence":["decision:window"],"requestedAction":"Choose a window"}), &context).unwrap();
+    let payload = json!({"changeId":change["changeId"],"title":" Title ","body":"  Exact body\nwith whitespace  "});
+    let notice = f.call("dude_notify", payload.clone(), &context).unwrap();
+    assert_eq!(notice["title"], payload["title"]);
+    assert_eq!(notice["body"], payload["body"]);
+    assert_eq!(f.call("dude_notify", payload.clone(), &context).unwrap()["id"], notice["id"]);
+    let mut conflicting = payload.clone(); conflicting["body"] = json!("Changed content");
+    assert!(f.call("dude_notify", conflicting, &context).unwrap_err().to_string().contains("NOTIFICATION_CONTENT_CONFLICT"));
+    f.state.dudes.update_notification(notice["id"].as_str().unwrap(), true, true).unwrap();
+    let read = f.call("dude_notification_get",json!({"notificationId":notice["id"]}),&context).unwrap();
+    assert!(read["readAt"].is_number());
+    assert!(read["archivedAt"].is_number());
+    assert!(read["resolvedAt"].is_null());
+    assert_eq!(read["delivery"],json!({"persisted":true,"received":null,"pushed":null}));
+    let page = f.call("dude_notification_page",json!({}),&context).unwrap();
+    assert_eq!(page["total"],0);
+    let page = f.call("dude_notification_page",json!({"includeArchived":true}),&context).unwrap();
+    assert_eq!(page["total"],1);
+    let mut foreign = context.clone(); foreign.user_code = Some("another-user".into());
+    assert_eq!(f.call("dude_notification_page",json!({"includeArchived":true}),&foreign).unwrap()["total"],0);
+    assert!(f.call("dude_notification_get",json!({"notificationId":notice["id"]}),&foreign).is_err());
+    assert!(f.call("dude_notification_page",json!({"size":101}),&context).is_err());
+    f.state.dudes.delete_archived_notification(notice["id"].as_str().unwrap()).unwrap();
+    assert!(f.call("dude_notification_get",json!({"notificationId":notice["id"]}),&context).is_err());
+    assert_eq!(f.call("dude_notify",payload,&context).unwrap()["id"],notice["id"]);
+    assert!(f.state.dudes.notifications().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn task_flow_is_discoverable_and_reopening_resets_progress_and_followup() {
+    let f = Fixture::new();
+    let mut context = f.context("Reopen my task");
+    context.tools = BusinessToolCatalog::list_tools(None,None,"en-US").into_iter().map(tool_record_to_effective_tool).collect();
+    let call = |name: &str, input: Value| {
+        let output = f.state.agent_tool_registry.execute_allowed(ToolRequest { tool_name:name.into(),input,invocation_id:None },&context)?;
+        Ok::<Value,ToolError>(serde_json::from_str(&output.observation.output).unwrap())
+    };
+    let task = f.task();
+    let detail = call("dude_task_get",json!({"taskCode":task})).unwrap();
+    assert_eq!(detail["taskFlow"]["closedStatus"],"CLOSED");
+    assert!(detail["taskFlow"]["statuses"].as_array().unwrap().iter().any(|s| s["statusCode"] == "IN_PROGRESS"));
+    let error = call("dude_task_update",json!({"taskCode":task,"status":"done"})).unwrap_err().to_string();
+    assert!(error.contains("Valid statuses:") && error.contains("IN_PROGRESS") && error.contains("CLOSED"));
+    call("dude_task_update",json!({"taskCode":task,"status":"completed"})).unwrap();
+    let closed = f.state.tasks.get_task(&task).unwrap(); assert_eq!(closed.progress,100); assert!(closed.next_followup_at.is_none());
+    let reopened = call("dude_task_update",json!({"taskCode":task,"status":"IN_PROGRESS"})).unwrap();
+    assert_eq!(reopened["progress"],0);
+    assert!(f.state.tasks.get_task(&task).unwrap().next_followup_at.is_some());
+    assert!(call("dude_task_get",json!({"taskCode":task,"workspaceCode":"foreign"})).is_err());
+}
+
+#[tokio::test]
+async fn similar_milestones_warn_but_distinct_results_are_not_merged() {
+    let f=Fixture::new(); let context=f.context("Report two results"); let task=f.task();
+    let record=|key:&str| f.call("dude_work_change",json!({"operation":"record","taskCode":task,"changeKey":key,"kind":"NeedsDecision","summary":"Choose the deployment window","evidence":[key],"requestedAction":key}),&context).unwrap();
+    let first=record("window-one"); let second=record("window-two");
+    assert_ne!(first["changeId"],second["changeId"]);
+    assert_eq!(second["warnings"][0]["code"],"SIMILAR_WORK_CHANGE");
+    assert_eq!(second["warnings"][0]["existingChangeId"],first["changeId"]);
+    assert!(f.state.dudes.notifications().unwrap().is_empty());
 }

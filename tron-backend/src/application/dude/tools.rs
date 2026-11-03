@@ -25,6 +25,7 @@ pub fn register_dude_tools(
         dudes: dudes.clone(),
         tasks: tasks.clone(),
     }))?;
+    super::notification_tools::register(registry, dudes.clone())?;
     registry.register(Arc::new(DudeNotify { dudes, tasks }))
 }
 struct DudeNotify {

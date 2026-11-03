@@ -13,6 +13,7 @@ mod management;
 mod memory_retrieval;
 mod record_ingestion;
 mod retrieval;
+mod retrieval_warnings;
 
 mod runtime;
 mod search;

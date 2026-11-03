@@ -50,6 +50,14 @@ pub(super) fn owned_task(
 fn snapshot(task: &crate::domain::task::TaskDetail) -> Value {
     json!({"status":task.status,"progress":task.progress,"executionResult":task.execution_result})
 }
+fn similar_summary(left: &str, right: &str) -> bool {
+    let normalize = |text: &str| text.chars().flat_map(char::to_lowercase).filter(|c| c.is_alphanumeric()).collect::<Vec<_>>();
+    let (left, right) = (normalize(left), normalize(right));
+    if left.len().min(right.len()) < 8 { return false; }
+    let grams = |text: &[char]| text.windows(2).map(|pair| (pair[0], pair[1])).collect::<std::collections::BTreeSet<_>>();
+    let (left, right) = (grams(&left), grams(&right));
+    2 * left.intersection(&right).count() * 100 >= 90 * (left.len() + right.len())
+}
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "camelCase", deny_unknown_fields)]
 enum WorkInput {
@@ -168,7 +176,7 @@ impl Tool for DudeWorkChangeTool {
                     && task.status == crate::domain::task::CLOSED_STATUS_CODE
                 {
                     return Err(invalid(
-                        "Reopen a closed task before reporting further progress or blockers",
+                        "Reopen the closed task with dude_task_update using a non-CLOSED status and progress (use dude_task_get to list its valid statuses) before reporting further progress or blockers",
                     ));
                 }
                 let change = DudeWorkChange {
@@ -202,13 +210,19 @@ impl Tool for DudeWorkChangeTool {
                     json!({"kind":kind,"snapshot":change.task_snapshot})
                 }
                 .to_string();
-                json!(
-                    self.dudes
-                        .repo()
-                        .map_err(failure)?
-                        .record_work_change(&change, &fingerprint)
-                        .map_err(failure)?
-                )
+                let mut repository = self.dudes.repo().map_err(failure)?;
+                let saved = repository.record_work_change(&change, &fingerprint).map_err(failure)?;
+                let mut value = json!(saved);
+                if saved.change_id == change.change_id {
+                    let warnings = repository.work_changes(dude, &change.task_code).map_err(failure)?
+                        .into_iter().rev().filter(|previous| previous.change_id != change.change_id && previous.kind == kind
+                            && similar_summary(&previous.summary, &change.summary)).take(3)
+                        .map(|previous| json!({"code":"SIMILAR_WORK_CHANGE","existingChangeId":previous.change_id,
+                            "existingNotificationId":previous.notification.map(|notification| notification.id),
+                            "message":"A similar milestone already exists for this task. Review and reuse its receipt if this is the same outcome; do not send another notification just because this session used a different changeKey. Distinct outcomes remain separate."})).collect::<Vec<_>>();
+                    if !warnings.is_empty() { value["warnings"] = json!(warnings); }
+                }
+                value
             }
             WorkInput::Resolve {
                 change_id,
@@ -287,8 +301,8 @@ pub(super) fn publish(
         .notify_work_change(
             dude,
             id,
-            title.trim(),
-            body.trim(),
+            title,
+            body,
             chrono::Utc::now().timestamp_millis(),
         )
         .map_err(failure)

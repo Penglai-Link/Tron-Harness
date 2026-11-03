@@ -312,6 +312,16 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 )
             })
             .collect();
+        // A new invocation or resume has a fresh saved-policy snapshot. Tell
+        // the model exactly what changed instead of leaving stale tool names in
+        // prior conversation turns as its only evidence. In-flight tools keep
+        // the assignment they were admitted under.
+        if let Some(notice) = host.harness.framework_tool_catalog_update(&state.context, bindings).await
+            .map_err(|error| fw::AgentError::ToolSetup(error.to_string()))? {
+            state.trusted_prefix.push(crate::domain::agent::AgentMessage::new("user", vec![crate::domain::agent::AgentMessagePart::Context {
+                kind: "tool_domains".into(), text: notice.to_string(), metadata: None,
+            }]));
+        }
         Ok(())
     }
 

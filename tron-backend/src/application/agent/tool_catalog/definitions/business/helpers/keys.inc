@@ -119,6 +119,15 @@ fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
         ("automation.execute", "sampleResultSummary") => {
             "agent.toolCatalog.tools.automation.execute.sampleResultSummary"
         }
+        ("dude.notification_page", "name") => "agent.toolCatalog.tools.dude.notification_page.name",
+        ("dude.notification_page", "description") => "agent.toolCatalog.tools.dude.notification_page.description",
+        ("dude.notification_page", "sampleResultSummary") => "agent.toolCatalog.tools.dude.notification_page.sampleResultSummary",
+        ("dude.notification_get", "name") => "agent.toolCatalog.tools.dude.notification_get.name",
+        ("dude.notification_get", "description") => "agent.toolCatalog.tools.dude.notification_get.description",
+        ("dude.notification_get", "sampleResultSummary") => "agent.toolCatalog.tools.dude.notification_get.sampleResultSummary",
+        ("task.get", "name") => "agent.toolCatalog.tools.task.get.name",
+        ("task.get", "description") => "agent.toolCatalog.tools.task.get.description",
+        ("task.get", "sampleResultSummary") => "agent.toolCatalog.tools.task.get.sampleResultSummary",
         ("task.page", "name") => "agent.toolCatalog.tools.task.page.name",
         ("task.page", "description") => "agent.toolCatalog.tools.task.page.description",
         ("task.page", "sampleResultSummary") => {

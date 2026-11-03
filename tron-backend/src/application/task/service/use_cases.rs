@@ -168,7 +168,7 @@ impl TaskService {
             task.progress = if status == crate::domain::task::CLOSED_STATUS_CODE {
                 100
             } else {
-                status_update.progress.unwrap_or(task.progress).min(100)
+                status_update.progress.unwrap_or(if task.status == crate::domain::task::CLOSED_STATUS_CODE { 0 } else { task.progress }).min(100)
             };
             task.status = status;
         }
@@ -259,11 +259,12 @@ impl TaskService {
         if !Self::flow_contains_status(&flow, &status) {
             return Err(TaskError::StatusNotInFlow);
         }
+        let reopening = task.status == crate::domain::task::CLOSED_STATUS_CODE && status != crate::domain::task::CLOSED_STATUS_CODE;
         task.status = status.clone();
         task.progress = if status == crate::domain::task::CLOSED_STATUS_CODE {
             100
         } else {
-            command.progress.unwrap_or(task.progress).min(100)
+            command.progress.unwrap_or(if reopening { 0 } else { task.progress }).min(100)
         };
         if task.status == crate::domain::task::CLOSED_STATUS_CODE {
             task.next_followup_at = None;

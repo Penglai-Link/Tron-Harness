@@ -18,7 +18,7 @@ pub struct ShortTermMemoryService {
     config: ShortTermMemoryConfig,
     runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
 }
-fn error(e: fw::StateError) -> ShortTermMemoryError {
+pub(super) fn error(e: fw::StateError) -> ShortTermMemoryError {
     match e {
         fw::StateError::NotFound => ShortTermMemoryError::SessionNotFound,
         fw::StateError::Conflict => ShortTermMemoryError::GoalStateConflict,

@@ -4,6 +4,12 @@ use super::*;
 use crate::domain::agent::{TokenEstimateSnapshot, TokenUsageAuditSnapshot};
 
 impl ReactAgent {
+    pub(crate) async fn framework_tool_catalog_update(&self, context: &AgentRunContext, bindings: &[eliteforge_agent_core::ToolBinding]) -> Result<Option<serde_json::Value>, AgentError> {
+        match &self.short_term_memory {
+            Some(memory) => memory.admitted_tool_catalog_update(context, bindings).await.map_err(short_term_memory_error),
+            None => Ok(None),
+        }
+    }
     pub(crate) fn framework_dudes(&self)->Option<crate::application::dude::DudeService> {
         self.framework_host.as_ref().and_then(|h|h.dudes())
     }

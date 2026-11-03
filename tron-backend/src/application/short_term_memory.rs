@@ -7,6 +7,7 @@ mod assembler;
 mod config;
 mod dto;
 mod native_service;
+mod tool_catalog_updates;
 mod provider_config;
 mod redaction;
 pub use config::{

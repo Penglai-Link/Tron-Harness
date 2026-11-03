@@ -63,7 +63,9 @@ fn context() -> AgentRunContext {
             responses_stateful_enabled: false,
             temperature: None,
             max_tokens: Some(128),
-            context_window_tokens: Some(32_000),
+            // Exercise gateway/schema behavior with the current allocation layout;
+            // tiny synthetic windows can fail required instruction-block quotas first.
+            context_window_tokens: Some(1_000_000),
             top_p: None,
             max_retries: Some(0),
             supports_developer_role: false,

@@ -62,6 +62,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             )
             .await?;
         self.recheck_published(&ranges, &mut result)?;
+        let warnings = result.warning_details();
         let hits: Vec<CandidateHit> = result
             .hits
             .into_iter()
@@ -109,11 +110,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             context_strategy: request.context.strategy,
             hits,
             context_pack,
-            warnings: result
-                .warnings
-                .into_iter()
-                .map(|warning| json!({"code":"RAG_RETRIEVAL_PARTIAL","message":warning}))
-                .collect(),
+            warnings,
             trace_code: None,
         })
     }

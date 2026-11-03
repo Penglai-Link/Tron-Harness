@@ -302,3 +302,18 @@ fn dude_soul_update_definition() -> ToolCatalogDefinition {
             "new":{"type":"string","maxLength":16384,"description":"Replacement text; empty string deletes a nonempty old passage. Must differ from old."}
         },"additionalProperties":false}}},"additionalProperties":false})))
 }
+
+
+fn dude_notification_page_definition() -> ToolCatalogDefinition {
+    definition("dude.notification_page", "dude_notification", ToolOperationKind::Query,
+        schema("agent.toolCatalog.tools.dude.notification_page.description", json!([{"current":1,"size":20}]),
+            json!({"type":"object","properties":{"current":{"type":"integer","minimum":1,"maximum":1000000},"size":{"type":"integer","minimum":1,"maximum":100},"includeArchived":{"type":"boolean"}},"additionalProperties":false})))
+}
+fn dude_notification_get_definition() -> ToolCatalogDefinition {
+    definition("dude.notification_get", "dude_notification", ToolOperationKind::Query,
+        schema("agent.toolCatalog.tools.dude.notification_get.description", json!([{"notificationId":"work-change:change-id"}]),
+            json!({"type":"object","required":["notificationId"],"properties":{"notificationId":{"type":"string","minLength":1}},"additionalProperties":false})))
+}
+fn task_get_definition() -> ToolCatalogDefinition {
+    task_code_definition("task.get", ToolOperationKind::Query)
+}

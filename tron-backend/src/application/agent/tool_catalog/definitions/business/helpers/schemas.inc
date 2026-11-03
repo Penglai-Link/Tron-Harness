@@ -149,7 +149,7 @@ pub(super) fn task_mutation_schema(create: bool) -> Value {
             "agentCodes": { "type": "array", "items": { "type": "string" }, "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.agentCodes" },
             "appCodes": { "type": "array", "items": { "type": "string" }, "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.appCodes" },
             "appCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.appCode" },
-            "status": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.page.params.status" },
+            "status": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.status" },
             "progress": { "type": "integer", "minimum": 0, "maximum": 100, "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.progress" }
         },
         "additionalProperties": false

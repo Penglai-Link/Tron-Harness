@@ -756,3 +756,16 @@ async fn embedding_batch_record_checkpoint_survives_failure_and_retry_without_re
     assert_eq!(stored.state, "COMPLETED");
     assert_eq!(stored.completed_units, task.total_units);
 }
+
+
+#[tokio::test]
+async fn filter_only_memory_style_retrieval_never_calls_a_reranker_with_empty_query() {
+    let repo = repository();
+    let rag = service(repo, Runtime { fail: false });
+    rag.ingest(request("orchid published evidence")).await.unwrap();
+    // Runtime::rerank deliberately fails if called. A listing must not call it.
+    let result = rag.retrieve_authorized("SPACE-A", "  ", &[range("SPACE-A")], 8, Some("reranker"), None).await.unwrap();
+    assert!(!result.hits.is_empty());
+    assert!(result.warnings.is_empty(),"{:?}",result.warnings);
+    assert!(result.stages.iter().any(|stage| stage.channel == "rerank" && stage.status == "SKIPPED" && stage.error.is_none()));
+}

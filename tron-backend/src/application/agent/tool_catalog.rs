@@ -25,6 +25,7 @@ pub(crate) fn dude_tool_replacement(code: &str) -> Option<&'static str> {
         "memory.save" => Some("dude.memory_save"),
         "memory.delete" => Some("dude.memory_delete"),
         "todo.update" => Some("dude.todo_update"),
+        "task.get" => Some("dude.task_get"),
         "task.page" => Some("dude.task_page"),
         "task.create" => Some("dude.task_create"),
         "task.update" => Some("dude.task_update"),

@@ -368,6 +368,13 @@ where
         if result.hits.is_empty() {
             return Ok(result);
         }
+        // Filter-only memory listing has no relevance query. Keep the fused
+        // order; never send an invalid empty query to a remote reranker.
+        if query.trim().is_empty() {
+            result.hits.truncate(limit);
+            result.stages.push(RagRetrievalStage { corpus_id: String::new(), channel: "rerank".into(), status: "SKIPPED".into(), hit_count: result.hits.len(), duration_ms: 0, error: None });
+            return Ok(result);
+        }
         if let Some(model) = rerank_model.filter(|model| !model.trim().is_empty()) {
             let rerank_started = std::time::Instant::now();
             let order = self

@@ -61,10 +61,21 @@ pub(super) fn localize_tool_record(
             }.into();
         }
     } else if record.domain_code == "dude_task" {
-        record.description = match locale {
-            SupportedLocale::ZhCn => "管理当前 Dude 负责的平台任务。".into(),
-            _ => "Manage platform tasks owned by the current Dude.".into(),
+        let scope = match locale {
+            SupportedLocale::ZhCn => "管理当前 Dude 负责的平台任务。",
+            _ => "Manage platform tasks owned by the current Dude.",
         };
+        let description = match (record.tool_name.as_str(), locale) {
+            ("dude_task_page", SupportedLocale::ZhCn) => "分页查询当前 Dude 负责的平台任务。",
+            ("dude_task_page", _) => "Page platform tasks owned by the current Dude.",
+            ("dude_task_create", SupportedLocale::ZhCn) => "创建由当前 Dude 负责的平台任务。",
+            ("dude_task_create", _) => "Create a platform task owned by the current Dude.",
+            _ => &record.description,
+        };
+        record.description = format!("{scope} {description}")
+            .replace("task_get", "dude_task_get")
+            .replace("task_update", "dude_task_update")
+            .replace("task_restore", "dude_task_restore");
         record.input_schema["description"] = record.description.clone().into();
     }
     // These are explicit host aliases for official local bindings. Resources

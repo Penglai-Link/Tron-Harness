@@ -256,6 +256,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             "memory.save" => ("dude.memory_save", "dude_memory_save", "dude_memory"),
             "memory.delete" => ("dude.memory_delete", "dude_memory_delete", "dude_memory"),
             "todo.update" => ("dude.todo_update", "dude_todo_update", "dude_task"),
+            "task.get" => ("dude.task_get", "dude_task_get", "dude_task"),
             "task.page" => ("dude.task_page", "dude_task_page", "dude_task"),
             "task.create" => ("dude.task_create", "dude_task_create", "dude_task"),
             "task.update" => ("dude.task_update", "dude_task_update", "dude_task"),
