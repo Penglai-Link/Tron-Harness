@@ -15,6 +15,7 @@ pub struct SystemCliRuntime {
     command_name: String,
     kind: SystemAgentCliKind,
     working_directory: Option<String>,
+    dsh_workspace: Option<eliteforge_agent_capability_external::DshWorkspaceOptions>,
 }
 impl SystemCliRuntime {
     pub fn new(
@@ -30,7 +31,15 @@ impl SystemCliRuntime {
             kind,
             command_name: command_name.into(),
             working_directory,
+            dsh_workspace: None,
         }
+    }
+    pub(crate) fn with_dsh_workspace(
+        mut self,
+        workspace: Option<eliteforge_agent_capability_external::DshWorkspaceOptions>,
+    ) -> Self {
+        self.dsh_workspace = workspace;
+        self
     }
     async fn invoke(
         &self,
@@ -97,7 +106,11 @@ impl SystemCliRuntime {
                 .reasoning_effort
                 .map(|effort| effort.provider_value().to_owned()),
         )
-        .with_dsh_options(eliteforge_agent_capability_external::DshCliOptions { reuse_stored_credentials: true, provider_profile: Some("desktop".into()) })
+        .with_dsh_options(eliteforge_agent_capability_external::DshCliOptions {
+            reuse_stored_credentials: true,
+            provider_profile: Some("desktop".into()),
+            workspace: self.dsh_workspace.clone(),
+        })
         .with_fast_mode(context.system_agent_fast_mode)
         .invoke(request, sink)
         .await

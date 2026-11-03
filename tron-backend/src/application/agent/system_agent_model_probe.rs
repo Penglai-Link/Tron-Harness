@@ -52,7 +52,9 @@ impl SystemCommandProbe for ProcessSystemCommandProbe {
             let catalog = eliteforge_agent_capability_external::DshModelProbe::discover_blocking(
                 command_name,
                 eliteforge_agent_capability_external::DshCliOptions {
-                    reuse_stored_credentials: true, provider_profile: Some("desktop".into())
+                    reuse_stored_credentials: true,
+                    provider_profile: Some("desktop".into()),
+                    ..Default::default()
                 },
             )
             .map_err(|e| e.to_string())?;

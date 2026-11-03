@@ -19,6 +19,17 @@ fn component(value: &str) -> String {
 }
 
 impl FrameworkHost {
+    /// dsh's immutable session cwd identifies the shared UI group. The CLI
+    /// adapter sets effective cwd and standing write root to the actual task.
+    pub(crate) fn dsh_workspace_options(
+        &self,
+    ) -> eliteforge_agent_capability_external::DshWorkspaceOptions {
+        eliteforge_agent_capability_external::DshWorkspaceOptions {
+            directory: self.0.path.with_extension("workspaces").join("sessions"),
+            title: "Tron harness".into(),
+        }
+    }
+
     fn managed_working_directory(&self, kind: &str, user: Option<&str>, id: &str) -> PathBuf {
         self.0
             .path
@@ -224,6 +235,46 @@ mod tests {
         assert_ne!(
             first.execution_scope.local_directory,
             other_user.execution_scope.local_directory
+        );
+    }
+    #[test]
+    fn dsh_group_is_the_shared_session_parent_without_changing_task_directories() {
+        let host = FrameworkHost::temporary(None).unwrap();
+        let group = host.dsh_workspace_options();
+        assert_eq!(group.title, "Tron harness");
+        assert_eq!(
+            group.directory,
+            host.0.path.with_extension("workspaces").join("sessions")
+        );
+        let mut first = context("first");
+        let mut other = context("second");
+        host.prepare_working_directory(&mut first).unwrap();
+        host.prepare_working_directory(&mut other).unwrap();
+        for ctx in [&first, &other] {
+            assert!(
+                Path::new(ctx.execution_scope.local_directory.as_ref().unwrap())
+                    .starts_with(group.directory.canonicalize().unwrap())
+            );
+        }
+        assert_ne!(
+            first.execution_scope.local_directory,
+            other.execution_scope.local_directory
+        );
+        let project = tempfile::tempdir().unwrap();
+        let mut selected = context("project");
+        selected.execution_scope.local_directory = Some(project.path().to_str().unwrap().into());
+        host.prepare_working_directory(&mut selected).unwrap();
+        assert_eq!(
+            selected.execution_scope.local_directory.as_deref(),
+            project.path().to_str()
+        );
+        assert_eq!(host.dsh_workspace_options().directory, group.directory);
+        assert_ne!(
+            FrameworkHost::temporary(None)
+                .unwrap()
+                .dsh_workspace_options()
+                .directory,
+            group.directory
         );
     }
     #[tokio::test]

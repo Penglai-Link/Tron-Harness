@@ -54,7 +54,19 @@ impl FrameworkHost {
                 command_name,
                 working_directory,
             )),
-            RuntimeAdapterSelection::DshHeadless { command_name, working_directory } => Arc::new(SystemCliRuntime::new(RuntimeAdapterKey::DshHeadless, RuntimeCapabilities::system_cli(), SystemAgentCliKind::Dsh, command_name, working_directory)),
+            RuntimeAdapterSelection::DshHeadless {
+                command_name,
+                working_directory,
+            } => Arc::new(
+                SystemCliRuntime::new(
+                    RuntimeAdapterKey::DshHeadless,
+                    RuntimeCapabilities::system_cli(),
+                    SystemAgentCliKind::Dsh,
+                    command_name,
+                    working_directory,
+                )
+                .with_dsh_workspace(Some(self.dsh_workspace_options())),
+            ),
             RuntimeAdapterSelection::OpenCodeRun {
                 command_name,
                 working_directory,
