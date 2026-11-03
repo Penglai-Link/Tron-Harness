@@ -60,7 +60,7 @@ export const observability = {
   dashboardScope: "Traces: retained data",
   dashboardHelpLabel: "Dashboard scope",
   dashboardHelp: "Cumulative metrics cover all retained page, Agent and Dude traces, not HTTP requests. Cumulative error rate = failed / all traces (including running). Latency includes ended traces only. Recent error rate and traffic cover the last 15 calendar minutes; the current minute is incomplete. Resources and process topology belong to the current Profile backend instance and are independent of workspace filters. Refreshes every 10 seconds.",
-  updatedAt: "Updated",
+  updatedAt: "Dashboard refreshed",
   dashboardFailed: "Could not load dashboard",
   requestCount: "Retained traces",
   requestCountHint: "Retained page, Agent and Dude traces, not the total number of HTTP requests",

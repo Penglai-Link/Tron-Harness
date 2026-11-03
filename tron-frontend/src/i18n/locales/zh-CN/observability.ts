@@ -60,7 +60,7 @@ export const observability = {
   dashboardScope: "链路统计：保留期内数据",
   dashboardHelpLabel: "看板统计说明",
   dashboardHelp: "累计指标覆盖全部保留的页面访问、Agent 和 Dude 运行链路，不是 HTTP 请求数。累计错误率 = 失败链路 / 全部链路（含运行中）。耗时仅统计已结束链路。近期错误率和趋势图显示最近 15 个自然分钟，当前分钟尚未结束。资源和进程拓扑属于当前 Profile 后端实例，不受工作区筛选影响。每 10 秒刷新。",
-  updatedAt: "更新时间",
+  updatedAt: "看板刷新时间",
   dashboardFailed: "看板加载失败",
   requestCount: "累计链路",
   requestCountHint: "保留数据中的页面访问及 Agent、Dude 运行链路，不是 HTTP 请求总数",
