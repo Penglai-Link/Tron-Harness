@@ -21,6 +21,29 @@ async fn context_layout_saves_only_shares_and_requires_exactly_one_hundred_perce
     let document = response_json(response).await["data"].clone();
     assert!(document["order"].as_array().unwrap().contains(&json!("conversation_history_summary")));
     assert!(document.get("nativeBudgets").is_none());
+    let response = authenticated_request(&app, Method::GET, "/api/v1/context-blocks", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let catalog = response_json(response).await["data"].clone();
+    for block in document["blocks"].as_array().unwrap() {
+        assert!(!block["description"].as_str().unwrap().is_empty(), "{}", block["id"]);
+        let metadata = catalog.as_array().unwrap().iter().find(|item| item["id"] == block["id"]).unwrap();
+        assert_eq!(block["displayName"], metadata["displayName"]);
+        assert_eq!(block["description"], metadata["description"]);
+    }
+    let skills = catalog.as_array().unwrap().iter().find(|item| item["id"] == "skills.catalog").unwrap();
+    assert_eq!(skills["displayName"], "技能目录");
+    assert!(skills["providerId"].is_string());
+    assert!(skills["description"].as_str().unwrap().contains("已授权技能"));
+    use tower::ServiceExt;
+    let response = app.clone().oneshot(axum::http::Request::builder()
+        .uri("/api/v1/context-blocks")
+        .header("authorization", "Bearer profile-test-token")
+        .header("accept-language", "en-US")
+        .body(axum::body::Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let english = response_json(response).await["data"].clone();
+    assert_eq!(english.as_array().unwrap().iter().find(|item| item["id"] == "skills.catalog").unwrap()["displayName"], "Skill catalog");
+    assert!(english.as_array().unwrap().iter().find(|item| item["id"] == "application_context").unwrap()["description"].as_str().unwrap().contains("AGENTS.md"));
     let defaults = document["defaults"].clone();
     assert_eq!(defaults["shares"]["seed_prompt_prefix"], 500);
     assert_eq!(defaults["shares"]["current_session_history"], 7500);

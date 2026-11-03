@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { PageHeader } from "@/shared";
 import { contextBlockName } from "@/shared/context/contextBlockPresentation";
+import { ContextBlockHelp } from "@/shared/context/ContextBlockHelp";
 import { fetchContextLayout, updateContextLayout, type ContextLayoutState } from "../api/contextLayoutApi";
 import { contextBlockColor } from "../components/context-layout/contextBlockColors";
 import { BudgetShareControl } from "../components/context-layout/BudgetShareControl";
@@ -81,7 +82,7 @@ export function ContextLayoutPage() {
   }
   const columns = "grid grid-cols-[minmax(8rem,1fr)_10rem_6rem] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_18rem_9rem] sm:gap-5";
   const tokenPreview = allocateContextShares(shares, previewWindow);
-  const budgets = order.map(id => ({ id, name: contextBlockName(id, t, blocksById.get(id)?.displayName || id), share: shares[id] ?? 0, tokens: tokenPreview[id] ?? 0 }));
+  const budgets = order.map(id => ({ id, name: blocksById.get(id)?.displayName || contextBlockName(id, t), share: shares[id] ?? 0, tokens: tokenPreview[id] ?? 0 }));
 
   return (
     <div className="min-w-0 pb-8">
@@ -106,7 +107,7 @@ export function ContextLayoutPage() {
               {order.map((id, index) => {
                 const block = blocksById.get(id);
                 const movable = id !== "seed_prompt_prefix";
-                const name = contextBlockName(id, t, block?.displayName || id);
+                const name = block?.displayName || contextBlockName(id, t);
                 return <li key={id}
                   onMouseEnter={() => setHighlightedId(id)} onMouseLeave={() => setHighlightedId(null)}
                   onFocusCapture={() => setHighlightedId(id)}
@@ -130,6 +131,7 @@ export function ContextLayoutPage() {
                     <span className="flex w-4 shrink-0 justify-center">{movable ? <GripVertical size={14} className="cursor-grab text-[var(--color-on-surface-variant)] opacity-40 group-hover:opacity-90" aria-hidden="true" /> : null}</span>
                     <span aria-hidden="true" className="size-2.5 shrink-0 rounded-[2px]" style={{ background: contextBlockColor(id) }} />
                     <span className="truncate text-sm font-medium" title={name}>{name}</span>
+                    <ContextBlockHelp name={name} description={block?.description} />
                     {block?.plugin ? <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-on-surface-variant)] ring-1 ring-inset ring-[var(--color-outline-variant)]" title={block.providerId ?? undefined}>{t("contextLayout.plugin")}</span> : null}
                     {block?.unavailable ? <Button variant="ghost" size="icon-xs" disabled={saving} aria-label={t("contextLayout.removeUnavailable", { name })} onClick={() => removeBlock(id)}><Trash2 /></Button> : null}
                   </div>

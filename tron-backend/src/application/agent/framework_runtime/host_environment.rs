@@ -658,24 +658,31 @@ impl FrameworkHost {
     pub(crate) async fn context_layout_catalog(
         &self,
     ) -> Result<Vec<super::super::ContextLayoutContributorInfo>, fw::AgentError> {
+        Ok(self
+            .context_block_catalog()
+            .await?
+            .into_iter()
+            .filter(|source| source.kind == fw::ContextSourceKind::Data)
+            .collect())
+    }
+
+    pub(crate) async fn context_block_catalog(
+        &self,
+    ) -> Result<Vec<super::super::ContextLayoutContributorInfo>, fw::AgentError> {
         let framework = self.framework().await?;
         let services = framework.services()?;
         Ok(services
             .providers::<fw::ContextContributorService>()
             .into_iter()
             .zip(services.all::<fw::ContextContributorService>())
-            .filter_map(|(provider_id, service)| {
+            .map(|(provider_id, service)| {
                 let source = &service.0;
-                (source.kind() == fw::ContextSourceKind::Data).then(|| {
-                    let metadata = source.layout_metadata();
-                    super::super::ContextLayoutContributorInfo {
-                        provider_id: provider_id.to_owned(),
-                        block_id: source.block_id().to_owned(),
-                        display_name: metadata.display_name,
-                        description: metadata.description,
-                        default_order: metadata.default_order,
-                    }
-                })
+                super::super::ContextLayoutContributorInfo {
+                    provider_id: provider_id.to_owned(),
+                    block_id: source.block_id().to_owned(),
+                    metadata: source.layout_metadata(),
+                    kind: source.kind(),
+                }
             })
             .collect())
     }

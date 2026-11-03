@@ -2154,6 +2154,7 @@ export const pages = {
         reductionStat: "压缩前 {{original}}，保留 {{final}} tokens。",
         protocolName: "工具定义",
         protocolNote: "请求中的独立 tools 字段",
+        descriptionUnavailable: "此上下文块尚未提供描述，或描述暂时无法加载。",
         inputCapacityShareNote: "各项显示实际 token / 模型可用输入预算；进度条表示该项占输入预算的比例。",
         requestAllocationNote: "本次分配 {{tokens}} token，按实际需要分配，不代表容量上限。",
         toolSchemaName: "工具定义",

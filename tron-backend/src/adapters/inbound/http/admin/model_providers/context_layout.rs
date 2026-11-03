@@ -13,6 +13,7 @@ use crate::{
     application::{short_term_memory::{ContextBudgetConfig, ContextProvidersConfig}, system_config::SystemConfigChange},
     response::ApiResponse,
 };
+use crate::shared::locale::SupportedLocale;
 
 const NATIVE_IDS: &[&str] = &[
     "seed_prompt_prefix",
@@ -142,6 +143,7 @@ pub(super) async fn list(
         revision,
         &config.context,
         contributors,
+        request_locale(&headers),
     ))))
 }
 
@@ -175,14 +177,16 @@ pub(super) async fn update(
         _ => LayoutError::invalid(&headers),
     })?;
     let updated = state.short_term_memory.framework_context_config();
-    Ok(Json(ApiResponse::protocol_success(build_layout(saved.revision, &updated.context, contributors))))
+    Ok(Json(ApiResponse::protocol_success(build_layout(saved.revision, &updated.context, contributors, request_locale(&headers)))))
 }
 
 fn build_layout(
     revision: String, config: &ContextBudgetConfig,
     contributors: Vec<crate::application::agent::framework_runtime::ContextLayoutContributorInfo>,
+    locale: SupportedLocale,
 ) -> ContextLayoutVo {
     let providers = &config.providers;
+    let catalog = crate::application::short_term_memory::context_block_catalog(contributors.clone());
     let contributors = contributors.into_iter().map(|item| (item.block_id.clone(), item)).collect::<HashMap<_, _>>();
     let order = ordered_sources(providers, &contributors);
     let shares = providers.effective_shares(&order);
@@ -195,12 +199,15 @@ fn build_layout(
         order: default_order,
     };
     let blocks = order.iter().map(|id| {
+        let text = catalog.get(id).map(|entry| entry.metadata.resolve(locale.as_str()));
+        let display_name = text.as_ref().map(|text| text.display_name.clone()).unwrap_or_else(|| id.clone());
+        let description = text.map(|text| text.description).unwrap_or_default();
         if let Some(item) = contributors.get(id) {
-            ContextLayoutBlockVo { id: id.clone(), display_name: item.display_name.clone(), description: item.description.clone(),
+            ContextLayoutBlockVo { id: id.clone(), display_name, description,
                 plugin: true, unavailable: false, provider_id: Some(item.provider_id.clone()) }
         } else {
             let native = NATIVE_IDS.contains(&id.as_str());
-            ContextLayoutBlockVo { id: id.clone(), display_name: id.clone(), description: String::new(),
+            ContextLayoutBlockVo { id: id.clone(), display_name, description,
                 plugin: !native, unavailable: !native, provider_id: None }
         }
     }).collect();
@@ -213,8 +220,12 @@ fn ordered_sources(
 ) -> Vec<String> {
     let mut order = providers.order.clone();
     let mut additions = contributors.values().filter(|item| !order.contains(&item.block_id))
-        .map(|item| (item.default_order, item.block_id.clone())).collect::<Vec<_>>();
+        .map(|item| (item.metadata.default_order, item.block_id.clone())).collect::<Vec<_>>();
     additions.sort();
     order.extend(additions.into_iter().map(|(_, id)| id));
     order
+}
+
+fn request_locale(headers: &HeaderMap) -> SupportedLocale {
+    SupportedLocale::from_request(headers.get("accept-language").and_then(|value| value.to_str().ok()))
 }

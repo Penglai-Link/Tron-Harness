@@ -34,6 +34,20 @@ import {
 import { contextAssemblySnapshot } from "../model/contextAssemblyReport";
 
 describe("saved plugin context budgets", () => {
+  it("uses the shared catalog for native, plugin and protocol descriptions in live and saved reports", () => {
+    const snapshot = contextAssemblySnapshot({ contextReport: {
+      input_capacity: 1_000, protocol_tokens: 10,
+      blocks: [{ id: "skills.catalog", position: 0, sources: [{ id: "skills.catalog" }], allocated_tokens: 20, final_tokens: 20, final_message_count: 1 }],
+    } })!;
+    const catalog = new Map([
+      ["skills.catalog", { id: "skills.catalog", displayName: "Plugin-owned name", description: "Plugin-owned description", providerId: "skills" }],
+      ["protocol", { id: "protocol", displayName: "Tool definitions", description: "Protocol description", providerId: null }],
+    ]);
+    const rows = buildReportedContextMemoryBlocks(snapshot, key => key, catalog);
+    expect(rows[0]).toMatchObject({ name: "Plugin-owned name", description: "Plugin-owned description" });
+    expect(rows[1]).toMatchObject({ name: "Tool definitions", description: "Protocol description" });
+    expect(buildReportedContextMemoryBlocks(JSON.parse(JSON.stringify(snapshot)), key => key, catalog)).toEqual(rows);
+  });
   it.each([776_601, 0])("retains the saved protocol ceiling for live and historical reports (%s)", (ceiling) => {
     const snapshot = contextAssemblySnapshot({
       snapshotSequence: "4",

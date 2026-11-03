@@ -1,4 +1,6 @@
 import { contextBlockName } from "@/shared/context/contextBlockPresentation";
+import { ContextBlockHelp } from "@/shared/context/ContextBlockHelp";
+import { useContextBlockCatalog, type ContextBlockCatalog } from "@/shared/context/useContextBlockCatalog";
 import {
   BookmarkPlus,
   Copy,
@@ -1376,6 +1378,7 @@ interface ContextMemoryBlockItem {
   allocationTokens?: number | null;
   limitTokens: number | null;
   name: string;
+  description?: string;
   stat: string;
   tokens: number;
 }
@@ -1385,10 +1388,11 @@ interface ContextMemoryBlockItem {
 export function buildReportedContextMemoryBlocks(
   snapshot: ContextAssemblySnapshot,
   translate: (key: string, options?: Record<string, unknown>) => string,
+  catalog?: ContextBlockCatalog,
 ): ContextMemoryBlockItem[] {
   const prefix = "chat.shortTermMemory.contextPanel.";
   const placements = contextBlockPlacements(snapshot.blocks);
-  const label = (id: string) => contextBlockName(id, translate);
+  const label = (id: string) => catalog?.get(id)?.displayName || contextBlockName(id, translate);
   const detailAliases: Record<string, ContextDetailBlock> = {
     "framework.instructions": "systemPrompt", seed_prompt_prefix: "systemPrompt",
     application_context: "applicationContext", "framework.history": "history",
@@ -1406,6 +1410,7 @@ export function buildReportedContextMemoryBlocks(
     allocationTokens: block.allocatedTokens,
     limitTokens: block.configuredTokens,
     name: label(block.id),
+    description: catalog?.get(block.id)?.description,
     tokens: block.finalTokens,
     stat: translate(prefix + "messageCount", { count: block.messageCount }),
     limitDescription: block.reason || (block.originalTokens !== null && block.originalTokens > block.finalTokens
@@ -1420,7 +1425,8 @@ export function buildReportedContextMemoryBlocks(
     detailCode: snapshot.toolsDetail !== undefined || snapshot.snapshotSequence ? "toolSchema" : undefined,
     detailValue: snapshot.toolsDetail,
     snapshotSequence: snapshot.snapshotSequence,
-    name: translate(prefix + "protocolName"),
+    name: label("protocol") === "protocol" ? translate(prefix + "protocolName") : label("protocol"),
+    description: catalog?.get("protocol")?.description,
     stat: "",
     allocationTokens: null,
     limitTokens: typeof protocolLimit === "number" && Number.isSafeInteger(protocolLimit) && protocolLimit >= 0
@@ -1661,23 +1667,16 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
             <span className="min-w-0 break-words text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]" title={block.code === "protocol" ? undefined : block.code}>{block.name}</span>
             {block.stat ? <span className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</span> : null}
           </button>
-          {block.code === "protocol" ? (
-            <InfoTooltip ariaLabel={block.name} align="start">
-              {t("chat.shortTermMemory.contextPanel.protocolNote")}
-            </InfoTooltip>
-          ) : null}
-          {block.sources?.length ? (
-            <InfoTooltip ariaLabel={block.name} align="start">
-              <div className="max-w-[18rem] whitespace-normal text-xs leading-5">
+          <ContextBlockHelp name={block.name} description={block.description}>
+            {block.sources?.length ? <div>
                 <p className="mb-1">{t("chat.shortTermMemory.contextPanel.mergedSourcesNote")}</p>
                 <ol className="space-y-1">
                   {block.sources.map((source, index) => <li className="break-words" key={`${source.id}:${index}`}>
                     <span className="mr-1 font-mono">{block.order}.{index + 1}</span>{source.name}
                   </li>)}
                 </ol>
-              </div>
-            </InfoTooltip>
-          ) : null}
+              </div> : null}
+          </ContextBlockHelp>
         </div>
         <span
           className="shrink-0 font-mono text-[11px]"
@@ -2212,6 +2211,7 @@ export function RightContextSidebar({
   todos?: ChatSessionTodo[];
 }) {
   const { t } = useTranslation("pages");
+  const blockCatalog = useContextBlockCatalog();
   const usage = chatTokenUsage(messages);
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
   const liveAssembly = useMemo(() => latestContextAssemblyFromEvents(events), [events]);
@@ -2223,7 +2223,7 @@ export function RightContextSidebar({
     effectiveInputBudget: assembly.snapshot.inputCapacity ?? undefined,
   }) : null;
   const runtimeNotice = latestShortTermMemoryRuntimeNotice(events);
-  const contextBlocks = useMemo(() => assembly.snapshot ? buildReportedContextMemoryBlocks(assembly.snapshot, (key, options) => t(key, options)) : [], [assembly.snapshot,t]);
+  const contextBlocks = useMemo(() => assembly.snapshot ? buildReportedContextMemoryBlocks(assembly.snapshot, (key, options) => t(key, options), blockCatalog) : [], [assembly.snapshot,t,blockCatalog]);
   return (
     <section className="space-y-3 text-sm">
       <div className="space-y-2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3" data-testid="context-short-term-memory-card">

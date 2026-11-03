@@ -2233,6 +2233,7 @@ export const pages = {
         reductionStat: "Before reduction: {{original}}; retained: {{final}} tokens.",
         protocolName: "Tool Definitions",
         protocolNote: "The separate `tools` field in the request.",
+        descriptionUnavailable: "This context block has no description, or its description could not be loaded.",
         inputCapacityShareNote: "Each row shows actual tokens / available model input budget. Bars show the row’s share of that budget.",
         requestAllocationNote: "Allocated {{tokens}} tokens for this request, based on actual need; this is not a capacity ceiling.",
         toolSchemaName: "Tool Schema",

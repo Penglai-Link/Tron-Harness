@@ -15,9 +15,8 @@ mod context_providers;
 pub(crate) struct ContextLayoutContributorInfo {
     pub provider_id: String,
     pub block_id: String,
-    pub display_name: String,
-    pub description: String,
-    pub default_order: i32,
+    pub metadata: eliteforge_agent_core::ContextBlockMetadata,
+    pub kind: eliteforge_agent_core::ContextSourceKind,
 }
 
 mod dude_context;

@@ -73,6 +73,7 @@ pub fn profile_routes() -> Router<AppState> {
             "/api/v1/context-layout",
             get(super::context_layout::list).put(super::context_layout::update),
         )
+        .route("/api/v1/context-blocks", get(super::context_blocks::list))
         .route(
             "/api/v1/model-providers/{provider_code}/reauthorization-sessions",
             post(create_authorization_session),
