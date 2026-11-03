@@ -12,6 +12,8 @@ const { finished } = require("node:stream/promises");
 // persistent product files, network request or real subprocess is created.
 for (const scenario of [
   { name: "host development", platform: process.platform, packaged: false },
+  { name: "macOS desktop", platform: "darwin", packaged: true },
+  { name: "macOS explicit allocator setting", platform: "darwin", packaged: true, allocatorCache: "1" },
   { name: "Windows manual launch", platform: "win32", packaged: true },
   { name: "Windows startup launch", platform: "win32", packaged: true, startup: true },
   { name: "manual launch during Windows startup", platform: "win32", packaged: true, startup: true, earlyRestore: true },
@@ -81,7 +83,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
   child.kill = () => { killCalls++; child.emit("close", 0, null); return true; };
   const context = vm.createContext({
     console, setTimeout, clearTimeout, Date: FastClock, __dirname: mainDir,
-    process: { argv: scenario.startup ? ["--tron-startup"] : [], env: {}, platform: scenario.platform },
+    process: { argv: scenario.startup ? ["--tron-startup"] : [], env: scenario.allocatorCache ? { MallocLargeCache: scenario.allocatorCache } : {}, platform: scenario.platform },
     require(name) {
       if (name === "electron") return {
         app: {
@@ -151,6 +153,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
     assert.equal(windows.length, 1);
     assert.equal(spawnCalls.length, 1);
     const launch = spawnCalls[0];
+    assert.equal(launch.options.env.MallocLargeCache, scenario.platform === "darwin" ? scenario.allocatorCache ?? "0" : undefined);
     assert.equal(launch.options.cwd, dataDir);
     assert.equal(launch.options.env.TRON_BACKEND_APPLICATION_CONFIG_PATH, path.join(dataDir, "application.yaml"));
     assert.equal(logCalls[0], path.join(dataDir, "logs/tron-backend.log"));

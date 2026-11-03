@@ -307,6 +307,7 @@ function startBackend(resourcesDir) {
   const child = spawn(sidecarPath, [], {
     env: {
       ...process.env,
+      ...(process.platform === "darwin" ? { MallocLargeCache: process.env.MallocLargeCache ?? "0" } : {}),
       TRON_BACKEND_DATABASE_URL: state.databasePath,
       TRON_BACKEND_CONTROL_DATABASE_URL: state.controlDatabasePath,
       TRON_BACKEND_APPLICATION_CONFIG_PATH: configPath,
