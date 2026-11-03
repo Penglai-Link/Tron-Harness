@@ -2335,7 +2335,6 @@ export const pages = {
     },
   },
   capabilityManagement: {
-    pluginProvides: "Provided capabilities",
     noDescription: "No description declared.",
     noPluginProvides: "No contributions declared for this plugin.",
     catalog: {

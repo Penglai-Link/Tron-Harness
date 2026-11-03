@@ -2254,7 +2254,6 @@ export const pages = {
     },
   },
   capabilityManagement: {
-    pluginProvides: "提供的能力",
     noDescription: "此内容未声明描述。",
     noPluginProvides: "此插件未声明提供的内容。",
     catalog: {

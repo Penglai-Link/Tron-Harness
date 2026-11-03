@@ -63,10 +63,11 @@ it("shows empty declared contents for a pack with no contributions", async () =>
   expect(screen.getByRole("tabpanel").textContent).toContain("pages:capabilityManagement.emptyContents");
 });
 
-it("groups contributions into tabs and shows plugin descriptions and provided capabilities", async () => {
+it("shows only plugin names and identifiers while keeping contribution details in their own tabs", async () => {
   vi.mocked(listCapabilityPacks).mockResolvedValue([{ ...pack, contents: [
     ...pack.contents,
-    { kind: "Plugin", name: "agent.a2ui", description: "Interactive interface plugin", provides: ["A2uiService", "a2ui-interface", "a2ui_publish"] },
+    { kind: "Plugin", name: "agent.a2ui", displayName: "A2UI Plugin", description: "Interactive interface plugin", provides: ["A2uiService", "a2ui-interface", "a2ui_publish"] },
+    { kind: "Plugin", name: "custom.plugin", description: "", provides: [] },
     { kind: "Implementation", name: "A2uiService", description: "tool: Interactive surfaces" },
     { kind: "Resource", name: "references/examples.json", description: "Skill examples" },
   ] }]);
@@ -74,12 +75,20 @@ it("groups contributions into tabs and shows plugin descriptions and provided ca
   expect(await screen.findByText("a2ui_publish")).toBeTruthy();
   expect(screen.queryByText("agent.a2ui")).toBeNull();
   fireEvent.click(screen.getByRole("tab", { name: /Plugin/ }));
+  expect(screen.getByRole("heading", { name: "A2UI Plugin" })).toBeTruthy();
   expect(await screen.findByText("agent.a2ui")).toBeTruthy();
-  expect(screen.getByText("Interactive interface plugin")).toBeTruthy();
-  expect(screen.getByText("A2uiService")).toBeTruthy();
-  expect(screen.getByText("tool: Interactive surfaces")).toBeTruthy();
-  expect(screen.getByText("a2ui-interface")).toBeTruthy();
+  expect(screen.getAllByText("custom.plugin")).toHaveLength(1);
+  expect(screen.queryByText("Interactive interface plugin")).toBeNull();
+  expect(screen.queryByText("A2uiService")).toBeNull();
+  expect(screen.queryByText("tool: Interactive surfaces")).toBeNull();
+  expect(screen.queryByText("a2ui-interface")).toBeNull();
   expect(screen.queryByText("a2ui_publish")).toBeNull();
+  expect(screen.queryByText("pages:capabilityManagement.noDescription")).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: /Implementation/ }));
+  expect(await screen.findByText("A2uiService")).toBeTruthy();
+  expect(screen.getByText("tool: Interactive surfaces")).toBeTruthy();
+  fireEvent.click(screen.getByRole("tab", { name: /Skill/ }));
+  expect(await screen.findByText("a2ui-interface")).toBeTruthy();
   fireEvent.click(screen.getByRole("tab", { name: /Resource/ }));
   expect(await screen.findByText("references/examples.json")).toBeTruthy();
 });

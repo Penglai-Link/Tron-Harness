@@ -49,7 +49,6 @@ export function CapabilityPackDetailPage() {
   ];
   const contentGroups = kinds.map((kind) => ({ kind, items: groups.get(kind) ?? [] }));
   const defaultKind = contentGroups.find(({ items }) => items.length > 0)?.kind ?? CONTENT_KIND_ORDER[0];
-  const toolNames = new Set(groups.get("Tool")?.map((item) => item.name));
 
   return <div data-theme-part="capability-pack-detail-page" className="space-y-5">
     <PageHeader title={record?.name ?? pageT("details")} breadcrumbs={[
@@ -76,19 +75,11 @@ export function CapabilityPackDetailPage() {
         {contentGroups.map(({ kind, items }) => <TabsContent key={kind} value={kind}>
           {items.length === 0 ? <SurfaceCard className="text-sm text-[var(--color-on-surface-variant)]">{pageT("emptyContents")}</SurfaceCard> :
             <ul className="grid gap-4">{items.map((item, index) => {
-              const provides = item.provides?.filter((name) => !toolNames.has(name)) ?? [];
               return <li key={`${item.name}-${index}`}>
                 <SurfaceCard>
-                  <h2 className="break-words text-sm font-semibold">{item.displayName ?? item.name}</h2>
+                  <h2 className="break-words text-sm font-semibold">{item.displayName || item.name}</h2>
                   {item.displayName && item.displayName !== item.name && <p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{item.name}</p>}
-                  <p className="mt-2 max-w-4xl whitespace-pre-wrap break-words text-sm text-[var(--color-on-surface-variant)]">{(item.kind === "Tool" ? item.description : capabilityDescription(t, item.kind, item.name, item.description)) || pageT("noDescription")}</p>
-                  {item.kind === "Plugin" && provides.length > 0 ? <div className="mt-4 border-l-2 border-[var(--color-outline-variant)] pl-4">
-                    <h3 className="text-xs font-medium text-[var(--color-on-surface-variant)]">{pageT("pluginProvides")}</h3>
-                    <ul className="mt-2 space-y-3">{provides.map((name) => {
-                      const contribution = record.contents.find((entry) => entry.kind !== "Plugin" && entry.name === name);
-                      return <li key={name}><p className="break-all font-mono text-sm">{name}</p>{contribution ? <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{capabilityDescription(t, contribution.kind, name, contribution.description)}</p> : null}</li>;
-                    })}</ul>
-                  </div> : null}
+                  {item.kind !== "Plugin" ? <p className="mt-2 max-w-4xl whitespace-pre-wrap break-words text-sm text-[var(--color-on-surface-variant)]">{(item.kind === "Tool" ? item.description : capabilityDescription(t, item.kind, item.name, item.description)) || pageT("noDescription")}</p> : null}
                 </SurfaceCard>
               </li>;
             })}</ul>}
