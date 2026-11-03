@@ -18,11 +18,9 @@ import { DetailField } from "@/components/detail-field";
 import { Field, TextArea, TextInput } from "@/components/forms";
 import { MarkdownContent } from "@/components/markdown-content";
 import { OptionSelect } from "@/components/option-select";
-import {
-  PageHeader,
-  SurfaceCard,
-  useLocaleText,
-} from "@/shared";
+import { PageHeader } from "@/shared/layout/PageHeader";
+import { SurfaceCard } from "@/shared/layout/SurfaceCard";
+import { useLocaleText } from "@/shared/hooks/useLocaleText";
 import { useToast } from "@/components/ui/toast";
 
 import {

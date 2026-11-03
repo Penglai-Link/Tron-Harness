@@ -10,11 +10,9 @@ import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
 import { OptionSelect } from "@/components/option-select";
-import {
-  PageHeader,
-  SurfaceCard,
-  useWorkspaceSpaces,
-} from "@/shared";
+import { PageHeader } from "@/shared/layout/PageHeader";
+import { SurfaceCard } from "@/shared/layout/SurfaceCard";
+import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { useToast } from "@/components/ui/toast";
 import { createAutomation } from "@/domain/automation/api";
 import { editableAutomationStatuses } from "@/domain/automation/constants";

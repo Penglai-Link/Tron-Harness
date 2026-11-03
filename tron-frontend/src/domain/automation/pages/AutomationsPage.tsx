@@ -14,14 +14,12 @@ import { DataTable } from "@/components/data-table";
 import { SelectInput } from "@/components/forms";
 import { SearchField } from "@/components/search-field";
 import { TablePagination } from "@/components/table-pagination";
-import {
-  PageHeader,
-  SurfaceCard,
-  useDismissibleLayer,
-  useLocaleFormatters,
-  useLocaleText,
-  useWorkspaceSpaces,
-} from "@/shared";
+import { PageHeader } from "@/shared/layout/PageHeader";
+import { SurfaceCard } from "@/shared/layout/SurfaceCard";
+import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
+import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
+import { useLocaleText } from "@/shared/hooks/useLocaleText";
+import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { useToast } from "@/components/ui/toast";
 
 import {

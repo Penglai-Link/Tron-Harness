@@ -18,14 +18,12 @@ import { DataTable } from "@/components/data-table";
 import { DetailField } from "@/components/detail-field";
 import { MarkdownContent } from "@/components/markdown-content";
 import { TablePagination } from "@/components/table-pagination";
-import {
-  PageHeader,
-  SurfaceCard,
-  useDismissibleLayer,
-  useTabPanelConfig,
-  useLocaleText,
-  useOpenRightSidebar,
-} from "@/shared";
+import { PageHeader } from "@/shared/layout/PageHeader";
+import { SurfaceCard } from "@/shared/layout/SurfaceCard";
+import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
+import { useTabPanelConfig } from "@/shared/layout/content/TabPanelRegistry";
+import { useLocaleText } from "@/shared/hooks/useLocaleText";
+import { useOpenRightSidebar } from "@/shared/hooks/useOpenRightSidebar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InspectorPanel } from "@/components/inspector";
 import { useToast } from "@/components/ui/toast";

@@ -107,16 +107,7 @@ type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["second
 
 const PERSON_AI_WEBSITE_URL = "https://personai.chat/person-ai-index/user/home/usage";
 
-export function useOpenRightSidebar() {
-  const activeTabId = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
-  const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
-
-  return useCallback(() => {
-    if (activeTabId) {
-      updateRightPanelState(activeTabId, { open: true });
-    }
-  }, [activeTabId, updateRightPanelState]);
-}
+export { useOpenRightSidebar } from "@/shared/hooks/useOpenRightSidebar";
 
 function navigationHrefMatches(itemHref: string, activeHref?: string) {
   return Boolean(itemHref && activeHref && (activeHref === itemHref || activeHref.startsWith(`${itemHref}/`)));
