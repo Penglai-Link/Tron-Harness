@@ -70,10 +70,6 @@ export function SettingsAppearancePage() {
     <div className="flex w-full flex-col gap-4">
       <PageHeader title={shellT("settings.items.appearance")} />
       <SkinSettings />
-      <BackgroundAppearanceSettings />
-      <SidebarAppearanceSettings />
-      <AppEntranceSettings />
-      <MotionSettings />
       <SurfaceCard className="p-0">
         <Item size="xs">
           <ItemContent>
@@ -100,6 +96,10 @@ export function SettingsAppearancePage() {
           </ItemActions>
         </Item>
       </SurfaceCard>
+      <BackgroundAppearanceSettings />
+      <SidebarAppearanceSettings />
+      <AppEntranceSettings />
+      <MotionSettings />
       <SurfaceCard className="p-0">
         <div className="space-y-2 border-b border-[var(--color-outline-variant)]/50 px-3 pb-3 pt-3">
           <ItemTitle>{pageT("settingsAppearance.typingEffect")}</ItemTitle>
