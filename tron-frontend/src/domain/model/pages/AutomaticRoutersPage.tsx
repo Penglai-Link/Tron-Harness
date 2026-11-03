@@ -43,9 +43,12 @@ function RouterEditor({ route }: { route: AutomaticRouter }) {
   const items = sources.mode === "SelectedProviders" ? providers : [...new Set(route.candidates.map(m => m.modelCode))].map(code => { const group = route.candidates.filter(m => m.modelCode === code); return { id: code, label: `${group[0].modelName} · ${group.map(m => m.providerName).join(" / ")}` }; });
   const selectedIds = sources.mode === "SelectedProviders" ? sources.providerIds : sources.modelCodes;
   // Retain unavailable identities visibly so an edit never silently widens access.
-  for (const id of selectedIds) if (!items.some(item => item.id === id)) items.push({ id, label: t("automaticRouters.unavailable", { id }) });
+  for (const id of selectedIds) if (!items.some(item => item.id === id)) {
+    const binding = route.candidates.find(model => model.bindingId === id);
+    items.push({ id, label: binding ? `${binding.providerName} / ${binding.modelName}` : t("automaticRouters.unavailable", { id }) });
+  }
   const selected = items.filter(item => selectedIds.includes(item.id));
-  const effective = route.candidates.filter(m => sources.mode === "AllProviders" || (sources.mode === "SelectedProviders" ? sources.providerIds.includes(m.providerId) : sources.modelCodes.includes(m.modelCode)));
+  const effective = route.candidates.filter(m => sources.mode === "AllProviders" || (sources.mode === "SelectedProviders" ? sources.providerIds.includes(m.providerId) : (sources.modelCodes.includes(m.modelCode) || sources.modelCodes.includes(m.bindingId))));
   async function save() {
     if (saving) return;
     setSaving(true);

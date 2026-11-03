@@ -1204,6 +1204,36 @@ async fn unified_routes_group_explicit_logical_models_and_keep_wire_ids_and_spac
             .route_auxiliary_model("workspace", AutoRouterKind::Embedding, &choice, Some(768))
             .is_err()
     );
+    // A pre-existing binding selection cannot silently widen to every provider
+    // merely because the operator later adds a shared logical identity.
+    fixture
+        .models
+        .save_automatic_route_sources(
+            AutoRouterKind::Embedding,
+            tron_backend::domain::model::AutoRouteSources {
+                mode: tron_backend::domain::model::AutoRouteSourceMode::SelectedModels,
+                provider_ids: vec![],
+                model_codes: vec![code(&created[0], 0).into()],
+            },
+        )
+        .unwrap();
+    choice.provider_id = None;
+    choice.required_modalities = vec![Modality::Text];
+    assert_eq!(
+        fixture
+            .models
+            .route_auxiliary_model("workspace", AutoRouterKind::Embedding, &choice, Some(1024))
+            .unwrap()
+            .route
+            .unwrap()
+            .candidates
+            .len(),
+        1
+    );
+    fixture
+        .models
+        .save_automatic_route_sources(AutoRouterKind::Embedding, Default::default())
+        .unwrap();
     // Index identity survives provider removal and different upstream aliases.
     let llm = tron_backend::application::llm::LlmRuntimeService::new(
         std::sync::Arc::new(fixture.models.clone()),

@@ -42,6 +42,10 @@ impl AutomaticRouteModel {
                         || self.binding_id.starts_with("PERSON_AI:FIXED:High:"))))
     }
 
+    pub fn allowed_by(&self, sources: &AutoRouteSources) -> bool {
+        sources.allows(&self.provider_id, &self.model_code)
+            || sources.allows(&self.provider_id, &self.binding_id)
+    }
     pub fn candidate(&self) -> fw::AutoRouteCandidate {
         let mut candidate =
             fw::AutoRouteCandidate::new(fw::ModelRef::new(&self.provider_id, &self.binding_id));
@@ -254,7 +258,7 @@ impl ModelService {
                     old.allows(&model.provider_id, &model.binding_id)
                         || old.allows(&model.provider_id, &model.model_code)
                 })
-                .map(|model| model.model_code.clone())
+                .map(|model| model.binding_id.clone())
                 .collect::<Vec<_>>();
             codes.sort();
             codes.dedup();
@@ -290,7 +294,7 @@ impl ModelService {
             || sources.model_codes.iter().any(|id| {
                 !catalog
                     .iter()
-                    .any(|m| &m.model_code == id && m.eligible_for(kind))
+                    .any(|m| (&m.model_code == id || &m.binding_id == id) && m.eligible_for(kind))
             })
         {
             return Err(AutomaticRoutingSettingsError::InvalidSources);
@@ -310,7 +314,7 @@ impl ModelService {
         Ok(self
             .automatic_route_catalog()?
             .into_iter()
-            .filter(|m| m.eligible_for(kind) && sources.allows(&m.provider_id, &m.model_code))
+            .filter(|m| m.eligible_for(kind) && m.allowed_by(&sources))
             .collect())
     }
     /// Called before credentials are bound into an immutable run snapshot.
@@ -492,7 +496,7 @@ impl ModelService {
                         .all(|m| model.input_modalities.contains(m))
                     && (kind != AutoRouterKind::Embedding
                         || dimensions.is_none_or(|d| model.dimension == Some(d)))
-                    && sources.allows(&model.provider_id, &model.model_code)
+                    && model.allowed_by(&sources)
             })
             .collect::<Vec<_>>();
         let first = eligible.first().ok_or_else(|| {
