@@ -2023,6 +2023,12 @@ async fn capability_catalog_exposes_installed_packs_and_extension_implementation
     assert!(packs.iter().any(|pack| pack["id"] == json!("tron.harness")));
     assert!(packs.iter().all(|pack| pack["effective"] == json!(true)));
     assert!(packs.iter().all(|pack| pack["version"].as_str().is_some()));
+    for plugin in packs.iter().flat_map(|pack| pack["contents"].as_array().unwrap()).filter(|item| item["kind"] == "Plugin") {
+        assert!(plugin["displayName"].as_str().is_some_and(|name| !name.is_empty()));
+        assert_ne!(plugin["displayName"], plugin["name"]);
+    }
+    let external = packs.iter().find(|pack| pack["id"] == "framework.external-agent").unwrap();
+    assert_eq!(external["contents"].as_array().unwrap().iter().filter(|item| item["kind"] == "Plugin").map(|item| item["name"].as_str().unwrap()).collect::<Vec<_>>(), ["framework.external-agent", "framework.loop"]);
 
     let extensions = request_with_headers(
         &app,

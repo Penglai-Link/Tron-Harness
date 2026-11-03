@@ -280,37 +280,19 @@ async fn service_runtime_cancel(
 #[test]
 fn runtime_adapter_descriptors_cover_all_runtime_keys() {
     let descriptors = runtime_adapter_descriptors();
-    assert_eq!(descriptors.len(), 6);
-    assert!(
-        descriptors
-            .iter()
-            .any(|item| item.key == RuntimeAdapterKey::React)
-    );
-    assert!(
-        descriptors
-            .iter()
-            .any(|item| item.key == RuntimeAdapterKey::CodexExec)
-    );
-    assert!(
-        descriptors
-            .iter()
-            .any(|item| item.key == RuntimeAdapterKey::CodexAppServer)
-    );
-    assert!(
-        descriptors
-            .iter()
-            .any(|item| item.key == RuntimeAdapterKey::OpenCodeRun)
-    );
-    assert!(
-        descriptors
-            .iter()
-            .any(|item| item.key == RuntimeAdapterKey::OpenCodeServe)
-    );
-    assert!(
-        descriptors
-            .iter()
-            .any(|item| item.key == RuntimeAdapterKey::OpenCodeAcp)
-    );
+    let expected = [
+        RuntimeAdapterKey::React,
+        RuntimeAdapterKey::CodexExec,
+        RuntimeAdapterKey::CodexAppServer,
+        RuntimeAdapterKey::OpenCodeRun,
+        RuntimeAdapterKey::OpenCodeServe,
+        RuntimeAdapterKey::OpenCodeAcp,
+        RuntimeAdapterKey::DshHeadless,
+    ];
+    assert_eq!(descriptors.len(), expected.len());
+    for key in expected {
+        assert!(descriptors.iter().any(|item| item.key == key), "missing {key:?}");
+    }
 }
 
 #[test]
@@ -328,6 +310,7 @@ fn runtime_adapter_key_from_code_parses_known_values() {
         Some(RuntimeAdapterKey::OpenCodeAcp)
     );
     assert_eq!(RuntimeAdapterKey::from_code("unknown"), None);
+    assert_eq!(RuntimeAdapterKey::from_code("DSH_HEADLESS"), Some(RuntimeAdapterKey::DshHeadless));
 }
 
 #[tokio::test]

@@ -391,9 +391,8 @@ impl FrameworkHost {
                 eliteforge_agent_framework::ContinuationLoop,
             ))
             .capability_pack(
-                eliteforge_agent_capability_external::external_agent_pack_with_loop(
+                eliteforge_agent_capability_external::external_agent_pack(
                     super::super::external::HostExternalAgent,
-                    "tron.external-loop",
                 ),
             )
             .plugin(eliteforge_agent_framework::GoalPlugin)

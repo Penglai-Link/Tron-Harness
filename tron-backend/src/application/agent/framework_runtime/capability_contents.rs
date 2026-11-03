@@ -158,7 +158,7 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             }),
     );
     let plugins: &[&str] = match id {
-        "framework.external-agent" => &["framework.external-agent", "tron.external-loop"],
+        "framework.external-agent" => &["framework.external-agent", "framework.loop"],
         "framework.local.scoped" => &["framework.pty.service", "framework.local.scoped.tools"],
         "framework.tool-pack.agent-collaboration" => &["tools.agents"],
         "framework.a2ui" => &["agent.a2ui"],
@@ -224,7 +224,7 @@ fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityCon
             "Connect external agents to host execution and session bridging",
             &["HostExternalAgent"],
         ),
-        "tron.external-loop" => (
+        "framework.loop" => (
             "Run external agents with native session ownership and observation events",
             &["Independent ExternalAgentLoop"],
         ),
@@ -283,6 +283,9 @@ fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityCon
         _ => ("", &[]),
     };
     let mut item = content("Plugin", id, description);
+    if let Some(name) = plugin_display_name(id, "en-US") {
+        item.display_name = name.into();
+    }
     item.provides = provides.iter().map(|name| (*name).into()).collect();
     let provides_tools = matches!(
         id,
@@ -304,6 +307,26 @@ fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityCon
         }
     }
     item
+}
+
+pub(super) fn plugin_display_name(id: &str, locale: &str) -> Option<&'static str> {
+    let (english, chinese) = match id {
+        "framework.external-agent" => ("External Agent Binding", "外部 Agent 绑定"),
+        "framework.loop" => ("External Agent Loop", "外部 Agent 执行循环"),
+        "framework.pty.service" => ("Scoped Terminal Service", "授权终端服务"),
+        "framework.local.scoped.tools" => ("Scoped Local Tools", "授权本地工具"),
+        "tools.agents" => ("Agent Collaboration Tools", "Agent 协作工具"),
+        "agent.a2ui" => ("A2UI Interfaces", "A2UI 交互界面"),
+        "capability.personai" => ("PersonAI Services", "PersonAI 服务"),
+        "framework.tools.discovery" => ("Tool Discovery", "工具发现"),
+        "framework.web.tools" => ("Web Tools", "网页工具"),
+        "framework.media.tools" => ("Media Tools", "媒体工具"),
+        "tron.harness.tools" => ("Tron Business Tools", "Tron 业务工具"),
+        "tron.harness.tool-permissions" => ("Tron Tool Permissions", "Tron 工具权限"),
+        "framework.context-assembler" => ("Context Assembly", "上下文组装"),
+        _ => return None,
+    };
+    Some(if locale.starts_with("zh") { chinese } else { english })
 }
 
 #[cfg(test)]
@@ -414,6 +437,7 @@ mod content_tests {
         let packs = super::super::capability_pack_catalog();
         for pack in packs {
             for plugin in pack.contents.iter().filter(|item| item.kind == "Plugin") {
+                assert_ne!(plugin.display_name, plugin.name, "{}", plugin.name);
                 assert!(!plugin.description.is_empty(), "{}", plugin.name);
                 assert!(!plugin.provides.is_empty(), "{}", plugin.name);
             }
@@ -421,9 +445,20 @@ mod content_tests {
         let external = builtin_contents("framework.external-agent");
         let plugin = external
             .iter()
-            .find(|item| item.name == "tron.external-loop")
+            .find(|item| item.name == "framework.loop")
             .unwrap();
         assert_eq!(plugin.provides, ["Independent ExternalAgentLoop"]);
+        assert_eq!(plugin.display_name, "External Agent Loop");
+        // The product catalog must reflect the plugins the official pack really assembles.
+        use eliteforge_agent_core::CapabilityPack;
+        let pack = eliteforge_agent_capability_external::external_agent_pack(
+            super::super::super::external::HostExternalAgent,
+        );
+        let installed = pack.plugins();
+        let actual = installed.iter().map(|plugin| plugin.id()).collect::<Vec<_>>();
+        let declared = external.iter().filter(|item| item.kind == "Plugin").map(|item| item.name.as_str()).collect::<Vec<_>>();
+        assert_eq!(actual, declared);
+        assert!(actual.iter().all(|id| id.starts_with("framework.")));
         let json = serde_json::to_value(&external).unwrap();
         assert!(
             json.as_array()
@@ -431,6 +466,21 @@ mod content_tests {
                 .iter()
                 .all(|item| item["provides"].is_array())
         );
+    }
+
+    #[test]
+    fn builtin_plugin_names_are_localized_without_losing_their_ids() {
+        let directory = tempfile::tempdir().unwrap();
+        for (locale, expected) in [
+            ("zh-CN", ["外部 Agent 绑定", "外部 Agent 执行循环"]),
+            ("en-US", ["External Agent Binding", "External Agent Loop"]),
+        ] {
+            let packs = super::super::installed_capability_packs(directory.path(), locale).unwrap();
+            let external = packs.iter().find(|pack| pack.id == "framework.external-agent").unwrap();
+            let plugins = external.contents.iter().filter(|item| item.kind == "Plugin").collect::<Vec<_>>();
+            assert_eq!(plugins.iter().map(|item| item.name.as_str()).collect::<Vec<_>>(), ["framework.external-agent", "framework.loop"]);
+            assert_eq!(plugins.iter().map(|item| item.display_name.as_str()).collect::<Vec<_>>(), expected);
+        }
     }
 
     #[test]

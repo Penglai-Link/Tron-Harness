@@ -47,6 +47,11 @@ pub fn installed_capability_packs(
     let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
     let mut packs = capability_pack_catalog();
     for pack in &mut packs {
+        for item in pack.contents.iter_mut().filter(|item| item.kind == "Plugin") {
+            if let Some(name) = contents::plugin_display_name(&item.name, locale) {
+                item.display_name = name.into();
+            }
+        }
         let descriptors=contents::builtin_tool_descriptors(&pack.id);
         for item in pack.contents.iter_mut().filter(|item|item.kind=="Tool") {
             if let Some(descriptor)=descriptors.iter().find(|d|d.call_name==item.name) {

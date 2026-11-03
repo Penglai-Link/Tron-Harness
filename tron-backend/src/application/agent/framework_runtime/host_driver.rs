@@ -9,7 +9,7 @@ impl FrameworkHost {
             .map_err(fw::AgentError::InvalidConfiguration)?;
         selection.agent_loop = Some(
             if external {
-                "tron.external-loop"
+                "framework.loop"
             } else {
                 "tron.continuation-loop"
             }
