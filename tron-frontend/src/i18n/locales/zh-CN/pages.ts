@@ -219,6 +219,7 @@ export const pages = {
   }
 },
   "notifications": {
+  "unavailable": "这条通知已删除或无法查看。",
   "requestedAction": "需要你处理", "resolution": "解决说明", "evidence": "变化依据",
   "changes": {"Progress":"工作进展","Completed":"工作完成","NeedsDecision":"待确认","Blocked":"受阻"},
   "title": "通知",

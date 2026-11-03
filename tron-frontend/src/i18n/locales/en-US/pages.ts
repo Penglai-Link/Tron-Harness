@@ -219,6 +219,7 @@ export const pages = {
   }
 },
   "notifications": {
+  "unavailable": "This notification was deleted or is unavailable.",
   "requestedAction": "Action needed", "resolution": "Resolution", "evidence": "Evidence",
   "changes": {"Progress":"Progress","Completed":"Completed","NeedsDecision":"Decision needed","Blocked":"Blocked"},
   "title": "Notifications",
