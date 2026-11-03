@@ -2304,7 +2304,7 @@ export const pages = {
         reasoning: "Reasoning",
         providerDelta:
           "Local estimate {{estimate}}, provider actual {{actual}}, delta {{delta}}.",
-        vendorTokenizer: "Uses the {{model}} tokenizer; protocol overhead is estimated.",
+        vendorTokenizer: "Local tokenizer: {{model}}; model versions and protocol framing may affect accuracy.",
         localHeuristic: "Generic approximation; provider usage is authoritative.",
         providerUnavailable: "Provider usage will appear after the next run.",
       },

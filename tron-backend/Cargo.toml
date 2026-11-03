@@ -45,7 +45,6 @@ async-stream = "0.3"
 base64 = "0.22"
 bcrypt = "0.17"
 flate2 = "1"
-tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "3baeeaaa69f04d883ada509c391dbd474d205429" }
 cron = "0.12"

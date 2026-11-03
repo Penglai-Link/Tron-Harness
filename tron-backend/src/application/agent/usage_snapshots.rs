@@ -13,8 +13,7 @@ pub(crate) fn request_estimate_snapshot(
     TokenEstimateSnapshot {
         estimator: super::framework_runtime::token_estimation::TronTokenEstimator::source(
             &context.model,
-        )
-        .into(),
+        ),
         estimated_input_tokens: prepared_context.estimated_tokens,
         message_token_estimate: prepared_context.message_token_estimate,
         tool_schema_token_estimate: prepared_context.tool_schema_token_estimate,

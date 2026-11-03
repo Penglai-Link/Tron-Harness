@@ -3,96 +3,54 @@
 use crate::domain::agent::{AgentModelConfig, AgentModelProtocol, EffectiveTool};
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
-use std::sync::OnceLock;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TokenProfile {
-    Unicode,
-    GlmFlash,
-    DeepSeekFlash,
-}
-
-impl TokenProfile {
-    fn for_name(name: &str) -> Self {
-        // Match the routed vendor name, including known dated aliases. A UUID
-        // in the product catalog is not a vendor model name.
-        let name = name.rsplit('/').next().unwrap_or(name).to_ascii_lowercase();
-        match name.as_str() {
-            "glm-5.3-flash" => Self::GlmFlash,
-            "deepseek-v4.1-flash" | "deepseek-v4.1-flash-1017" => Self::DeepSeekFlash,
-            _ => Self::Unicode,
-        }
-    }
-
-    fn tokenizer(self) -> Option<&'static tokenizers::Tokenizer> {
-        fn load(bytes: &[u8]) -> Option<tokenizers::Tokenizer> {
-            use std::io::Read;
-            let mut json = Vec::new();
-            flate2::read::GzDecoder::new(bytes)
-                .read_to_end(&mut json)
-                .ok()?;
-            tokenizers::Tokenizer::from_bytes(json).ok()
-        }
-        static GLM: OnceLock<Option<tokenizers::Tokenizer>> = OnceLock::new();
-        static DEEPSEEK: OnceLock<Option<tokenizers::Tokenizer>> = OnceLock::new();
-        match self {
-            Self::Unicode => None,
-            Self::GlmFlash => GLM
-                .get_or_init(|| {
-                    load(include_bytes!(
-                        "../../../../resources/tokenizers/glm-5.3-flash.tokenizer.json.gz"
-                    ))
-                })
-                .as_ref(),
-            Self::DeepSeekFlash => DEEPSEEK
-                .get_or_init(|| {
-                    load(include_bytes!(
-                        "../../../../resources/tokenizers/deepseek-v4.1-flash.tokenizer.json.gz"
-                    ))
-                })
-                .as_ref(),
-        }
-    }
-
-    fn text_tokens(self, text: &str) -> usize {
-        self.tokenizer()
-            .and_then(|tokenizer| tokenizer.encode(text, false).ok())
-            .map_or_else(
-                || fw::estimate_unicode_text_tokens(text),
-                |encoding| encoding.len(),
-            )
-    }
-
-    fn json_tokens<T: serde::Serialize>(self, value: &T) -> usize {
-        serde_json::to_string(value).map_or(usize::MAX, |text| self.text_tokens(&text))
-    }
-}
+use eliteforge_agent_official_plugin_model_http::tokenization::builtin_tokenizer_registry;
 
 /// One model binding owns one protocol and tokenizer selection. The same
 /// instance prices block assembly and the Framework's final model admission.
 pub(crate) struct TronTokenEstimator {
     protocol: AgentModelProtocol,
-    profile: TokenProfile,
+    tokenizer: fw::TokenizerSelection,
 }
 
 impl TronTokenEstimator {
     pub(crate) fn new(config: &AgentModelConfig) -> Self {
+        Self::with_registry(config, builtin_tokenizer_registry())
+    }
+
+    pub(crate) fn with_registry(
+        config: &AgentModelConfig,
+        registry: &fw::TokenizerRegistry,
+    ) -> Self {
         Self {
             protocol: config.protocol,
-            profile: TokenProfile::for_name(&config.model_name),
+            tokenizer: registry.select(&config.model_name),
         }
     }
 
-    pub(crate) fn source(config: &AgentModelConfig) -> &'static str {
-        match TokenProfile::for_name(&config.model_name) {
-            TokenProfile::DeepSeekFlash if TokenProfile::DeepSeekFlash.tokenizer().is_some() => {
-                "deepseek-v4.1-flash"
+    pub(crate) fn source(config: &AgentModelConfig) -> String {
+        let selection = builtin_tokenizer_registry().select(&config.model_name);
+        match selection.accuracy {
+            fw::TokenizerAccuracy::ModelTokenizer => selection.tokenizer_id,
+            fw::TokenizerAccuracy::FamilyEstimate => {
+                format!("{}_family_estimate", selection.tokenizer_id)
             }
-            TokenProfile::GlmFlash if TokenProfile::GlmFlash.tokenizer().is_some() => {
-                "glm-5.3-flash"
+            fw::TokenizerAccuracy::Heuristic if selection.tokenizer_id == "unicode_estimate" => {
+                selection.tokenizer_id
             }
-            _ => "unicode_estimate",
+            fw::TokenizerAccuracy::Heuristic => format!("{}_estimate", selection.tokenizer_id),
         }
+    }
+
+    fn text_tokens(&self, text: &str) -> Result<usize, fw::ModelError> {
+        self.tokenizer
+            .count_tokens(text)
+            .map_err(|e| fw::ModelError::Fatal(e.to_string()))
+    }
+
+    fn json_tokens<T: serde::Serialize>(&self, value: &T) -> Result<usize, fw::ModelError> {
+        let json =
+            serde_json::to_string(value).map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
+        self.text_tokens(&json)
     }
 }
 
@@ -117,7 +75,7 @@ impl fw::TokenEstimator for TronTokenEstimator {
         } else {
             native.plain_text_content()
         };
-        let mut tokens = 16usize.saturating_add(self.profile.text_tokens(&text));
+        let mut tokens = 16usize.saturating_add(self.text_tokens(&text)?);
         if message.role == fw::Role::User {
             for block in &message.content.0 {
                 if let fw::ContentBlock::Media { media } = block {
@@ -128,9 +86,9 @@ impl fw::TokenEstimator for TronTokenEstimator {
         for call in &message.tool_calls {
             tokens = tokens
                 .saturating_add(16)
-                .saturating_add(self.profile.text_tokens(&call.id))
-                .saturating_add(self.profile.text_tokens(&call.call_name))
-                .saturating_add(self.profile.json_tokens(&call.arguments));
+                .saturating_add(self.text_tokens(&call.id)?)
+                .saturating_add(self.text_tokens(&call.call_name)?)
+                .saturating_add(self.json_tokens(&call.arguments)?);
         }
         // structured/tool_result, annotations and model_context are persistence
         // sidecars. The HTTP bridge sends the decoded content above, and restores
@@ -144,10 +102,10 @@ impl fw::TokenEstimator for TronTokenEstimator {
         _: &fw::ModelRef,
         options: &fw::GenerationOptions,
     ) -> Result<usize, fw::ModelError> {
-        Ok(options
+        options
             .output_schema
             .as_ref()
-            .map_or(0, |schema| self.profile.json_tokens(schema)))
+            .map_or(Ok(0), |schema| self.json_tokens(schema))
     }
 
     async fn tools(
@@ -172,7 +130,7 @@ impl fw::TokenEstimator for TronTokenEstimator {
         // Count the selected SDK wire format, never the maximum of four
         // unrelated provider formats or internal ToolDescriptor metadata.
         let payload = crate::application::agent::tool_schema_payload(self.protocol, &native);
-        Ok(self.profile.json_tokens(&payload))
+        self.json_tokens(&payload)
     }
 }
 
@@ -236,28 +194,99 @@ mod token_estimator_tests {
     }
 
     #[test]
-    fn resolves_vendor_tokenizer_from_routed_name_not_catalog_uuid() {
-        let glm = estimator("glm_plan/glm-5.3-flash");
-        let deepseek = estimator("alibaba_token_plan/deepseek/deepseek-v4.1-flash-1017");
-        assert!(glm.profile.tokenizer().is_some());
-        assert!(deepseek.profile.tokenizer().is_some());
-        assert_eq!(estimator("deepseek-v3.2").profile, TokenProfile::Unicode);
+    fn resolves_families_from_vendor_name_and_records_estimate_provenance() {
+        for (name, id) in [
+            ("provider/DeepSeek V4.1 Flash", "deepseek-v4.1-flash"),
+            ("provider/GLM-5.3", "glm-5.3-flash"),
+            ("provider/QWEN3.5-plus", "qwen3.5"),
+            ("provider/Kimi-K2.5", "kimi-k2.5"),
+            ("provider/GPT-5.4", "o200k_base"),
+            ("provider/Claude Opus", "claude-legacy"),
+        ] {
+            assert_eq!(estimator(name).tokenizer.tokenizer_id, id);
+        }
         assert_eq!(
-            estimator("unrelated-deepseek-v4.1-flash").profile,
-            TokenProfile::Unicode
+            estimator("deepseek/unrelated").tokenizer.tokenizer_id,
+            "unicode_estimate"
         );
-        let sample = "中文上下文估算应该使用对应模型的分词器。 JSON: {\"items\":[1,2,3]}";
         assert_eq!(
-            deepseek.profile.text_tokens(sample),
-            deepseek
-                .profile
-                .tokenizer()
-                .unwrap()
-                .encode(sample, false)
-                .unwrap()
-                .len()
+            TronTokenEstimator::source(&config("DeepSeek-new")),
+            "deepseek-v4.1-flash_family_estimate"
         );
-        assert!(deepseek.profile.text_tokens(sample) < fw::estimate_unicode_text_tokens(sample));
+        assert_eq!(
+            TronTokenEstimator::source(&config("deepseek-v4.1-flash")),
+            "deepseek-v4.1-flash"
+        );
+        assert_eq!(
+            TronTokenEstimator::source(&config("claude-opus-4.6")),
+            "claude-legacy_estimate"
+        );
+    }
+
+    fn config(name: &str) -> AgentModelConfig {
+        serde_json::from_value(serde_json::json!({
+            "modelCode":"catalog-uuid", "modelName":name, "protocol":"CHAT_COMPLETIONS",
+            "baseUrl":"https://example.test", "apiKey":"unused"
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn same_registered_counter_prices_messages_tools_and_schema() {
+        let mut registry = builtin_tokenizer_registry().clone();
+        registry
+            .bind(
+                fw::TokenizerMatcher::Exact("host-model".into()),
+                "qwen3.5",
+                fw::TokenizerAccuracy::ModelTokenizer,
+                0,
+            )
+            .unwrap();
+        let estimator = TronTokenEstimator::with_registry(&config("host-model"), &registry);
+        let model = fw::ModelRef::new("test", "catalog-uuid");
+        let text = "中文 JSON {\"query\": \"test\"}";
+        assert_eq!(
+            estimator
+                .message(&model, &fw::Message::user(text))
+                .await
+                .unwrap(),
+            16 + registry.select("host-model").count_tokens(text).unwrap()
+        );
+        let options = fw::GenerationOptions {
+            output_schema: Some(fw::OutputSchema {
+                name: "answer".into(),
+                schema: serde_json::json!({"type":"object"}),
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            estimator.options(&model, &options).await.unwrap(),
+            estimator
+                .json_tokens(options.output_schema.as_ref().unwrap())
+                .unwrap()
+        );
+        let tool = fw::ToolDescriptor::new(
+            "lookup",
+            "lookup",
+            "查询资料",
+            serde_json::json!({"type":"object"}),
+        );
+        let native = EffectiveTool {
+            tool_name: "lookup".into(),
+            domain_code: None,
+            description: "查询资料".into(),
+            input_schema: serde_json::json!({"type":"object"}),
+            skill_name: None,
+            required_variable_keys: vec![],
+        };
+        let payload = crate::application::agent::tool_schema_payload(estimator.protocol, &[native]);
+        assert_eq!(
+            estimator.tools(&model, &[tool]).await.unwrap(),
+            registry
+                .select("host-model")
+                .count_tokens(&serde_json::to_string(&payload).unwrap())
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -293,7 +322,7 @@ mod token_estimator_tests {
         let payload = crate::application::agent::tool_schema_payload(estimator.protocol, &[native]);
         assert_eq!(
             estimator.tools(&model, &[tool]).await.unwrap(),
-            estimator.profile.json_tokens(&payload)
+            estimator.json_tokens(&payload).unwrap()
         );
     }
 
