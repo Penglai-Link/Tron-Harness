@@ -231,7 +231,7 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
     assert!(first.chunk_count > 1);
     assert_eq!(
         first.embedding_model_code.as_deref(),
-        Some(model.model_code.as_str())
+        Some(model_code.as_str())
     );
     assert_eq!(first.embedding_dimension, Some(1024));
     assert_eq!(
