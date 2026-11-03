@@ -53,7 +53,7 @@ export function draftRowId() { return `provider-draft-${++draftSequence}`; }
 
 export function emptyProviderModel(): ProviderModelDraft {
   return {
-    rowId: draftRowId(), dimension: "", modelType: "Text", modelCode: null, modelId: "", name: "", contextWindowTokens: "",
+    rowId: draftRowId(), logicalModelCode: null, dimension: "", modelType: "Text", modelCode: null, modelId: "", name: "", contextWindowTokens: "",
     maxOutputTokens: "", reasoning: false, supportsDeveloperRole: false,
     inputCapabilities: ["Text"], enabled: true,
   };
@@ -111,7 +111,7 @@ const forbiddenHeaders = new Set([
   "host", "content-length", "connection", "transfer-encoding", "upgrade", "trailer", "te",
 ]);
 
-export type ProviderDraftError = "displayName" | "baseUrl" | "modelsRequired" | "modelId" | "modelName" | "duplicateModel" | "tokenLimit" | "outputLimit" | "headers" | "inputCapabilities" | "modelType" | "dimension";
+export type ProviderDraftError = "logicalModelCode" | "displayName" | "baseUrl" | "modelsRequired" | "modelId" | "modelName" | "duplicateModel" | "tokenLimit" | "outputLimit" | "headers" | "inputCapabilities" | "modelType" | "dimension";
 
 function tokenLimit(value: string): number | null {
   return value.trim() === "" ? null : Number(value);
@@ -126,6 +126,8 @@ export function validateProviderDraft(draft: ConfiguredProviderDraft): ProviderD
   if (!draft.models.length) return "modelsRequired";
   const ids = new Set<string>();
   for (const model of draft.models) {
+    const logicalCode = model.logicalModelCode?.trim();
+    if (logicalCode && (logicalCode.length > 256 || /[\u0000-\u001f]/.test(logicalCode) || /^(MODEL-|AUTO:|PERSON_AI:)/.test(logicalCode))) return "logicalModelCode";
     if (!supportsModelType(model.modelType, draft.protocol)) return "modelType";
     if (["TextEmbedding", "MultimodalEmbedding"].includes(model.modelType) && (!/^\d+$/.test(model.dimension) || !Number.isSafeInteger(Number(model.dimension)) || Number(model.dimension) < 1 || Number(model.dimension) > 4294967295)) return "dimension";
     if (!model.modelId.trim()) return "modelId";
@@ -155,7 +157,7 @@ export function providerDraftToPayload(draft: ConfiguredProviderDraft): Configur
     requestHeaders: Object.fromEntries(draft.headers.map((header) => [header.name.trim(), header.value])),
     models: draft.models.map(({ rowId: _rowId, dimension, contextWindowTokens, maxOutputTokens, ...model }) => ({
       dimension: ["TextEmbedding", "MultimodalEmbedding"].includes(model.modelType) ? tokenLimit(dimension) : null,
-      ...model, modelId: model.modelId.trim(), name: model.name.trim(),
+      ...model, logicalModelCode: model.logicalModelCode?.trim() || null, modelId: model.modelId.trim(), name: model.name.trim(),
       contextWindowTokens: tokenLimit(contextWindowTokens), maxOutputTokens: tokenLimit(maxOutputTokens),
     })),
   };

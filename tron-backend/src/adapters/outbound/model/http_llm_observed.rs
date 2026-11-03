@@ -1,7 +1,7 @@
 //! Observation is a returned SDK report, not an extra statistics pipeline.
 use super::*;
 use eliteforge_agent_framework::{ModelExecutionReport, ObservedModelResult};
-use sdk::ModelTransportFactory as _;
+
 fn failure<T>(message: impl Into<String>) -> ObservedModelResult<T> {
     ObservedModelResult {
         result: Err(fw::AgentError::InvalidConfiguration(message.into())),
@@ -81,57 +81,16 @@ impl HttpLlmRuntimeClient {
         inputs: &[fw::Content],
         dimensions: Option<usize>,
     ) -> ObservedModelResult<fw::EmbeddingResponse> {
-        if config.model_type != ModelType::TextEmbedding {
-            return failure("embedding requires EMBEDDING model");
+        if !matches!(
+            config.model_type,
+            ModelType::TextEmbedding | ModelType::MultimodalEmbedding
+        ) {
+            return failure("embedding requires an embedding model");
         }
         let model = runtime_to_agent_model_config(config);
-        let wire = match sdk_config(&model) {
-            Ok(config) => config,
-            Err(error) => return failure(error),
-        };
-        let factory =
-            match sdk::ScopedModelTransportFactory::new(self.models.factory.clone(), &wire) {
-                Ok(factory) => Arc::new(factory),
-                Err(error) => {
-                    return ObservedModelResult {
-                        result: Err(error.into()),
-                        report: Default::default(),
-                    };
-                }
-            };
-        let reference = fw::ModelRef::new("http-embedding", &model.model_code);
-        let routers = self.routing_for(&model, &reference);
-        let input_modalities = match factory.embedding_input_modalities(&wire) {
-            Ok(modalities) => modalities,
-            Err(error) => {
-                return ObservedModelResult {
-                    result: Err(error.into()),
-                    report: Default::default(),
-                };
-            }
-        };
-        let service = fw::EmbeddingModelService::new(
-            reference.clone(),
-            Arc::new(sdk::HttpEmbeddingModel {
-                config: wire,
-                factory,
-            }),
-        );
-        let service = service.capabilities(fw::OperationCapabilities {
-            input: input_modalities,
-            ..Default::default()
-        });
-        let mut request = fw::EmbeddingRequest::texts(std::iter::empty::<String>());
-        request.inputs = inputs.to_vec();
-        request.dimensions = dimensions;
-        if !model.model_code.contains(":ROUTE:") {
-            request.choice = fw::ModelChoice::model(reference);
-        }
-        let mut update =
-            eliteforge_agent_framework::ModelRuntimeUpdate::new("http-embedding", 0, vec![]);
-        update.embedding.push(service);
-        let runtime = match eliteforge_agent_framework::ModelRuntime::new(update) {
-            Ok(runtime) => runtime,
+        let routers = self.pool_routers(config);
+        let (runtime, choice, _) = match self.auxiliary_pool(config, dimensions, false) {
+            Ok(pool) => pool,
             Err(error) => {
                 return ObservedModelResult {
                     result: Err(error),
@@ -139,6 +98,10 @@ impl HttpLlmRuntimeClient {
                 };
             }
         };
+        let mut request = fw::EmbeddingRequest::texts(std::iter::empty::<String>());
+        request.inputs = inputs.to_vec();
+        request.dimensions = dimensions;
+        request.choice = choice;
         let config = self.models.invocation_config().embedding;
         let effective = limits(
             &model,
@@ -173,7 +136,25 @@ impl HttpLlmRuntimeClient {
         documents: &[String],
         top_n: Option<usize>,
     ) -> ObservedModelResult<Vec<LlmRuntimeRerankHit>> {
-        if config.model_type != ModelType::TextRerank {
+        let documents = documents
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect::<Vec<fw::Content>>();
+        self.observed_rerank_content(config, &query.into(), &documents, top_n)
+            .await
+    }
+    pub(super) async fn observed_rerank_content(
+        &self,
+        config: &RuntimeModelConfig,
+        query: &fw::Content,
+        documents: &[fw::Content],
+        top_n: Option<usize>,
+    ) -> ObservedModelResult<Vec<LlmRuntimeRerankHit>> {
+        if !matches!(
+            config.model_type,
+            ModelType::TextRerank | ModelType::MultimodalRerank
+        ) {
             return failure("rerank requires RERANK model");
         }
         if top_n == Some(0) {
@@ -186,59 +167,21 @@ impl HttpLlmRuntimeClient {
             };
         }
         let model = runtime_to_agent_model_config(config);
-        let wire = match sdk_config(&model) {
-            Ok(config) => config,
-            Err(error) => return failure(error),
-        };
-        let factory =
-            match sdk::ScopedModelTransportFactory::new(self.models.factory.clone(), &wire) {
-                Ok(factory) => Arc::new(factory),
-                Err(error) => {
-                    return ObservedModelResult {
-                        result: Err(error.into()),
-                        report: Default::default(),
-                    };
-                }
-            };
-        let reference = fw::ModelRef::new("http-rerank", &model.model_code);
-        let routers = self.routing_for(&model, &reference);
-        let chat_instruction = match self.prompts.as_ref() {
-            Some(prompts) => match prompts.runtime_prompt_text(
-                "model.chat-rerank", "en-US", &std::collections::HashMap::new(),
-            ) {
-                Ok(value) => value,
-                Err(error) => return failure(format!("managed chat rerank prompt: {error}")),
-            },
-            None => None,
-        };
-        let adapter = Arc::new(sdk::HttpRerankModel {
-            config: wire,
-            factory,
-            chat_fallback: false,
-            chat_instruction,
-        });
-        let service = fw::RerankModelService::new(reference.clone(), adapter.clone());
-        let request = fw::RerankRequest {
-            choice: if model.model_code.contains(":ROUTE:") {
-                fw::ModelChoice::default()
-            } else {
-                fw::ModelChoice::model(reference)
-            },
-            query: query.into(),
-            documents: documents.iter().cloned().map(Into::into).collect(),
-            top_n: top_n.map(|n| n.min(documents.len())),
-        };
-        let mut update =
-            eliteforge_agent_framework::ModelRuntimeUpdate::new("http-rerank", 0, vec![]);
-        update.rerank.push(service);
-        let runtime = match eliteforge_agent_framework::ModelRuntime::new(update) {
-            Ok(runtime) => runtime,
+        let routers = self.pool_routers(config);
+        let (runtime, choice, adapters) = match self.auxiliary_pool(config, None, true) {
+            Ok(pool) => pool,
             Err(error) => {
                 return ObservedModelResult {
                     result: Err(error),
                     report: Default::default(),
                 };
             }
+        };
+        let request = fw::RerankRequest {
+            choice,
+            query: query.clone(),
+            documents: documents.to_vec(),
+            top_n: top_n.map(|n| n.min(documents.len())),
         };
         let invocation = self.models.invocation_config();
         let effective = limits(&model, &invocation.rerank, invocation.default_output_tokens);
@@ -248,7 +191,10 @@ impl HttpLlmRuntimeClient {
         };
         // Native rerank scores each query/document pair independently. Keep
         // the same scoped adapter for all batches and merge their global top-k.
-        let capacity = fw::RerankModel::input_capacity(adapter.as_ref())
+        let capacity = adapters
+            .iter()
+            .filter_map(|adapter| fw::RerankModel::input_capacity(adapter.as_ref()))
+            .min()
             .unwrap_or(effective.max_context_tokens)
             .min(effective.max_context_tokens);
         let batch_request = |range: std::ops::Range<usize>| {
@@ -262,10 +208,17 @@ impl HttpLlmRuntimeClient {
         while start < documents.len() {
             let mut end = start;
             while end < documents.len()
-                && fw::RerankModel::input_token_estimate(
-                    adapter.as_ref(),
-                    &batch_request(start..end + 1),
-                ) <= capacity as u64
+                && adapters
+                    .iter()
+                    .map(|adapter| {
+                        fw::RerankModel::input_token_estimate(
+                            adapter.as_ref(),
+                            &batch_request(start..end + 1),
+                        )
+                    })
+                    .max()
+                    .unwrap_or(0)
+                    <= capacity as u64
             {
                 end += 1;
             }

@@ -20,6 +20,36 @@ impl ProviderAwareLlmRuntimeResolver {
 }
 
 impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
+    fn auxiliary_runtime_model_config(
+        &self,
+        workspace: &str,
+        kind: crate::domain::model::AutoRouterKind,
+        choice: &eliteforge_agent_core::ModelChoice,
+        dimensions: Option<usize>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        if let Some(models) = &self.configured_models {
+            return models
+                .route_auxiliary_model(workspace, kind, choice, dimensions)
+                .map(Some);
+        }
+        if choice.provider_id.is_some()
+            || choice
+                .required_modalities
+                .iter()
+                .any(|m| *m != eliteforge_agent_core::Modality::Text)
+        {
+            return Err(ModelError::RuntimeResolutionFailed(
+                "route constraints require a configured model catalogue".into(),
+            ));
+        }
+        match kind {
+            crate::domain::model::AutoRouterKind::Embedding => {
+                self.embedding_runtime_model_config(workspace, choice.model_code.as_deref())
+            }
+            _ => self.rerank_runtime_model_config(workspace, choice.model_code.as_deref()),
+        }
+    }
+
     fn embedding_batch_input_limit(
         &self,
         workspace: &str,
@@ -40,8 +70,13 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
         )))
     }
     fn embedding_accepts_images(&self, _: &str, model: &str) -> Result<bool, ModelError> {
-        if let Some(models)=&self.configured_models {
-            if let Some(record)=models.automatic_route_catalog()?.into_iter().find(|m|m.model_code==model) { return Ok(record.model_type==ModelType::MultimodalEmbedding); }
+        if let Some(models) = &self.configured_models {
+            return Ok(models.automatic_route_catalog()?.into_iter().any(|record| {
+                (record.model_code == model || record.binding_id == model)
+                    && record
+                        .input_modalities
+                        .contains(&eliteforge_agent_core::Modality::Image)
+            }));
         }
         self.providers.embedding_accepts_images(model)
     }
@@ -162,17 +197,19 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        let requested=model_code.map(str::trim).filter(|s|!s.is_empty());
-        if let Some(models)=&self.configured_models {
-            let auto_kind=match requested {
-                None=>Some(crate::domain::model::AutoRouterKind::TextEmbedding),
-                Some("AUTO:TextEmbedding")=>Some(crate::domain::model::AutoRouterKind::TextEmbedding),
-                Some("AUTO:MultimodalEmbedding")=>Some(crate::domain::model::AutoRouterKind::MultimodalEmbedding),
-                Some("PERSON_AI:ROUTE:EmbeddingAuto")=>Some(crate::domain::model::AutoRouterKind::TextEmbedding),
-                Some("PERSON_AI:ROUTE:MultimodalEmbeddingAuto")=>Some(crate::domain::model::AutoRouterKind::MultimodalEmbedding),
-                _=>None,
-            };
-            if let Some(kind)=auto_kind { return models.route_automatic_model(workspace_code,kind).map(Some); }
+        if let Some(models) = &self.configured_models {
+            return models
+                .route_auxiliary_model(
+                    workspace_code,
+                    crate::domain::model::AutoRouterKind::Embedding,
+                    &eliteforge_agent_core::ModelChoice {
+                        model_code: model_code.map(str::to_owned),
+                        required_modalities: vec![eliteforge_agent_core::Modality::Text],
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .map(Some);
         }
         match self
             .providers
@@ -192,17 +229,19 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        let requested=model_code.map(str::trim).filter(|s|!s.is_empty());
-        if let Some(models)=&self.configured_models {
-            let auto_kind=match requested {
-                None=>Some(crate::domain::model::AutoRouterKind::TextRerank),
-                Some("AUTO:TextRerank")=>Some(crate::domain::model::AutoRouterKind::TextRerank),
-                Some("AUTO:MultimodalRerank")=>Some(crate::domain::model::AutoRouterKind::MultimodalRerank),
-                Some("PERSON_AI:ROUTE:RerankAuto")=>Some(crate::domain::model::AutoRouterKind::TextRerank),
-
-                _=>None,
-            };
-            if let Some(kind)=auto_kind { return models.route_automatic_model(workspace_code,kind).map(Some); }
+        if let Some(models) = &self.configured_models {
+            return models
+                .route_auxiliary_model(
+                    workspace_code,
+                    crate::domain::model::AutoRouterKind::Rerank,
+                    &eliteforge_agent_core::ModelChoice {
+                        model_code: model_code.map(str::to_owned),
+                        required_modalities: vec![eliteforge_agent_core::Modality::Text],
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .map(Some);
         }
         match self
             .providers
@@ -330,6 +369,7 @@ pub(super) fn require_high_chat_quality(
 
 pub(super) fn runtime_config_from_agent(config: AgentModelConfig) -> RuntimeModelConfig {
     RuntimeModelConfig {
+        route: None,
         model_code: config.model_code,
         protocol: match config.protocol {
             AgentModelProtocol::Responses => ModelProtocol::Responses,

@@ -8,6 +8,8 @@ pub struct LlmTextGenerationCallResult {
 pub struct LlmEmbeddingCallCommand {
     pub workspace_code: String,
     pub model_code: Option<String>,
+    pub provider_id: Option<String>,
+    pub required_modalities: Vec<eliteforge_agent_core::Modality>,
     pub input: String,
 }
 
@@ -22,6 +24,8 @@ pub struct LlmEmbeddingCallResult {
 pub struct LlmChunkedEmbeddingCallCommand {
     pub workspace_code: String,
     pub model_code: Option<String>,
+    pub provider_id: Option<String>,
+    pub required_modalities: Vec<eliteforge_agent_core::Modality>,
     pub input: String,
 }
 
@@ -42,6 +46,8 @@ pub struct LlmEmbeddingChunkResultItem {
 pub struct LlmRerankCallCommand {
     pub workspace_code: String,
     pub model_code: Option<String>,
+    pub provider_id: Option<String>,
+    pub required_modalities: Vec<eliteforge_agent_core::Modality>,
     pub query: String,
     pub documents: Vec<String>,
     pub top_n: Option<usize>,
@@ -64,6 +70,8 @@ pub struct LlmRerankResultItem {
 pub struct LlmEmbeddingBatchCallCommand {
     pub workspace_code: String,
     pub model_code: Option<String>,
+    pub provider_id: Option<String>,
+    pub required_modalities: Vec<eliteforge_agent_core::Modality>,
     pub inputs: Vec<String>,
     pub dimensions: usize,
 }
@@ -79,6 +87,20 @@ pub struct LlmEmbeddingBatchCallResult {
 pub struct LlmEmbeddingContentBatchCallCommand {
     pub workspace_code: String,
     pub model_code: Option<String>,
+    pub provider_id: Option<String>,
+    pub required_modalities: Vec<eliteforge_agent_core::Modality>,
     pub inputs: Vec<eliteforge_agent_framework::Content>,
     pub dimensions: usize,
+}
+
+/// Native content is preserved through routing and the provider protocol adapter.
+#[derive(Debug, Clone)]
+pub struct LlmContentRerankCallCommand {
+    pub workspace_code: String,
+    pub model_code: Option<String>,
+    pub provider_id: Option<String>,
+    pub required_modalities: Vec<eliteforge_agent_core::Modality>,
+    pub query: eliteforge_agent_core::Content,
+    pub documents: Vec<eliteforge_agent_core::Content>,
+    pub top_n: Option<usize>,
 }

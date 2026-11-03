@@ -82,6 +82,8 @@ impl RagEmbeddingRuntime for DefaultRagRuntime {
         Box::pin(async move {
             self.llm
                 .embedding_call(LlmEmbeddingCallCommand {
+                    provider_id: None,
+                    required_modalities: vec![],
                     workspace_code: call.workspace_code,
                     model_code: call.model_code,
                     input: call.input,
@@ -118,6 +120,8 @@ impl RagSearchRuntime for DefaultRagRuntime {
                     .llm
                     .embedding_query_call(
                         LlmEmbeddingCallCommand {
+                            provider_id: None,
+                            required_modalities: vec![],
                             workspace_code: call.workspace_code,
                             model_code: call.model_code,
                             input: call.input,
@@ -135,6 +139,8 @@ impl RagSearchRuntime for DefaultRagRuntime {
             self.llm
                 .embedding_query_in_run(
                     LlmEmbeddingCallCommand {
+                        provider_id: None,
+                        required_modalities: vec![],
                         workspace_code: call.workspace_code,
                         model_code: call.model_code,
                         input: call.input,
@@ -166,6 +172,8 @@ impl RagSearchRuntime for DefaultRagRuntime {
         Box::pin(async move {
             self.llm
                 .rerank_call(LlmRerankCallCommand {
+                    provider_id: None,
+                    required_modalities: vec![],
                     workspace_code: call.workspace_code,
                     model_code: call.model_code,
                     query: call.query,
@@ -232,6 +240,7 @@ mod tests {
     fn graph_extraction_preserves_deep_reasoning_and_gives_it_an_explicit_output_budget() {
         for protocol in [ModelProtocol::OpenAiCompatible, ModelProtocol::Responses] {
             let original = crate::application::model::RuntimeModelConfig {
+                route: None,
                 model_code: "extractor".into(),
                 model_name: "extractor".into(),
                 protocol,

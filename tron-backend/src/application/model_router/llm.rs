@@ -190,6 +190,7 @@ pub(crate) fn runtime_from_agent(
     config: crate::domain::agent::AgentModelConfig,
 ) -> RuntimeModelConfig {
     RuntimeModelConfig {
+        route: None,
         model_code: config.model_code,
         protocol: match config.protocol {
             AgentModelProtocol::Responses => ModelProtocol::Responses,

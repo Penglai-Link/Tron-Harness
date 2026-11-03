@@ -45,13 +45,46 @@ pub struct LlmRuntimeRerankHit {
 }
 
 pub trait LlmRuntimeModelResolver: Send + Sync {
-    fn embedding_batch_input_limit(&self, _: &str, _: &str) -> Result<Option<usize>,ModelError> { Ok(None) }
+    fn auxiliary_runtime_model_config(
+        &self,
+        workspace: &str,
+        kind: crate::domain::model::AutoRouterKind,
+        choice: &eliteforge_agent_core::ModelChoice,
+        _dimensions: Option<usize>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        if choice.provider_id.is_some()
+            || choice
+                .required_modalities
+                .iter()
+                .any(|m| *m != eliteforge_agent_core::Modality::Text)
+        {
+            return Err(ModelError::RuntimeResolutionFailed(
+                "resolver does not support the requested route constraints".into(),
+            ));
+        }
+        match kind {
+            crate::domain::model::AutoRouterKind::Embedding => {
+                self.embedding_runtime_model_config(workspace, choice.model_code.as_deref())
+            }
+            crate::domain::model::AutoRouterKind::Rerank => {
+                self.rerank_runtime_model_config(workspace, choice.model_code.as_deref())
+            }
+            _ => Err(ModelError::InvalidProtocolModelType),
+        }
+    }
+
+    fn embedding_batch_input_limit(&self, _: &str, _: &str) -> Result<Option<usize>, ModelError> {
+        Ok(None)
+    }
     /// The host/provider declares input capability; Framework does not inspect vendor tags.
     fn embedding_accepts_images(&self, _: &str, _: &str) -> Result<bool, ModelError> {
         Ok(false)
     }
-    fn auto_vision_runtime_model_config<'a>(&'a self, _workspace: &'a str)
-        -> Pin<Box<dyn Future<Output = Result<Option<RuntimeModelConfig>, ModelError>> + Send + 'a>> {
+    fn auto_vision_runtime_model_config<'a>(
+        &'a self,
+        _workspace: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<RuntimeModelConfig>, ModelError>> + Send + 'a>>
+    {
         Box::pin(async { Ok(None) })
     }
     fn vision_cache_identity(&self) -> Result<Option<String>, ModelError> {
@@ -79,13 +112,57 @@ pub trait LlmRuntimeModelResolver: Send + Sync {
 }
 
 pub trait LlmRuntimeClient: Send + Sync {
-    fn embed_content_batch_with_model<'a>(
-        &'a self, config: &'a RuntimeModelConfig, inputs: &'a [eliteforge_agent_framework::Content], dimensions: usize,
-    ) -> Pin<Box<dyn Future<Output = Result<(Vec<eliteforge_agent_framework::EmbeddingVector>, Option<String>), String>> + Send + 'a>> {
+    fn rerank_content_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        query: &'a eliteforge_agent_core::Content,
+        documents: &'a [eliteforge_agent_core::Content],
+        top_n: Option<usize>,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>> {
         Box::pin(async move {
-            if inputs.iter().any(|input| input.has_media()) { return Err("multimodal embedding is unavailable".into()); }
-            let texts = inputs.iter().map(eliteforge_agent_framework::Content::text).collect::<Vec<_>>();
-            self.embed_batch_with_model(config, &texts, dimensions).await
+            if std::iter::once(query)
+                .chain(documents.iter())
+                .any(eliteforge_agent_core::Content::has_media)
+            {
+                return Err("media rerank requires an explicit provider adapter".into());
+            }
+            let documents = documents
+                .iter()
+                .map(eliteforge_agent_core::Content::text)
+                .collect::<Vec<_>>();
+            self.rerank(config, &query.text(), &documents, top_n).await
+        })
+    }
+
+    fn embed_content_batch_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        inputs: &'a [eliteforge_agent_framework::Content],
+        dimensions: usize,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        (
+                            Vec<eliteforge_agent_framework::EmbeddingVector>,
+                            Option<String>,
+                        ),
+                        String,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            if inputs.iter().any(|input| input.has_media()) {
+                return Err("multimodal embedding is unavailable".into());
+            }
+            let texts = inputs
+                .iter()
+                .map(eliteforge_agent_framework::Content::text)
+                .collect::<Vec<_>>();
+            self.embed_batch_with_model(config, &texts, dimensions)
+                .await
         })
     }
     fn model_authorization_scope(&self, _: &RuntimeModelConfig) -> Result<Option<String>, String> {

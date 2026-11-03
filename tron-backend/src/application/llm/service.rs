@@ -14,6 +14,17 @@ use super::{
 };
 
 impl LlmRuntimeModelResolver for ModelService {
+    fn auxiliary_runtime_model_config(
+        &self,
+        workspace: &str,
+        kind: crate::domain::model::AutoRouterKind,
+        choice: &eliteforge_agent_core::ModelChoice,
+        dimensions: Option<usize>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        self.route_auxiliary_model(workspace, kind, choice, dimensions)
+            .map(Some)
+    }
+
     fn embedding_runtime_model_config(
         &self,
         workspace: &str,
@@ -87,17 +98,35 @@ impl LlmRuntimeService {
         dimensions: usize,
     ) -> Result<String, LlmRuntimeError> {
         use sha2::{Digest, Sha256};
-        let config = self.resolve_embedding_model_config(workspace, model)?;
-        let identity = serde_json::to_vec(&(
-            &config.model_code,
-            &config.model_name,
-            config.protocol,
-            &config.base_url,
-            &config.api_path,
-            dimensions,
-            "knowledge-base-local-v1",
-        ))
-        .map_err(|error| LlmRuntimeError::invalid_provider_response(error.to_string()))?;
+        let config = self.resolve_auxiliary(
+            workspace,
+            crate::domain::model::AutoRouterKind::Embedding,
+            model.map(str::to_owned),
+            None,
+            vec![eliteforge_agent_core::Modality::Text],
+            &[],
+            Some(dimensions),
+        )?;
+        let identity =
+            if let Some(route) = config.route.as_ref().filter(|route| route.shared_identity) {
+                serde_json::to_vec(&(
+                    &route.model_code,
+                    &route.model_code,
+                    dimensions,
+                    "knowledge-base-local-v1",
+                ))
+            } else {
+                serde_json::to_vec(&(
+                    &config.model_code,
+                    &config.model_name,
+                    config.protocol,
+                    &config.base_url,
+                    &config.api_path,
+                    dimensions,
+                    "knowledge-base-local-v1",
+                ))
+            }
+            .map_err(|error| LlmRuntimeError::invalid_provider_response(error.to_string()))?;
         Ok(format!("{:x}", Sha256::digest(identity)))
     }
 
@@ -111,7 +140,15 @@ impl LlmRuntimeService {
             required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
         let input = required_trimmed(command.input, LlmRuntimeError::InputRequired)?;
         let model = optional_trimmed(command.model_code);
-        let config = self.resolve_embedding_model_config(&workspace, model.as_deref())?;
+        let config = self.resolve_auxiliary(
+            &workspace,
+            crate::domain::model::AutoRouterKind::Embedding,
+            model,
+            command.provider_id,
+            command.required_modalities,
+            &[input.clone().into()],
+            Some(dimensions),
+        )?;
         if let Some(allowance) = run.extensions.get::<ContextQueryAllowance>() {
             allowance
                 .admit()
@@ -146,7 +183,15 @@ impl LlmRuntimeService {
             required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
         let input = required_trimmed(command.input, LlmRuntimeError::InputRequired)?;
         let model = optional_trimmed(command.model_code);
-        let config = self.resolve_embedding_model_config(&workspace, model.as_deref())?;
+        let config = self.resolve_auxiliary(
+            &workspace,
+            crate::domain::model::AutoRouterKind::Embedding,
+            model,
+            command.provider_id,
+            command.required_modalities,
+            &[input.clone().into()],
+            Some(dimensions),
+        )?;
         let (embedding, provider_model) = self
             .client
             .embed_query_with_model(&config, &input, dimensions)
@@ -174,8 +219,15 @@ impl LlmRuntimeService {
             required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
         let input = required_trimmed(command.input, LlmRuntimeError::InputRequired)?;
         let model_code = optional_trimmed(command.model_code);
-        let config =
-            self.resolve_embedding_model_config(workspace_code.as_str(), model_code.as_deref())?;
+        let config = self.resolve_auxiliary(
+            &workspace_code,
+            crate::domain::model::AutoRouterKind::Embedding,
+            model_code,
+            command.provider_id,
+            command.required_modalities,
+            &[input.clone().into()],
+            None,
+        )?;
 
         let (embedding, provider_model) = self
             .client
@@ -211,7 +263,20 @@ impl LlmRuntimeService {
             .map(|input| required_trimmed(input, LlmRuntimeError::InputRequired))
             .collect::<Result<Vec<_>, _>>()?;
         let model = optional_trimmed(command.model_code);
-        let config = self.resolve_embedding_model_config(&workspace, model.as_deref())?;
+        let contents = inputs
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect::<Vec<eliteforge_agent_core::Content>>();
+        let config = self.resolve_auxiliary(
+            &workspace,
+            crate::domain::model::AutoRouterKind::Embedding,
+            model,
+            command.provider_id,
+            command.required_modalities,
+            &contents,
+            Some(command.dimensions),
+        )?;
         let (vectors, provider_model) = self
             .client
             .embed_batch_with_model(&config, &inputs, command.dimensions)
@@ -254,7 +319,15 @@ impl LlmRuntimeService {
             return Err(LlmRuntimeError::InputRequired);
         }
         let model = optional_trimmed(command.model_code);
-        let config = self.resolve_embedding_model_config(&workspace, model.as_deref())?;
+        let config = self.resolve_auxiliary(
+            &workspace,
+            crate::domain::model::AutoRouterKind::Embedding,
+            model,
+            command.provider_id,
+            command.required_modalities,
+            &inputs,
+            Some(command.dimensions),
+        )?;
         let (vectors, provider_model) = self
             .client
             .embed_content_batch_with_model(&config, &inputs, command.dimensions)
@@ -290,8 +363,15 @@ impl LlmRuntimeService {
             required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
         let input = required_trimmed(command.input, LlmRuntimeError::InputRequired)?;
         let model_code = optional_trimmed(command.model_code);
-        let config =
-            self.resolve_embedding_model_config(workspace_code.as_str(), model_code.as_deref())?;
+        let config = self.resolve_auxiliary(
+            &workspace_code,
+            crate::domain::model::AutoRouterKind::Embedding,
+            model_code,
+            command.provider_id,
+            command.required_modalities,
+            &[input.clone().into()],
+            None,
+        )?;
         let chunks = chunk_strategy
             .split(input.as_str())
             .map_err(LlmRuntimeError::invalid_chunk_strategy)?;
@@ -329,12 +409,51 @@ impl LlmRuntimeService {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<RuntimeModelConfig, LlmRuntimeError> {
-        let config = self
-            .model_resolver
-            .embedding_runtime_model_config(workspace_code, model_code)
-            .map_err(map_model_error)?
-            .ok_or(LlmRuntimeError::EmbeddingModelUnavailable)?;
+        let config = self.resolve_auxiliary(
+            workspace_code,
+            crate::domain::model::AutoRouterKind::Embedding,
+            model_code.map(str::to_owned),
+            None,
+            vec![eliteforge_agent_core::Modality::Text],
+            &[],
+            Some(crate::shared::sqlite_extensions::TRON_VECTOR_INDEX_DIMENSION),
+        )?;
         Ok(config)
+    }
+
+    fn resolve_auxiliary(
+        &self,
+        workspace: &str,
+        kind: crate::domain::model::AutoRouterKind,
+        model_code: Option<String>,
+        provider_id: Option<String>,
+        mut required_modalities: Vec<eliteforge_agent_core::Modality>,
+        inputs: &[eliteforge_agent_core::Content],
+        dimensions: Option<usize>,
+    ) -> Result<RuntimeModelConfig, LlmRuntimeError> {
+        for modality in inputs
+            .iter()
+            .flat_map(eliteforge_agent_core::Content::modalities)
+        {
+            if !required_modalities.contains(&modality) {
+                required_modalities.push(modality);
+            }
+        }
+        let choice = eliteforge_agent_core::ModelChoice {
+            model_code,
+            provider_id,
+            required_modalities,
+            ..Default::default()
+        };
+        self.model_resolver
+            .auxiliary_runtime_model_config(workspace, kind, &choice, dimensions)
+            .map_err(map_model_error)?
+            .ok_or(match kind {
+                crate::domain::model::AutoRouterKind::Embedding => {
+                    LlmRuntimeError::EmbeddingModelUnavailable
+                }
+                _ => LlmRuntimeError::RerankModelUnavailable,
+            })
     }
 
     async fn embed_chunk(
@@ -359,6 +478,40 @@ impl LlmRuntimeService {
         Ok(embedding)
     }
 
+    pub async fn rerank_content_call(
+        &self,
+        command: super::LlmContentRerankCallCommand,
+    ) -> Result<Vec<super::LlmRuntimeRerankHit>, LlmRuntimeError> {
+        let workspace =
+            required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
+        if command.query.is_empty() {
+            return Err(LlmRuntimeError::QueryRequired);
+        }
+        if command.documents.is_empty()
+            || command
+                .documents
+                .iter()
+                .any(eliteforge_agent_core::Content::is_empty)
+        {
+            return Err(LlmRuntimeError::DocumentsRequired);
+        }
+        let mut inputs = command.documents.clone();
+        inputs.push(command.query.clone());
+        let config = self.resolve_auxiliary(
+            &workspace,
+            crate::domain::model::AutoRouterKind::Rerank,
+            command.model_code,
+            command.provider_id,
+            command.required_modalities,
+            &inputs,
+            None,
+        )?;
+        self.client
+            .rerank_content_with_model(&config, &command.query, &command.documents, command.top_n)
+            .await
+            .map_err(LlmRuntimeError::provider_failed)
+    }
+
     pub async fn rerank_call(
         &self,
         command: LlmRerankCallCommand,
@@ -377,11 +530,21 @@ impl LlmRuntimeService {
             return Err(LlmRuntimeError::DocumentsRequired);
         }
 
-        let config = self
-            .model_resolver
-            .rerank_runtime_model_config(workspace_code.as_str(), model_code.as_deref())
-            .map_err(map_model_error)?
-            .ok_or(LlmRuntimeError::RerankModelUnavailable)?;
+        let mut contents = documents
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect::<Vec<eliteforge_agent_core::Content>>();
+        contents.push(query.clone().into());
+        let config = self.resolve_auxiliary(
+            &workspace_code,
+            crate::domain::model::AutoRouterKind::Rerank,
+            model_code,
+            command.provider_id,
+            command.required_modalities,
+            &contents,
+            None,
+        )?;
         let hits = self
             .client
             .rerank(&config, query.as_str(), documents.as_slice(), command.top_n)

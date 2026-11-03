@@ -65,6 +65,7 @@ impl LlmRuntimeClient for TitleModels {
 }
 fn config(code: &str) -> RuntimeModelConfig {
     RuntimeModelConfig {
+        route: None,
         model_code: code.into(),
         protocol: ModelProtocol::OpenAiCompatible,
         model_type: ModelType::Text,

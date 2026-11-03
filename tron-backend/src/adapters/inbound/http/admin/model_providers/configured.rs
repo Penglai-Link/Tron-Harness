@@ -72,6 +72,7 @@ impl UpdateConfiguredProviderRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ConfiguredModelResponse {
+    logical_model_code: Option<String>,
     model_type: ConfiguredProviderModelType,
     model_code: String,
     model_id: String,
@@ -87,6 +88,7 @@ struct ConfiguredModelResponse {
 impl From<ConfiguredProviderModel> for ConfiguredModelResponse {
     fn from(model: ConfiguredProviderModel) -> Self {
         Self {
+            logical_model_code: model.logical_model_code,
             model_type: model.model_type,
             model_code: model.model_code.unwrap_or_default(),
             model_id: model.model_id,

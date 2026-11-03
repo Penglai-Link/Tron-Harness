@@ -20,38 +20,41 @@ impl HttpLlmRuntimeClient {
         dimensions: usize,
         run: Option<&fw::RunContext>,
     ) -> Result<(Vec<f32>, Option<String>), String> {
-        if config.model_type != ModelType::TextEmbedding || dimensions == 0 {
+        if !matches!(
+            config.model_type,
+            ModelType::TextEmbedding | ModelType::MultimodalEmbedding
+        ) || dimensions == 0
+        {
             return Err("query requires a configured embedding index space".into());
         }
         if let Some(run) = run {
             run.check_cancelled().map_err(|error| error.to_string())?;
         }
         let model = runtime_to_agent_model_config(config);
-        let wire = sdk_config(&model)?;
-        let factory = Arc::new(
-            sdk::ScopedModelTransportFactory::new(self.models.factory.clone(), &wire)
-                .map_err(|error| error.to_string())?,
-        );
-        let reference = fw::ModelRef::new("http-embedding", &model.model_code);
+        let (runtime, choice, _) = self
+            .auxiliary_pool(config, Some(dimensions), false)
+            .map_err(|error| error.to_string())?;
+        let first = if let Some(route) = &config.route {
+            fw::ModelRef::new(
+                &route.candidates[0].provider_id,
+                &route.candidates[0].config.model_code,
+            )
+        } else {
+            fw::ModelRef::new("http-embedding", &config.model_code)
+        };
+        let shared = config.route.as_ref().filter(|route| route.shared_identity);
         let space = fw::EmbeddingSpace {
-            model: reference.clone(),
-            revision: "v1".into(),
+            model: first,
+            logical_model_code: shared.map(|route| route.model_code.clone()),
+            revision: shared.map_or_else(|| "v1".into(), |route| route.model_code.clone()),
             dimensions,
             preprocessing: "knowledge-base-local-v1".into(),
         };
-        let mut update =
-            eliteforge_agent_framework::ModelRuntimeUpdate::new("http-embedding", 0, vec![]);
-        update.embedding.push(fw::EmbeddingModelService::new(
-            reference,
-            Arc::new(sdk::HttpEmbeddingModel {
-                config: wire,
-                factory,
-            }),
-        ));
-        update.spaces.push(space.clone());
-        let runtime = eliteforge_agent_framework::ModelRuntime::new(update)
-            .map_err(|error| error.to_string())?;
-        let mut executor = self.models.executor.with_runtime(runtime);
+        let mut executor = self
+            .models
+            .executor
+            .with_runtime(runtime)
+            .with_auto_routers(self.pool_routers(config));
         let effective = limits(
             &model,
             &self.models.invocation_config().embedding.timeouts(),
@@ -63,9 +66,10 @@ impl HttpLlmRuntimeClient {
                 .map_err(|error| error.to_string())?,
         };
         executor = executor.with_options(options);
-        // One attempt. The SDK keeps the existing step/continuation/token budgets binding.
+        let mut request = fw::EmbeddingRequest::texts([input]);
+        request.choice = choice;
         let response = executor
-            .embed_query(&space, fw::EmbeddingRequest::texts([input]))
+            .embed_query(&space, request)
             .await
             .map_err(|error| error.to_string())?;
         let provider_model = response.provider_model;

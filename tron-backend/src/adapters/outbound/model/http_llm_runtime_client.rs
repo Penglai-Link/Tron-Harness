@@ -18,6 +18,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 pub struct HttpLlmRuntimeClient {
     models: Arc<HttpModelClient>,
     auto_routers: fw::AutoRouters,
+    provider_rotation: Arc<eliteforge_agent_capability_auto_routing::RoundRobinAutoRouter>,
     prompts: Option<crate::application::prompt::PromptService>,
 }
 impl HttpLlmRuntimeClient {
@@ -27,6 +28,7 @@ impl HttpLlmRuntimeClient {
                 HttpModelProviderClient::new(client),
             ))),
             auto_routers: default_auto_routers(),
+            provider_rotation: Arc::default(),
             prompts: None,
         }
     }
@@ -34,6 +36,7 @@ impl HttpLlmRuntimeClient {
         Self {
             models,
             auto_routers: default_auto_routers(),
+            provider_rotation: Arc::default(),
             prompts: None,
         }
     }
@@ -41,24 +44,12 @@ impl HttpLlmRuntimeClient {
         self.auto_routers = routers;
         self
     }
-    pub fn with_prompt_service(mut self, prompts: crate::application::prompt::PromptService) -> Self {
+    pub fn with_prompt_service(
+        mut self,
+        prompts: crate::application::prompt::PromptService,
+    ) -> Self {
         self.prompts = Some(prompts);
         self
-    }
-    fn routing_for(&self, model: &AgentModelConfig, reference: &fw::ModelRef) -> fw::AutoRouters {
-        let mut routers = self.auto_routers.clone();
-        if routers.source.is_none() {
-            let mut candidate = fw::AutoRouteCandidate::new(reference.clone());
-            candidate.metadata.insert(
-                eliteforge_agent_capability_personai::PERSONAI_PROVIDER.into(),
-                model.model_code.starts_with("PERSON_AI:").into(),
-            );
-            candidate.context_window_tokens = model.context_window_tokens.map(|v| v as usize);
-            routers.source = Some(Arc::new(
-                crate::application::model_router::TronAutoRouteDataSource(vec![candidate]),
-            ));
-        }
-        routers
     }
 }
 fn default_auto_routers() -> fw::AutoRouters {
@@ -101,7 +92,24 @@ pub(crate) fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> Agen
 mod in_run;
 #[path = "http_llm_observed.rs"]
 mod observed;
+#[path = "http_llm_routing.rs"]
+mod routing;
 impl LlmRuntimeClient for HttpLlmRuntimeClient {
+    fn rerank_content_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        query: &'a fw::Content,
+        documents: &'a [fw::Content],
+        top_n: Option<usize>,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.observed_rerank_content(config, query, documents, top_n)
+                .await
+                .into_result()
+                .map_err(error)
+        })
+    }
+
     fn embed_content_batch_with_model<'a>(
         &'a self,
         config: &'a RuntimeModelConfig,
@@ -386,6 +394,7 @@ mod tests {
         let url = format!("http://{}", listener.local_addr().unwrap());
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let config = RuntimeModelConfig {
+            route: None,
             model_code: "fixture".into(),
             protocol: ModelProtocol::OpenAiCompatibleEmbedding,
             model_type: ModelType::TextEmbedding,
@@ -475,6 +484,7 @@ mod tests {
                 .unwrap();
         });
         let config = RuntimeModelConfig {
+            route: None,
             model_code: "fixture".into(),
             protocol: ModelProtocol::OpenAiCompatibleEmbedding,
             model_type: ModelType::TextEmbedding,
@@ -496,6 +506,8 @@ mod tests {
         let client = HttpLlmRuntimeClient::new(sdk::ModelHttpClient::new());
         let llm = LlmRuntimeService::new(Arc::new(Resolver(config)), Arc::new(client.clone()));
         let command = LlmEmbeddingBatchCallCommand {
+            provider_id: None,
+            required_modalities: vec![],
             workspace_code: "PLATFORM".into(),
             model_code: Some("fixture".into()),
             inputs: vec!["first".into(), "second".into(), "third".into()],
@@ -581,6 +593,7 @@ mod tests {
         let url = format!("http://{}", listener.local_addr().unwrap());
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let config = RuntimeModelConfig {
+            route: None,
             model_code: "fixture".into(),
             protocol: ModelProtocol::Rerank,
             model_type: ModelType::TextRerank,
@@ -668,6 +681,7 @@ mod tests {
                 .unwrap();
         });
         let config = RuntimeModelConfig {
+            route: None,
             model_code: "fixture".into(),
             protocol: ModelProtocol::Rerank,
             model_type: ModelType::TextRerank,
@@ -743,6 +757,7 @@ mod tests {
                 .unwrap();
         });
         let config = RuntimeModelConfig {
+            route: None,
             model_code: "synthetic-local".into(),
             protocol: ModelProtocol::OpenAiCompatible,
             model_type: ModelType::Text,

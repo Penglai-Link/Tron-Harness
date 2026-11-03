@@ -8,11 +8,10 @@ pub use vision::VisionModelBinding;
 mod service_tests;
 
 pub use dto::{
-    LlmEmbeddingContentBatchCallCommand,
-    LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmEmbeddingBatchCallCommand,
-    LlmEmbeddingBatchCallResult, LlmEmbeddingCallCommand, LlmEmbeddingCallResult,
-    LlmEmbeddingChunkResultItem, LlmRerankCallCommand, LlmRerankCallResult, LlmRerankResultItem,
-    LlmTextGenerationCallResult,
+    LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmContentRerankCallCommand,
+    LlmEmbeddingBatchCallCommand, LlmEmbeddingBatchCallResult, LlmEmbeddingCallCommand,
+    LlmEmbeddingCallResult, LlmEmbeddingChunkResultItem, LlmEmbeddingContentBatchCallCommand,
+    LlmRerankCallCommand, LlmRerankCallResult, LlmRerankResultItem, LlmTextGenerationCallResult,
 };
 pub use error::LlmRuntimeError;
 pub use port::{

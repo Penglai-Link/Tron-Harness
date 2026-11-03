@@ -14,6 +14,7 @@ pub use automatic_routing::{AutomaticRouteModel, AutomaticRoutingSettingsError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeModelConfig {
+    pub route: Option<Box<RuntimeModelRoute>>,
     pub request_headers: std::collections::BTreeMap<String, String>,
     pub model_code: String,
     pub protocol: ModelProtocol,
@@ -31,6 +32,23 @@ pub struct RuntimeModelConfig {
     pub context_window_tokens: Option<u32>,
     pub top_p: Option<f64>,
     pub max_retries: Option<u32>,
+}
+
+/// One immutable, authorized logical-model pool for an auxiliary operation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeModelRoute {
+    pub model_code: String,
+    pub shared_identity: bool,
+    pub required_modalities: Vec<eliteforge_agent_core::Modality>,
+    pub candidates: Vec<RuntimeModelEndpoint>,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeModelEndpoint {
+    pub provider_id: String,
+    pub model_code: String,
+    pub input_modalities: Vec<eliteforge_agent_core::Modality>,
+    pub dimension: Option<usize>,
+    pub config: RuntimeModelConfig,
 }
 
 pub trait ModelRepository: Send {

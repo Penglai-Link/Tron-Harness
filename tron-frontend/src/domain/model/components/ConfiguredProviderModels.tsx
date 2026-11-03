@@ -68,6 +68,9 @@ export function ConfiguredProviderModels({ presetId, models, protocol, disabled,
               <TextInput aria-label={t("configuredProviders.models.idNumber", { number: index + 1 })} value={model.modelId}
                 autoComplete="off" spellCheck={false} onChange={(event) => update(model.rowId, { modelId: event.currentTarget.value })} />
             </Field>
+            {["TextEmbedding", "MultimodalEmbedding", "TextRerank", "MultimodalRerank"].includes(model.modelType) && <Field label={<span className="inline-flex items-center gap-1">{text("models.logicalCode")}<InfoTooltip ariaLabel={text("models.logicalCode")}>{text("models.logicalCodeHelp")}</InfoTooltip></span>}>
+              <TextInput aria-label={text("models.logicalCode")} value={model.logicalModelCode ?? ""} autoComplete="off" spellCheck={false} onChange={event => update(model.rowId, { logicalModelCode: event.currentTarget.value })} />
+            </Field>}
             <Field label={text("models.name")} required>
               <TextInput aria-label={t("configuredProviders.models.nameNumber", { number: index + 1 })} value={model.name}
                 onChange={(event) => update(model.rowId, { name: event.currentTarget.value })} />

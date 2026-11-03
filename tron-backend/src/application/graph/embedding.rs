@@ -133,6 +133,8 @@ impl GraphEmbeddingRuntime for LlmRuntimeService {
         Box::pin(async move {
             let result = self
                 .embedding_call(LlmEmbeddingCallCommand {
+                    provider_id: None,
+                    required_modalities: vec![],
                     workspace_code: workspace_code.to_owned(),
                     model_code: model_code.map(str::to_owned),
                     input: input.to_owned(),
@@ -159,6 +161,8 @@ impl GraphEmbeddingRuntime for LlmRuntimeService {
             let result = self
                 .embedding_call_with_chunking(
                     LlmChunkedEmbeddingCallCommand {
+                        provider_id: None,
+                        required_modalities: vec![],
                         workspace_code: workspace_code.to_owned(),
                         model_code: model_code.map(str::to_owned),
                         input: input.to_owned(),

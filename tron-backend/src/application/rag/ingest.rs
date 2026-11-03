@@ -247,6 +247,8 @@ impl RagEmbeddingRuntime for LlmRuntimeService {
         Box::pin(async move {
             self.embedding_content_batch_call(
                 crate::application::llm::LlmEmbeddingContentBatchCallCommand {
+                    provider_id: None,
+                    required_modalities: vec![],
                     workspace_code: call.workspace_code,
                     model_code: call.model_code,
                     inputs: call.inputs,
@@ -282,6 +284,8 @@ impl RagEmbeddingRuntime for LlmRuntimeService {
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingBatchResult, String>> + Send + 'a>> {
         Box::pin(async move {
             self.embedding_batch_call(LlmEmbeddingBatchCallCommand {
+                provider_id: None,
+                required_modalities: vec![],
                 workspace_code: call.workspace_code,
                 model_code: call.model_code,
                 inputs: call.inputs,
@@ -297,6 +301,8 @@ impl RagEmbeddingRuntime for LlmRuntimeService {
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move {
             self.embedding_call(LlmEmbeddingCallCommand {
+                provider_id: None,
+                required_modalities: vec![],
                 workspace_code: call.workspace_code,
                 model_code: call.model_code,
                 input: call.input,

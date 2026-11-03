@@ -13,6 +13,8 @@ pub struct AutomaticRouteModel {
     pub provider_id: String,
     pub provider_name: String,
     pub model_code: String,
+    pub binding_id: String,
+    pub shared_identity: bool,
     pub model_name: String,
     pub model_type: ModelType,
     pub context_window_tokens: Option<u32>,
@@ -22,23 +24,29 @@ pub struct AutomaticRouteModel {
 }
 impl AutomaticRouteModel {
     pub fn eligible_for(&self, kind: AutoRouterKind) -> bool {
-        (self.model_type == kind.model_type()
-            || (kind == AutoRouterKind::TextRerank
-                && self.model_type == ModelType::MultimodalRerank
-                && self.input_modalities.contains(&fw::Modality::Text)))
-            && (!matches!(
-                kind,
-                AutoRouterKind::TextEmbedding | AutoRouterKind::MultimodalEmbedding
-            ) || self.dimension == Some(crate::shared::sqlite_extensions::TRON_VECTOR_INDEX_DIMENSION))
+        let family = match kind {
+            AutoRouterKind::Embedding => matches!(
+                self.model_type,
+                ModelType::TextEmbedding | ModelType::MultimodalEmbedding
+            ),
+            AutoRouterKind::Rerank => matches!(
+                self.model_type,
+                ModelType::TextRerank | ModelType::MultimodalRerank
+            ),
+            _ => self.model_type == ModelType::Text,
+        };
+        family
             && (kind != AutoRouterKind::Chat
                 || (self.context_window_tokens.is_some_and(|n| n > 0)
-                    && (!self.model_code.starts_with("PERSON_AI:")
-                        || self.model_code.starts_with("PERSON_AI:FIXED:High:"))))
+                    && (!self.binding_id.starts_with("PERSON_AI:")
+                        || self.binding_id.starts_with("PERSON_AI:FIXED:High:"))))
     }
 
     pub fn candidate(&self) -> fw::AutoRouteCandidate {
         let mut candidate =
-            fw::AutoRouteCandidate::new(fw::ModelRef::new(&self.provider_id, &self.model_code));
+            fw::AutoRouteCandidate::new(fw::ModelRef::new(&self.provider_id, &self.binding_id));
+        candidate.model_code = self.model_code.clone();
+        candidate.provider_id = self.provider_id.clone();
         candidate.protocol = self.protocol.clone();
         candidate.context_window_tokens = self.context_window_tokens.map(|v| v as usize);
         candidate.input_modalities = self.input_modalities.clone();
@@ -71,7 +79,13 @@ impl ModelService {
                 result.push(AutomaticRouteModel {
                     provider_id: provider.provider_id.clone(),
                     provider_name: provider.display_name.clone(),
-                    model_code: model.model_code.clone().ok_or(ModelError::StorageFailure)?,
+                    model_code: model
+                        .logical_model_code
+                        .clone()
+                        .or_else(|| model.model_code.clone())
+                        .ok_or(ModelError::StorageFailure)?,
+                    binding_id: model.model_code.clone().ok_or(ModelError::StorageFailure)?,
+                    shared_identity: model.logical_model_code.is_some(),
                     model_name: model.name.clone(),
                     model_type: kind,
                     context_window_tokens: model.context_window_tokens,
@@ -174,6 +188,8 @@ impl ModelService {
                 result.push(AutomaticRouteModel {
                     provider_id: "PersonAi".into(),
                     provider_name: "Person-AI".into(),
+                    binding_id: code.clone(),
+                    shared_identity: false,
                     model_code: code,
                     model_name: model.model_name,
                     model_type: kind,
@@ -193,7 +209,7 @@ impl ModelService {
         });
         result.dedup_by(|a, b| {
             a.provider_id == b.provider_id
-                && a.model_code == b.model_code
+                && a.binding_id == b.binding_id
                 && a.model_type == b.model_type
         });
         Ok(result)
@@ -201,9 +217,57 @@ impl ModelService {
     pub fn automatic_route_sources(
         &self,
     ) -> Result<std::collections::BTreeMap<String, AutoRouteSources>, ModelError> {
-        self.providers
+        let mut sources = self
+            .providers
             .automatic_route_sources()
-            .map_err(provider_error)
+            .map_err(provider_error)?;
+        // Preserve the admitted legacy pools when consolidating two policies.
+        // An absent old policy had the old default; explicit empty selections stay empty.
+        let catalog = self.automatic_route_catalog()?;
+        for (kind, text, multi) in [
+            (
+                AutoRouterKind::Embedding,
+                "TextEmbedding",
+                "MultimodalEmbedding",
+            ),
+            (AutoRouterKind::Rerank, "TextRerank", "MultimodalRerank"),
+        ] {
+            if sources.contains_key(kind.code())
+                || (!sources.contains_key(text) && !sources.contains_key(multi))
+            {
+                continue;
+            }
+            let text_sources = sources.remove(text).unwrap_or_default();
+            let multi_sources = sources.remove(multi).unwrap_or_default();
+            let mut codes = catalog
+                .iter()
+                .filter(|model| model.eligible_for(kind))
+                .filter(|model| {
+                    let old = if matches!(
+                        model.model_type,
+                        ModelType::MultimodalEmbedding | ModelType::MultimodalRerank
+                    ) {
+                        &multi_sources
+                    } else {
+                        &text_sources
+                    };
+                    old.allows(&model.provider_id, &model.binding_id)
+                        || old.allows(&model.provider_id, &model.model_code)
+                })
+                .map(|model| model.model_code.clone())
+                .collect::<Vec<_>>();
+            codes.sort();
+            codes.dedup();
+            sources.insert(
+                kind.code().into(),
+                AutoRouteSources {
+                    mode: crate::domain::model::AutoRouteSourceMode::SelectedModels,
+                    provider_ids: vec![],
+                    model_codes: codes,
+                },
+            );
+        }
+        Ok(sources)
     }
     pub fn save_automatic_route_sources(
         &self,
@@ -256,7 +320,7 @@ impl ModelService {
         Ok(self
             .automatic_route_models(AutoRouterKind::Chat)?
             .into_iter()
-            .map(|m| m.model_code)
+            .map(|m| m.binding_id)
             .collect())
     }
     pub fn route_automatic_model(
@@ -264,6 +328,9 @@ impl ModelService {
         workspace: &str,
         kind: AutoRouterKind,
     ) -> Result<RuntimeModelConfig, ModelError> {
+        if matches!(kind, AutoRouterKind::Embedding | AutoRouterKind::Rerank) {
+            return self.route_auxiliary_model(workspace, kind, &fw::ModelChoice::default(), None);
+        }
         let available = self
             .automatic_route_models(kind)?
             .into_iter()
@@ -281,9 +348,7 @@ impl ModelService {
         };
         let operation = match kind {
             AutoRouterKind::Chat | AutoRouterKind::TextGeneration => fw::ModelOperation::Chat,
-            AutoRouterKind::TextEmbedding | AutoRouterKind::MultimodalEmbedding => {
-                fw::ModelOperation::Embedding
-            }
+            AutoRouterKind::Embedding => fw::ModelOperation::Embedding,
             _ => fw::ModelOperation::Rerank,
         };
         let context = fw::AutoRouteContext {
@@ -296,12 +361,6 @@ impl ModelService {
         };
         let selected = match kind {
             AutoRouterKind::TextGeneration => routers.select_text_generation(&context, &available),
-            AutoRouterKind::MultimodalEmbedding => {
-                routers.select_multimodal_embedding(&context, &available)
-            }
-            AutoRouterKind::MultimodalRerank => {
-                routers.select_multimodal_rerank(&context, &available)
-            }
             _ => routers.select(&context, &available),
         }
         .map_err(|e| ModelError::RuntimeResolutionFailed(e.to_string()))?;
@@ -329,7 +388,7 @@ impl ModelService {
                 };
                 agent.map(crate::application::model_router::runtime_from_agent)
             }
-            AutoRouterKind::TextEmbedding | AutoRouterKind::MultimodalEmbedding => {
+            AutoRouterKind::Embedding => {
                 if code.starts_with("PERSON_AI:") {
                     self.providers
                         .embedding_runtime_model_config(workspace, Some(code))
@@ -358,6 +417,139 @@ impl ModelService {
             })
     }
 }
+impl ModelService {
+    pub fn route_auxiliary_model(
+        &self,
+        workspace: &str,
+        kind: AutoRouterKind,
+        choice: &fw::ModelChoice,
+        dimensions: Option<usize>,
+    ) -> Result<RuntimeModelConfig, ModelError> {
+        if !matches!(kind, AutoRouterKind::Embedding | AutoRouterKind::Rerank) {
+            return Err(ModelError::InvalidProtocolModelType);
+        }
+        if choice
+            .model_code
+            .as_ref()
+            .is_some_and(|code| code.trim().is_empty())
+            || choice
+                .provider_id
+                .as_ref()
+                .is_some_and(|code| code.trim().is_empty())
+        {
+            return Err(ModelError::RuntimeResolutionFailed(
+                "empty model or provider constraint".into(),
+            ));
+        }
+        let requested = match choice.model_code.as_deref() {
+            None => None,
+            Some(code)
+                if match kind {
+                    AutoRouterKind::Embedding => matches!(
+                        code,
+                        "AUTO:Embedding"
+                            | "AUTO:TextEmbedding"
+                            | "AUTO:MultimodalEmbedding"
+                            | "PERSON_AI:ROUTE:EmbeddingAuto"
+                            | "PERSON_AI:ROUTE:MultimodalEmbeddingAuto"
+                    ),
+                    _ => matches!(
+                        code,
+                        "AUTO:Rerank"
+                            | "AUTO:TextRerank"
+                            | "AUTO:MultimodalRerank"
+                            | "PERSON_AI:ROUTE:RerankAuto"
+                    ),
+                } =>
+            {
+                None
+            }
+            Some(code) if code.starts_with("AUTO:") || code.contains(":ROUTE:") => {
+                return Err(ModelError::RuntimeResolutionFailed(
+                    "unknown or incompatible automatic route".into(),
+                ));
+            }
+            Some(code) => Some(code),
+        };
+        let catalog = self.automatic_route_catalog()?;
+        let sources = self
+            .automatic_route_sources()?
+            .remove(kind.code())
+            .unwrap_or_default();
+        let eligible = catalog
+            .iter()
+            .filter(|model| {
+                model.eligible_for(kind)
+                    && requested
+                        .is_none_or(|code| code == model.model_code || code == model.binding_id)
+                    && choice
+                        .provider_id
+                        .as_ref()
+                        .is_none_or(|id| id == &model.provider_id)
+                    && choice
+                        .required_modalities
+                        .iter()
+                        .all(|m| model.input_modalities.contains(m))
+                    && (kind != AutoRouterKind::Embedding
+                        || dimensions.is_none_or(|d| model.dimension == Some(d)))
+                    && sources.allows(&model.provider_id, &model.model_code)
+            })
+            .collect::<Vec<_>>();
+        let first = eligible.first().ok_or_else(|| {
+            ModelError::RuntimeResolutionFailed(
+                "no authorized model satisfies the route constraints".into(),
+            )
+        })?;
+        let group_code = first.model_code.clone();
+        let fixed_binding = requested == Some(first.binding_id.as_str());
+        let logical = if fixed_binding {
+            first.binding_id.clone()
+        } else {
+            group_code.clone()
+        };
+        let shared_identity = first.shared_identity && !fixed_binding;
+        let dimension = first.dimension;
+        let mut candidates = Vec::new();
+        for model in eligible.into_iter().filter(|model| {
+            model.model_code == group_code
+                && (kind != AutoRouterKind::Embedding || model.dimension == dimension)
+        }) {
+            let config = if model.binding_id.starts_with("PERSON_AI:") {
+                match kind {
+                    AutoRouterKind::Embedding => self
+                        .providers
+                        .embedding_runtime_model_config(workspace, Some(&model.binding_id)),
+                    _ => self
+                        .providers
+                        .rerank_runtime_model_config(workspace, Some(&model.binding_id)),
+                }
+                .map_err(provider_error)?
+            } else {
+                self.auxiliary_runtime_model(Some(&model.binding_id), model.model_type)?
+            }
+            .ok_or_else(|| {
+                ModelError::RuntimeResolutionFailed("route binding unavailable".into())
+            })?;
+            candidates.push(RuntimeModelEndpoint {
+                provider_id: model.provider_id.clone(),
+                model_code: logical.clone(),
+                input_modalities: model.input_modalities.clone(),
+                dimension: model.dimension,
+                config,
+            });
+        }
+        let mut config = candidates[0].config.clone();
+        config.model_code = logical.clone();
+        config.route = Some(Box::new(RuntimeModelRoute {
+            model_code: logical,
+            shared_identity,
+            required_modalities: choice.required_modalities.clone(),
+            candidates,
+        }));
+        Ok(config)
+    }
+}
+
 fn provider_error(error: crate::application::model_provider::ModelProviderError) -> ModelError {
     ModelError::RuntimeResolutionFailed(error.to_string())
 }
@@ -379,30 +571,5 @@ impl AutomaticRoutingSettingsError {
                 message_key: "tron.automatic_router.storage_failed",
             },
         }
-    }
-}
-
-#[cfg(test)]
-mod rerank_capability_tests {
-    use super::*;
-    #[test]
-    fn embedding_candidates_require_confirmed_index_dimension() {
-        let mut model = AutomaticRouteModel { provider_id: "p".into(), provider_name: "P".into(), model_code: "e".into(), model_name: "E".into(), model_type: ModelType::TextEmbedding, context_window_tokens: None, input_modalities: vec![fw::Modality::Text], protocol: "p".into(), dimension: None };
-        assert!(!model.eligible_for(AutoRouterKind::TextEmbedding));
-        model.dimension = Some(768); assert!(!model.eligible_for(AutoRouterKind::TextEmbedding));
-        model.dimension = Some(1024); assert!(model.eligible_for(AutoRouterKind::TextEmbedding));
-        model.model_type = ModelType::MultimodalEmbedding; assert!(model.eligible_for(AutoRouterKind::MultimodalEmbedding));
-        model.dimension = None; assert!(!model.eligible_for(AutoRouterKind::MultimodalEmbedding));
-    }
-    #[test]
-    fn multimodal_reranker_is_text_candidate_only_when_it_accepts_text() {
-        let mut model = AutomaticRouteModel { provider_id: "p".into(), provider_name: "P".into(), model_code: "m".into(), model_name: "M".into(), model_type: ModelType::MultimodalRerank, context_window_tokens: None, input_modalities: vec![fw::Modality::Text, fw::Modality::Image], protocol: "personai".into(), dimension: None };
-        assert!(model.eligible_for(AutoRouterKind::TextRerank));
-        assert!(model.eligible_for(AutoRouterKind::MultimodalRerank));
-        model.input_modalities = vec![fw::Modality::Image];
-        assert!(!model.eligible_for(AutoRouterKind::TextRerank));
-        assert!(model.eligible_for(AutoRouterKind::MultimodalRerank));
-        model.model_type = ModelType::TextRerank;
-        assert!(!model.eligible_for(AutoRouterKind::MultimodalRerank));
     }
 }

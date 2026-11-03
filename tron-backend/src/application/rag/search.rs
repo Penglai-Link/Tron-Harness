@@ -162,6 +162,8 @@ impl RagSearchRuntime for LlmRuntimeService {
     ) -> Pin<Box<dyn Future<Output = Result<Vec<(usize, f64)>, String>> + Send + 'a>> {
         Box::pin(async move {
             self.rerank_call(LlmRerankCallCommand {
+                provider_id: None,
+                required_modalities: vec![],
                 workspace_code: call.workspace_code,
                 model_code: call.model_code,
                 query: call.query,

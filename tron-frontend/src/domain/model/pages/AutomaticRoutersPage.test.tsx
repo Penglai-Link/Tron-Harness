@@ -13,33 +13,33 @@ import { AutomaticRoutersPage } from "./AutomaticRoutersPage";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  const routes: AutomaticRouter[] = ["Chat", "TextGeneration", "TextEmbedding", "MultimodalEmbedding", "TextRerank", "MultimodalRerank"].map(kind => ({ kind: kind as AutomaticRouter["kind"], sources: { mode: "AllProviders", providerIds: [], modelCodes: [] }, candidates: [
-    { providerId: "account-a", providerName: "Work key", modelCode: "model-a", modelName: "Shared model" },
-    { providerId: "account-b", providerName: "Personal key", modelCode: "model-b", modelName: "Shared model" },
+  const routes: AutomaticRouter[] = ["Chat", "TextGeneration", "Embedding", "Rerank"].map(kind => ({ kind: kind as AutomaticRouter["kind"], sources: { mode: "AllProviders", providerIds: [], modelCodes: [] }, candidates: [
+    { providerId: "account-a", providerName: "Work key", modelCode: "model-a", modelName: "Shared model", bindingId: "binding", inputModalities: ["Text", "Image"], dimension: 1024 },
+    { providerId: "account-b", providerName: "Personal key", modelCode: "model-b", modelName: "Shared model", bindingId: "binding", inputModalities: ["Text", "Image"], dimension: 1024 },
   ] }));
   fixture.list.mockResolvedValue(routes);
   fixture.save.mockResolvedValue({});
 });
 afterEach(cleanup);
 
-it("shows all six independent routes and saves an explicit empty selection without broadening it", async () => {
+it("shows four unified routes and saves an explicit empty selection without broadening it", async () => {
   render(<AutomaticRoutersPage />);
-  const section = await screen.findByRole("region", { name: "automaticRouters.kinds.MultimodalRerank" });
-  expect(screen.getAllByRole("region")).toHaveLength(6);
+  const section = await screen.findByRole("region", { name: "automaticRouters.kinds.Rerank" });
+  expect(screen.getAllByRole("region")).toHaveLength(4);
   const trigger = within(section).getByRole("combobox");
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
   const option = await screen.findByRole("option", { name: "automaticRouters.modes.SelectedModels" });
   fireEvent.pointerDown(option, { pointerType: "mouse" });
   fireEvent.click(option);
   fireEvent.click(within(section).getByRole("button", { name: "automaticRouters.save" }));
-  await waitFor(() => expect(fixture.save).toHaveBeenCalledWith("MultimodalRerank", { mode: "SelectedModels", providerIds: [], modelCodes: [] }));
+  await waitFor(() => expect(fixture.save).toHaveBeenCalledWith("Rerank", { mode: "SelectedModels", providerIds: [], modelCodes: [] }));
   expect(fixture.toast.success).toHaveBeenCalledWith("automaticRouters.saved");
 });
 
 it("keeps a failed save editable and reports its cause", async () => {
   fixture.save.mockRejectedValueOnce(new Error("Storage unavailable"));
   render(<AutomaticRoutersPage />);
-  const section = await screen.findByRole("region", { name: "automaticRouters.kinds.TextEmbedding" });
+  const section = await screen.findByRole("region", { name: "automaticRouters.kinds.Embedding" });
   fireEvent.keyDown(within(section).getByRole("combobox"), { key: "ArrowDown" });
   const option = await screen.findByRole("option", { name: "automaticRouters.modes.SelectedProviders" });
   fireEvent.pointerDown(option, { pointerType: "mouse" });

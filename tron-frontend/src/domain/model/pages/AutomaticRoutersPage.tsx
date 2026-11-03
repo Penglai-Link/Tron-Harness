@@ -40,7 +40,7 @@ function RouterEditor({ route }: { route: AutomaticRouter }) {
   const [saving, setSaving] = useState(false);
   useEffect(() => { setSources(route.sources); setSaved(route.sources); }, [route.sources]);
   const providers = [...new Map(route.candidates.map(m => [m.providerId, { id: m.providerId, label: m.providerName }])).values()];
-  const items = sources.mode === "SelectedProviders" ? providers : route.candidates.map(m => ({ id: m.modelCode, label: `${m.providerName} / ${m.modelName}` }));
+  const items = sources.mode === "SelectedProviders" ? providers : [...new Set(route.candidates.map(m => m.modelCode))].map(code => { const group = route.candidates.filter(m => m.modelCode === code); return { id: code, label: `${group[0].modelName} · ${group.map(m => m.providerName).join(" / ")}` }; });
   const selectedIds = sources.mode === "SelectedProviders" ? sources.providerIds : sources.modelCodes;
   // Retain unavailable identities visibly so an edit never silently widens access.
   for (const id of selectedIds) if (!items.some(item => item.id === id)) items.push({ id, label: t("automaticRouters.unavailable", { id }) });
@@ -75,7 +75,7 @@ function RouterEditor({ route }: { route: AutomaticRouter }) {
       </Field>}
     </div>
     <details className="text-sm"><summary className="cursor-pointer text-[var(--color-on-surface-variant)]">{t("automaticRouters.candidates", { count: effective.length })}</summary>
-      <ul className="mt-2 space-y-1">{effective.map(m => <li key={m.modelCode} className="break-words">{m.providerName} / {m.modelName}</li>)}</ul>
+      <ul className="mt-2 space-y-1">{effective.map(m => <li key={`${m.providerId}:${m.bindingId}`} className="flex flex-wrap items-baseline gap-x-2 break-words"><span>{m.providerName} / {m.modelName}</span><span className="text-xs text-[var(--color-on-surface-variant)]">{m.modelCode} · {m.inputModalities?.map(input => t(`configuredProviders.inputs.${input}`)).join(" / ")}{m.dimension ? ` · ${m.dimension}D` : ""}</span></li>)}</ul>
       {sources.mode === "SelectedModels" && selected.filter(item => !effective.some(m => m.modelCode === item.id)).map(item => <p key={item.id} className="mt-1 break-words">{item.label}</p>)}
       {!effective.length && (sources.mode !== "SelectedModels" || !selected.length) && <p className="mt-2">{t("automaticRouters.empty")}</p>}
     </details>

@@ -180,27 +180,37 @@ impl ModelService {
 
     pub fn embedding_runtime_model_config(
         &self,
-        _workspace: &str,
+        workspace: &str,
         code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        let config = self.auxiliary_runtime_model(code, ModelType::TextEmbedding)?;
-        if config.is_none() && code.is_some() {
-            self.auxiliary_runtime_model(code, ModelType::MultimodalEmbedding)
-        } else {
-            Ok(config)
-        }
+        self.route_auxiliary_model(
+            workspace,
+            crate::domain::model::AutoRouterKind::Embedding,
+            &eliteforge_agent_core::ModelChoice {
+                model_code: code.map(str::to_owned),
+                required_modalities: vec![eliteforge_agent_core::Modality::Text],
+                ..Default::default()
+            },
+            None,
+        )
+        .map(Some)
     }
     pub fn rerank_runtime_model_config(
         &self,
-        _workspace: &str,
+        workspace: &str,
         code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        let config = self.auxiliary_runtime_model(code, ModelType::TextRerank)?;
-        if config.is_none() && code.is_some() {
-            self.auxiliary_runtime_model(code, ModelType::MultimodalRerank)
-        } else {
-            Ok(config)
-        }
+        self.route_auxiliary_model(
+            workspace,
+            crate::domain::model::AutoRouterKind::Rerank,
+            &eliteforge_agent_core::ModelChoice {
+                model_code: code.map(str::to_owned),
+                required_modalities: vec![eliteforge_agent_core::Modality::Text],
+                ..Default::default()
+            },
+            None,
+        )
+        .map(Some)
     }
     pub(super) fn auxiliary_runtime_model(
         &self,
@@ -223,6 +233,7 @@ impl ModelService {
                     continue;
                 }
                 return Ok(Some(RuntimeModelConfig {
+                    route: None,
                     model_code: model.model_code.clone().ok_or(ModelError::StorageFailure)?,
                     protocol: model
                         .model_type

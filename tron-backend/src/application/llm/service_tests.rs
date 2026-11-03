@@ -121,6 +121,7 @@ impl LlmRuntimeClient for FakeClient {
 
 fn text_config() -> RuntimeModelConfig {
     RuntimeModelConfig {
+        route: None,
         model_code: "MODEL-TEXT".into(),
         protocol: ModelProtocol::OpenAiCompatible,
         model_type: ModelType::Text,
@@ -143,6 +144,7 @@ fn text_config() -> RuntimeModelConfig {
 
 fn embedding_config() -> RuntimeModelConfig {
     RuntimeModelConfig {
+        route: None,
         model_code: "MODEL-EMBED".into(),
         protocol: ModelProtocol::OpenAiCompatibleEmbedding,
         model_type: ModelType::TextEmbedding,
@@ -165,6 +167,7 @@ fn embedding_config() -> RuntimeModelConfig {
 
 fn rerank_config() -> RuntimeModelConfig {
     RuntimeModelConfig {
+        route: None,
         model_code: "MODEL-RERANK".into(),
         protocol: ModelProtocol::Rerank,
         model_type: ModelType::TextRerank,
@@ -203,6 +206,8 @@ async fn embedding_call_uses_resolved_model_and_returns_embedding_vector() {
 
     let result = service
         .embedding_call(LlmEmbeddingCallCommand {
+            provider_id: None,
+            required_modalities: vec![],
             workspace_code: "TRON_CORE".into(),
             model_code: None,
             input: "memory chunk".into(),
@@ -237,6 +242,8 @@ async fn embedding_call_with_chunking_embeds_every_slice() {
     let result = service
         .embedding_call_with_chunking(
             LlmChunkedEmbeddingCallCommand {
+                provider_id: None,
+                required_modalities: vec![],
                 workspace_code: "TRON_CORE".into(),
                 model_code: None,
                 input: "abcdefghij".into(),
@@ -289,6 +296,8 @@ async fn rerank_call_returns_ranked_documents() {
 
     let result = service
         .rerank_call(LlmRerankCallCommand {
+            provider_id: None,
+            required_modalities: vec![],
             workspace_code: "TRON_CORE".into(),
             model_code: None,
             query: "best candidate".into(),
@@ -349,6 +358,8 @@ async fn embedding_call_rejects_blank_input() {
 
     let error = service
         .embedding_call(LlmEmbeddingCallCommand {
+            provider_id: None,
+            required_modalities: vec![],
             workspace_code: "TRON_CORE".into(),
             model_code: None,
             input: "  ".into(),
@@ -381,6 +392,8 @@ async fn embedding_call_with_chunking_rejects_invalid_strategy() {
     let error = service
         .embedding_call_with_chunking(
             LlmChunkedEmbeddingCallCommand {
+                provider_id: None,
+                required_modalities: vec![],
                 workspace_code: "TRON_CORE".into(),
                 model_code: None,
                 input: "abcdef".into(),

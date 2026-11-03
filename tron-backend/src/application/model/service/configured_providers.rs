@@ -114,14 +114,51 @@ impl ModelService {
         create: bool,
     ) -> Result<ConfiguredModelProvider, ConfiguredProviderError> {
         validate_provider(provider_id, &command)?;
+        for model in &command.models {
+            if model.logical_model_code.as_ref().is_some_and(|code| {
+                code.trim().is_empty()
+                    || code.len() > 256
+                    || code.chars().any(char::is_control)
+                    || code.starts_with("MODEL-")
+                    || code.starts_with("AUTO:")
+                    || code.starts_with("PERSON_AI:")
+            }) {
+                return Err(ConfiguredProviderError::InvalidModels);
+            }
+        }
         command.display_name = command.display_name.trim().to_owned();
         command.base_url = command.base_url.trim().trim_end_matches('/').to_owned();
         let mut repository = self
             .repository
             .lock()
             .expect("model repository mutex poisoned");
-        let previous = repository
-            .list_configured_providers()?
+        let existing = repository.list_configured_providers()?;
+        for model in &command.models {
+            let Some(code) = model.logical_model_code.as_deref().map(str::trim) else {
+                continue;
+            };
+            for other in existing
+                .iter()
+                .filter(|provider| provider.provider_id != provider_id)
+                .flat_map(|provider| &provider.models)
+                .chain(command.models.iter())
+            {
+                if other.logical_model_code.as_deref().map(str::trim) == Some(code) {
+                    let family =
+                        |model: &ConfiguredProviderModel| match model.model_type.model_type() {
+                            ModelType::TextEmbedding | ModelType::MultimodalEmbedding => 1,
+                            ModelType::TextRerank | ModelType::MultimodalRerank => 2,
+                            _ => 3,
+                        };
+                    if family(model) != family(other)
+                        || (family(model) == 1 && model.dimension != other.dimension)
+                    {
+                        return Err(ConfiguredProviderError::InvalidModels);
+                    }
+                }
+            }
+        }
+        let previous = existing
             .into_iter()
             .find(|provider| provider.provider_id == provider_id);
         if create && previous.is_some() {
@@ -181,6 +218,11 @@ impl ModelService {
                 .unwrap_or_default(),
         };
         for config in &mut command.models {
+            config.logical_model_code = config
+                .logical_model_code
+                .as_ref()
+                .map(|code| code.trim().to_owned())
+                .filter(|code| !code.is_empty());
             config.model_id = config.model_id.trim().to_owned();
             config.name = config.name.trim().to_owned();
             if config.model_code.is_none() {
@@ -189,7 +231,9 @@ impl ModelService {
         }
         let provider = ConfiguredModelProvider {
             provider_id: provider_id.to_owned(),
-            provider_type: command.provider_type.or_else(|| previous.as_ref().and_then(|p| p.provider_type.clone())),
+            provider_type: command
+                .provider_type
+                .or_else(|| previous.as_ref().and_then(|p| p.provider_type.clone())),
             display_name: command.display_name,
             protocol: command.protocol,
             base_url: command.base_url,
@@ -298,12 +342,20 @@ fn validate_provider(
             || (model.model_type != crate::domain::model::ConfiguredProviderModelType::Text
                 && (model.reasoning
                     || model.supports_developer_role
-                    || (!model.model_type.is_media() && !model.model_type.is_multimodal()
+                    || (!model.model_type.is_media()
+                        && !model.model_type.is_multimodal()
                         && model.input_capabilities != [ModelInputCapability::Text])))
         {
             return Err(ConfiguredProviderError::InvalidModels);
         }
-        if model.model_type.is_multimodal() && !model.input_capabilities.iter().any(|c| *c != ModelInputCapability::Text) { return Err(ConfiguredProviderError::InvalidModels); }
+        if model.model_type.is_multimodal()
+            && !model
+                .input_capabilities
+                .iter()
+                .any(|c| *c != ModelInputCapability::Text)
+        {
+            return Err(ConfiguredProviderError::InvalidModels);
+        }
         if model.model_id.trim().is_empty()
             || model.model_id.len() > 256
             || model.name.trim().is_empty()
@@ -318,11 +370,13 @@ fn validate_provider(
             || model.max_output_tokens == Some(0)
             || matches!((model.context_window_tokens, model.max_output_tokens), (Some(context), Some(output)) if output > context)
             || model.input_capabilities.is_empty()
-            || (!model.model_type.is_media() && !model.model_type.is_multimodal()
+            || (!model.model_type.is_media()
+                && !model.model_type.is_multimodal()
                 && !model
                     .input_capabilities
                     .contains(&ModelInputCapability::Text))
-            || (!model.model_type.is_media() && !model.model_type.is_multimodal()
+            || (!model.model_type.is_media()
+                && !model.model_type.is_multimodal()
                 && model.input_capabilities.iter().any(|cap| {
                     matches!(
                         cap,

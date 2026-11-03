@@ -72,7 +72,7 @@ fn connect_auto(f: &Fixture) {
          ON CONFLICT(provider_code) DO UPDATE SET status='Connected';
          INSERT OR REPLACE INTO default_model_selections
          (scope_key,workspace_code,model_type,selection_kind,provider_code,route_code,created_at,updated_at)
-         VALUES('platform',NULL,'EMBEDDING','ProviderRoute','PersonAi','EmbeddingAuto',1,1);
+         VALUES('platform',NULL,'TEXT_EMBEDDING','ProviderRoute','PersonAi','EmbeddingAuto',1,1);
          INSERT INTO provider_multimedia_catalog_models
          (provider_code,model_id,model_code,model_name,media_type,status,first_seen_at,last_seen_at,updated_at)
          VALUES('PersonAi','seed-embedding','bge-m3','BGE-M3',6,'Available',1,1,1);
@@ -86,7 +86,7 @@ fn fixed_selection(f: &Fixture, scope: &str, code: &str) {
         .execute(
             "INSERT OR REPLACE INTO default_model_selections
          (scope_key,workspace_code,model_type,selection_kind,model_code,created_at,updated_at)
-         VALUES(?1,?1,'EMBEDDING','Fixed',?2,1,1)",
+         VALUES(?1,?1,'TEXT_EMBEDDING','Fixed',?2,1,1)",
             params![scope, code],
         )
         .unwrap();
@@ -161,7 +161,7 @@ fn explicit_embedding_route_overrides_default_and_obeys_connection_state() {
     Connection::open(&f.state.config.database_url)
         .unwrap()
         .execute(
-            "DELETE FROM default_model_selections WHERE scope_key=?1 AND model_type='EMBEDDING'",
+            "DELETE FROM default_model_selections WHERE scope_key=?1 AND model_type='TEXT_EMBEDDING'",
             [WORKSPACE],
         )
         .unwrap();
@@ -243,7 +243,7 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
     Connection::open(&f.state.config.database_url)
         .unwrap()
         .execute(
-            "DELETE FROM default_model_selections WHERE scope_key=?1 AND model_type='EMBEDDING'",
+            "DELETE FROM default_model_selections WHERE scope_key=?1 AND model_type='TEXT_EMBEDDING'",
             [WORKSPACE],
         )
         .unwrap();
@@ -281,9 +281,12 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
         .search_for_agent_in_run(USER, WORKSPACE, &f.agent, "unseen paraphrase", 1200, &run())
         .await
         .unwrap();
-    assert!(changed.hits.is_empty());
-    assert!(changed.text.contains("查询模型配置与已发布向量空间不同"));
-    assert_eq!(f.client.calls.load(Ordering::SeqCst), calls);
+    // Corpus settings affect the next generation; retrieval keeps the published
+    // model/space until an explicit rebuild publishes a replacement.
+    assert!(!changed.hits.is_empty());
+    assert!(!changed.text.contains("查询模型配置与已发布向量空间不同"));
+    assert_eq!(f.client.calls.load(Ordering::SeqCst), calls + 1);
+    assert_eq!(rebuilt.embedding_model_code.as_deref(), Some(BGE_M3));
     svc.set_grants(USER, &kb.id, vec![]).unwrap();
     assert!(
         svc.search_for_agent_in_run(USER, WORKSPACE, &f.agent, "orchid", 1200, &run())
@@ -292,7 +295,7 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
             .hits
             .is_empty()
     );
-    assert_eq!(f.client.calls.load(Ordering::SeqCst), calls);
+    assert_eq!(f.client.calls.load(Ordering::SeqCst), calls + 1);
 }
 
 #[tokio::test]

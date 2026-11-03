@@ -1,41 +1,32 @@
 use super::ModelType;
 use serde::{Deserialize, Serialize};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AutoRouterKind {
     Chat,
     TextGeneration,
-    TextEmbedding,
-    MultimodalEmbedding,
-    TextRerank,
-    MultimodalRerank,
+    Embedding,
+    Rerank,
 }
 impl AutoRouterKind {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 4] = [
         Self::Chat,
         Self::TextGeneration,
-        Self::TextEmbedding,
-        Self::MultimodalEmbedding,
-        Self::TextRerank,
-        Self::MultimodalRerank,
+        Self::Embedding,
+        Self::Rerank,
     ];
     pub fn code(self) -> &'static str {
         match self {
             Self::Chat => "Chat",
             Self::TextGeneration => "TextGeneration",
-            Self::TextEmbedding => "TextEmbedding",
-            Self::MultimodalEmbedding => "MultimodalEmbedding",
-            Self::TextRerank => "TextRerank",
-            Self::MultimodalRerank => "MultimodalRerank",
+            Self::Embedding => "Embedding",
+            Self::Rerank => "Rerank",
         }
     }
     pub fn model_type(self) -> ModelType {
         match self {
             Self::Chat | Self::TextGeneration => ModelType::Text,
-            Self::TextEmbedding => ModelType::TextEmbedding,
-            Self::MultimodalEmbedding => ModelType::MultimodalEmbedding,
-            Self::TextRerank => ModelType::TextRerank,
-            Self::MultimodalRerank => ModelType::MultimodalRerank,
+            Self::Embedding => ModelType::TextEmbedding,
+            Self::Rerank => ModelType::TextRerank,
         }
     }
 }

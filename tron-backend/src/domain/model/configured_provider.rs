@@ -111,6 +111,9 @@ impl ConfiguredProviderModelType {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConfiguredProviderModel {
+    /// Explicit, versioned identity shared only by equivalent provider bindings.
+    #[serde(default)]
+    pub logical_model_code: Option<String>,
     #[serde(default)]
     pub model_type: ConfiguredProviderModelType,
     pub model_code: Option<String>,

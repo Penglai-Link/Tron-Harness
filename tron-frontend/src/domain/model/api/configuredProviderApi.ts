@@ -14,6 +14,7 @@ export interface ConfiguredProviderModel {
   modelType: ConfiguredProviderModelType;
   dimension?: number | null;
   modelCode: string | null;
+  logicalModelCode?: string | null;
   modelId: string;
   name: string;
   contextWindowTokens: number | null;

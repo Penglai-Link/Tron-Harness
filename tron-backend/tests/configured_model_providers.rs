@@ -958,7 +958,7 @@ async fn automatic_sources_default_to_all_providers_and_control_real_runtime_res
         StatusCode::OK,
     )
     .await;
-    assert_eq!(list["data"].as_array().unwrap().len(), 6);
+    assert_eq!(list["data"].as_array().unwrap().len(), 4);
     assert_no_credentials(&list, &["first-secret", "second-secret"]);
     call(
         &fixture.router,
@@ -1070,34 +1070,23 @@ async fn text_and_multimodal_vector_and_rerank_types_remain_distinct_through_sto
         request["models"].as_array_mut().unwrap().push(m);
     }
     let created = create(&fixture, request).await;
-    for (index, (route, expected)) in [
-        (AutoRouterKind::TextEmbedding, ModelType::TextEmbedding),
+    for (route, expected) in [
         (
-            AutoRouterKind::MultimodalEmbedding,
-            ModelType::MultimodalEmbedding,
+            AutoRouterKind::Embedding,
+            [ModelType::TextEmbedding, ModelType::MultimodalEmbedding],
         ),
-        (AutoRouterKind::TextRerank, ModelType::TextRerank),
         (
-            AutoRouterKind::MultimodalRerank,
-            ModelType::MultimodalRerank,
+            AutoRouterKind::Rerank,
+            [ModelType::TextRerank, ModelType::MultimodalRerank],
         ),
-    ]
-    .into_iter()
-    .enumerate()
-    {
+    ] {
         let candidates = fixture.models.automatic_route_models(route).unwrap();
-        assert_eq!(candidates.len(), 1);
-        let config = fixture
-            .models
-            .route_automatic_model("workspace", route)
-            .unwrap();
-        assert_eq!(config.model_code, code(&created, index));
-        assert_eq!(config.model_type, expected);
+        assert_eq!(candidates.len(), 2);
+        for kind in expected {
+            assert!(candidates.iter().any(|m| m.model_type == kind));
+        }
         let (_, reopened) = open(&fixture.config);
-        assert_eq!(
-            reopened.automatic_route_models(route).unwrap()[0].model_type,
-            expected
-        );
+        assert_eq!(reopened.automatic_route_models(route).unwrap().len(), 2);
     }
     let mut invalid = update(&created, None);
     invalid["models"][0]["inputCapabilities"] = json!(["Text", "Image"]);
@@ -1106,6 +1095,158 @@ async fn text_and_multimodal_vector_and_rerank_types_remain_distinct_through_sto
         Method::PUT,
         &endpoint(id(&created)),
         Some(invalid),
+        StatusCode::BAD_REQUEST,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn unified_routes_group_explicit_logical_models_and_keep_wire_ids_and_spaces_separate() {
+    use eliteforge_agent_core::{Modality, ModelChoice};
+    use tron_backend::domain::model::AutoRouterKind;
+    let fixture = Fixture::new();
+    let mut created = vec![];
+    for (name, wire) in [("first", "vendor-alias-a"), ("second", "vendor-alias-b")] {
+        let mut request = provider(name, "https://models.example.test/v1", None);
+        let mut m = model(wire, "Shared embedding");
+        m["modelType"] = json!("MultimodalEmbedding");
+        m["dimension"] = json!(1024);
+        m["inputCapabilities"] = json!(["Text", "Image"]);
+        m["logicalModelCode"] = json!("shared-embedding-v1");
+        request["models"] = json!([m]);
+        created.push(create(&fixture, request).await);
+    }
+    let routes = call(
+        &fixture.router,
+        Method::GET,
+        "/api/v1/automatic-routers",
+        None,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(routes["data"].as_array().unwrap().len(), 4);
+    let embedding = routes["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|route| route["kind"] == "Embedding")
+        .unwrap();
+    assert_eq!(embedding["candidates"].as_array().unwrap().len(), 2);
+    assert!(
+        embedding["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|m| m["modelCode"] == "shared-embedding-v1"
+                && m["bindingId"].as_str().unwrap().starts_with("MODEL-"))
+    );
+    let mut choice = ModelChoice {
+        model_code: Some("shared-embedding-v1".into()),
+        required_modalities: vec![Modality::Text],
+        ..Default::default()
+    };
+    let pool = fixture
+        .models
+        .route_auxiliary_model("workspace", AutoRouterKind::Embedding, &choice, Some(1024))
+        .unwrap();
+    assert_eq!(pool.route.as_ref().unwrap().candidates.len(), 2);
+    assert_eq!(pool.model_code, "shared-embedding-v1");
+    let wire_ids = pool
+        .route
+        .as_ref()
+        .unwrap()
+        .candidates
+        .iter()
+        .map(|m| m.config.model_name.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(
+        wire_ids,
+        std::collections::HashSet::from(["vendor-alias-a", "vendor-alias-b"])
+    );
+    let fixed = fixture
+        .models
+        .route_auxiliary_model(
+            "workspace",
+            AutoRouterKind::Embedding,
+            &ModelChoice {
+                model_code: Some(code(&created[0], 0).into()),
+                ..Default::default()
+            },
+            Some(1024),
+        )
+        .unwrap();
+    assert_eq!(fixed.model_code, code(&created[0], 0));
+    assert!(!fixed.route.as_ref().unwrap().shared_identity);
+    assert_eq!(fixed.route.as_ref().unwrap().candidates.len(), 1);
+    choice.provider_id = Some(id(&created[0]).into());
+    assert_eq!(
+        fixture
+            .models
+            .route_auxiliary_model("workspace", AutoRouterKind::Embedding, &choice, Some(1024))
+            .unwrap()
+            .route
+            .unwrap()
+            .candidates
+            .len(),
+        1
+    );
+    choice.required_modalities = vec![Modality::Audio];
+    assert!(
+        fixture
+            .models
+            .route_auxiliary_model("workspace", AutoRouterKind::Embedding, &choice, Some(1024))
+            .is_err()
+    );
+    choice.required_modalities = vec![Modality::Image];
+    assert!(
+        fixture
+            .models
+            .route_auxiliary_model("workspace", AutoRouterKind::Embedding, &choice, Some(768))
+            .is_err()
+    );
+    // Index identity survives provider removal and different upstream aliases.
+    let llm = tron_backend::application::llm::LlmRuntimeService::new(
+        std::sync::Arc::new(fixture.models.clone()),
+        std::sync::Arc::new(
+            tron_backend::adapters::outbound::model::HttpLlmRuntimeClient::new(
+                eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
+            ),
+        ),
+    );
+    assert_eq!(
+        llm.resolve_embedding_index_model_code("workspace", Some("AUTO:Embedding"))
+            .unwrap(),
+        "shared-embedding-v1"
+    );
+    let fingerprint = llm
+        .embedding_space_fingerprint("workspace", Some("shared-embedding-v1"), 1024)
+        .unwrap();
+    let mut disabled = update(&created[0], None);
+    disabled["enabled"] = json!(false);
+    call(
+        &fixture.router,
+        Method::PUT,
+        &endpoint(id(&created[0])),
+        Some(disabled),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(
+        llm.embedding_space_fingerprint("workspace", Some("shared-embedding-v1"), 1024)
+            .unwrap(),
+        fingerprint
+    );
+    assert!(
+        llm.embedding_space_fingerprint("workspace", Some("shared-embedding-v1"), 768)
+            .is_err()
+    );
+    let mut incompatible = update(&created[1], None);
+    incompatible["models"][0]["dimension"] = json!(768);
+    call(
+        &fixture.router,
+        Method::PUT,
+        &endpoint(id(&created[1])),
+        Some(incompatible),
         StatusCode::BAD_REQUEST,
     )
     .await;

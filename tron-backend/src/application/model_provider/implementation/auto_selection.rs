@@ -320,6 +320,7 @@ impl ModelProviderService {
 
 pub(super) fn person_ai_embedding_config(code: &str) -> RuntimeModelConfig {
     RuntimeModelConfig {
+        route: None,
         model_code: format!("{PERSON_AI_EMBEDDING_PREFIX}{code}"),
         protocol: ModelProtocol::OpenAiCompatibleEmbedding,
         model_type: ModelType::TextEmbedding,
@@ -342,6 +343,7 @@ pub(super) fn person_ai_embedding_config(code: &str) -> RuntimeModelConfig {
 
 pub(super) fn person_ai_rerank_config(id: &str) -> RuntimeModelConfig {
     RuntimeModelConfig {
+        route: None,
         model_code: format!("{PERSON_AI_RERANK_PREFIX}{id}"),
         protocol: ModelProtocol::Rerank,
         model_type: ModelType::TextRerank,

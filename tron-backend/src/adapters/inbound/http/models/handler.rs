@@ -172,19 +172,53 @@ pub async fn list_select_options(
         }
     }));
 
-    for kind in [crate::domain::model::AutoRouterKind::TextEmbedding,crate::domain::model::AutoRouterKind::MultimodalEmbedding,crate::domain::model::AutoRouterKind::TextRerank,crate::domain::model::AutoRouterKind::MultimodalRerank] {
-        let code=format!("AUTO:{}",kind.code());
-        let label=match (locale,kind) {
-            (SupportedLocale::EnUs,crate::domain::model::AutoRouterKind::TextEmbedding)=>"Text embedding auto route",
-            (SupportedLocale::EnUs,crate::domain::model::AutoRouterKind::MultimodalEmbedding)=>"Multimodal embedding auto route",
-            (SupportedLocale::EnUs,crate::domain::model::AutoRouterKind::TextRerank)=>"Text rerank auto route",
-            (SupportedLocale::EnUs,_)=>"Multimodal rerank auto route",
-            (_,crate::domain::model::AutoRouterKind::TextEmbedding)=>"文本向量自动路由",
-            (_,crate::domain::model::AutoRouterKind::MultimodalEmbedding)=>"多模态向量自动路由",
-            (_,crate::domain::model::AutoRouterKind::TextRerank)=>"文本重排自动路由",
-            _=>"多模态重排自动路由",
+    for kind in [
+        crate::domain::model::AutoRouterKind::Embedding,
+        crate::domain::model::AutoRouterKind::Rerank,
+    ] {
+        let code = format!("AUTO:{}", kind.code());
+        let label = match (locale, kind) {
+            (SupportedLocale::EnUs, crate::domain::model::AutoRouterKind::Embedding) => {
+                "Embedding auto route"
+            }
+            (SupportedLocale::EnUs, _) => "Rerank auto route",
+            (_, crate::domain::model::AutoRouterKind::Embedding) => "向量自动路由",
+            _ => "重排自动路由",
         };
-        records.push(ModelSelectOption {option_code:code.clone(),model_code:code.clone(),display_name:label.into(),model_name:label.into(),source_kind:ModelViewSourceKind::Provider,source_label:if locale==SupportedLocale::EnUs {"Automatic router"}else{"自动路由器"}.into(),vendor:String::new(),protocol:if matches!(kind,crate::domain::model::AutoRouterKind::TextEmbedding|crate::domain::model::AutoRouterKind::MultimodalEmbedding){ModelProtocol::OpenAiCompatibleEmbedding}else{ModelProtocol::Rerank},model_type:kind.model_type(),enabled:true,model_selection:ModelSelection::fixed(code),provider_code:None,access_platform:None,upstream_vendor_name:None,remote_status:None,context_window_tokens:None,quality_type:None,input_coefficient:None,cache_hit_coefficient:None,output_coefficient:None,supported_reasoning_efforts:vec![],default_reasoning_effort:None,is_default:false});
+        records.push(ModelSelectOption {
+            option_code: code.clone(),
+            model_code: code.clone(),
+            display_name: label.into(),
+            model_name: label.into(),
+            source_kind: ModelViewSourceKind::Provider,
+            source_label: if locale == SupportedLocale::EnUs {
+                "Automatic router"
+            } else {
+                "自动路由器"
+            }
+            .into(),
+            vendor: String::new(),
+            protocol: if matches!(kind, crate::domain::model::AutoRouterKind::Embedding) {
+                ModelProtocol::OpenAiCompatibleEmbedding
+            } else {
+                ModelProtocol::Rerank
+            },
+            model_type: kind.model_type(),
+            enabled: true,
+            model_selection: ModelSelection::fixed(code),
+            provider_code: None,
+            access_platform: None,
+            upstream_vendor_name: None,
+            remote_status: None,
+            context_window_tokens: None,
+            quality_type: None,
+            input_coefficient: None,
+            cache_hit_coefficient: None,
+            output_coefficient: None,
+            supported_reasoning_efforts: vec![],
+            default_reasoning_effort: None,
+            is_default: false,
+        });
     }
     Ok(Json(ApiResponse::protocol_success(
         records
