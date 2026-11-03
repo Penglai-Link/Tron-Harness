@@ -139,6 +139,14 @@ impl FrameworkHost {
         Ok(self.telemetry().await?.service())
     }
 
+    pub async fn reset_observability(&self) -> Result<(), crate::application::observability::ObservabilityError> {
+        use crate::application::observability::ObservabilityError;
+        self.ensure_open().map_err(|_| ObservabilityError::Storage)?;
+        let telemetry = self.telemetry().await?;
+        telemetry.runtime.force_flush().await.map_err(|_| ObservabilityError::Storage)?;
+        telemetry.store.clear().await.map_err(|_| ObservabilityError::Storage)
+    }
+
     pub async fn collector_connection(
         &self,
     ) -> Result<

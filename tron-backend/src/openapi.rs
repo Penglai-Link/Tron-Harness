@@ -29,6 +29,7 @@ use crate::{
         crate::adapters::inbound::http::observability::get_runtime,
         crate::adapters::inbound::http::observability::get_dashboard,
         crate::adapters::inbound::http::observability::query_metric_points,
+        crate::adapters::inbound::http::observability::reset_observability,
         crate::adapters::inbound::http::observability::get_export_config),
     components(schemas(
         ApiResponse<HealthData>,

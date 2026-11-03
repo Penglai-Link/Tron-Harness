@@ -59,6 +59,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/observability/metrics", get(get_metrics))
         .route("/api/v1/observability/runtime", get(get_runtime))
         .route("/api/v1/observability/dashboard", get(get_dashboard))
+        .route("/api/v1/observability/reset", post(reset_observability))
         .route(
             "/api/v1/observability/metric-points/query",
             post(query_metric_points),
@@ -698,4 +699,22 @@ mod http_trace_tests {
             assert!(!request_trace_context(&headers).span().span_context().is_valid());
         }
     }
+}
+
+#[derive(serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetObservabilityVo { reset_at: i64 }
+
+#[utoipa::path(post,path="/api/v1/observability/reset",tag="Observability",
+responses((status=200,body=ApiResponse<ResetObservabilityVo>),(status=500,body=ApiResponse<EmptyData>)))]
+pub async fn reset_observability(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+) -> Result<Json<ApiResponse<ResetObservabilityVo>>, ObservabilityApiError> {
+    let result = async {
+        state.agent_framework.reset_observability().await?;
+        Ok::<_, ObservabilityError>(ResetObservabilityVo { reset_at: chrono::Utc::now().timestamp_millis() })
+    }.await;
+    result.map(|data| Json(ApiResponse::protocol_success(data)))
+        .map_err(|error| ObservabilityApiError(error, auth.locale))
 }

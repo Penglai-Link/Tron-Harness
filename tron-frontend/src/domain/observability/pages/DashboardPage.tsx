@@ -1,3 +1,8 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
+import { resetObservability } from "../api/observabilityApi";
 import { PlatformWorkspaceFilter, usePlatformDataHref } from "@/domain/settings/components/PlatformWorkspaceScope";
 import { PluginCountCard, ResourceTrendCards } from "../components/ResourceTrendCards";
 import { useTranslation } from "react-i18next";
@@ -26,6 +31,17 @@ export function DashboardPage() {
   const href = usePlatformDataHref();
   const query = useObservabilityDashboard(workspace);
   const data = query.data;
+  const [resetOpen, setResetOpen] = useState(false);
+  const client = useQueryClient();
+  const toast = useToast();
+  const reset = useMutation({
+    mutationFn: resetObservability,
+    onSuccess: async () => {
+      setResetOpen(false);
+      await client.invalidateQueries({ predicate: query => String(query.queryKey[0]).startsWith("observability") });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
   const disk = data?.diskUsage;
   const diskUnits = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
   const diskUnit = disk?.bytes ? Math.min(Math.floor(Math.log(disk.bytes) / Math.log(1024)), diskUnits.length - 1) : 0;
@@ -64,6 +80,9 @@ export function DashboardPage() {
   const maximum = Math.max(1, ...buckets.map((b) => b.requests));
   return (
     <>
+      <ConfirmDialog open={resetOpen} title={t("resetStatisticsTitle")} description={t("resetStatisticsDescription")}
+        cancelText={t("resetCancel")} confirmText={t("resetStatisticsConfirm")} pending={reset.isPending}
+        onCancel={() => setResetOpen(false)} onConfirm={() => reset.mutate()} />
       <div className="flex flex-col gap-6 pb-8">
         <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <PlatformWorkspaceFilter />
@@ -75,6 +94,7 @@ export function DashboardPage() {
               </time>
             )}
             <CollectorConfigButton />
+            <Button variant="secondary" disabled={reset.isPending} onClick={() => setResetOpen(true)}>{t("resetStatistics")}</Button>
             <Button
               variant="secondary"
               disabled={query.isFetching}

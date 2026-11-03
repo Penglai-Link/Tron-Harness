@@ -1,10 +1,15 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render as rtlRender, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { observability } from "@/i18n/locales/zh-CN/observability";
 import { DashboardPage } from "./DashboardPage";
+const resetApi = vi.hoisted(() => vi.fn().mockResolvedValue({ resetAt: 123 }));
+vi.mock("../api/observabilityApi", () => ({ resetObservability: resetApi }));
+vi.mock("@/components/ui/toast", () => ({ useToast: () => ({ error: vi.fn() }) }));
+function render(ui: ReactNode) { const client = new QueryClient(); return rtlRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> }); }
 const state = vi.hoisted(() => ({
   data: {
     sampledAt: 60000,
@@ -128,4 +133,18 @@ it.each([[4, "0%"], [0, "—"]])("keeps the recent error rate independent from r
   expect(screen.getByText("33.3%")).toBeTruthy();
   expect(screen.getByText(`最近 15 分钟：${rate}`)).toBeTruthy();
   state.data = previous;
+});
+
+it("requires confirmation and resets globally only after explicit confirmation", async () => {
+  resetApi.mockClear();
+  render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+  fireEvent.click(screen.getByRole("button", { name: "重置统计" }));
+  expect(screen.getByRole("dialog").textContent).toContain("所有工作区");
+  expect(resetApi).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(resetApi).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "重置统计" }));
+  fireEvent.click(screen.getByRole("button", { name: "清空并重新采集" }));
+  await waitFor(() => expect(resetApi).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });

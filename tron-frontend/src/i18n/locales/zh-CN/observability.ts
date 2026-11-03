@@ -1,4 +1,10 @@
 export const observability = {
+  resetStatistics: "重置统计",
+  resetStatisticsTitle: "清空全部观测数据？",
+  resetStatisticsDescription: "将永久清空所有工作区的历史链路、Span、指标及关联统计，随后自动重新采集。此操作不受当前工作区筛选影响，无法撤销。",
+  resetStatisticsConfirm: "清空并重新采集",
+  resetCancel: "取消",
+
   keyword: "关键词",
   keywordPlaceholder: "触发点、路径、编码",
   allStates: "全部状态",

@@ -72,3 +72,7 @@ export function queryLogs(query: import("../model/ApplicationLog").LogQuery, sig
     body: { ...query, workspaceCode: query.workspaceCode || null, beforeLogId: query.beforeLogId ?? null, keyword:query.keyword.trim() || null, level:query.level || null, traceId:query.traceId.trim() || null, spanId:query.spanId.trim() || null }, signal,
   });
 }
+
+export function resetObservability() {
+  return requestApi<{ resetAt: number }>("POST /api/v1/observability/reset");
+}

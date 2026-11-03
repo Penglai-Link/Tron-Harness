@@ -1,4 +1,10 @@
 export const observability = {
+  resetStatistics: "Reset statistics",
+  resetStatisticsTitle: "Clear all observability data?",
+  resetStatisticsDescription: "Permanently deletes historical traces, spans, metrics and related statistics across all workspaces. Collection resumes automatically. The current workspace filter does not limit this action. This cannot be undone.",
+  resetStatisticsConfirm: "Clear and recollect",
+  resetCancel: "Cancel",
+
   keyword: "Keyword",
   keywordPlaceholder: "Trigger, path or code",
   allStates: "All statuses",
