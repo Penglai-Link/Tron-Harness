@@ -36,6 +36,7 @@ export const pages = {
     previewHelp: "Segments match the color markers in the list and keep their colors when reordered. This previews configured shares, not actual usage or borrowed history capacity. Runtime deducts output reserve and tool protocol costs before allocating input capacity.",
     blockColumn: "Context block",
     ratioLimitFor: "Share (%) for {{name}}",
+    reorderBlock: "Reorder {{name}}",
     title: "Context Configuration",
     refresh: "Refresh",
     loading: "Loading…",

@@ -36,6 +36,7 @@ export const pages = {
     previewHelp: "色段与下方列表的标记对应，拖动排序时颜色不变。此处仅预览配置比例，不展示实际用量或历史借用额度。运行时先扣除输出预留和工具协议开销，再分配输入预算。",
     blockColumn: "上下文块",
     ratioLimitFor: "{{name}} 的占比（%）",
+    reorderBlock: "拖动排序 {{name}}",
     title: "上下文配置",
     refresh: "刷新",
     loading: "加载中…",

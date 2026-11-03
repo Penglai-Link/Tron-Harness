@@ -112,23 +112,32 @@ export function ContextLayoutPage() {
                   onMouseEnter={() => setHighlightedId(id)} onMouseLeave={() => setHighlightedId(null)}
                   onFocusCapture={() => setHighlightedId(id)}
                   onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHighlightedId(null); }}
-                  draggable={movable && !saving} tabIndex={movable ? 0 : undefined}
-                  onKeyDown={event => {
-                    if (!movable || saving || event.target !== event.currentTarget || !event.altKey) return;
-                    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                      event.preventDefault(); const target = order[index + (event.key === "ArrowUp" ? -1 : 1)]; if (target) moveBlock(id, target);
-                    }
+                  onDragOver={event => {
+                    if (!movable || saving || !draggedId || draggedId === id) return;
+                    event.preventDefault(); event.dataTransfer.dropEffect = "move";
                   }}
-                  onDragStart={event => {
-                    if (!movable || saving || (event.target as HTMLElement).closest("input, button")) { event.preventDefault(); return; }
-                    event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); setDraggedId(id);
+                  onDrop={event => {
+                    if (!movable || saving || !draggedId) return;
+                    event.preventDefault(); moveBlock(draggedId, id); setDraggedId(null);
                   }}
-                  onDragEnd={() => setDraggedId(null)}
-                  onDragOver={event => { if (movable && draggedId && draggedId !== id) event.preventDefault(); }}
-                  onDrop={event => { event.preventDefault(); const source = event.dataTransfer.getData("text/plain") || draggedId; if (source) moveBlock(source, id); setDraggedId(null); }}
                   className={`group ${columns} min-h-14 px-4 py-2 hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)] ${draggedId === id ? "opacity-50" : ""}`}>
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="flex w-4 shrink-0 justify-center">{movable ? <GripVertical size={14} className="cursor-grab text-[var(--color-on-surface-variant)] opacity-40 group-hover:opacity-90" aria-hidden="true" /> : null}</span>
+                    <span className="flex w-4 shrink-0 justify-center">{movable ? <Button
+                      variant="ghost" size="icon-xs" disabled={saving} draggable={!saving}
+                      aria-label={t("contextLayout.reorderBlock", { name })}
+                      className="cursor-grab text-[var(--color-on-surface-variant)] opacity-40 group-hover:opacity-90 focus-visible:opacity-100 active:cursor-grabbing"
+                      onKeyDown={event => {
+                        if (saving || !event.altKey) return;
+                        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                          event.preventDefault(); const target = order[index + (event.key === "ArrowUp" ? -1 : 1)]; if (target) moveBlock(id, target);
+                        }
+                      }}
+                      onDragStart={event => {
+                        if (saving) { event.preventDefault(); return; }
+                        event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); setDraggedId(id);
+                      }}
+                      onDragEnd={() => setDraggedId(null)}
+                    ><GripVertical aria-hidden="true" /></Button> : null}</span>
                     <span aria-hidden="true" className="size-2.5 shrink-0 rounded-[2px]" style={{ background: contextBlockColor(id) }} />
                     <span className="truncate text-sm font-medium" title={name}>{name}</span>
                     <ContextBlockHelp name={name} description={block?.description} updateMode={block?.updateMode} />

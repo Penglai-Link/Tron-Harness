@@ -14,7 +14,7 @@ export function BudgetShareControl({ value, label, placeholder, disabled, onChan
   const [draft, setDraft] = useState("");
   const effective = value ?? 0;
   return (
-    <div className="flex min-w-0 items-center gap-3" onDragStart={event => event.stopPropagation()}>
+    <div className="flex min-w-0 items-center gap-3">
       <input type="range" min={1} max={10_000} step={1} value={Math.max(1, Math.min(10_000, effective))} disabled={disabled}
         aria-label={label} aria-valuetext={`${effective / 100}%`}
         className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full accent-[var(--color-accent)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:cursor-default disabled:opacity-50 [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--color-accent)] [&::-moz-range-thumb]:size-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--color-accent)]"
