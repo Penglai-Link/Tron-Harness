@@ -144,7 +144,7 @@ it("requires confirmation and resets globally only after explicit confirmation",
   fireEvent.click(screen.getByRole("button", { name: "取消" }));
   expect(resetApi).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "重置统计" }));
-  fireEvent.click(screen.getByRole("button", { name: "清空并重新采集" }));
+  fireEvent.click(screen.getByRole("button", { name: "我已知晓" }));
   await waitFor(() => expect(resetApi).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });
