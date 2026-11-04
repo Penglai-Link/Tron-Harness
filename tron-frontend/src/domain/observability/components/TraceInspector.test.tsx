@@ -38,3 +38,16 @@ it("opens Dude execution traces in the Dude history view", () => {
   render(<MemoryRouter><TraceInspector detail={detail} /></MemoryRouter>);
   expect(screen.getByRole("button", { name: "openSession" }).getAttribute("href")).toBe("/dudes?dude=main-dude&tab=history&session=dude-session");
 });
+
+it.each([
+  ["", { "tron.trace.page": "true", "url.path": "/api/v1/profiles/profile/avatar" }],
+  ["session", { "tron.trace.page": "true", "url.path": "/chats" }],
+  ["   ", {}],
+])("does not offer session navigation for a page trigger or missing session (%s)", (sessionCode, attributes) => {
+  const detail: TraceDetail = { trace: { workspaceCode: "WS", traceId: "trace", sessionCode, sessionName: "", runCode: "", agentCode: "", endedAt: 200, spanCount: 1, errorCount: 0, modelCount: 0, toolCount: 0, startedAt: 100, durationMs: 100, status: "Completed", inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }, spans: [
+    { spanId: "root", parentSpanId: null, name: "GET avatar", startedAt: 100, durationMs: 100, status: "Completed", attributes, events: [], links: [] },
+  ] };
+  render(<MemoryRouter><TraceInspector detail={detail} /></MemoryRouter>);
+  expect(screen.queryByRole("button", { name: "openSession" })).toBeNull();
+  expect(screen.getByRole("button", { name: "copyTraceId" })).toBeTruthy();
+});

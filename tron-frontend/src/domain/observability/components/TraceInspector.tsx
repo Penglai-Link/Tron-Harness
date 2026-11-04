@@ -63,6 +63,7 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
   const triggerCategory = !isPageTrigger && (triggerRoot?.attributes["tron.agent.code"] || triggerRoot?.attributes["tron.dude.code"]) ? "Agent" : "Page";
   const title = triggerLabel(trace.trigger, i18n, triggerCategory);
   const isDudeExecution = detail.spans.some((item) => item.name === "tron.dude.execute");
+  const canOpenSession = !isPageTrigger && Boolean(trace.sessionCode?.trim());
   const sessionHref = isDudeExecution
     ? `/dudes?${new URLSearchParams({ dude: trace.agentCode, tab: "history", session: trace.sessionCode })}`
     : `/chats?${new URLSearchParams({ sessionCode: trace.sessionCode, workspaceCode: trace.workspaceCode })}`;
@@ -108,14 +109,14 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
           <TraceStatus status={trace.status} />
         </div>
         <div className="flex items-center gap-2">
-          <Button
+          {canOpenSession && <Button
             variant="secondary"
             nativeButton={false}
             render={<Link to={sessionHref} />}
           >
 
             {t("openSession")}
-          </Button>
+          </Button>}
           <InfoTooltip ariaLabel={t("help")}>{t("metricsHelp")}</InfoTooltip>
         </div>
       </header>

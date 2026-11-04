@@ -8,6 +8,7 @@ import { PluginCountCard, ResourceTrendCards } from "../components/ResourceTrend
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip/InfoTooltip";
 import {
   SurfaceCard,
@@ -104,10 +105,15 @@ export function DashboardPage() {
             </Button>
           </div>
         </header>
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <dl className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-4">
           {cards.map(([label, value]) => (
             <div key={label}>
-              <SurfaceCard className="!px-5 !py-4 !shadow-none">
+              <SurfaceCard className="relative h-full !px-5 !py-4 !shadow-none">
+              {label === "metricPoints" && <Link
+                to={href("/settings/observability/metrics")}
+                aria-label={t("metricPoints")}
+                className="absolute inset-0 rounded-[inherit] outline-offset-2 hover:ring-1 hover:ring-[var(--color-outline)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+              />}
               <dt className="flex items-center gap-1 text-xs text-[var(--color-on-surface-variant)]">
                 {t(label)}
                 {label === "errorRate" && <InfoTooltip variant="icon" ariaLabel={t("errorRate")}>{t("errorRateHint")}</InfoTooltip>}
@@ -136,19 +142,15 @@ export function DashboardPage() {
               <>
                 <div
                   className="flex h-36 items-end gap-2 border-b border-[var(--color-outline-variant)]"
-                  role="img"
+                  role="group"
                   aria-label={t("requestTrend")}
                 >
                   {buckets.map((b) => (
-                    <div
-                      key={b.startedAt}
+                    <Tooltip key={b.startedAt}>
+                    <TooltipTrigger
+                      render={<div />}
                       className="flex h-full min-w-0 flex-1 items-end"
-                      title={`${formatDateTime(b.startedAt, {
-                        timeStyle: "short",
-                      })} · ${t("requestsValue", { count: b.requests })} · ${t(
-                        "errorsValue",
-                        { count: b.errors }
-                      )}`}
+                      aria-label={`${formatDateTime(b.startedAt, { timeStyle: "short" })} · ${t("requestsValue", { count: b.requests })}`}
                     >
                       <div
                         className="relative w-full rounded-t bg-[var(--chart-1)]"
@@ -163,7 +165,13 @@ export function DashboardPage() {
                           }}
                         />
                       </div>
-                    </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="font-medium tabular-nums">{formatDateTime(b.startedAt, { timeStyle: "short" })}</p>
+                      <p>{t("requestsValue", { count: b.requests })}</p>
+                      <p>{t("errorsValue", { count: b.errors })}</p>
+                    </TooltipContent>
+                    </Tooltip>
                   ))}
                 </div>
                 <div className="mt-2 flex justify-between text-xs text-[var(--color-on-surface-variant)]">

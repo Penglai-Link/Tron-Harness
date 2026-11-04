@@ -100,9 +100,23 @@ it("shows scoped request error rate, readable latency, resources and actual chil
     screen.getByRole("link", { name: "查看链路" }).getAttribute("href")
   ).toBe("/settings/observability/traces");
   expect(screen.queryByRole("link", { name: "查看指标" })).toBeNull();
+  expect(screen.getByRole("link", { name: "指标数据点" }).getAttribute("href")).toBe("/settings/observability/metrics");
   const samplingHeader = screen.getByText("采样时间").closest("p")!.parentElement!;
   expect(samplingHeader.querySelector("h2")?.textContent).toBe("资源使用");
   expect(samplingHeader.querySelector("time")?.dateTime).toBe(new Date(state.data.resourceSampledAt).toISOString());
+});
+it.each([[3, 1], [0, 0]])("shows the minute, request total and error total when hovering a trend column (%i requests)", async (requests, errors) => {
+  const previous = state.data;
+  state.data = { ...previous, recentRequests: [{ startedAt: 0, requests, errors }] };
+  render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+  const column = screen.getByLabelText(`0 · ${requests} 次请求`);
+  fireEvent.mouseEnter(column);
+  fireEvent.mouseMove(column);
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip.textContent).toContain("0");
+  expect(tooltip.textContent).toContain(`${requests} 次请求`);
+  expect(tooltip.textContent).toContain(`${errors} 次失败`);
+  state.data = previous;
 });
 it("keeps unavailable disk usage distinct from an empty data directory", () => {
   const previous = state.data;
