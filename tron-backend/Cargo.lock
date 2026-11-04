@@ -7651,6 +7651,7 @@ dependencies = [
  "eliteforge-agent-plugin-core",
  "eliteforge-agent-test-support",
  "flate2",
+ "fs2",
  "gmcrypto-core",
  "grafeo",
  "hex",
