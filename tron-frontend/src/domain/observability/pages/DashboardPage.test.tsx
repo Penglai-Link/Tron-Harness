@@ -94,7 +94,7 @@ it("shows scoped request error rate, readable latency, resources and actual chil
   expect(screen.getByText("1.25 s")).toBeTruthy();
   expect(screen.getAllByText((_, element) => element?.textContent === "100 MiB" && !Array.from(element.children).some((child) => child.textContent === "100 MiB"))).toHaveLength(2);
   expect(screen.getByText("plugin-backend")).toBeTruthy();
-  expect(screen.getByText("Tron 数据占用")).toBeTruthy();
+  expect(screen.getByText("磁盘占用")).toBeTruthy();
   expect(screen.getByText((_, element) => element?.textContent === "1.5 GiB" && element.tagName === "DD")).toBeTruthy();
   expect(
     screen.getByRole("link", { name: "查看链路" }).getAttribute("href")
@@ -122,7 +122,7 @@ it("keeps unavailable disk usage distinct from an empty data directory", () => {
   const previous = state.data;
   state.data = { ...previous, diskUsage: { ...previous.diskUsage, bytes: null } };
   const view = render(<MemoryRouter><DashboardPage /></MemoryRouter>);
-  const diskValue = screen.getByText("Tron 数据占用").closest("dt")!.nextElementSibling;
+  const diskValue = screen.getByText("磁盘占用").closest("dt")!.nextElementSibling;
   expect(diskValue?.textContent).toBe("—");
   state.data = { ...previous, diskUsage: { ...previous.diskUsage, bytes: 0 } };
   view.rerender(<MemoryRouter><DashboardPage /></MemoryRouter>);
