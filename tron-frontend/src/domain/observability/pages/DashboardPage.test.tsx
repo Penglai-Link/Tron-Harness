@@ -99,9 +99,10 @@ it("shows scoped request error rate, readable latency, resources and actual chil
   expect(
     screen.getByRole("link", { name: "查看链路" }).getAttribute("href")
   ).toBe("/settings/observability/traces");
-  expect(
-    screen.getByRole("link", { name: "查看指标" }).getAttribute("href")
-  ).toBe("/settings/observability/metrics");
+  expect(screen.queryByRole("link", { name: "查看指标" })).toBeNull();
+  const samplingHeader = screen.getByText("采样时间").closest("p")!.parentElement!;
+  expect(samplingHeader.querySelector("h2")?.textContent).toBe("资源使用");
+  expect(samplingHeader.querySelector("time")?.dateTime).toBe(new Date(state.data.resourceSampledAt).toISOString());
 });
 it("keeps unavailable disk usage distinct from an empty data directory", () => {
   const previous = state.data;

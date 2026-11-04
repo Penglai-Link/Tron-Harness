@@ -207,14 +207,19 @@ export function DashboardPage() {
           <div className="grid gap-6 lg:grid-cols-2">
           <PluginCountCard />
           <SurfaceCard className="flex flex-col">
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-1">
                 <h2 className="font-semibold">{t("resourceUsage")}</h2>
                 <InfoTooltip variant="icon" ariaLabel={t("resourceUsage")}>{t("runtimeHelp")}</InfoTooltip>
               </div>
-              <Link className="text-xs text-[var(--color-on-surface-variant)] transition-colors hover:text-[var(--color-on-surface)] hover:underline" to={href("/settings/observability/metrics")}>
-                {t("showMetrics")}
-              </Link>
+              {data?.resourceSampledAt != null && (
+                <p className="ml-auto flex items-center gap-2 whitespace-nowrap text-xs text-[var(--color-on-surface-variant)]">
+                  <span>{t("sampledAt")}</span>
+                  <time dateTime={new Date(data.resourceSampledAt).toISOString()} className="tabular-nums">
+                    {formatDateTime(data.resourceSampledAt, { timeStyle: "medium" })}
+                  </time>
+                </p>
+              )}
             </div>
             <dl className="divide-y divide-[var(--color-outline-variant)] rounded-lg bg-[var(--color-surface-container)] px-4">
               <div className="flex flex-wrap items-center justify-between gap-3 py-4">
@@ -256,14 +261,6 @@ export function DashboardPage() {
                 </dd>
               </div>
             </dl>
-            {data?.resourceSampledAt && (
-              <p className="mt-4 flex justify-between gap-3 text-xs text-[var(--color-on-surface-variant)]">
-                <span>{t("sampledAt")}</span>
-                <time dateTime={new Date(data.resourceSampledAt).toISOString()} className="tabular-nums">
-                  {formatDateTime(data.resourceSampledAt, { timeStyle: "medium" })}
-                </time>
-              </p>
-            )}
           </SurfaceCard>
           </div>
         <SurfaceCard>
