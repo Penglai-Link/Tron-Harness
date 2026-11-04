@@ -14,10 +14,10 @@ import {
   MetricCard,
   PageHeader,
   SurfaceCard,
-  TronShell,
   useTabPanelConfig,
   useTablePagination,
 } from "@/shared";
+import { TronShell } from "@/shared/layout/Shell";
 import { InspectorPanel, SegmentedTabs } from "@/components/inspector";
 import { useToast } from "@/components/ui/toast";
 import { sharedShellPreviewRows } from "@/domain/shared-shell/constants";

@@ -14,9 +14,13 @@ vi.mock("react-i18next", async (importOriginal) => ({
   ...await importOriginal<typeof import("react-i18next")>(),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock("@/shared", () => ({
+vi.mock("@/shared/layout/Shell", () => ({
   TronShell: ({ children }: { children: ReactNode }) => children,
+}));
+vi.mock("@/shared/layout/SettingsShell", () => ({
   SettingsShell: ({ children }: { children: ReactNode }) => children,
+}));
+vi.mock("@/shared/layout/content/TabPanelRegistry", () => ({
   TabPanelRegistryProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("./ConsoleFallbackRoutePage", () => ({

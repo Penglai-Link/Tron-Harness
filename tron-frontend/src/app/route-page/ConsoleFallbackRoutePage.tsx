@@ -1,5 +1,6 @@
 import { AuthUserMenuPanel } from "@/domain/auth";
-import { tronNavigation, TronNavItem, TronShell } from "@/shared";
+import { tronNavigation, type TronNavItem } from "@/shared";
+import { TronShell } from "@/shared/layout/Shell";
 import { useLocation } from "react-router";
 import ConsoleFallbackPage from "./ConsoleFallbackPage";
 

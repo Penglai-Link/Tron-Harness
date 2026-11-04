@@ -1,11 +1,9 @@
 import { PlatformWorkspaceScope } from "@/domain/settings/components/PlatformWorkspaceScope";
 import { AuthUserMenuPanel } from "@/domain/auth";
 import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
-import {
-  SettingsShell,
-  TabPanelRegistryProvider,
-  TronShell,
-} from "@/shared";
+import { SettingsShell } from "@/shared/layout/SettingsShell";
+import { TronShell } from "@/shared/layout/Shell";
+import { TabPanelRegistryProvider } from "@/shared/layout/content/TabPanelRegistry";
 import { useTabStore } from "@/store/tabStore";
 import { MotionReveal } from "@/shared/motion";
 import {

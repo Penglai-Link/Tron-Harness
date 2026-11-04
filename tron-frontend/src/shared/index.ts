@@ -3,8 +3,8 @@ export * from "./constants/shellNavigation";
 export * from "./constants/workspaceSpaces";
 export * from "./layout/content/TabBar";
 export * from "./layout/PageHeader";
-export * from "./layout/SettingsShell";
-export * from "./layout/Shell";
+// Application shells compose pages; importing a shared utility must not load them.
+export * from "./hooks/useOpenRightSidebar";
 export * from "./layout/content/TabPanelRegistry";
 export * from "./layout/SurfaceCard";
 export * from "./hooks/useWorkspaceSpaces";
