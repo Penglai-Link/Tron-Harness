@@ -48,7 +48,7 @@ export const getDudeThreadHistory = (dudeCode: string, sessionCode: string, quer
 /** Dude definitions are independent and intentionally absent from ordinary Agent lists. */
 export const getDudeResources = (dudeCode: string, signal?: AbortSignal) => requestApi<WorkspaceInternalAgentRecordApi>("GET /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode }, signal }).then(record => normalizeWorkspaceInternalAgentRecord({ ...record, description: record.description ?? "", platformDefined: true }));
 export const sendDudeThreadMessage = (dudeCode: string, sessionCode: string, content: string) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/messages", { pathParams: { dudeCode, sessionCode }, body: { content } });
-export const answerDudeThreadInteraction = (dudeCode: string, sessionCode: string, interactionId: string, value: unknown) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/answer", { pathParams: { dudeCode, sessionCode }, body: { interactionId, value } });
+export const answerDudeThreadInteraction = (dudeCode: string, sessionCode: string, answers: { interactionId: string; value: unknown }[]) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/answer", { pathParams: { dudeCode, sessionCode }, body: { answers } });
 
 export type SoulState = "Uninitialized" | "AwaitingUser" | "Ready";
 export interface DudeSoul { dudeCode: string; name: string; markdown: string; nameConfirmed: boolean; state: SoulState }

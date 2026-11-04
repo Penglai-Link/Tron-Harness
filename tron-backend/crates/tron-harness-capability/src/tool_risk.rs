@@ -240,6 +240,86 @@ fn command_risk(input: &Value) -> ToolRisk {
     }
 }
 
+/// Explain the same command interpretation used by the risk classifier.
+pub(crate) fn command_approval_reason(input: &Value) -> (&'static str, &'static str) {
+    if input
+        .get("env")
+        .is_some_and(|v| v.as_object().is_none_or(|v| !v.is_empty()))
+        || input.get("interactive").and_then(Value::as_bool) == Some(true)
+        || input.get("tty").and_then(Value::as_bool) == Some(true)
+        || input
+            .get("stdin")
+            .is_some_and(|v| v.as_str().is_none_or(|s| !s.is_empty()))
+    {
+        return (
+            "调用包含环境变量、交互终端或标准输入，无法仅凭命令名确认执行影响",
+            "The call includes environment overrides, an interactive terminal, or standard input; its effects cannot be determined from the executable alone",
+        );
+    }
+    let Some(command) = input.get("command").and_then(Value::as_str) else {
+        return (
+            "调用未提供可静态检查的命令，需要人工确认",
+            "No statically inspectable command was provided; manual approval is required",
+        );
+    };
+    let words = if let Some(args) = input.get("args") {
+        let Some(mut words) = args.as_array().and_then(|args| {
+            args.iter()
+                .map(|v| v.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()
+        }) else {
+            return (
+                "命令参数无法静态解析",
+                "The command arguments cannot be statically parsed",
+            );
+        };
+        words.insert(0, command.to_owned());
+        words
+    } else {
+        let Some(words) = shell_words(command) else {
+            return (
+                "命令包含 shell 控制、展开或无法静态解析的语法，按非常危险处理",
+                "The command contains shell control, expansion, or syntax outside the static parser; it is classified as critical",
+            );
+        };
+        words
+    };
+    if argv_risk(&words) >= ToolRisk::Medium
+        && input
+            .get("cwd")
+            .and_then(Value::as_str)
+            .is_some_and(protected_path)
+    {
+        return (
+            "命令在受保护目录中执行且可能修改数据",
+            "The command runs in a protected directory and may modify data",
+        );
+    }
+    let name = words[0]
+        .strip_prefix("/bin/")
+        .or_else(|| words[0].strip_prefix("/usr/bin/"))
+        .unwrap_or(&words[0]);
+    match name {
+        "sh" | "bash" | "zsh" | "fish" | "python" | "python3" | "node" | "ruby" | "perl"
+        | "eval" | "exec" | "env" | "xargs" => (
+            "命令通过解释器或动态执行程序运行，可执行任意脚本",
+            "The command uses an interpreter or dynamic executor and can run arbitrary scripts",
+        ),
+        "rm" | "rmdir" => (
+            "命令会删除文件或目录",
+            "The command deletes files or directories",
+        ),
+        "curl" | "wget" | "scp" | "sftp" | "ssh" | "rsync" | "nc" | "ncat" | "telnet" => (
+            "命令会访问网络、传输数据或执行远端操作",
+            "The command can access the network, transfer data, or run remote operations",
+        ),
+        _ => (
+            "命令的可执行程序与参数命中了当前执行风险规则，达到你配置的确认阈值",
+            "The executable and arguments match the execution risk rules and meet your configured approval threshold",
+        ),
+    }
+}
+
 /// Parse only a deliberately small shell subset. Any expansion, control operator,
 /// redirect or malformed quote stays high risk, including inside double quotes.
 fn shell_words(command: &str) -> Option<Vec<String>> {

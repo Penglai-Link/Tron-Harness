@@ -451,15 +451,15 @@ async fn sessions(
     let result = sessions
         .into_iter()
         .filter_map(|session| {
-            chats
-                .remove(&session.session_code)
-                .and_then(|chat| {
-                    if session.purpose == DudeSessionPurpose::Heartbeat {
-                        heartbeat_count += 1;
-                        if heartbeat_count > HEARTBEAT_HISTORY_LIMIT { return None; }
+            chats.remove(&session.session_code).and_then(|chat| {
+                if session.purpose == DudeSessionPurpose::Heartbeat {
+                    heartbeat_count += 1;
+                    if heartbeat_count > HEARTBEAT_HISTORY_LIMIT {
+                        return None;
                     }
-                    Some(ListDudeSessionResponse::from_record(chat, session))
-                })
+                }
+                Some(ListDudeSessionResponse::from_record(chat, session))
+            })
         })
         .collect::<Vec<_>>();
     Ok(Json(ApiResponse::protocol_success(result)))
@@ -714,6 +714,14 @@ async fn thread_message(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AnswerDudeThreadRequest {
+    #[serde(default)]
+    pub answers: Vec<DudeThreadAnswer>,
+    pub interaction_id: Option<String>,
+    pub value: Option<serde_json::Value>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DudeThreadAnswer {
     pub interaction_id: String,
     pub value: serde_json::Value,
 }
@@ -731,15 +739,28 @@ async fn thread_answer(
     Json(r): Json<AnswerDudeThreadRequest>,
 ) -> Result<Json<ApiResponse<AnswerDudeThreadResponse>>, DudeApiError> {
     verify_thread(&s, &code, &thread).await?;
-    let interaction = eliteforge_agent_core::RunId::parse_str(&r.interaction_id)
-        .map_err(|_| DudeError::Invalid)?;
+    let answers = match (r.interaction_id, r.value) {
+        (Some(interaction_id), Some(value)) if r.answers.is_empty() => vec![DudeThreadAnswer {
+            interaction_id,
+            value,
+        }],
+        (None, None) if !r.answers.is_empty() => r.answers,
+        _ => return Err(DudeError::Invalid.into()),
+    };
+    let answers = answers
+        .into_iter()
+        .map(|answer| {
+            eliteforge_agent_core::RunId::parse_str(&answer.interaction_id)
+                .map(|id| (id, answer.value))
+                .map_err(|_| DudeError::Invalid)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let summary = s
         .agent_framework
         .dude_thread_answer(
             &code,
             &thread,
-            interaction,
-            r.value,
+            answers,
             &auth.user().user_code,
             &auth.locale,
             &s.dude_invocation_service(),

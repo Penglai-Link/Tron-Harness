@@ -112,8 +112,7 @@ impl FrameworkHost {
         &self,
         dude: &str,
         id: &str,
-        interaction: fw::RunId,
-        value: serde_json::Value,
+        answers: Vec<(fw::RunId, serde_json::Value)>,
         user: &str,
         locale: &str,
         service: &AgentInvocationService,
@@ -126,7 +125,31 @@ impl FrameworkHost {
         if thread.state.lock().unwrap().summary.status != fw::ThreadStatus::AwaitingInput {
             return Err(failure("thread is not awaiting input"));
         }
-        let request = thread.agent.answer(id, interaction, value).await?;
+        let interaction = answers
+            .first()
+            .ok_or_else(|| failure("interaction answers are required"))?
+            .0;
+        let ids: Vec<_> = answers.iter().map(|(id, _)| *id).collect();
+        if ids.iter().collect::<std::collections::BTreeSet<_>>().len() != ids.len() {
+            return Err(failure("duplicate interaction response"));
+        }
+        let records = thread.agent.interactions(id, &ids).await?;
+        let run = records
+            .first()
+            .ok_or_else(|| failure("interaction not found"))?
+            .run_id;
+        for (record, (_, value)) in records.iter().zip(&answers) {
+            if record.run_id != run {
+                return Err(failure("responses belong to different logical runs"));
+            }
+            super::host_interactions::validate_record_response(record, value.clone())
+                .map_err(|error| failure(error.to_string()))?;
+        }
+        let mut request = None;
+        for (interaction, value) in answers {
+            request = Some(thread.agent.answer(id, interaction, value).await?);
+        }
+        let request = request.ok_or_else(|| failure("interaction answers are required"))?;
         let (_, request, _) = runtime
             .prepare_owned(
                 request,

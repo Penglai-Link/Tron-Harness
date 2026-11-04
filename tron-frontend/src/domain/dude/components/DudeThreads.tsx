@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useEffect, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { historyMessages, historyUserInputRequests, nativeUserInputAnswer, type ChatUserInputAnswer, type ChatUserInputLabels, type HistoryCursor, type SessionHistory } from "@eliteforge/agent-ui-chat-core";
+import { historyMessages, historyUserInputRequests, nativeUserInputBatchAnswer, pendingApprovalRequests, type ChatUserInputAnswer, type ChatUserInputLabels, type HistoryCursor, type SessionHistory } from "@eliteforge/agent-ui-chat-core";
 import { ChatPanel } from "@eliteforge/agent-ui-chat-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,21 @@ function DudeThreadHistory({ dudeCode, thread, active }: { dudeCode: string; thr
   const userInputLabels: ChatUserInputLabels = {
     ariaLabel: t("chat.userInput.ariaLabel"), progress: (current, total) => t("chat.userInput.progress", { current, total }),
     back: t("chat.userInput.back"), next: t("chat.userInput.next"), continue: t("chat.userInput.continue"),
+    approvalTitle: t("chat.userInput.approvalTitle"),
+    approvalTool: t("chat.userInput.approvalTool"),
+    approvalExecution: t("chat.userInput.approvalExecution"),
+    approvalReason: t("chat.userInput.approvalReason"),
+    approvalDirectory: t("chat.userInput.approvalDirectory"),
+    approvalParameters: t("chat.userInput.approvalParameters"),
+    approvalMissingDetails: t("chat.userInput.approvalMissingDetails"),
+    approvalScope: t("chat.userInput.approvalScope"),
+    approvalBatch: t("chat.userInput.approvalBatch"),
+    approvalBatchHint: t("chat.userInput.approvalBatchHint"),
+    approvalWaiting: t("chat.userInput.approvalWaiting"),
+    approvalRetry: t("chat.userInput.approvalRetry"),
+    approvalChange: t("chat.userInput.approvalChange"),
+    approved: t("chat.userInput.approved"),
+    rejected: t("chat.userInput.rejected"),
     approve: t("chat.userInput.approve"), reject: t("chat.userInput.reject"), continuing: t("chat.userInput.continuing"),
     otherOptionLabel: t("chat.userInput.otherOptionLabel"), otherOptionDescription: t("chat.userInput.otherOptionDescription"),
     skipOptionLabel: t("chat.userInput.skipOptionLabel"), skipOptionDescription: t("chat.userInput.skipOptionDescription"),
@@ -58,9 +73,9 @@ function DudeThreadHistory({ dudeCode, thread, active }: { dudeCode: string; thr
   function answer(answers: ChatUserInputAnswer[]) {
     const request = requests[0]; if (!request) return;
     void perform(async () => {
-      const entry = nativeUserInputAnswer(request, answers).resume?.[0];
-      if (!entry) throw new Error(t("chat.userInput.ariaLabel"));
-      await answerDudeThreadInteraction(dudeCode, thread.sessionCode, entry.interruptId, entry.payload);
+      const entries = nativeUserInputBatchAnswer(pendingApprovalRequests(request, requests), answers).resume;
+      if (!entries?.length) throw new Error(t("chat.userInput.ariaLabel"));
+      await answerDudeThreadInteraction(dudeCode, thread.sessionCode, entries.map(entry => ({interactionId:entry.interruptId, value:entry.payload})));
     });
   }
   return <div className="space-y-3">{query.error ? <div role="alert">{query.error.message}<Button size="sm" variant="outline" onClick={() => void query.refetch()}>{t("dude.retry")}</Button></div> : null}

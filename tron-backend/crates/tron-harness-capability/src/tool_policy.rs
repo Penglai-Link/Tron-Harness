@@ -155,7 +155,9 @@ impl fw::ToolPolicy for TronToolPolicy {
                 } else if invocation.call.arguments.get("command").is_some()
                     || invocation.descriptor.call_name.starts_with("terminal_")
                 {
-                    locale.text("系统命令风险按真实可执行程序、参数及 shell 行为判断", "Command risk is assessed from the actual executable, arguments, and shell behavior")
+                    let (zh, en) =
+                        super::tool_risk::command_approval_reason(&invocation.call.arguments);
+                    locale.text(zh, en)
                 } else if operation == Some(true) {
                     locale.text(
                         "该工具会修改业务数据或运行状态",
