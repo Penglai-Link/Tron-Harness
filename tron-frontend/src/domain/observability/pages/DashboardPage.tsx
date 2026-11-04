@@ -35,9 +35,9 @@ export function DashboardPage() {
   const data = query.data;
   const electron = useElectronMetrics();
   const electronData = electron.isError ? undefined : electron.data;
-  const rustMemory = data?.processes.find(p => p.parentPid == null && p.name === "tron-backend")?.memoryBytes ?? data?.memoryBytes;
-  const electronMemory = electronData?.memoryBytes;
-  const totalMemory = rustMemory != null && electronMemory != null ? rustMemory + electronMemory : null;
+  const rustMemory = data?.memoryBytes;
+  const electronMemory = electronData?.memoryBytes ?? 0;
+  const totalMemory = rustMemory != null ? rustMemory + electronMemory : null;
   const memory = (bytes: number | null | undefined) => bytes == null ? "—" : `${formatNumber(bytes / 1048576, { maximumFractionDigits: 1 })} MiB`;
 
   const [resetOpen, setResetOpen] = useState(false);
@@ -250,18 +250,15 @@ export function DashboardPage() {
               </div>
               <Tooltip>
                 <TooltipTrigger render={<div />} className="flex flex-wrap items-center justify-between gap-3 py-4" aria-label={t("totalMemory")}>
-                  <dt className="text-sm text-[var(--color-on-surface-variant)]">{t("totalMemory")}</dt>
+                  <dt className="text-sm text-[var(--color-on-surface-variant)]">
+                    {t("totalMemory")}
+                  </dt>
                   <dd className="text-3xl font-semibold leading-none tracking-tight tabular-nums">{memory(totalMemory)}</dd>
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="max-w-sm space-y-2 text-left">
                     <p>{t("electronMemory")}: {memory(electronMemory)}</p>
                     <p>{t("rustMemory")}: {memory(rustMemory)}</p>
-                    <p>{t("totalMemoryHelp")}</p>
-                    {!electron.available && <p>{t("electronBrowserUnavailable")}</p>}
-                    {electron.available && electron.isError && <p>{t("electronMetricsFailed")}</p>}
-                    {electronData && <p>{t("electronSampledAt")} {formatDateTime(electronData.sampledAt, { timeStyle: "medium" })}</p>}
-                    {data && <p>{t("rustSampledAt")} {formatDateTime(data.sampledAt, { timeStyle: "medium" })}</p>}
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -307,7 +304,7 @@ export function DashboardPage() {
           )}
           <h3 className="mb-3 mt-5 text-sm font-medium">{t("electronMemory")}</h3>
           {electronData?.processes.length ? <ServiceTopology processes={electronData.processes} sampledAt={electronData.sampledAt} />
-            : <p className="text-sm text-[var(--color-on-surface-variant)]">{t(!electron.available ? "electronBrowserUnavailable" : electron.isError ? "electronMetricsFailed" : electronData ? "noProcesses" : "loading")}</p>}
+            : <p className="text-sm text-[var(--color-on-surface-variant)]">{t("noProcesses")}</p>}
         </SurfaceCard>
         </div>
       </div>
