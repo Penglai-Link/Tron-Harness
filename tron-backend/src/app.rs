@@ -440,6 +440,17 @@ impl AppState {
                     tracing::error!("platform skill index synchronization failed: {error}");
                 }
             });
+            // SQLite 空闲页巡检：每 10 分钟最多回收 1024 页（≈4 MiB），回收会话 /
+            // 任务 / 事件按保留策略删除后残留的 freelist（存量库转换已在打开时完成）
+            runtime.spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(600)).await;
+                    let _ = tokio::task::spawn_blocking(|| {
+                        crate::adapters::outbound::persistence::sqlite::framework_storage::reclaim_all_databases(1024);
+                    })
+                    .await;
+                }
+            });
         }
         agui_replay_store
             .bind_framework(&agent_framework)
