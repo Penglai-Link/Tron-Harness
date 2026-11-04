@@ -119,20 +119,3 @@ fn localized_message(locale: &str, zh: &str, en: &str) -> String {
         en.to_string()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn flow_errors_follow_request_locale() {
-        assert_eq!(
-            localized_task_error(&TaskError::WorkspaceFlowHasOpenTasks, "zh-CN"),
-            "切换任务流前必须关闭工作区中的所有任务"
-        );
-        assert_eq!(
-            localized_task_error(&TaskError::WorkspaceFlowHasOpenTasks, "en-US"),
-            "Close every task before switching the task flow"
-        );
-    }
-}

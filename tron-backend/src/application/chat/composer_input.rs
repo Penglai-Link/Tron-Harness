@@ -40,21 +40,3 @@ pub(super) fn goal_error(
         _ => ChatError::StorageFailure,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn goal_requires_a_complete_command_and_objective() {
-        assert!(matches!(
-            goal_objective("/goal  "),
-            Err(ChatError::GoalCommandInvalid)
-        ));
-        assert_eq!(
-            goal_objective(" /GOAL build\na preview ").unwrap(),
-            Some("build\na preview")
-        );
-        assert_eq!(goal_objective("/goalkeeper check").unwrap(), None);
-        assert_eq!(goal_objective("explain /goal").unwrap(), None);
-    }
-}

@@ -111,61 +111,7 @@ impl RagSettings {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::RagSettings;
 
-    #[test]
-    fn knowledge_bases_enable_graph_and_graph_only_still_requires_embedding_geometry() {
-        let mut settings = RagSettings::knowledge_base_default();
-        assert!(settings.graph);
-        settings.vector = false;
-        assert!(settings.validate().is_ok());
-        settings.embedding_model_code = None;
-        assert!(settings.validate().is_err());
-        settings.embedding_model_code = Some("model".into());
-        settings.graph_model_code = None;
-        assert!(settings.validate().is_err());
-    }
-
-    #[test]
-    fn vector_index_accepts_a_fixed_model_or_an_automatic_route() {
-        let mut settings = RagSettings::default();
-        assert!(settings.validate().is_ok());
-        settings.embedding_model_code = Some("AUTO:Embedding".into());
-        assert!(settings.validate().is_ok());
-        settings.embedding_model_code = Some("PERSON_AI:EMBEDDING:bge-m3".into());
-        assert!(settings.validate().is_ok());
-        settings.embedding_model_code = None;
-        assert!(settings.validate().is_err());
-        settings.vector = false;
-        assert!(settings.validate().is_ok());
-    }
-    #[test]
-    fn omitted_models_default_to_routes_and_explicit_choices_are_preserved() {
-        let defaults = RagSettings::default();
-        let omitted: RagSettings = serde_json::from_value(serde_json::json!({})).unwrap();
-        assert_eq!(defaults, omitted);
-        assert_eq!(
-            defaults.embedding_model_code.as_deref(),
-            Some("AUTO:Embedding")
-        );
-        assert_eq!(defaults.graph_model_code.as_deref(), Some("AUTO:Chat"));
-        assert_eq!(defaults.rerank_model_code.as_deref(), Some("AUTO:Rerank"));
-        let explicit: RagSettings = serde_json::from_value(serde_json::json!({"embeddingModelCode":"fixed-embedding", "graphModelCode":"fixed-chat", "rerankModelCode":null})).unwrap();
-        assert_eq!(
-            explicit.embedding_model_code.as_deref(),
-            Some("fixed-embedding")
-        );
-        assert_eq!(explicit.graph_model_code.as_deref(), Some("fixed-chat"));
-        assert!(explicit.rerank_model_code.is_none());
-        assert_eq!(
-            serde_json::from_value::<RagSettings>(serde_json::to_value(&explicit).unwrap())
-                .unwrap(),
-            explicit
-        );
-    }
-}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

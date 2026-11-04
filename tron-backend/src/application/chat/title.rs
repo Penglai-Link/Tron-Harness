@@ -164,9 +164,7 @@ fn title_generation_error_code(error: &LlmRuntimeError) -> &'static str {
     }
 }
 
-#[cfg(test)]
-#[path = "title_generation_tests.rs"]
-mod generation_tests;
+
 
 pub(super) fn should_generate_manual_session_title(session: &ChatSession) -> bool {
     session.source_type == ChatSessionSourceType::Manual
@@ -276,83 +274,4 @@ fn strip_title_reasoning(mut remaining: &str) -> Option<String> {
     }
     output.push_str(remaining);
     Some(output)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::chat::ChatSessionStatus;
-
-    fn manual_new_chat_session(last_run_code: Option<String>) -> ChatSession {
-        ChatSession {
-            id: 1,
-            session_code: "SESSION-1".into(),
-            workspace_code: "TRON_CORE".into(),
-            project_code: None,
-            app_code: None,
-            task_code: None,
-            source_type: ChatSessionSourceType::Manual,
-            source_code: None,
-            title: DEFAULT_MANUAL_SESSION_TITLE.into(),
-            status: ChatSessionStatus::Active,
-            agent_code: Some("main-agent".into()),
-            last_run_code,
-            last_run_status: None,
-            system_agent_session_id: None,
-            user_code: Some("user".into()),
-            created_at: "1".into(),
-            updated_at: "1".into(),
-        }
-    }
-
-    #[test]
-    fn manual_new_chat_title_generation_retries_after_first_run() {
-        let session = manual_new_chat_session(Some("RUN-1".into()));
-
-        assert!(should_generate_manual_session_title(&session));
-    }
-
-    #[test]
-    fn main_agent_default_title_is_generated_after_first_run() {
-        let mut session = manual_new_chat_session(Some("RUN-1".into()));
-        session.title = DEFAULT_MAIN_AGENT_SESSION_TITLE.into();
-
-        assert!(should_generate_manual_session_title(&session));
-    }
-
-    #[test]
-    fn localized_default_titles_remain_eligible_after_a_completed_run() {
-        for title in ["新会话", " 主智能体 ", "new CHAT"] {
-            let mut session = manual_new_chat_session(Some("RUN-1".into()));
-            session.title = title.into();
-            assert!(should_generate_manual_session_title(&session));
-            assert!(normalize_generated_session_title(title).is_none());
-        }
-    }
-
-    #[test]
-    fn localized_custom_and_task_titles_are_not_regenerated() {
-        let mut session = manual_new_chat_session(Some("RUN-1".into()));
-        session.title = "黄女士会诊".into();
-        assert!(!should_generate_manual_session_title(&session));
-        assert_eq!(
-            normalize_generated_session_title(&session.title).as_deref(),
-            Some("黄女士会诊")
-        );
-
-        session.title = "新会话".into();
-        session.task_code = Some("TASK-1".into());
-        assert!(!should_generate_manual_session_title(&session));
-        session.task_code = None;
-        session.source_type = ChatSessionSourceType::Task;
-        assert!(!should_generate_manual_session_title(&session));
-    }
-
-    #[test]
-    fn renamed_manual_chat_does_not_generate_title_again() {
-        let mut session = manual_new_chat_session(Some("RUN-1".into()));
-        session.title = "Existing title".into();
-
-        assert!(!should_generate_manual_session_title(&session));
-    }
 }

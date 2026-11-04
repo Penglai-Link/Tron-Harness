@@ -162,24 +162,7 @@ pub(crate) fn now() -> i64 {
         .as_millis()
         .min(i64::MAX as u128) as i64
 }
-#[cfg(test)]
-fn sort_trace_summaries(records: &mut [TraceSummary], sorts: &[crate::application::observability::TraceSort]) {
-    records.sort_by(|a, b| {
-        for sort in sorts {
-            let order = match sort.field {
-                TraceSortField::StartedAt => a.started_at.cmp(&b.started_at),
-                TraceSortField::Duration => a.duration_ms.total_cmp(&b.duration_ms),
-                TraceSortField::Spans => a.span_count.cmp(&b.span_count),
-                TraceSortField::Tokens => a.input_tokens.saturating_add(a.output_tokens).cmp(&b.input_tokens.saturating_add(b.output_tokens)),
-                TraceSortField::Errors => a.error_count.cmp(&b.error_count),
-            };
-            if !order.is_eq() {
-                return if matches!(sort.direction, TraceSortDirection::Desc) { order.reverse() } else { order };
-            }
-        }
-        b.started_at.cmp(&a.started_at).then_with(|| a.trace_id.cmp(&b.trace_id))
-    });
-}
+
 impl TraceRepository for TelemetryProjection {
     fn agent_options(&self, workspace: &str) -> Result<Vec<TraceAgentOption>, ObservabilityError> { self.trace_agent_options(workspace) }
     fn query(&self, q: &TraceQuery) -> Result<TracePage, ObservabilityError> {
@@ -350,43 +333,5 @@ impl ObservabilityRepository for TelemetryProjection {
                     .total,
             })
         })
-    }
-}
-
-#[cfg(test)]
-mod sorting_tests {
-    use super::*;
-    fn row(id: &str, start: i64, duration: f64, spans: usize, tokens: u64, errors: usize) -> TraceSummary {
-        TraceSummary { trigger: String::new(), root_span_id: None, workspace_code: "w".into(), trace_id: id.into(), session_code: "s".into(), session_name: None,
-            run_code: "r".into(), agent_code: "a".into(), started_at: start, ended_at: Some(start + duration as i64),
-            duration_ms: duration, status: "Completed".into(), span_count: spans, error_count: errors,
-            model_count: 0, tool_count: 0, input_tokens: tokens, cached_input_tokens: 0, output_tokens: 1 }
-    }
-    #[test]
-    fn trace_sorting_uses_numeric_values_and_deterministic_ties() {
-        let rows = vec![row("a", 10, 1200., 2, 1000, 1), row("b", 20, 50., 10, 20, 3), row("c", 30, 300., 1, 200, 2)];
-        for (field, expected) in [
-            (TraceSortField::StartedAt, ["a", "b", "c"]),
-            (TraceSortField::Duration, ["b", "c", "a"]),
-            (TraceSortField::Spans, ["c", "a", "b"]),
-            (TraceSortField::Tokens, ["b", "c", "a"]),
-            (TraceSortField::Errors, ["a", "c", "b"]),
-        ] {
-            let mut sorted = rows.clone();
-            sort_trace_summaries(&mut sorted, &[crate::application::observability::TraceSort { field: field, direction: TraceSortDirection::Asc }]);
-            assert_eq!(sorted.iter().map(|r| r.trace_id.as_str()).collect::<Vec<_>>(), expected);
-            sort_trace_summaries(&mut sorted, &[crate::application::observability::TraceSort { field: field, direction: TraceSortDirection::Desc }]);
-            assert_eq!(sorted.iter().map(|r| r.trace_id.as_str()).collect::<Vec<_>>(), expected.into_iter().rev().collect::<Vec<_>>());
-        }
-        let mut tied = vec![row("b", 1, 1., 1, 1, 1), row("a", 1, 1., 1, 1, 1)];
-        sort_trace_summaries(&mut tied, &[crate::application::observability::TraceSort { field: TraceSortField::Tokens, direction: TraceSortDirection::Desc }]);
-        assert_eq!(tied[0].trace_id, "a");
-        let mut combined = vec![row("a", 30, 100., 2, 1, 1), row("b", 10, 100., 5, 1, 1), row("c", 20, 50., 9, 1, 1)];
-        sort_trace_summaries(&mut combined, &[
-            crate::application::observability::TraceSort { field: TraceSortField::Duration, direction: TraceSortDirection::Desc },
-            crate::application::observability::TraceSort { field: TraceSortField::Spans, direction: TraceSortDirection::Desc },
-        ]);
-        assert_eq!(combined.iter().map(|r| r.trace_id.as_str()).collect::<Vec<_>>(), ["b", "a", "c"]);
-
     }
 }

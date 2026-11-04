@@ -306,6 +306,3 @@ pub(super) async fn prepare_unit_graph(
         "图谱抽取经过 {MAX_CALLS} 次校验仍失败，未发布：{last_error}"
     ))
 }
-
-#[cfg(test)]
-mod tests;

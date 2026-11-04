@@ -20,9 +20,8 @@ tron-harness-capability/
 能力包内容页和 Agent 技能选择使用同一份内嵌目录，不依赖源码路径或另一个技能安装步骤。
 技能脚本只随包分发，不会自动执行；记忆做梦需要使用方另外提供 `memory-dream` 命令。
 
-本 crate 保留独立 workspace，隔离测试存储依赖。仓库根目录运行
-`make harness-capability-check` / `make harness-capability-test`；
-`agent-capability-*` 和 `agent-harness-*` 命令保留为兼容入口。
+本 crate 保留独立 workspace。仓库根目录运行 `make harness-capability-check`；
+`agent-capability-check` 和 `agent-harness-check` 命令保留为兼容入口。
 
 工具权限提示使用每次运行的 `TronToolPolicyLocale` 扩展，支持 `EnUs` 和 `ZhCn`。
 宿主从 `AgentRunContext.locale` 解析后注入，审批继续运行时也会重新注入；

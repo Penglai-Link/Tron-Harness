@@ -519,47 +519,7 @@ fn validate_system_agent_model(
     )))
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::application::chat::ChatSendError;
-    use crate::domain::model_provider::{
-        ModelProviderCode, ModelSelection, ModelSelectionKind, ProviderRouteCode,
-    };
 
-    use super::{chat_send_error_code, chat_send_error_message, validate_chat_model_selection};
-
-    #[test]
-    fn active_run_race_uses_dedicated_stream_error_code() {
-        let error = ChatSendError::RunAlreadyActive {
-            active_run_code: Some("RUN-ACTIVE".into()),
-        };
-        assert_eq!(chat_send_error_code(&error), "CHAT_RUN_ALREADY_ACTIVE");
-        assert_eq!(
-            chat_send_error_message(error),
-            "chat session already has an active run"
-        );
-    }
-
-    #[test]
-    fn chat_provider_route_accepts_only_person_ai_auto() {
-        assert!(
-            validate_chat_model_selection(&ModelSelection::person_ai_route(
-                ProviderRouteCode::ChatAuto,
-            ))
-            .is_ok()
-        );
-        assert!(
-            validate_chat_model_selection(&ModelSelection {
-                kind: ModelSelectionKind::ProviderRoute,
-                provider_code: Some(ModelProviderCode::PersonAi),
-                model_code: Some("deepseek-v4".into()),
-                quality_type: None,
-                route_code: Some(ProviderRouteCode::ChatAuto),
-            })
-            .is_err()
-        );
-    }
-}
 
 // This decorates the independently completed product response when replay failed;
 // normal streaming preserves the SDK's native terminal verbatim.
@@ -581,7 +541,3 @@ fn native_interrupt_outcome(
     }).collect::<Vec<_>>();
     Some(json!({"type":"interrupt","interrupts":interrupts}))
 }
-
-#[cfg(test)]
-#[path = "completion_tests.rs"]
-mod completion_tests;

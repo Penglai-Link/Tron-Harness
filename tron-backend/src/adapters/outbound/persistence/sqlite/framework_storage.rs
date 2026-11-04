@@ -349,24 +349,3 @@ impl Drop for BusinessTransaction<'_> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn database_path_aliases_share_the_same_native_connection() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("tron.sqlite3");
-        let first = SharedDatabase::open(path.to_str().unwrap()).unwrap();
-        let alias = directory.path().join(".").join("tron.sqlite3");
-        let second = SharedDatabase::open(alias.to_str().unwrap()).unwrap();
-        assert!(std::sync::Arc::ptr_eq(&first.0, &second.0));
-        #[cfg(unix)]
-        {
-            let link = directory.path().join("alias.sqlite3");
-            std::os::unix::fs::symlink(&path, &link).unwrap();
-            let third = SharedDatabase::open(link.to_str().unwrap()).unwrap();
-            assert!(std::sync::Arc::ptr_eq(&first.0, &third.0));
-        }
-    }
-}

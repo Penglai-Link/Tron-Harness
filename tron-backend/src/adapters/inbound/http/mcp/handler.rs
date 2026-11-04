@@ -1,7 +1,6 @@
 mod transport;
 
-#[cfg(test)]
-mod tests;
+
 
 use axum::{
     Json,

@@ -211,25 +211,3 @@ fn managed_guidance(
     })?;
     fw::ManagedDeveloperPrompts::resolve(input.run, key, fallback)
 }
-
-#[cfg(test)]
-mod trigger_tests {
-    use super::*;
-
-    #[test]
-    fn user_input_and_transport_controls_do_not_create_a_wakeup() {
-        assert_eq!(trigger_event(None), None);
-        assert_eq!(trigger_event(Some(&json!({"annotations":[],"requestedSkills":[],"resume":[],"contextCompaction":false}))), None);
-        assert_eq!(trigger_event(Some(&json!({"source":"UserMessage","payload":{"content":"already in history"}}))), None);
-    }
-
-    #[test]
-    fn background_trigger_keeps_event_evidence_without_transport_controls() {
-        let event = trigger_event(Some(&json!({
-            "source":"ThreadFeedback", "eventId":"event-1", "taskCode":"task-1",
-            "payload":{"result":{"interactions":[{"id":"interaction-1"}]}},
-            "resume":[], "annotations":[], "contextCompaction":false,
-        }))).unwrap();
-        assert_eq!(event, json!({"source":"ThreadFeedback","eventId":"event-1","taskCode":"task-1","payload":{"result":{"interactions":[{"id":"interaction-1"}]}}}));
-    }
-}

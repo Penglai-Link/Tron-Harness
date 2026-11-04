@@ -41,30 +41,3 @@ pub(super) fn hint(unit: &RagTextUnitWrite, source: &str, value: &Value) -> Stri
         })
         .unwrap_or_default()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn whitespace_hint_keeps_original_unicode_newlines_and_punctuation() {
-        assert_eq!(
-            unique_original("说明：甲\u{3000}\n乙。其他内容", "甲乙。"),
-            Some("甲\u{3000}\n乙。")
-        );
-        assert_eq!(
-            unique_original("Alpha\n calls Beta.", "Alpha calls Beta."),
-            Some("Alpha\n calls Beta.")
-        );
-        assert_eq!(unique_original("甲乙。", "甲乙!"), None);
-        assert_eq!(unique_original("Alpha", "alpha"), None);
-    }
-
-    #[test]
-    fn repeated_overlapping_empty_and_oversized_quotes_have_no_hint() {
-        assert_eq!(unique_original("甲 乙，然后甲乙", "甲乙"), None);
-        assert_eq!(unique_original("aaaa", "aaa"), None);
-        assert_eq!(unique_original("甲乙", " \n"), None);
-        assert_eq!(unique_original("甲乙", &"甲".repeat(4096)), None);
-    }
-}

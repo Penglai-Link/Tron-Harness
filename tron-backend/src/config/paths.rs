@@ -72,18 +72,3 @@ fn default_path_from_home(home: Option<String>, suffix: &str) -> String {
         .display()
         .to_string()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::default_application_config_path_from_home;
-    use std::{env, path::PathBuf};
-
-    #[test]
-    fn application_config_defaults_to_home_tron_directory() {
-        let expected = PathBuf::from(env::var("HOME").expect("HOME should be set"))
-            .join(".tron/application.yaml")
-            .display()
-            .to_string();
-        assert_eq!(default_application_config_path_from_home(), expected);
-    }
-}

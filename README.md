@@ -48,7 +48,7 @@ Makefile中集成了前端、后端、WEB继承模式、桌面APP模式的相关
 
 ```sh
 make be-check RUST_CACHE_DIR=/path/to/rust-cache
-make be-test SCCACHE_DIR=/path/to/sccache CCACHE_DIR=/path/to/ccache
+make be-check SCCACHE_DIR=/path/to/sccache CCACHE_DIR=/path/to/ccache
 ```
 
 这些变量只改变编译缓存位置，Cargo 产物仍位于各工作树的构建目录。直接运行 Cargo 时，缓存路径使用调用方的环境变量或 sccache 默认值；Makefile 的默认路径不会自动生效。

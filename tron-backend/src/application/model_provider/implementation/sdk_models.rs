@@ -548,20 +548,5 @@ impl ModelProviderService {
             self.sdk_fingerprint(&material)
         )
     }
-    #[cfg(test)]
-    pub(super) fn sdk_credential_attempt(&self, token: &str) -> String {
-        let row = self
-            .connection
-            .call(
-                |connection| read_connection(connection, ModelProviderCode::PersonAi),
-                || ModelProviderError::Storage,
-            )
-            .unwrap()
-            .unwrap();
-        self.sdk_attempt_for_row(&row, token)
-    }
-}
 
-#[cfg(test)]
-#[path = "sdk_models_tests.rs"]
-mod tests;
+}

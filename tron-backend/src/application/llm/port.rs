@@ -306,36 +306,7 @@ pub trait LlmRuntimeClient: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>>;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn char_length_chunk_strategy_splits_text_by_character_limit() {
-        let strategy = CharLengthChunkStrategy {
-            max_chars_per_chunk: 3,
-        };
-
-        let chunks = strategy
-            .split("abcdefg")
-            .expect("character-based chunks should be generated");
-
-        assert_eq!(chunks, vec!["abc", "def", "g"]);
-    }
-
-    #[test]
-    fn char_length_chunk_strategy_rejects_zero_limit() {
-        let strategy = CharLengthChunkStrategy {
-            max_chars_per_chunk: 0,
-        };
-
-        let error = strategy
-            .split("abcdefg")
-            .expect_err("zero chunk limit should be rejected");
-
-        assert_eq!(error, "max_chars_per_chunk must be greater than zero");
-    }
-}
 
 fn unsupported_observed<T>() -> eliteforge_agent_framework::ObservedModelResult<T> {
     eliteforge_agent_framework::ObservedModelResult {

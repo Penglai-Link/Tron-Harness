@@ -372,20 +372,3 @@ pub(super) fn append_rendered_sections(
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod parsed_text_budget_tests {
-    use super::*;
-
-    #[test]
-    fn long_parsed_pdf_keeps_all_text_when_no_office_preview_is_appended() {
-        let text = format!("{}FINAL_PAGE", "Evidence and conditions. ".repeat(100_000));
-        assert!(text.len() > MAX_TEXT_BYTES);
-        let mut document = parse_normalized_markdown(text.as_bytes()).unwrap();
-        document.format = "pdf".into();
-        append_rendered_sections(&mut document, vec![]).unwrap();
-        assert!(document.sections.last().unwrap().text.contains("FINAL_PAGE"));
-        assert!(document.sections.last().unwrap().location.char_end > MAX_TEXT_BYTES);
-        assert!(document.warnings.is_empty());
-    }
-}

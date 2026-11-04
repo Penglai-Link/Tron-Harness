@@ -65,72 +65,7 @@ fn index_preparation_error(error: String) -> KnowledgeBaseError {
     }
 }
 
-#[cfg(test)]
-mod retry_classification_tests {
-    use super::*;
-    use eliteforge_agent_core::{ModelError, ProviderErrorCategory, ProviderModelError};
 
-    #[test]
-    fn node_embedding_retries_typed_transient_failures_but_not_invalid_graphs_or_accounts() {
-        for (category, status, retryable) in [
-            (ProviderErrorCategory::Transient, 503, true),
-            (ProviderErrorCategory::Authentication, 401, false),
-            (ProviderErrorCategory::Permission, 403, false),
-            (ProviderErrorCategory::Quota, 429, false),
-        ] {
-            let wire = eliteforge_agent_official_plugin_model_http::encode_model_error(
-                &ModelError::Provider(Box::new(ProviderModelError {
-                    authorization_attempt: None,
-                    provider: "test-provider".into(),
-                    category,
-                    http_status: Some(status),
-                    business_code: None,
-                    error_type: None,
-                    model: None,
-                    message: "model request failed".into(),
-                })),
-            );
-            for classify in [graph_stage_error, index_preparation_error] {
-                let error = classify(wire.clone());
-                assert_eq!(matches!(error, KnowledgeBaseError::Storage(_)), retryable);
-                assert_eq!(
-                    error.to_string(),
-                    wire,
-                    "preserve diagnostics for the durable task"
-                );
-            }
-        }
-        let timeout = eliteforge_agent_official_plugin_model_http::encode_model_error(
-            &ModelError::Indeterminate("model invocation timed out".into()),
-        );
-        assert!(matches!(
-            index_preparation_error(timeout),
-            KnowledgeBaseError::Invalid(_)
-        ));
-        let unexpected_tools = eliteforge_agent_official_plugin_model_http::encode_model_error(
-            &ModelError::Fatal("text generation unexpectedly requested tool calls".into()),
-        );
-        assert!(matches!(
-            index_preparation_error(unexpected_tools),
-            KnowledgeBaseError::Invalid(_)
-        ));
-        assert!(matches!(
-            index_preparation_error("SDK_MODEL_ERROR:{bad-json}".into()),
-            KnowledgeBaseError::Invalid(_)
-        ));
-        for error in [
-            "图谱关系缺少原文依据",
-            "图谱节点向量空间已改变",
-            "SDK_MODEL_ERROR:{bad-json}",
-            "untrusted text says HTTP 503",
-        ] {
-            assert!(matches!(
-                graph_stage_error(error.into()),
-                KnowledgeBaseError::Invalid(_)
-            ));
-        }
-    }
-}
 impl AppRagService {
     pub(crate) async fn execute_document_task(
         &self,

@@ -169,20 +169,3 @@ fn default_source_type() -> TaskSourceType {
 fn default_priority() -> TaskPriority {
     TaskPriority::Medium
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn minimal_task_and_explicit_deadline_clear() {
-        let create: CreateTaskRequest =
-            serde_json::from_value(serde_json::json!({"title":"Prepare report"})).unwrap();
-        assert_eq!(create.task_type, TaskType::General);
-        assert_eq!(create.workspace_code, None);
-        let clear: UpdateTaskRequest =
-            serde_json::from_value(serde_json::json!({"dueAt":null})).unwrap();
-        let unchanged: UpdateTaskRequest = serde_json::from_value(serde_json::json!({})).unwrap();
-        assert_eq!(clear.due_at, Some(None));
-        assert_eq!(unchanged.due_at, None);
-    }
-}

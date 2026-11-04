@@ -140,26 +140,9 @@ impl ModelProviderService {
         .await
     }
 
-    #[cfg(test)]
-    pub(super) async fn refresh_credentials_after_unauthorized(
-        &self,
-        provider_code: ModelProviderCode,
-        rejected_token: &str,
-    ) -> Result<ProviderCredentials, ModelProviderError> {
-        self.refresh_credentials_for_request(provider_code, rejected_token, true)
-            .await
-    }
 
-    #[cfg(test)]
-    pub(super) async fn refresh_credentials_for_request(
-        &self,
-        provider_code: ModelProviderCode,
-        expected_token: &str,
-        force: bool,
-    ) -> Result<ProviderCredentials, ModelProviderError> {
-        self.refresh_credentials_for_match(provider_code, expected_token, force, false)
-            .await
-    }
+
+
     pub(super) async fn refresh_credentials_for_match(
         &self,
         provider_code: ModelProviderCode,

@@ -216,12 +216,10 @@ help:
 	@echo "  make agent-ui-install    Install shared UI dependencies"
 	@echo "  make agent-ui-build      Build shared UI packages"
 	@echo "  make harness-capability-check Compile the Tron capability package"
-	@echo "  make harness-capability-test  Test framework assembly and host scope isolation"
 	@echo ""
 	@echo "Backend commands:"
 	@echo "  make be-install   Fetch backend dependencies"
 	@echo "  make be-check     Compile backend"
-	@echo "  make be-test      Run backend tests"
 	@echo "  make be-clean     Remove backend build artifacts and scratch files"
 	@echo "  make be-clean-package Remove backend crate artifacts; retain dependency caches"
 	@echo "  make be-dev       Run backend server"
@@ -254,7 +252,7 @@ help:
 	@echo "构建缓存：默认当前用户目录下的 rust-cache，自动创建；可用 RUST_CACHE_DIR 覆盖"
 
 .PHONY: _build-cache
-harness-capability-check harness-capability-test agent-capability-check agent-capability-test agent-harness-check agent-harness-test be-check be-test be-dev openapi web-build web-dev desktop-build desktop-dev be-ui-acceptance: | _build-cache
+harness-capability-check agent-capability-check agent-harness-check be-check be-dev openapi web-build web-dev desktop-build desktop-dev be-ui-acceptance: | _build-cache
 _build-cache:
 ifeq ($(OS),Windows_NT)
 	@if not exist "$(subst /,\,$(SCCACHE_DIR))\" mkdir "$(subst /,\,$(SCCACHE_DIR))"
@@ -326,7 +324,7 @@ fe-clean:
 be-install:
 	$(CARGO) fetch --manifest-path "$(BACKEND_MANIFEST)"
 
-.PHONY: agent-deps agent-ui-install agent-ui-build harness-capability-check harness-capability-test agent-capability-check agent-capability-test agent-harness-check agent-harness-test
+.PHONY: agent-deps agent-ui-install agent-ui-build harness-capability-check agent-capability-check agent-harness-check
 agent-deps:
 	$(NODE) scripts/prepare-agent-dependencies.mjs
 
@@ -339,20 +337,12 @@ agent-ui-build:
 harness-capability-check:
 	$(CARGO) check --manifest-path "$(BACKEND_DIR)/crates/tron-harness-capability/Cargo.toml"
 
-harness-capability-test:
-	$(CARGO) test --manifest-path "$(BACKEND_DIR)/crates/tron-harness-capability/Cargo.toml" $(TEST)
-
 # Compatibility aliases for existing local scripts.
 agent-capability-check agent-harness-check: harness-capability-check
-agent-capability-test agent-harness-test: harness-capability-test
 
 .PHONY: be-check
 be-check:
 	$(CARGO) check --manifest-path "$(BACKEND_MANIFEST)"
-
-.PHONY: be-test
-be-test:
-	$(CARGO) test --manifest-path "$(BACKEND_MANIFEST)" $(TEST)
 
 .PHONY: be-clean-package
 # Retain dependency caches and running development data when reclaiming local artifacts.

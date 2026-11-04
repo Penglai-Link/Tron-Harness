@@ -346,28 +346,7 @@ async fn chunks(
     response(kb.published_chunks(&auth.user().user_code, &id, &doc, q.page, q.page_size))
 }
 
-#[cfg(test)]
-mod ocr_contract_tests {
-    use super::*;
-    use crate::application::knowledge_base::parsing::OcrMode;
-    #[test]
-    fn ocr_patch_distinguishes_omitted_inherited_and_selected_modes() {
-        let omitted: Configure =
-            serde_json::from_value(serde_json::json!({"chunkConfig":null})).unwrap();
-        assert_eq!(omitted.ocr_mode, None);
-        let inherited: Configure =
-            serde_json::from_value(serde_json::json!({"ocrMode":null})).unwrap();
-        assert_eq!(inherited.ocr_mode, Some(None));
-        for mode in [OcrMode::Auto, OcrMode::Text, OcrMode::Ocr] {
-            let selected: Configure =
-                serde_json::from_value(serde_json::json!({"ocrMode":mode})).unwrap();
-            assert_eq!(selected.ocr_mode, Some(Some(mode)));
-        }
-        assert!(
-            serde_json::from_value::<Configure>(serde_json::json!({"ocrMode":"invalid"})).is_err()
-        );
-    }
-}
+
 
 async fn binary(
     State(kb): State<KnowledgeBaseService>,

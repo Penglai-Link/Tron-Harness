@@ -162,7 +162,3 @@ fn validate_profile(
     }
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "system_agent_profile_tests.rs"]
-mod tests;

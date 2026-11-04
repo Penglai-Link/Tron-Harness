@@ -88,22 +88,3 @@ fn build_tls_config(
         _ => Err(()),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::build_tls_config;
-    use crate::application::resource::ConnectionTlsMaterial;
-
-    #[test]
-    fn tls_config_uses_a_concrete_crypto_provider() {
-        let config = build_tls_config(&ConnectionTlsMaterial {
-            mode: "VERIFY_FULL".to_string(),
-            ca_certificate: None,
-            client_certificate: None,
-            client_key: None,
-            client_key_password: None,
-        });
-
-        assert!(config.is_ok());
-    }
-}

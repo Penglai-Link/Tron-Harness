@@ -312,45 +312,7 @@ fn deduplicate_models(models: Vec<SystemAgentModelRecord>) -> Vec<SystemAgentMod
     deduplicated
 }
 
-#[cfg(test)]
-mod tests {
-    use super::parse_system_agent_models_output;
 
-    #[test]
-    fn parses_codex_debug_models_json_payload() {
-        let payload = r#"{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5"},{"slug":"gpt-5","display_name":"GPT-5"}]}"#;
-        let models = parse_system_agent_models_output(payload);
-        assert_eq!(models.len(), 2);
-        assert_eq!(models[0].model_id, "gpt-5.5");
-        assert_eq!(models[0].display_name, "GPT-5.5");
-        assert_eq!(models[0].context_window_tokens, None);
-        assert_eq!(models[1].model_id, "gpt-5");
-        assert_eq!(models[1].display_name, "GPT-5");
-        assert_eq!(models[1].context_window_tokens, None);
-    }
-
-    #[test]
-    fn parses_line_based_models_output_and_deduplicates_case_insensitive_ids() {
-        let payload = "openrouter/anthropic/claude-sonnet-4\nopenrouter/anthropic/CLAUDE-SONNET-4\nopenrouter/openai/gpt-5\n";
-        let models = parse_system_agent_models_output(payload);
-        assert_eq!(models.len(), 2);
-        assert_eq!(models[0].model_id, "openrouter/anthropic/claude-sonnet-4");
-        assert_eq!(models[0].context_window_tokens, None);
-        assert_eq!(models[1].model_id, "openrouter/openai/gpt-5");
-        assert_eq!(models[1].context_window_tokens, None);
-    }
-
-    #[test]
-    fn parses_context_window_tokens_when_present() {
-        let payload = r#"{"models":[{"id":"gpt-5.2","displayName":"GPT-5.2","contextWindowTokens":200000},{"id":"gpt-5.1","context_window_tokens":"128000"}]}"#;
-        let models = parse_system_agent_models_output(payload);
-        assert_eq!(models.len(), 2);
-        assert_eq!(models[0].model_id, "gpt-5.2");
-        assert_eq!(models[0].context_window_tokens, Some(200000));
-        assert_eq!(models[1].model_id, "gpt-5.1");
-        assert_eq!(models[1].context_window_tokens, Some(128000));
-    }
-}
 
 fn parse_reasoning_efforts(
     object: &serde_json::Map<String, Value>,

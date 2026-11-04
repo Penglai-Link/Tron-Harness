@@ -14,16 +14,7 @@ impl<T: Clone> RuntimeCell<T> {
     pub fn get(&self) -> Option<T> {
         self.value.read().unwrap().clone()
     }
-    #[cfg(test)]
-    pub fn set(&self, value: T) -> Result<(), T> {
-        let mut slot = self.value.write().unwrap();
-        if slot.is_some() {
-            Err(value)
-        } else {
-            *slot = Some(value);
-            Ok(())
-        }
-    }
+
     pub fn take(&self) -> Option<T> {
         self.value.write().unwrap().take()
     }

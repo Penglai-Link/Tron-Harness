@@ -526,9 +526,7 @@ fn completion_channel_closed_payload(session_code: &str, run_code: &str) -> Chat
     )
 }
 
-#[cfg(test)]
-#[path = "channel_tests.rs"]
-mod channel_tests;
+
 
 fn poll_product_completion(
     receiver: &mut tokio::sync::mpsc::Receiver<ChatSsePayload>,

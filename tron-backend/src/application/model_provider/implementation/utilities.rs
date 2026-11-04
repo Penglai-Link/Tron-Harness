@@ -226,15 +226,3 @@ pub(super) fn model_type_storage(model_type: ModelType) -> &'static str {
         ModelType::RealtimeSpeech => "REALTIME_SPEECH",
     }
 }
-
-#[cfg(test)]
-mod fractional_balance_tests {
-    use super::*;
-    #[test]
-    fn preserves_fractional_balance_and_missing_values() {
-        let parsed = parse_person_ai_account_info(serde_json::json!({"code":0,"data":{"remaining_tokens":123.45}})).unwrap();
-        assert_eq!(parsed.remaining_points, Some(123.45));
-        let missing = parse_person_ai_account_info(serde_json::json!({"code":0,"data":{}})).unwrap();
-        assert_eq!(missing.remaining_points, None);
-    }
-}

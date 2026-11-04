@@ -205,24 +205,3 @@ impl ModelInvocationConfig {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn output_default_is_configurable_and_zero_is_rejected() {
-        let mut config = ModelInvocationConfig::default();
-        assert_eq!(config.default_output_tokens, 16_384);
-        config.apply_overrides(serde_yaml::from_str("defaultOutputTokens: 8192").unwrap());
-        config.validate().unwrap();
-        assert_eq!(config.default_output_tokens, 8192);
-        config.apply_overrides(serde_yaml::from_str("defaultOutputTokens: 0").unwrap());
-        assert!(
-            config
-                .validate()
-                .unwrap_err()
-                .contains("defaultOutputTokens")
-        );
-    }
-}

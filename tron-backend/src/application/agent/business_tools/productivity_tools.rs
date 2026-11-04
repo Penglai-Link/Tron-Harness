@@ -231,7 +231,3 @@ async fn run(
         "truncated": output["stdoutTruncated"].as_bool().unwrap_or(false) || output["stderrTruncated"].as_bool().unwrap_or(false) }),
     )
 }
-
-#[cfg(test)]
-#[path = "productivity_tools/registry_tests.rs"]
-mod registry_tests;

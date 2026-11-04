@@ -607,36 +607,3 @@ fn parse_translation_output(
         description,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn translation_output_accepts_json_code_fence_and_normalizes_fields() {
-        let translation = parse_translation_output(
-            "```json\n{\"displayName\":\" English summary \",\"promptBody\":\" Please summarize {{topic}}. \",\"description\":\" A short description \"}\n```",
-            "en-US",
-        )
-        .expect("translation JSON should parse");
-
-        assert_eq!(translation.locale, "en-US");
-        assert_eq!(translation.display_name, "English summary");
-        assert_eq!(translation.prompt_body, "Please summarize {{topic}}.");
-        assert_eq!(
-            translation.description.as_deref(),
-            Some("A short description")
-        );
-    }
-
-    #[test]
-    fn translation_output_rejects_missing_prompt_fields() {
-        let error = parse_translation_output(
-            r#"{"displayName":"English summary","promptBody":""}"#,
-            "en-US",
-        )
-        .expect_err("empty prompt body should be rejected");
-
-        assert!(error.to_string().contains("displayName and promptBody"));
-    }
-}

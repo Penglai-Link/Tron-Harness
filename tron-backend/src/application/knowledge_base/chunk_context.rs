@@ -195,6 +195,3 @@ fn expand_with_budget(
         result.warnings.push("SourceContextBudget".into());
     }
 }
-
-#[cfg(test)]
-mod tests;

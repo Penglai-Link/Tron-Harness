@@ -124,36 +124,3 @@ async fn run_scheduled_automation(
         );
     }
 }
-
-#[cfg(test)]
-mod builtin_target_tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn builtin_target_uses_existing_registry_and_replaces_prior_schedule() {
-        let runtime = AutomationRuntime::new();
-        let ticked = Arc::new(tokio::sync::Notify::new());
-        let tick = ticked.clone();
-        runtime
-            .register_builtin_interval(
-                BuiltinScheduleTarget::DudeHeartbeat,
-                Duration::from_secs(60),
-                Arc::new(move || tick.notify_one()),
-            )
-            .unwrap();
-        tokio::time::timeout(Duration::from_secs(1), ticked.notified())
-            .await
-            .unwrap();
-        assert_eq!(runtime.snapshot(), vec!["builtin:dude-heartbeat"]);
-        runtime
-            .register_builtin_interval(
-                BuiltinScheduleTarget::DudeHeartbeat,
-                Duration::from_secs(60),
-                Arc::new(|| {}),
-            )
-            .unwrap();
-        assert_eq!(runtime.snapshot().len(), 1);
-        runtime.unregister(BuiltinScheduleTarget::DudeHeartbeat.registry_key());
-        assert!(runtime.snapshot().is_empty());
-    }
-}

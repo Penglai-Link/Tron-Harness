@@ -287,13 +287,7 @@ impl AgentManagementService {
         }
         Ok(record)
     }
-    #[cfg(test)]
-    pub(crate) fn register_tool_descriptors(
-        &self,
-        descriptors: &[ToolDescriptor],
-    ) -> Result<Vec<ToolCatalogRecord>, String> {
-        self.register_labeled_tool_descriptors(descriptors, &[])
-    }
+
     pub(crate) fn register_labeled_tool_descriptors(
         &self,
         descriptors: &[ToolDescriptor],

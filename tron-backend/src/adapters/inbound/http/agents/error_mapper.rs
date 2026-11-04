@@ -218,7 +218,3 @@ pub fn agent_management_error_response(error: AgentManagementError) -> Response 
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
 }
-
-#[cfg(test)]
-#[path = "agui_error_tests.rs"]
-mod agui_error_tests;

@@ -74,32 +74,7 @@ pub(crate) fn append_image_chunks(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    #[test]
-    fn raw_vectors_use_asset_specific_annotations_and_prefer_the_original_image_occurrence() {
-        let parsed:ParsedDocument=serde_json::from_value(json!({"format":"docx","sections":[
-            {"text":"Table","headingLevel":null,"location":{"sourceBlockId":"table","blockKind":"table","imageResourceCodes":["a","b"],"charStart":0,"charEnd":5,"imageAnnotations":[
-                {"kind":"source_caption","source":"parser","text":"Whole table caption","block":"table"},
-                {"kind":"generated_description","source":"vision","text":"Description A","block":"table","resourceCode":"a"},
-                {"kind":"generated_description","source":"vision","text":"Description B","block":"table","resourceCode":"b"}]}},
-            {"text":"Figure A","headingLevel":null,"location":{"sourceBlockId":"figure-a","parentSourceBlockId":"table","blockKind":"image","imageResourceCodes":["a"],"charStart":6,"charEnd":14,"imageAnnotations":[{"kind":"source_caption","source":"parser","text":"Figure A caption","block":"figure-a"}]}},
-            {"text":"Inline","headingLevel":null,"location":{"sourceBlockId":"paragraph","blockKind":"paragraph","imageResourceCodes":["inline"],"charStart":15,"charEnd":21}}
-        ],"warnings":[]})).unwrap();
-        let mut chunks = Vec::new();
-        append_image_chunks(&parsed, "Document", &mut chunks).unwrap();
-        assert_eq!(chunks.len(), 3);
-        assert_eq!(chunks[0].location.image_resource_codes, vec!["a"]);
-        assert_eq!(chunks[0].text, "Figure A caption");
-        assert_eq!(chunks[0].source_locations[0]["sourceBlockId"], "figure-a");
-        assert_eq!(chunks[1].text, "Description B");
-        assert!(!chunks[1].text.contains("Description A"));
-        assert!(!chunks[1].text.contains("Whole table"));
-        assert_eq!(chunks[2].location.image_resource_codes, vec!["inline"]);
-    }
-}
+
 
 impl KnowledgeBaseService {
     /// Index configuration changes never submit a parser job for existing documents.

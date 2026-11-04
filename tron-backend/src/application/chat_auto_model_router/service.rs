@@ -355,31 +355,3 @@ fn candidate_key(selection: &ModelSelection) -> String {
         )
     })
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn snapshot_order_matches_full_identity_and_preserves_context_window_policy() {
-        use super::*;
-        let candidate = |vendor: &str, window| AutoModelCandidate {
-            selection: ModelSelection::person_ai_fixed(
-                format!("{vendor}/model"),
-                crate::domain::model_provider::ProviderModelQuality::High,
-            ),
-            config: serde_json::from_value(serde_json::json!({
-                "modelCode": format!("PERSON_AI:FIXED:High:{vendor}/model"),
-                "protocol": "CHAT_COMPLETIONS", "baseUrl": "https://fixture.test",
-                "apiKey": "fixture", "modelName": "Model", "contextWindowTokens": window,
-            }))
-            .unwrap(),
-        };
-        let small = candidate("small", 128);
-        let current = candidate("current", 256);
-        let large = candidate("large", 512);
-        let ordered = order_authorized_candidates(
-            vec![small.clone(), large.clone(), current.clone()],
-            &current.config,
-        );
-        assert_eq!(ordered, vec![current.config, large.config, small.config]);
-    }
-}

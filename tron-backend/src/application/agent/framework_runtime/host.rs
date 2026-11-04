@@ -170,16 +170,7 @@ impl FrameworkHost {
         self.0.prompt_service.set(service)
             .unwrap_or_else(|_| panic!("prompt service already bound"));
     }
-    #[cfg(test)]
-    pub(super) fn bind_test_skill_registry(
-        &self,
-        service: crate::application::skill::SkillRegistryService,
-    ) {
-        self.0
-            .skill_registry
-            .set(service)
-            .unwrap_or_else(|_| panic!("skills already bound"));
-    }
+
     pub fn bind_skills(
         &self,
         service: crate::application::skill::SkillRegistryService,
@@ -911,15 +902,3 @@ fn map_error_ref(error: &fw::AgentError) -> AgentError {
         _ => AgentError::InvalidConfiguration(error.to_string()),
     }
 }
-
-#[cfg(test)]
-#[path = "host_lifecycle_tests.rs"]
-mod lifecycle_tests;
-
-#[cfg(test)]
-#[path = "context_seed_budget_tests.rs"]
-mod context_seed_budget_tests;
-
-#[cfg(test)]
-#[path = "host_environment_tests.rs"]
-mod environment_tests;

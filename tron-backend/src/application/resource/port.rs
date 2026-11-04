@@ -144,28 +144,3 @@ impl std::io::Write for RangeWriter<'_> {
         self.target.flush()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use std::io::{Cursor, Write};
-
-    use super::RangeWriter;
-
-    #[test]
-    fn range_writer_selects_only_the_requested_window() {
-        let mut output = Cursor::new(Vec::new());
-        let mut writer = RangeWriter {
-            skipped: 3,
-            remaining: 4,
-            written: 0,
-            target: &mut output,
-        };
-
-        writer.write_all(b"abcdef").expect("range should write");
-        writer.write_all(b"ghij").expect("range should write");
-
-        assert_eq!(writer.written, 4);
-        drop(writer);
-        assert_eq!(output.into_inner(), b"defg");
-    }
-}

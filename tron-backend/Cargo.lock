@@ -2131,19 +2131,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eliteforge-agent-test-support"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "eliteforge-agent-framework",
- "eliteforge-agent-official-plugin-storage-local",
- "serde_json",
- "tempfile",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "elliptic-curve"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7649,7 +7636,6 @@ dependencies = [
  "eliteforge-agent-official-plugin-tools-media",
  "eliteforge-agent-official-plugin-tools-web",
  "eliteforge-agent-plugin-core",
- "eliteforge-agent-test-support",
  "flate2",
  "fs2",
  "gmcrypto-core",
@@ -7662,10 +7648,7 @@ dependencies = [
  "ldap3",
  "opendal",
  "opentelemetry",
- "opentelemetry-proto",
  "pdf-extract",
- "prost",
- "quote",
  "rand 0.8.7",
  "rand 0.9.4",
  "redis",
@@ -7688,14 +7671,12 @@ dependencies = [
  "snowflaked",
  "socketioxide",
  "sqlx",
- "syn 2.0.117",
  "sysinfo",
  "tempfile",
  "tokio",
  "tokio-cron",
  "tokio-rusqlite",
  "tokio-util",
- "tower",
  "tower-http",
  "tracing",
  "tracing-appender",

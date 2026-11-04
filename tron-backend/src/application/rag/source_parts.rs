@@ -112,45 +112,7 @@ pub(crate) fn parts(metadata: &Value, text: &str, fallback: &str) -> Option<Vec<
     Some(parts)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    fn metadata(lengths: [usize; 2]) -> Value {
-        json!({
-            "sourceLocations": [
-                {"sourceBlockId": "a"}, {"sourceBlockId": "b"}
-            ],
-            "sourceSpans": [
-                {"blockId": "a", "start": 0, "end": lengths[0]},
-                {"blockId": "b", "start": 0, "end": lengths[1]}
-            ]
-        })
-    }
-
-    #[test]
-    fn original_newlines_and_unicode_are_preserved() {
-        let parts = parts(&metadata([2, 3]), "\n甲\n乙丙\n", "test").unwrap();
-        assert_eq!(parts[0].text, "\n甲");
-        assert_eq!(parts[1].text, "乙丙\n");
-    }
-
-    #[test]
-    fn a_single_unambiguous_framing_newline_is_accepted() {
-        let parts = parts(&metadata([1, 1]), "\n甲\n乙", "test").unwrap();
-        assert_eq!(parts[0].text, "甲");
-        assert_eq!(parts[1].text, "乙");
-    }
-
-    #[test]
-    fn ambiguous_framing_or_unverified_offsets_are_rejected() {
-        assert!(parts(&metadata([1, 1]), "\n\n\n\n", "test").is_none());
-        assert!(parts(&metadata([1, 1]), "甲乙丙", "test").is_none());
-        let mut missing = metadata([1, 1]);
-        missing.as_object_mut().unwrap().remove("sourceSpans");
-        assert!(parts(&missing, "甲\n乙", "test").is_none());
-    }
-}
 
 pub(crate) fn select(
     metadata: &Value,

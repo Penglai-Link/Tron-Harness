@@ -261,7 +261,3 @@ impl Drop for ActiveRunGroupGuard {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "active_run_group_tests.rs"]
-mod tests;

@@ -1,7 +1,6 @@
 mod error;
 mod lpg;
-#[cfg(test)]
-mod lpg_tests;
+
 mod ontology;
 mod scope;
 

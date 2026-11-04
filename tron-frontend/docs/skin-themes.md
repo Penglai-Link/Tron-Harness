@@ -126,13 +126,11 @@ button {
 
 ```sh
 make be-check
-make be-test TEST='--lib adapters::outbound::skin::tests'
-make be-test TEST='--test skin_api'
 make fe-check
 make fe-unit-test TEST=src/shared/theme
 ```
 
-浏览器验证覆盖中英文外观页、内置切换、JSON 导入、刷新恢复、自定义变量清理和 390px 窄屏。浏览器使用接口桩隔离账户及已有实例；磁盘持久化、ZIP、路径边界和 SSE 协议由真实 Rust Store / Router 测试覆盖。
+浏览器验证覆盖中英文外观页、内置切换、JSON 导入、刷新恢复、自定义变量清理和 390px 窄屏。浏览器使用接口桩隔离账户及已有实例。
 
 ## 主题作者 Skill
 

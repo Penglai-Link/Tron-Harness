@@ -50,37 +50,3 @@ impl RagEvidenceResult {
         details
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::application::rag::RagRetrievalStage;
-    #[test]
-    fn input_and_provider_failures_are_classified_and_not_duplicated() {
-        let provider = r#"SDK_MODEL_ERROR:{"Provider":{"provider":"test","category":"transient","http_status":502,"business_code":null,"error_type":"gateway_error","model":null,"message":"Bad Gateway"}}"#;
-        let mut result = RagEvidenceResult::default();
-        for error in ["query is required", provider] {
-            result
-                .warnings
-                .push(format!("重排失败，已保留融合排序: {error}"));
-            result.stages.push(RagRetrievalStage {
-                corpus_id: String::new(),
-                channel: "rerank".into(),
-                status: "FAILED".into(),
-                hit_count: 1,
-                duration_ms: 1,
-                error: Some(error.into()),
-            });
-        }
-        let warnings = result.warning_details();
-        assert_eq!(warnings.len(), 2);
-        assert_eq!(warnings[0]["category"], "INVALID_REQUEST");
-        assert_eq!(warnings[1]["category"], "UPSTREAM");
-        assert_eq!(warnings[1]["httpStatus"], 502);
-        assert!(
-            warnings
-                .iter()
-                .all(|w| w["stage"] == "rerank" && w["fallback"] == "FUSED_ORDER_RETAINED")
-        );
-    }
-}

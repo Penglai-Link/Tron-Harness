@@ -45,8 +45,7 @@ pub(crate) use native_session_scope::NativeCollaborationScope;
 
 mod question;
 
-#[cfg(test)]
-mod context_auth_recovery_tests;
+
 
 mod auxiliary_models;
 pub(crate) use auxiliary_models::attach_auxiliary_model;

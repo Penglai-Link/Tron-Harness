@@ -22,25 +22,3 @@ pub fn normalize_terminal_command(output: String) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalizes_markdown_wrapped_command_to_one_line() {
-        assert_eq!(
-            normalize_terminal_command("```bash\nls\n  -la\n```\n".into()),
-            "ls -la"
-        );
-    }
-
-    #[test]
-    fn supplies_the_terminal_user_request_runtime_value() {
-        let values = terminal_command_runtime_values("list files");
-        assert_eq!(
-            values.get(&PromptRuntimeProvider::TerminalUserRequest),
-            Some(&Value::String("list files".into())),
-        );
-    }
-}

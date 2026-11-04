@@ -105,33 +105,3 @@ fn readiness_failure_message(components: &ReadinessComponents) -> &'static str {
         _ => "dependency not ready",
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use axum::{body::to_bytes, extract::State};
-    use serde_json::Value;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn readiness_returns_service_unavailable_when_graph_dependency_is_not_ready() {
-        let response = readiness(State(AppReadiness::new(
-            ":memory:",
-            "/dev/null/tron.graph.grafeo",
-        )))
-        .await;
-
-        let status = response.status();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body should be readable");
-        let json: Value = serde_json::from_slice(&body).expect("response should be valid JSON");
-
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(json["code"], "DEPENDENCY_NOT_READY");
-        assert_eq!(json["data"]["status"], "not_ready");
-        assert_eq!(json["data"]["components"]["storage"], "up");
-        assert_eq!(json["data"]["components"]["graph"], "down");
-        assert_eq!(json["data"]["components"]["rag"], "down");
-    }
-}

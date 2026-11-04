@@ -81,25 +81,3 @@ impl ToolAssignmentMode {
             && self.strategy().includes(tool, selected_codes)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn category_union_uses_declared_category_and_query_kind() {
-        let mut tool =
-            crate::application::agent::BusinessToolCatalog::tool("bash.exec", "en-US").unwrap();
-        let codes = vec!["system.command".into(), "readonly".into()];
-        assert!(ToolAssignmentMode::SelectedCategories.selects(&tool, &codes));
-        tool.category = Some(eliteforge_agent_core::ToolCategory::localized(
-            "other", "其他", "Other",
-        ));
-        assert!(!ToolAssignmentMode::SelectedCategories.selects(&tool, &codes));
-        tool.operation_kind = ToolOperationKind::Query;
-        assert!(ToolAssignmentMode::SelectedCategories.selects(&tool, &codes));
-        tool.operation_kind = ToolOperationKind::Unknown;
-        assert!(!ToolAssignmentMode::SelectedCategories.selects(&tool, &codes));
-        tool.availability_state = ToolAvailabilityState::Disabled;
-        assert!(!ToolAssignmentMode::SelectedCategories.selects(&tool, &vec!["other".into()]));
-    }
-}

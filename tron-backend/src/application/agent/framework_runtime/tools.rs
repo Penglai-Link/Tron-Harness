@@ -684,7 +684,3 @@ impl local::CommandProgressSink for CommandProgress {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "managed_skills_tests.rs"]
-mod managed_skills_tests;

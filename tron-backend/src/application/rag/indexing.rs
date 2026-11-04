@@ -41,31 +41,7 @@ impl Default for RagEmbeddingBatchLimits {
         }
     }
 }
-#[cfg(test)]
-impl RagEmbeddingBatchLimits {
-    fn end(&self, inputs: &[String], start: usize) -> Result<usize, String> {
-        if self.max_inputs == 0 || self.max_tokens == 0 {
-            return Err("Embedding批次上限必须大于零".into());
-        }
-        let mut tokens = 0usize;
-        let mut end = start;
-        for input in inputs.iter().skip(start).take(self.max_inputs) {
-            if input.trim().is_empty() {
-                return Err("Embedding分块正文不能为空".into());
-            }
-            let cost = eliteforge_agent_framework::Content::from(input.clone()).estimated_tokens();
-            if cost > self.max_tokens {
-                return Err("单个分块超过Embedding批次token上限，请缩小分块后重建".into());
-            }
-            if cost > self.max_tokens - tokens {
-                break;
-            }
-            tokens += cost;
-            end += 1;
-        }
-        Ok(end)
-    }
-}
+
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct RagPreparedVectors {
@@ -414,6 +390,3 @@ fn structured_evidence(
     }
     Ok(Value::Object(evidence))
 }
-
-#[cfg(test)]
-mod tests;

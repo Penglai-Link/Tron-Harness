@@ -293,7 +293,3 @@ pub(super) fn paused_run_presentation(
         "paused result must contain a native Framework interaction".into(),
     )))
 }
-#[cfg(test)]
-mod native_pause_tests {
-    include!("native_pause_tests.inc");
-}

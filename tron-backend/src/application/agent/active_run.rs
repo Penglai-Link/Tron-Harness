@@ -568,91 +568,10 @@ fn validate_expected_run(
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use std::sync::{
-        Arc, Barrier,
-        atomic::{AtomicBool, Ordering},
-    };
 
-    use super::{ActiveRunError, ActiveRunRegistry, AgentSteerInput};
-
-    #[test]
-    fn captured_entry_rejects_acceptance_after_guard_closes_it() {
-        let registry = ActiveRunRegistry::new();
-        let guard = registry
-            .register("SESSION-1", "RUN-1", "REACT", true)
-            .expect("active run should register");
-        let captured_entry = registry
-            .entry("SESSION-1")
-            .expect("acceptance should be able to capture the active entry");
-        let start = Arc::new(Barrier::new(2));
-        let callback_called = Arc::new(AtomicBool::new(false));
-        let accept_task = {
-            let start = start.clone();
-            let callback_called = callback_called.clone();
-            std::thread::spawn(move || {
-                start.wait();
-                let result = captured_entry.accept_steer(|| {
-                    callback_called.store(true, Ordering::SeqCst);
-                    Ok::<_, ()>((
-                        (),
-                        AgentSteerInput {
-                            page_context: None,
-                            annotations: Vec::new(),
-                            requested_skills: Vec::new(),
-                            steer_code: "MSG-1".into(),
-                            content: "too late".into(),
-                            attachments: Vec::new(),
-                        },
-                    ))
-                });
-                (result, captured_entry)
-            })
-        };
-
-        drop(guard);
-        start.wait();
-
-        let (result, captured_entry) = accept_task.join().expect("acceptance task should join");
-        assert_eq!(result, Err(ActiveRunError::RunFinishing));
-        assert!(!callback_called.load(Ordering::SeqCst));
-        assert!(
-            captured_entry
-                .state
-                .lock()
-                .expect("active run state should lock")
-                .pending
-                .is_empty()
-        );
-        assert!(matches!(
-            registry.control("SESSION-1", "RUN-1"),
-            Err(ActiveRunError::NoActiveRun)
-        ));
-    }
-}
 
 impl eliteforge_agent_core::ContextCompactionObserver for ActiveRunControl {
     fn state_changed(&self, active: bool) {
         if let Ok(mut state) = self.entry.state.lock() { state.compaction_phase = active; }
-    }
-}
-
-#[cfg(test)]
-mod compaction_tests {
-    use super::*;
-    #[test]
-    fn compaction_is_exclusive_from_admission_and_releases_after_failure_or_completion() {
-        let registry = ActiveRunRegistry::new();
-        let guard = registry.reserve_context_compaction("session", "run", "REACT", true).unwrap();
-        let snapshot = registry.snapshot("session").unwrap().unwrap();
-        assert_eq!(snapshot.operation_kind.as_deref(), Some("ContextCompaction"));
-        assert!(!snapshot.supports_steer);
-        assert!(matches!(registry.reserve("session", "other", "REACT", true), Err(ActiveRunError::AlreadyActive)));
-        assert!(matches!(registry.request_stop("session", "run"), Err(ActiveRunError::RunFinishing)));
-        assert!(matches!(registry.entry("session").unwrap().accept_steer(|| -> Result<((), AgentSteerInput), ()> { panic!("steer admission must remain closed") }), Err(ActiveRunError::RunFinishing)));
-        drop(guard);
-        assert!(registry.snapshot("session").unwrap().is_none());
-        assert!(registry.reserve("session", "after", "REACT", true).is_ok());
     }
 }

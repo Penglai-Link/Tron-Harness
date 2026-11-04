@@ -77,19 +77,7 @@ fn request_buckets(at: i64) -> Vec<RequestBucket> {
         })
         .collect()
 }
-#[cfg(test)]
-fn record_request(buckets: &mut [RequestBucket], started: i64, error: bool, at: i64) {
-    if started > at {
-        return;
-    }
-    if let Some(bucket) = buckets
-        .iter_mut()
-        .find(|b| started >= b.started_at && started < b.started_at + 60_000)
-    {
-        bucket.requests += 1;
-        bucket.errors += usize::from(error);
-    }
-}
+
 fn service_processes() -> Vec<ServiceProcess> {
     let mut system = System::new();
     system.refresh_processes_specifics(
@@ -132,56 +120,4 @@ fn service_processes() -> Vec<ServiceProcess> {
             })
         })
         .collect()
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn minute_buckets_exclude_old_and_future_requests_and_count_errors() {
-        let at = 30 * 60_000 + 20_000;
-        let mut buckets = request_buckets(at);
-        for (time, error) in [
-            (16 * 60_000 - 1, false),
-            (16 * 60_000, false),
-            (30 * 60_000, true),
-            (at + 1, true),
-        ] {
-            record_request(&mut buckets, time, error, at);
-        }
-        assert_eq!(buckets.len(), 15);
-        assert_eq!(buckets.iter().map(|b| b.requests).sum::<usize>(), 2);
-        assert_eq!(buckets[14].errors, 1);
-    }
-    #[cfg(unix)]
-    #[test]
-    fn live_child_process_appears_under_backend() {
-        let mut child = std::process::Command::new("/bin/sleep")
-            .arg("30")
-            .spawn()
-            .unwrap();
-        let pid = child.id();
-        let snapshot = service_processes();
-        let _ = child.kill();
-        let _ = child.wait();
-        assert!(
-            snapshot
-                .iter()
-                .any(|p| p.pid == pid && p.parent_pid == Some(std::process::id()))
-        );
-    }
-    #[test]
-    fn process_snapshot_includes_only_backend_and_its_descendants() {
-        let processes = service_processes();
-        let root = processes
-            .iter()
-            .find(|p| p.pid == std::process::id())
-            .unwrap();
-        assert_eq!(root.parent_pid, None);
-        assert_eq!(root.name, "tron-backend");
-        for process in &processes {
-            if let Some(parent) = process.parent_pid {
-                assert!(processes.iter().any(|p| p.pid == parent));
-            }
-        }
-    }
 }

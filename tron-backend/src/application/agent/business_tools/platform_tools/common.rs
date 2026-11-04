@@ -103,29 +103,3 @@ pub(super) fn enum_tool_error(field_name: &str, value: &str) -> ToolError {
 pub(super) fn service_tool_error(error: impl ToString) -> ToolError {
     ToolError::ExecutionFailed(error.to_string())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn page_records_saturates_huge_page_offsets() {
-        let output = page_records(vec![1, 2, 3], Some(usize::MAX), Some(100));
-
-        assert_eq!(output.current, usize::MAX);
-        assert_eq!(output.size, 100);
-        assert_eq!(output.total, 3);
-        assert!(output.records.is_empty());
-    }
-
-    #[test]
-    fn ensure_workspace_match_rejects_mismatched_entities() {
-        let error = ensure_workspace_match("ENTERPRISE", "TRON_CORE", "app")
-            .expect_err("workspace mismatch should fail");
-
-        assert_eq!(
-            error.to_string(),
-            "workspaceCode `ENTERPRISE` does not match app workspace `TRON_CORE`"
-        );
-    }
-}

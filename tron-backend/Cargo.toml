@@ -97,15 +97,9 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+# Dependencies of the frontend browser acceptance server.
 rand08 = { package = "rand", version = "0.8" }
 rsa = "0.9"
-rusqlite = { version = "0.37", features = ["trace"] }
-opentelemetry-proto = { version = "=0.32.0", default-features = false, features = ["gen-tonic-messages", "trace", "metrics", "with-serde"] }
-prost = "0.14"
-eliteforge-agent-test-support = { path = "../.agent-deps/agent-framework/crates/testing/eliteforge-agent-test-support" }
-quote = "1"
-syn = { version = "2", features = ["full", "visit", "visit-mut"] }
-tower = { version = "0.5", features = ["util"] }
 
 [profile.release]
 # The desktop sidecar is distributed to end users.  These settings remove

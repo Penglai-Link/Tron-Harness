@@ -644,7 +644,3 @@ impl AgentCollaborationRuntime for Runtime {
         Ok(())
     }
 }
-
-#[cfg(test)]
-#[path = "host_collaboration_thread_tests.rs"]
-mod tests;

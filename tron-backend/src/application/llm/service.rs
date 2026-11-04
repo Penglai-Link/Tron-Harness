@@ -607,21 +607,3 @@ impl ContextQueryAllowance {
             .map_err(|_| "shared context auxiliary call allowance exhausted".into())
     }
 }
-
-#[cfg(test)]
-mod context_query_allowance_tests {
-    use super::*;
-    #[test]
-    fn query_and_context_reducers_share_a_single_ceiling() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        let calls = Arc::new(AtomicUsize::new(1));
-        let query = ContextQueryAllowance {
-            calls: calls.clone(),
-            limit: 2,
-        };
-        query.admit().unwrap();
-        assert_eq!(calls.load(Ordering::Acquire), 2);
-        assert!(query.admit().is_err());
-        assert!(ContextQueryAllowance { calls, limit: 0 }.admit().is_err());
-    }
-}

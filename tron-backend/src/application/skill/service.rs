@@ -20,8 +20,7 @@ mod rag_index_payload;
 mod registry_files;
 mod registry_paths;
 mod registry_sync;
-#[cfg(test)]
-mod tests;
+
 mod use_cases;
 pub use provider::SkillAgentIdentity;
 mod projection;

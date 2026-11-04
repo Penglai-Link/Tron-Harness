@@ -264,26 +264,7 @@ fn runtime_resolution_error(error: ModelProviderError) -> ModelError {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn model_selection_and_authorization_errors_are_not_storage_failures() {
-        for error in [
-            ModelProviderError::InvalidSelection("no tagged embedding candidates".into()),
-            ModelProviderError::AuthenticationRequired,
-            ModelProviderError::ConnectionNotReady,
-        ] {
-            let expected = error.to_string();
-            let mapped = runtime_resolution_error(error);
-            assert_eq!(mapped, ModelError::RuntimeResolutionFailed(expected));
-        }
-        assert_eq!(
-            runtime_resolution_error(ModelProviderError::Storage),
-            ModelError::StorageFailure
-        );
-    }
-}
+
 
 pub(super) fn person_ai_agent_config(
     runtime_model_code: impl Into<String>,

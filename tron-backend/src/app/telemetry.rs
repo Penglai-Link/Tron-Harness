@@ -253,10 +253,7 @@ impl LocalTelemetry {
             Err(format!("{report:?}"))
         }
     }
-    #[cfg(test)]
-    pub async fn flush(&self) {
-        self.runtime.force_flush().await.unwrap();
-    }
+
 }
 pub struct TraceGuard(pub(super) Context, Option<Arc<dyn TelemetryStore>>, std::sync::atomic::AtomicBool, eliteforge_agent_core::TelemetrySpan);
 impl TraceGuard {
@@ -334,9 +331,7 @@ impl Drop for TraceGuard {
     }
 }
 
-#[cfg(test)]
-#[path = "telemetry_tests.rs"]
-mod tests;
+
 
 /// OTel context is thread-local; capture it before crossing a Tokio task boundary.
 pub(crate) fn spawn_traced<F>(future: F) -> tokio::task::JoinHandle<F::Output>

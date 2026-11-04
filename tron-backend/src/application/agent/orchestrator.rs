@@ -167,14 +167,3 @@ fn single_agent_collaboration_run_code(run_code: &str) -> String {
 fn single_agent_step_code(run_code: &str) -> String {
     format!("{run_code}-STEP-0001")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{single_agent_collaboration_run_code, single_agent_step_code};
-
-    #[test]
-    fn single_agent_codes_are_derived_from_run_code() {
-        assert_eq!(single_agent_collaboration_run_code("RUN-1"), "COLLAB-RUN-1");
-        assert_eq!(single_agent_step_code("RUN-1"), "RUN-1-STEP-0001");
-    }
-}

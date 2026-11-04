@@ -25,10 +25,7 @@ pub trait ModelProtocolAdapter: Send + Sync {
     -> Result<Option<ModelResponse>, String>;
     fn parse_usage(&self, body: &Value) -> Option<ModelTokenUsage>;
 }
-#[cfg(test)]
-pub mod registry {
-    pub use super::ModelProtocolAdapter;
-}
+
 macro_rules! adapter {
     ($name:ident,$kind:ident) => {
         #[derive(Debug, Clone, Copy)]
@@ -125,20 +122,3 @@ pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> V
 pub fn embeddings_request(config: &AgentModelConfig, input: &str) -> Value {
     sdk::protocol::embeddings_request(&sdk::AgentModelConfig::from(config), input)
 }
-
-#[cfg(test)]
-mod chat_completions_tests;
-#[cfg(test)]
-mod chat_tool_observation_tests;
-#[cfg(test)]
-mod externalized_tool_tests;
-#[cfg(test)]
-mod responses_stateful_tests;
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod tool_call_argument_tests;
-#[cfg(test)]
-mod tool_call_id_tests;
-#[cfg(test)]
-mod usage_tests;

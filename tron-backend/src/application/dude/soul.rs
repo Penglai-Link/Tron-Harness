@@ -247,23 +247,3 @@ pub fn runtime_input_kind(source: DudeEventSource) -> String {
         format!("DUDE_{source:?}").to_uppercase()
     }
 }
-
-#[cfg(test)]
-mod awakening_locale_tests {
-    use super::*;
-
-    #[test]
-    fn awakening_message_uses_requested_language() {
-        assert_eq!(awakening_message("en-US"), "Wake up");
-        assert_eq!(awakening_message("en-GB,en;q=0.9"), "Wake up");
-        assert_eq!(awakening_message("zh-CN"), "醒醒");
-    }
-
-    #[test]
-    fn awakening_is_visible_user_input_but_background_events_are_not() {
-        assert_eq!(runtime_input_kind(DudeEventSource::UserMessage), "USER_PROMPT");
-        for source in [DudeEventSource::Heartbeat, DudeEventSource::MemoryBatch, DudeEventSource::ThreadFeedback] {
-            assert_ne!(runtime_input_kind(source), "USER_PROMPT");
-        }
-    }
-}

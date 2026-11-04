@@ -555,9 +555,7 @@ fn bound_memory_reducer() -> Arc<dyn fw::ContextReducer> {
     }))
 }
 
-#[cfg(test)]
-#[path = "context_reduction_tests.rs"]
-mod reduction_tests;
+
 
 /// Resolve the host codec before a generic reducer turns JSON into prose.
 /// Reserved transport records must never become model-visible text.

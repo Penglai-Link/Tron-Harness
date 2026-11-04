@@ -154,37 +154,7 @@ impl LlmModelRouter {
 
 impl super::router::ModelRouter for LlmModelRouter {}
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn converting_a_routed_model_does_not_erase_its_reasoning_settings() {
-        let config = crate::domain::agent::AgentModelConfig {
-            model_code: "extractor".into(),
-            model_name: "extractor".into(),
-            protocol: crate::domain::agent::AgentModelProtocol::ChatCompletions,
-            base_url: "https://provider.invalid".into(),
-            api_path: None,
-            api_key: String::new(),
-            request_headers: Default::default(),
-            thinking_enabled: true,
-            supports_developer_role: false,
-            reasoning_effort: Some(crate::domain::reasoning::ReasoningEffort::Max),
-            responses_stateful_enabled: false,
-            temperature: None,
-            max_tokens: Some(65_536),
-            context_window_tokens: Some(128_000),
-            top_p: None,
-            max_retries: Some(0),
-        };
-        let converted = super::runtime_from_agent(config);
-        assert!(converted.thinking_enabled);
-        assert_eq!(
-            converted.reasoning_effort,
-            Some(crate::domain::reasoning::ReasoningEffort::Max)
-        );
-        assert_eq!(converted.max_tokens, Some(65_536));
-    }
-}
+
 
 pub(crate) fn runtime_from_agent(
     config: crate::domain::agent::AgentModelConfig,

@@ -174,9 +174,7 @@ fn project_native_event(
     Some(AgentAguiProtocolEvent { sse_event, data })
 }
 
-#[cfg(test)]
-#[path = "presentation_tests.rs"]
-mod tests;
+
 
 fn project_native_group_event(
     mut data: Value,

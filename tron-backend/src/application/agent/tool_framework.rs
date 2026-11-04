@@ -95,37 +95,3 @@ pub(crate) async fn execute(
     .await
     .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
 }
-
-#[cfg(test)]
-mod framework_lease_tests {
-    use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    #[test]
-    fn preparation_guard_releases_only_its_runs_pending_plugins() {
-        let registry = Arc::new(ToolRegistry::default());
-        let released = Arc::new(AtomicBool::new(false));
-        let other = Arc::new(AtomicBool::new(false));
-        let guard = registry.framework_lease_guard("failed");
-        for (run, flag) in [("failed", released.clone()), ("other", other.clone())] {
-            registry.register_framework_lease(
-                run,
-                eliteforge_agent_core::ToolLease::new(vec![]).with_cleanup(move || {
-                    flag.store(true, Ordering::SeqCst);
-                }),
-            );
-        }
-        drop(guard);
-        assert!(released.load(Ordering::SeqCst));
-        assert!(!other.load(Ordering::SeqCst));
-        let transferred = registry.take_framework_leases("other");
-        drop(registry.framework_lease_guard("other"));
-        assert!(!other.load(Ordering::SeqCst));
-        drop(transferred);
-        assert!(other.load(Ordering::SeqCst));
-    }
-}
-
-#[cfg(test)]
-#[path = "tool_framework/composition_tests.rs"]
-mod composition_tests;

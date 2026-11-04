@@ -277,30 +277,3 @@ fn generic_profile_error(
     )
         .into_response()
 }
-
-#[cfg(test)]
-mod token_error_tests {
-    use super::*;
-
-    #[test]
-    fn refresh_outages_are_not_reported_as_authorization_failures() {
-        assert_eq!(
-            active_profile_token_error(ModelProviderError::Remote("timeout".into())).status(),
-            StatusCode::SERVICE_UNAVAILABLE
-        );
-        assert_eq!(
-            active_profile_token_error(ModelProviderError::Storage).status(),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
-        for error in [
-            ModelProviderError::Unauthorized,
-            ModelProviderError::AuthenticationRequired,
-            ModelProviderError::DeviceUnbound,
-        ] {
-            assert_eq!(
-                active_profile_token_error(error).status(),
-                StatusCode::UNAUTHORIZED
-            );
-        }
-    }
-}

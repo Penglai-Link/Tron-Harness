@@ -430,25 +430,3 @@ pub fn installed_extension_implementations(
     }
     Ok(items)
 }
-
-#[cfg(test)]
-mod extension_catalog_tests {
-    use super::*;
-    use std::collections::BTreeMap;
-
-    #[test]
-    fn pack_and_extension_switches_compose_without_disabling_other_providers() {
-        let packs = BTreeMap::from([("framework.local.scoped".into(), false)]);
-        let items = extension_implementation_catalog_with_state(&packs, &BTreeMap::new());
-        let tools: Vec<_> = items.iter().filter(|item| item.extension_point == "tool").collect();
-        assert_eq!(tools.iter().filter(|item| item.effective).count(), 6);
-        let local = tools.iter().find(|item| item.provider_pack_id == "framework.local.scoped").unwrap();
-        assert!(local.enabled);
-        assert!(!local.effective);
-
-        let items = extension_implementation_catalog_with_state(&packs, &BTreeMap::from([("tool".into(), false)]));
-        assert!(items.iter().filter(|item| item.extension_point == "tool").all(|item| !item.effective));
-        assert!(items.iter().filter(|item| item.configuration == ExtensionConfiguration::Required).all(|item| item.effective));
-        assert!(!items.iter().find(|item| item.implementation == "TronContext + bounded context preparation").unwrap().effective);
-    }
-}

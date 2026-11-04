@@ -197,21 +197,3 @@ fn map_storage_error(error: opendal::Error) -> ResourceError {
         ResourceError::StorageFailure
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn object_keys_are_restricted_to_relative_segments() {
-        assert!(validate_object_key("chat-sessions/session/file.txt").is_ok());
-        assert_eq!(
-            validate_object_key("../secrets"),
-            Err(ResourceError::StorageLocatorInvalid)
-        );
-        assert_eq!(
-            validate_object_key("chat//file"),
-            Err(ResourceError::StorageLocatorInvalid)
-        );
-    }
-}

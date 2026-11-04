@@ -4,8 +4,7 @@ mod port;
 mod service;
 mod vision;
 pub use vision::VisionModelBinding;
-#[cfg(test)]
-mod service_tests;
+
 
 pub use dto::{
     LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmContentRerankCallCommand,

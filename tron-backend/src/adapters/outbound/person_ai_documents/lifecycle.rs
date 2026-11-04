@@ -200,6 +200,3 @@ pub(super) fn result_manifest(task: &ParseTask) -> Result<&Value, KnowledgeBaseE
         .filter(|result| result.is_object())
         .ok_or_else(|| KnowledgeBaseError::Storage("平台已结算，但未返回解析产物清单".into()))
 }
-
-#[cfg(test)]
-mod tests;

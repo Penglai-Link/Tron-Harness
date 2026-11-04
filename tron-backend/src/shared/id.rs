@@ -7,7 +7,6 @@ mod config;
 mod persistence_policy;
 mod serialization;
 mod snowflake;
-mod testing;
 
 pub use config::{MAX_INSTANCE_ID, SnowflakeConfig, SnowflakeConfigError};
 pub use persistence_policy::{
@@ -15,7 +14,6 @@ pub use persistence_policy::{
 };
 pub use serialization::{SnowflakeIdSerializationError, SnowflakeIdSerializationPolicy};
 pub use snowflake::SnowflakedSnowflakeIdProvider;
-pub use testing::FixedSnowflakeIdProvider;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SnowflakeId(i64);

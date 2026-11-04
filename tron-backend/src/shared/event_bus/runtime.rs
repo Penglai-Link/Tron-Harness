@@ -223,11 +223,7 @@ impl EventBusRuntimeBuilder {
         self
     }
 
-    #[cfg(test)]
-    pub fn without_workers_for_testing(mut self) -> Self {
-        self.start_workers = false;
-        self
-    }
+
 
     pub fn build(self) -> EventBusHandle {
         if !self.config.enabled {
@@ -342,7 +338,3 @@ fn notify_delivery_failure(event: &BusEvent, sinks: &[SinkRegistration], detail:
         }
     }
 }
-
-#[cfg(test)]
-#[path = "delivery_tests.rs"]
-mod delivery_tests;

@@ -79,7 +79,7 @@ let api = "";
 let backendLogs = "";
 const requests: RecordedRequest[] = [];
 
-/** Mirrors `tron-backend/tests/common` auth: the acceptance profile and its bearer token. */
+/** Mirrors the backend browser acceptance auth: the acceptance profile and its bearer token. */
 async function routeAcceptanceProfile(page: Page) {
   const profile = {
     profileId: "PROFILE-ACCEPTANCE",

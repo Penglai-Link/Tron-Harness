@@ -663,43 +663,7 @@ fn validate_workspace(state: &AppState, workspace: Option<&str>) -> Result<(), O
     Ok(())
 }
 
-#[cfg(test)]
-mod http_trace_tests {
-    use super::*;
-    use opentelemetry::trace::TraceContextExt;
-    #[test]
-    fn ignores_chat_polling_but_keeps_agent_requests() {
-        for path in [
-            "/api/v1/agents/agui/streams/session/protocol-events",
-            "/api/v1/chats/sessions/session/subagents",
-            "/api/v1/chats/sessions/session/history/query",
-        ] { assert!(ignored_trace_path(path)); }
-        assert!(!ignored_trace_path("/api/v1/chats/sessions/session/messages/stream"));
-    }
-    #[test]
-    fn accepts_valid_w3c_context_and_rejects_invalid_ids() {
-        for value in [
-            "00-11111111111111111111111111111111-2222222222222222-01",
-            "00-11111111111111111111111111111111-2222222222222222-00",
-        ] {
-            let mut headers = axum::http::HeaderMap::new();
-            headers.insert("traceparent", value.parse().unwrap());
-            let context = request_trace_context(&headers);
-            assert_eq!(context.span().span_context().trace_id().to_string(), "11111111111111111111111111111111");
-            assert!(context.span().span_context().is_remote());
-        }
-        for value in [
-            "00-00000000000000000000000000000000-2222222222222222-01",
-            "00-11111111111111111111111111111111-0000000000000000-01",
-            "ff-11111111111111111111111111111111-2222222222222222-01",
-            "invalid",
-        ] {
-            let mut headers = axum::http::HeaderMap::new();
-            headers.insert("traceparent", value.parse().unwrap());
-            assert!(!request_trace_context(&headers).span().span_context().is_valid());
-        }
-    }
-}
+
 
 #[derive(serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]

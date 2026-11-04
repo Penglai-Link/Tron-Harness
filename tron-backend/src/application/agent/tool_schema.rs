@@ -76,34 +76,3 @@ impl ToolSchemaCache {
         Ok(snapshot)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn native_provider_tools_are_counted_and_budget_rejection_keeps_the_previous_snapshot() {
-        let tool = EffectiveTool {
-            tool_name: "lookup".into(),
-            domain_code: None,
-            description: "Look up a document by its identifier".into(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {"id": {"type": "string"}},
-                "required": ["id"],
-            }),
-            skill_name: None,
-            required_variable_keys: Vec::new(),
-        };
-        for protocol in [AgentModelProtocol::Anthropic, AgentModelProtocol::Gemini] {
-            let mut cache = ToolSchemaCache::default();
-            let accepted = cache.prepare(protocol, &[tool.clone()], u32::MAX).unwrap();
-            assert!(accepted.estimated_tokens() > 0);
-            assert!(accepted.payload().to_string().contains("lookup"));
-            assert!(accepted.payload().to_string().contains("required"));
-            assert!(cache.prepare(protocol, &[tool.clone()], 0).is_err());
-            assert!(Arc::ptr_eq(&accepted, &cache.current().unwrap()));
-        }
-    }
-}

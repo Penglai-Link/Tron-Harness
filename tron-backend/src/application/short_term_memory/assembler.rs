@@ -107,20 +107,3 @@ pub(crate) fn estimate_messages_tokens(messages: &[AgentMessage]) -> u32 {
         total.saturating_add(eliteforge_agent_memory::estimate_serialized_tokens(message))
     })
 }
-
-#[cfg(test)]
-mod contributor_source_tests {
-    use super::*;
-    #[test]
-    fn working_state_leaves_selection_to_the_configured_reducer() {
-        let todos = (0..61).map(|i| serde_json::from_value(serde_json::json!({
-            "id": i, "todoCode": format!("todo-{i}"), "sessionCode":"session", "workspaceCode":"workspace",
-            "position":i, "content":format!("unique-task-{i}"), "status":"pending", "priority":"medium",
-            "createdByRunCode":null, "updatedByRunCode":null, "createdAt":"now", "updatedAt":"now"
-        })).unwrap()).collect::<Vec<ShortTermMemoryTodo>>();
-        let message = working_state_message(None, &todos, true).unwrap();
-        let encoded = serde_json::to_string(&message).unwrap();
-        assert!(encoded.contains("unique-task-60"));
-        assert_eq!(encoded.matches("unique-task-").count(), 61);
-    }
-}

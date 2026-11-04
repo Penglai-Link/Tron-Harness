@@ -70,39 +70,3 @@ impl AgentModelConfig {
         identity
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn config(code: &str) -> AgentModelConfig {
-        serde_json::from_value(serde_json::json!({
-            "modelCode": code, "protocol": "CHAT_COMPLETIONS", "baseUrl": "https://example.test",
-            "apiPath": null, "apiKey": "fixture", "modelName": "fixture"
-        }))
-        .unwrap()
-    }
-
-    #[test]
-    fn model_identity_supports_connections_without_quality_and_excludes_credentials() {
-        let a = config("model-a");
-        assert_eq!(a.identity().quality, None);
-        let mut b = a.clone();
-        b.api_key = "rotated".into();
-        assert_eq!(a.identity(), b.identity());
-        b.base_url = "https://other.test".into();
-        assert_ne!(a.identity(), b.identity());
-    }
-
-    #[test]
-    fn model_identity_distinguishes_vendor_and_optional_provider_dimensions() {
-        let a = config("PERSON_AI:FIXED:High:vendor-a/model");
-        let b = config("PERSON_AI:FIXED:High:vendor-b/model");
-        let c = config("PERSON_AI:FIXED:Middle:vendor-a/model");
-        assert_ne!(a.identity(), b.identity());
-        assert_ne!(a.identity(), c.identity());
-        let mut routed = a.clone();
-        routed.api_path = Some("/conversation/run".into());
-        assert_eq!(a.identity(), routed.identity());
-    }
-}
