@@ -753,6 +753,10 @@ function registerIpcHandlers() {
       return handleFsCommand(command, request, browserWindow);
     }
 
+    if (command === "desktopProcessMetrics") {
+      return require("./process-metrics.cjs").collectProcessMetrics(app);
+    }
+
     if (command === "desktopBackendStatus") {
       return {
         backendUrl: state.backendUrl,

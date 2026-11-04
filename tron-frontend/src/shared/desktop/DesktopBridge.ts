@@ -7,6 +7,18 @@ const INJECTION_EVENT_COMMAND = "desktopInjectionEvent";
 
 export type DesktopTargetMode = "browser" | "iframe" | "view" | "window";
 
+export interface DesktopProcessMetrics {
+  sampledAt: number;
+  memoryBytes: number | null;
+  processes: Array<{
+    pid: number;
+    parentPid: number | null;
+    name: string;
+    memoryBytes: number | null;
+    startedAt: number;
+  }>;
+}
+
 export interface DesktopBackendStatus {
   backendUrl: string;
   backendPort: number;
@@ -316,6 +328,11 @@ export class DesktopBridge {
 
   public isElectron(): boolean {
     return this.electronHost;
+  }
+
+  public async getProcessMetrics(): Promise<DesktopProcessMetrics> {
+    if (!this.electronHost || !this.invoke) throw new Error("Electron metrics unavailable");
+    return this.invoke("desktopProcessMetrics", {}) as Promise<DesktopProcessMetrics>;
   }
 
   public async getBackendStatus(): Promise<DesktopBackendStatus> {

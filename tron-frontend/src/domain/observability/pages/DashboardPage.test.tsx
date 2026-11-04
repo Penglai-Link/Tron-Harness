@@ -81,7 +81,9 @@ vi.mock("../components/ResourceTrendCards", () => ({
   ResourceTrendCards: () => null,
   PluginCountCard: () => null,
 }));
-afterEach(cleanup);
+const electronState = vi.hoisted(() => ({ available: false, isError: false, data: undefined as import("@/shared/desktop/DesktopBridge").DesktopProcessMetrics | undefined }));
+vi.mock("../hooks/useElectronMetrics", () => ({ useElectronMetrics: () => electronState }));
+afterEach(() => { cleanup(); electronState.available = false; electronState.isError = false; electronState.data = undefined; });
 it("shows scoped request error rate, readable latency, resources and actual child process relationships", () => {
   render(
     <MemoryRouter>
@@ -92,7 +94,7 @@ it("shows scoped request error rate, readable latency, resources and actual chil
   expect(screen.getByText("累计错误率")).toBeTruthy();
   expect(screen.getByText("最近 15 分钟：33.3%")).toBeTruthy();
   expect(screen.getByText("1.25 s")).toBeTruthy();
-  expect(screen.getAllByText((_, element) => element?.textContent === "100 MiB" && !Array.from(element.children).some((child) => child.textContent === "100 MiB"))).toHaveLength(2);
+  expect(screen.getAllByText((_, element) => element?.textContent === "100 MiB" && !Array.from(element.children).some((child) => child.textContent === "100 MiB"))).toHaveLength(1);
   expect(screen.getByText("plugin-backend")).toBeTruthy();
   expect(screen.getByText("磁盘占用")).toBeTruthy();
   expect(screen.getByText((_, element) => element?.textContent === "1.5 GiB" && element.tagName === "DD")).toBeTruthy();
@@ -138,7 +140,7 @@ it("does not invent a zero-percent error rate when no requests were collected", 
     </MemoryRouter>
   );
   expect(screen.queryByText("0%")).toBeNull();
-  expect(screen.getByText("—")).toBeTruthy();
+  expect(screen.getByText("累计错误率").closest("dt")?.nextElementSibling?.textContent).toBe("—");
   state.data = previous;
 });
 it.each([[4, "0%"], [0, "—"]])("keeps the recent error rate independent from retained failures with %i recent traces", (requests, rate) => {
@@ -162,4 +164,35 @@ it("requires confirmation and resets globally only after explicit confirmation",
   fireEvent.click(screen.getByRole("button", { name: "我已知晓" }));
   await waitFor(() => expect(resetApi).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+it("sums all Electron processes with Rust and shows the same processes in topology", async () => {
+  electronState.available = true;
+  electronState.data = {
+    sampledAt: 60000, memoryBytes: 300 * 1048576,
+    processes: [
+      { pid: 101, parentPid: null, name: "Electron · Browser", memoryBytes: 100 * 1048576, startedAt: 1 },
+      { pid: 102, parentPid: null, name: "Electron · GPU", memoryBytes: 200 * 1048576, startedAt: 1 },
+    ],
+  };
+  render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+  const row = screen.getByLabelText("总内存");
+  expect(row.textContent).toContain("400 MiB");
+  expect(screen.getByText("Electron · GPU")).toBeTruthy();
+  expect(screen.getByText("4 个进程")).toBeTruthy();
+  fireEvent.mouseEnter(row); fireEvent.mouseMove(row);
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip.textContent).toContain("Electron（所有进程）: 300 MiB");
+  expect(tooltip.textContent).toContain("Rust 后端: 100 MiB");
+});
+it("does not present Rust alone as a total in browser mode or reuse failed Electron samples", () => {
+  const view = render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+  expect(screen.getByLabelText("总内存").textContent).toContain("—");
+  expect(screen.getByText(observability.electronBrowserUnavailable)).toBeTruthy();
+  view.unmount();
+  electronState.available = true; electronState.isError = true;
+  electronState.data = { sampledAt: 1, memoryBytes: 999, processes: [] };
+  render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+  expect(screen.getByLabelText("总内存").textContent).toContain("—");
+  expect(screen.getByText(observability.electronMetricsFailed)).toBeTruthy();
 });

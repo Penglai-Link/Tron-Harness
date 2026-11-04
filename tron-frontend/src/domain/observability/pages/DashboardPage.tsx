@@ -1,3 +1,4 @@
+import { useElectronMetrics } from "../hooks/useElectronMetrics";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -32,6 +33,13 @@ export function DashboardPage() {
   const href = usePlatformDataHref();
   const query = useObservabilityDashboard(workspace);
   const data = query.data;
+  const electron = useElectronMetrics();
+  const electronData = electron.isError ? undefined : electron.data;
+  const rustMemory = data?.processes.find(p => p.parentPid == null && p.name === "tron-backend")?.memoryBytes ?? data?.memoryBytes;
+  const electronMemory = electronData?.memoryBytes;
+  const totalMemory = rustMemory != null && electronMemory != null ? rustMemory + electronMemory : null;
+  const memory = (bytes: number | null | undefined) => bytes == null ? "—" : `${formatNumber(bytes / 1048576, { maximumFractionDigits: 1 })} MiB`;
+
   const [resetOpen, setResetOpen] = useState(false);
   const client = useQueryClient();
   const toast = useToast();
@@ -240,16 +248,23 @@ export function DashboardPage() {
                     : "—"}
                 </dd>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-                <dt className="text-sm text-[var(--color-on-surface-variant)]">
-                  {t("processMemory")}
-                </dt>
-                <dd className="text-3xl font-semibold leading-none tracking-tight tabular-nums">
-                  {data?.memoryBytes != null
-                    ? <>{formatNumber(data.memoryBytes / 1048576, { maximumFractionDigits: 1 })}{" "}<span className="text-sm font-normal text-[var(--color-on-surface-variant)]">MiB</span></>
-                    : "—"}
-                </dd>
-              </div>
+              <Tooltip>
+                <TooltipTrigger render={<div />} className="flex flex-wrap items-center justify-between gap-3 py-4" aria-label={t("totalMemory")}>
+                  <dt className="text-sm text-[var(--color-on-surface-variant)]">{t("totalMemory")}</dt>
+                  <dd className="text-3xl font-semibold leading-none tracking-tight tabular-nums">{memory(totalMemory)}</dd>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="max-w-sm space-y-2 text-left">
+                    <p>{t("electronMemory")}: {memory(electronMemory)}</p>
+                    <p>{t("rustMemory")}: {memory(rustMemory)}</p>
+                    <p>{t("totalMemoryHelp")}</p>
+                    {!electron.available && <p>{t("electronBrowserUnavailable")}</p>}
+                    {electron.available && electron.isError && <p>{t("electronMetricsFailed")}</p>}
+                    {electronData && <p>{t("electronSampledAt")} {formatDateTime(electronData.sampledAt, { timeStyle: "medium" })}</p>}
+                    {data && <p>{t("rustSampledAt")} {formatDateTime(data.sampledAt, { timeStyle: "medium" })}</p>}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
               <div className="flex flex-wrap items-center justify-between gap-3 py-4">
                 <dt className="flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)]">
                   {t("diskUsage")}
@@ -278,9 +293,10 @@ export function DashboardPage() {
                 <InfoTooltip variant="icon" ariaLabel={t("serviceTopology")}>{t("serviceTopologyHint")}</InfoTooltip>
               </div>
             <span className="text-xs text-[var(--color-on-surface-variant)]">
-              {t("processCount", { count: data?.processes.length ?? 0 })}
+              {t("processCount", { count: (data?.processes.length ?? 0) + (electronData?.processes.length ?? 0) })}
             </span>
           </div>
+          <h3 className="mb-3 text-sm font-medium">{t("rustMemory")}</h3>
           {data?.processes.length ? (
             <ServiceTopology
               processes={data.processes}
@@ -289,6 +305,9 @@ export function DashboardPage() {
           ) : (
             data ? <p className="text-sm">{t("noProcesses")}</p> : null
           )}
+          <h3 className="mb-3 mt-5 text-sm font-medium">{t("electronMemory")}</h3>
+          {electronData?.processes.length ? <ServiceTopology processes={electronData.processes} sampledAt={electronData.sampledAt} />
+            : <p className="text-sm text-[var(--color-on-surface-variant)]">{t(!electron.available ? "electronBrowserUnavailable" : electron.isError ? "electronMetricsFailed" : electronData ? "noProcesses" : "loading")}</p>}
         </SurfaceCard>
         </div>
       </div>

@@ -7,12 +7,12 @@ export function ServiceTopology({
   processes,
   sampledAt,
 }: {
-  processes: ServiceProcess[];
+  processes: Array<Omit<ServiceProcess, "memoryBytes"> & { memoryBytes: number | null }>;
   sampledAt: number;
 }) {
   const { t } = useTranslation("observability");
   const { formatNumber } = useLocaleFormatters();
-  const render = (process: ServiceProcess, ancestors: Set<number>) => {
+  const render = (process: (typeof processes)[number], ancestors: Set<number>) => {
     if (ancestors.has(process.pid)) return null;
     const visited = new Set(ancestors).add(process.pid);
     const children = processes.filter((p) => p.parentPid === process.pid);
@@ -46,10 +46,9 @@ export function ServiceTopology({
               ),
             })}
           >
-            {formatNumber(process.memoryBytes / 1048576, {
+            {process.memoryBytes == null ? "—" : formatNumber(process.memoryBytes / 1048576, {
               maximumFractionDigits: 1,
-            })}{" "}
-            MiB
+            })}{process.memoryBytes == null ? "" : " MiB"}
           </span>
         </div>
         {children.length > 0 && (
