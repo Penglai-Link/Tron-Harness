@@ -92,7 +92,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
         ChatError::UserInputAnswerInvalid(message) => (
             StatusCode::BAD_REQUEST,
             "CHAT_USER_INPUT_ANSWER_INVALID",
-            message,
+            user_input_error_message(&message),
         ),
         ChatError::UserInputPending => (
             StatusCode::CONFLICT,
@@ -112,6 +112,18 @@ pub fn chat_error_response(error: ChatError) -> Response {
         ),
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
+}
+
+pub(super) fn user_input_error_message(detail: &str) -> String {
+    use crate::shared::locale::SupportedLocale;
+    tracing::warn!(detail, "chat interaction response rejected");
+    let en = crate::shared::auth_holder::AuthHolder::get()
+        .is_some_and(|auth| SupportedLocale::from_raw(&auth.locale) == SupportedLocale::EnUs);
+    if en {
+        "The approval or answer could not be submitted. The request may have changed or expired; refresh the conversation and try again.".into()
+    } else {
+        "审批或回答提交失败，请求可能已变化或过期。请刷新会话后重试。".into()
+    }
 }
 
 pub(super) fn composer_error_message(error: &ChatError) -> String {

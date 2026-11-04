@@ -193,7 +193,9 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
         ChatSendError::Chat(ChatError::UserInputAlreadyAnswered) => {
             "chat user input request is already answered".into()
         }
-        ChatSendError::Chat(ChatError::UserInputAnswerInvalid(message)) => message,
+        ChatSendError::Chat(ChatError::UserInputAnswerInvalid(message)) => {
+            super::super::error_mapper::user_input_error_message(&message)
+        }
         ChatSendError::Chat(ChatError::UserInputPending) => {
             "chat session is waiting for a user answer".into()
         }

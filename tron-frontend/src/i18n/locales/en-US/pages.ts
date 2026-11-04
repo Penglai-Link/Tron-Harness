@@ -1800,7 +1800,7 @@ export const pages = {
       approvalBatch: "Tool approvals",
       approvalBatchHint: "Approve or reject each call. Execution resumes after all decisions are submitted.",
       approvalWaiting: "Waiting for batch",
-      approvalRetry: "Submit decisions",
+      approvalRetry: "Retry submission",
       approvalChange: "Change decision",
       approved: "Approved",
       rejected: "Rejected",

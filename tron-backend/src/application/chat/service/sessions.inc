@@ -459,7 +459,7 @@ impl ChatService {
     pub fn native_resume_command(
         &self,
         session_code: &str,
-        entry: crate::application::chat::ChatResumeEntry,
+        entries: Vec<crate::application::chat::ChatResumeEntry>,
         model_code: Option<String>,
         reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
     ) -> Result<SendChatMessageCommand, ChatError> {
@@ -486,7 +486,7 @@ impl ChatService {
                 user_input_requests: true,
             a2ui: None,
             }),
-            resume: vec![entry],
+            resume: entries,
         })
     }
 

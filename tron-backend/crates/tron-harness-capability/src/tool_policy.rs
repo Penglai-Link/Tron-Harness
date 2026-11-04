@@ -22,10 +22,16 @@ pub struct ToolPermissionSetting {
 }
 impl ToolPermissionSetting {
     pub fn default_for(tool_code: impl Into<String>) -> Self {
+        let tool_code = tool_code.into();
+        let (permission, confirm_level) = if tool_code == "bash.exec" {
+            (ToolPermission::Ask, ToolRisk::High)
+        } else {
+            (ToolPermission::Run, ToolRisk::Low)
+        };
         Self {
-            tool_code: tool_code.into(),
-            permission: ToolPermission::Run,
-            confirm_level: ToolRisk::Low,
+            tool_code,
+            permission,
+            confirm_level,
         }
     }
 }

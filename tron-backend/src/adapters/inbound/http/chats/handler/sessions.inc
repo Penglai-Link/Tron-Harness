@@ -381,35 +381,32 @@ pub async fn answer_user_input(
     if eliteforge_agent_core::RunId::parse_str(&request_code).is_err() {
         return chat_error_response(ChatError::UserInputRequestNotFound);
     }
-    if request.resume.len() > 1
-        || request
-            .resume
-            .first()
-            .is_some_and(|entry| entry.interrupt_id != request_code)
+    if !request.resume.is_empty()
+        && !request.resume.iter().any(|entry| entry.interrupt_id == request_code)
     {
         return chat_error_response(ChatError::UserInputAnswerInvalid(
             "response identity does not match the interaction".into(),
         ));
     }
-    let payload = match request.resume.first() {
-        Some(entry) => entry.payload.clone(),
-        None => match answers {
-            Some(answers) => json!({"answers":answers}),
+    let entries = if request.resume.is_empty() {
+        match answers {
+            Some(answers) => vec![crate::application::chat::ChatResumeEntry {
+                interrupt_id: request_code,
+                status: "resolved".into(),
+                payload: json!({"answers":answers}),
+            }],
             None => {
                 return chat_error_response(ChatError::UserInputAnswerInvalid(
                     "interaction response is required".into(),
                 ));
             }
-        },
-    };
-    let entry = crate::application::chat::ChatResumeEntry {
-        interrupt_id: request_code,
-        status: "resolved".into(),
-        payload,
+        }
+    } else {
+        request.resume
     };
     if let Err(error) = state
         .agent_framework
-        .validate_native_resume(&session_code, std::slice::from_ref(&entry))
+        .validate_native_resume(&session_code, &entries)
         .await
     {
         return chat_error_response(ChatError::UserInputAnswerInvalid(error.to_string()));
@@ -423,7 +420,7 @@ pub async fn answer_user_input(
     };
     let mut command = match state.chats.native_resume_command(
         &session_code,
-        entry,
+        entries,
         history.as_ref().map(|record| record.model_code.clone()),
         history.and_then(|record| record.reasoning_effort),
     ) {

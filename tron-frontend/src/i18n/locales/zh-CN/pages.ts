@@ -1731,7 +1731,7 @@ export const pages = {
       approvalBatch: "批量执行审批",
       approvalBatchHint: "逐项批准或拒绝，全部确认后统一继续执行。",
       approvalWaiting: "等待同批确认",
-      approvalRetry: "提交本批决定",
+      approvalRetry: "重试提交",
       approvalChange: "修改决定",
       approved: "已批准",
       rejected: "已拒绝",
