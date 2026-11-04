@@ -1,6 +1,10 @@
 //! Composition bridge for synchronous business services and Framework storage.
 //! Entire consistency operations run in one future so transaction binding is retained.
-use std::{future::Future, sync::OnceLock};
+use std::collections::BTreeMap;
+use std::future::Future;
+use std::sync::{Arc, Mutex, OnceLock, Weak};
+
+use eliteforge_agent_official_plugin_storage_local::SqliteDatabase;
 
 pub(crate) fn blocking<T: Send>(future: impl Future<Output = T> + Send) -> T {
     static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
@@ -50,26 +54,20 @@ pub(crate) fn chat_error(
 }
 
 #[derive(Clone)]
-pub(crate) struct SharedDatabase(
-    std::sync::Arc<eliteforge_agent_official_plugin_storage_local::SqliteDatabase>,
-);
+pub(crate) struct SharedDatabase(Arc<SqliteDatabase>);
+
+/// 进程内已打开数据库的弱引用登记表：供周期性空闲页回收遍历
+type DatabaseRegistry = Mutex<BTreeMap<String, Weak<SqliteDatabase>>>;
+
+fn database_registry() -> &'static DatabaseRegistry {
+    static DATABASES: OnceLock<DatabaseRegistry> = OnceLock::new();
+    DATABASES.get_or_init(Default::default)
+}
+
 impl SharedDatabase {
     pub fn open(path: &str) -> rusqlite::Result<Self> {
-        use std::collections::BTreeMap;
-        use std::sync::{Arc, Mutex, Weak};
-        static DATABASES: OnceLock<
-            Mutex<
-                BTreeMap<
-                    String,
-                    Weak<eliteforge_agent_official_plugin_storage_local::SqliteDatabase>,
-                >,
-            >,
-        > = OnceLock::new();
         if path == ":memory:" {
-            let database = blocking(
-                eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(path),
-            )
-            .map(|db| Self(Arc::new(db)))?;
+            let database = blocking(SqliteDatabase::open(path)).map(|db| Self(Arc::new(db)))?;
             database.call(
                 |c| super::schema::initialize_business(c),
                 || rusqlite::Error::InvalidQuery,
@@ -95,22 +93,38 @@ impl SharedDatabase {
             .map_err(|_| rusqlite::Error::InvalidPath(absolute))?;
             resolved.to_string_lossy().into_owned()
         };
-        let mut databases = DATABASES
-            .get_or_init(Default::default)
+        let mut databases = database_registry()
             .lock()
             .map_err(|_| rusqlite::Error::InvalidQuery)?;
         if let Some(database) = databases.get(&key).and_then(Weak::upgrade) {
             return Ok(Self(database));
         }
-        let database = Arc::new(blocking(
-            eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(&key),
-        )?);
-        Self(database.clone()).call(
+        let database = Arc::new(blocking(SqliteDatabase::open(&key))?);
+        let shared = Self(database.clone());
+        shared.call(
             |c| super::schema::initialize_business(c),
             || rusqlite::Error::InvalidQuery,
         )?;
+        // SQLite 空间治理：新库在建表前已由 configure_space 打开增量回收；
+        // 存量库在此一次性转换（设置 + VACUUM 必须在同一个写连接上完成）。
+        // 失败（磁盘余量不足 / 被占用）只告警，不阻断打开，下次启动重试。
+        let space_path = key.clone();
+        if let Err(error) = shared.call(
+            move |c| configure_space(c, &space_path),
+            || rusqlite::Error::InvalidQuery,
+        ) {
+            tracing::warn!(%error, "SQLite 空间回收转换失败（下次启动重试）");
+        }
         databases.insert(key, Arc::downgrade(&database));
-        Ok(Self(database))
+        Ok(shared)
+    }
+
+    /// 增量回收空闲页（仅 auto_vacuum=INCREMENTAL 生效），返回实际回收页数
+    pub fn reclaim_free_pages(&self, max_pages: u64) -> rusqlite::Result<u64> {
+        self.call(
+            move |c| reclaim_free_pages_on(c, max_pages),
+            || rusqlite::Error::InvalidQuery,
+        )
     }
     pub fn runtime(&self) -> eliteforge_agent_official_plugin_storage_local::SqliteDatabase {
         self.0.as_ref().clone()
@@ -179,6 +193,82 @@ impl SharedDatabase {
                 std::time::SystemTime::now(), attributes, failed);
         }
         result
+    }
+}
+
+/// 空间治理：开增量回收 + 存量库一次性转换（PRAGMA 与 VACUUM 必须同一连接）
+fn configure_space(connection: &mut rusqlite::Connection, path: &str) -> rusqlite::Result<()> {
+    connection.execute_batch("PRAGMA auto_vacuum = INCREMENTAL")?;
+    let mode: i64 = connection.query_row("PRAGMA auto_vacuum", [], |row| row.get(0))?;
+    // 已是 INCREMENTAL（新库建表前即生效）或处于事务中时无事可做
+    if mode == 2 || !connection.is_autocommit() {
+        return Ok(());
+    }
+    // 存量库转换要整库重写：磁盘至少留 2 倍库文件 + 8 MiB，否则跳过等下次启动
+    let file = std::path::Path::new(path);
+    let file_bytes = std::fs::metadata(file).map(|meta| meta.len()).unwrap_or(0);
+    if file_bytes > 0 {
+        if let Some(dir) = file.parent() {
+            if let Ok(available) = fs2::available_space(dir) {
+                let needed = file_bytes
+                    .saturating_mul(2)
+                    .saturating_add(8 * 1024 * 1024);
+                if available < needed {
+                    tracing::warn!(
+                        available_mb = available / 1024 / 1024,
+                        needed_mb = needed / 1024 / 1024,
+                        "磁盘余量不足，暂不转换 SQLite auto_vacuum（下次启动重试）"
+                    );
+                    return Ok(());
+                }
+            }
+        }
+    }
+    connection.execute_batch("VACUUM")?;
+    let after: i64 = connection.query_row("PRAGMA auto_vacuum", [], |row| row.get(0))?;
+    if after == 2 {
+        tracing::info!("SQLite auto_vacuum=INCREMENTAL 转换完成");
+    }
+    Ok(())
+}
+
+/// 增量回收空闲页；注意 incremental_vacuum 每回收一页返回一行，必须 step 到底
+fn reclaim_free_pages_on(
+    connection: &mut rusqlite::Connection,
+    max_pages: u64,
+) -> rusqlite::Result<u64> {
+    let mode: i64 = connection.query_row("PRAGMA auto_vacuum", [], |row| row.get(0))?;
+    if mode != 2 || max_pages == 0 {
+        return Ok(0);
+    }
+    let freelist: i64 = connection.query_row("PRAGMA freelist_count", [], |row| row.get(0))?;
+    if freelist <= 0 {
+        return Ok(0);
+    }
+    let limit = (max_pages as i64).min(freelist);
+    let mut stmt = connection.prepare(&format!("PRAGMA incremental_vacuum({limit})"))?;
+    let mut rows = stmt.query([])?;
+    while rows.next()?.is_some() {}
+    drop(rows);
+    drop(stmt);
+    let after: i64 = connection.query_row("PRAGMA freelist_count", [], |row| row.get(0))?;
+    Ok((freelist - after).max(0) as u64)
+}
+
+/// 遍历进程内仍存活的数据库，各回收一轮空闲页（供后台巡检调用）
+pub(crate) fn reclaim_all_databases(max_pages: u64) {
+    let databases: Vec<Arc<SqliteDatabase>> = {
+        let mut registry = match database_registry().lock() {
+            Ok(registry) => registry,
+            Err(_) => return,
+        };
+        registry.retain(|_, weak| weak.strong_count() > 0);
+        registry.values().filter_map(Weak::upgrade).collect()
+    };
+    for database in databases {
+        if let Err(error) = SharedDatabase(database).reclaim_free_pages(max_pages) {
+            tracing::warn!(%error, "SQLite 空闲页回收失败");
+        }
     }
 }
 

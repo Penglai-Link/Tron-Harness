@@ -12,3 +12,10 @@
 - 后端 JSON 响应统一使用 `ApiResponse<T>` [ `tron-backend/src/response.rs` (`code`, `message`, `data`)]。每个http接口使用独立的DTO定义，不要混用
 - GIT管理遵循 `$eliteforge-git-feature-oriented-lite-spec`
 - 不要在项目内新增技术设计文档、脑爆文档、产品设计文档
+
+
+## SQLite 空间回收（改动持久化前必读）
+
+- 业务库统一经 `framework_storage::SharedDatabase::open` 打开：设置 `auto_vacuum=INCREMENTAL`，存量库在同一个写连接上 `VACUUM` 完成一次性转换（磁盘余量不足则跳过，下次启动重试）。
+- `app.rs` 启动后每 10 分钟调用 `reclaim_all_databases(1024)`，遍历进程内仍存活的数据库各回收一轮。
+- 若新增 SQLite 文件绕过 `SharedDatabase`（直接 `rusqlite::Connection::open`），需自行补同样的 PRAGMA 与回收，否则文件只增不减。
