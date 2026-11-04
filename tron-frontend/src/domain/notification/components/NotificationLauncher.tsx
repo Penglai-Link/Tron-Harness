@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
-import { Bell, ExternalLink } from "lucide-react";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { listNotifications, notificationQueryKey } from "../api/notificationApi";
+import { listNotifications, notificationQueryKey, updateNotification } from "../api/notificationApi";
 import { areBrowserNotificationsEnabled, browserNotificationPreferenceChangedEvent } from "../model/browserNotifications";
 
 export function NotificationLauncher() {
   const { t, i18n } = useTranslation("pages");
   const navigate = useNavigate();
+  const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const query = useQuery({ queryKey: notificationQueryKey, queryFn: ({ signal }) => listNotifications(signal), refetchInterval: 15000 });
   const notifications = query.data ?? [];
@@ -18,6 +19,16 @@ export function NotificationLauncher() {
   const unread = unreadItems.length;
   const recentUnread = unreadItems.slice().sort((left, right) => right.createdAt - left.createdAt).slice(0, 5);
   const previousNotificationIds = useRef<Set<string> | null>(null);
+  const markAllRead = useMutation({
+    mutationFn: async () => {
+      const results = await Promise.allSettled(unreadItems.map(item =>
+        updateNotification(item.id, { read: true, archived: false })
+      ));
+      const failure = results.find(result => result.status === "rejected");
+      if (failure?.status === "rejected") throw failure.reason;
+    },
+    onSettled: () => client.invalidateQueries({ queryKey: notificationQueryKey }),
+  });
 
   useEffect(() => {
     const currentNotifications = query.data;
@@ -60,9 +71,18 @@ export function NotificationLauncher() {
         {unread > 0 ? <span className="absolute right-0 top-0 flex min-w-4 translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] leading-4 text-[var(--color-on-primary)]" aria-hidden="true">{unread}</span> : null}
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="w-[min(24rem,calc(100vw-1rem))] p-0">
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-3 py-2">
-          <p className="text-sm font-medium">{t("notifications.title")}</p>
-        </div>
+        <header className="flex flex-wrap items-center gap-2 border-b border-[var(--color-outline-variant)] px-3 py-2">
+          <p className="mr-auto text-sm font-medium">{t("notifications.title")}</p>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button size="sm" variant="outline" disabled={unread === 0 || markAllRead.isPending} aria-busy={markAllRead.isPending} onClick={() => markAllRead.mutate()}>
+              {t(markAllRead.isPending ? "notifications.markAllReadPending" : "notifications.markAllRead")}
+            </Button>
+            <Button size="sm" variant="outline" nativeButton={false} role="link" render={<Link to="/notifications" onClick={() => setOpen(false)} />}>
+              {t("notifications.manage")}
+            </Button>
+          </div>
+        </header>
+        {markAllRead.error ? <p role="alert" className="px-3 py-2 text-sm text-[var(--color-error)]">{markAllRead.error.message}</p> : null}
         {query.isPending ? <p className="px-3 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">{t("notifications.loading")}</p> : null}
         {query.error ? <p role="alert" className="px-3 py-4 text-sm text-[var(--color-error)]">{query.error.message}</p> : null}
         {!query.isPending && !query.error && recentUnread.length === 0 ? <p className="px-3 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">{t("notifications.noUnread")}</p> : null}
@@ -83,12 +103,6 @@ export function NotificationLauncher() {
             ))}
           </ul>
         ) : null}
-        <div className="flex justify-end border-t border-[var(--color-outline-variant)] p-2">
-          <Button size="sm" variant="ghost" nativeButton={false} render={<Link to="/notifications" onClick={() => setOpen(false)} />}>
-            <ExternalLink aria-hidden="true" />
-            {t("notifications.manage")}
-          </Button>
-        </div>
       </PopoverContent>
     </Popover>
   );
