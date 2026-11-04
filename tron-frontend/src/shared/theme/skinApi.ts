@@ -1,5 +1,6 @@
 import { buildApiUrl, requestApi, requestApiBlob } from "@/shared/api/httpClient";
 import type { Skin } from "./Skin";
+import { subscribeSharedEvent } from "@/shared/api/sharedEventStream";
 
 export interface MarketSkin {
   id: string;
@@ -23,8 +24,6 @@ export const skinApi = {
     return result.blob;
   },
   watch: (onChange: () => void) => {
-    const source = new EventSource(buildApiUrl(`${base}/events`), { withCredentials: true });
-    source.addEventListener("skin-changed", onChange);
-    return () => source.close();
+    return subscribeSharedEvent(buildApiUrl(`${base}/events`), "skin-changed", onChange);
   },
 };

@@ -15,6 +15,7 @@ import { TabPanelRegistryProvider } from "@/shared/layout/content/TabPanelRegist
 import { FilePanelHostProvider } from "@/shared/layout/content/FilePanelHostProvider";
 import { ProfileSelectionPage } from "@/domain/profile/pages/ProfileSelectionPage";
 import { buildApiUrl } from "@/shared/api/httpClient";
+import { subscribeSharedEvent } from "@/shared/api/sharedEventStream";
 import { useAuthStore } from "@/store/authStore";
 
 function ServerAuthDeviceUnboundHandler() {
@@ -22,18 +23,13 @@ function ServerAuthDeviceUnboundHandler() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const events = new EventSource(buildApiUrl("/api/v1/profiles/events"));
     const onDeviceUnbound = () => {
       useAuthStore.getState().markUnauthenticated();
       queryClient.clear();
       window.dispatchEvent(new Event("server-auth-device-unbound"));
       navigate("/profiles?mode=reauth", { replace: true });
     };
-    events.addEventListener("server-auth-device-unbound", onDeviceUnbound);
-    return () => {
-      events.removeEventListener("server-auth-device-unbound", onDeviceUnbound);
-      events.close();
-    };
+    return subscribeSharedEvent(buildApiUrl("/api/v1/profiles/events"), "server-auth-device-unbound", onDeviceUnbound);
   }, [navigate, queryClient]);
 
   return null;
