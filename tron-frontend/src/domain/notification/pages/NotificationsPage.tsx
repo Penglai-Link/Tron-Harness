@@ -146,11 +146,11 @@ export function NotificationsPage() {
                 {t("notifications.deleteAll")}
               </Button>
             ) : <>
-              {filter !== "read" ? <Button size="sm" variant="ghost" aria-busy={busy === "read"} disabled={busy !== null || deletePending || counts.unread === 0} onClick={() => void changeAll("read")}>
+              {filter !== "read" ? <Button size="sm" variant="outline" aria-busy={busy === "read"} disabled={busy !== null || deletePending || counts.unread === 0} onClick={() => void changeAll("read")}>
                 {busy === "read" ? <LoaderCircle className="animate-spin" size={14} aria-hidden="true" /> : null}
                 {t(busy === "read" ? "notifications.markAllReadPending" : "notifications.markAllRead")}
               </Button> : null}
-              <Button size="sm" variant="ghost" aria-busy={busy === "archive"} disabled={busy !== null || deletePending || counts.all === 0} onClick={() => void changeAll("archive")}>
+              <Button size="sm" variant="outline" aria-busy={busy === "archive"} disabled={busy !== null || deletePending || counts.all === 0} onClick={() => void changeAll("archive")}>
                 {busy === "archive" ? <LoaderCircle className="animate-spin" size={14} aria-hidden="true" /> : null}
                 {t(busy === "archive" ? "notifications.archiveAllPending" : "notifications.archiveAll")}
               </Button>
