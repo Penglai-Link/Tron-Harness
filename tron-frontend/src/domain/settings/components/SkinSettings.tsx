@@ -57,8 +57,7 @@ export function SkinSettings() {
             if (file) void install(file);
           }} />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-sm text-muted-foreground">{shellT("theme.mode")}</span>
+      <div className="flex justify-start">
         <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label={shellT("theme.mode")}>
           {([{ value: "light", icon: Sun }, { value: "dark", icon: Moon }, { value: "system", icon: Monitor }] as const).map(({ value, icon: Icon }) => (
             <Button key={value} size="sm" variant="ghost" aria-pressed={colorMode === value}

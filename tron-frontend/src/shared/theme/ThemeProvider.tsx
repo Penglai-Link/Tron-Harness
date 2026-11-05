@@ -156,6 +156,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const hasExplicitBackgroundEffectSettings = useRef(hasStoredBackgroundEffectSettings(localStorage));
   const applied = useRef<PreparedSkin | null>(null);
   const activeSignature = useRef<string | null>(null);
+  const applicationFailed = useRef(false);
   const generation = useRef(0);
   const mutation = useRef(false);
   const previewPrepared = useRef<PreparedSkin | null>(null);
@@ -175,10 +176,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const stopPreviewSkin = useCallback(() => {
     previewGeneration.current++;
+    const hadPreview = previewPrepared.current !== null;
     previewPrepared.current?.dispose();
     previewPrepared.current = null;
     setPreviewSkinId(null);
-    applied.current?.apply();
+    if (hadPreview) applied.current?.apply();
   }, []);
 
   const setColorMode = useCallback((mode: ColorMode) => {
@@ -211,6 +213,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const resolved = resolveSkin(activeSkin, resolvedMode);
     const signature = JSON.stringify(resolved);
     if (signature === activeSignature.current && applied.current) return;
+    applicationFailed.current = false;
     void (async () => {
       try {
         prepared = await prepareSkin(resolved);
@@ -229,7 +232,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         if (applied.current) await revealTheme(apply);
         else apply();
       } catch (reason) {
-        if (current) setError(reason instanceof Error ? reason.message : String(reason));
+        if (current) {
+          applicationFailed.current = true;
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
       } finally { prepared?.dispose(); }
     })();
     return () => { current = false; };
@@ -245,7 +251,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         throw new Error("Theme package must include light and dark palettes");
       }
       setSkins(list.filter((skin) => skin.variants?.light && skin.variants?.dark));
-      setActiveSkin(active);
+      // Activation, SSE and focus refreshes can return the same theme while
+      // its reveal is waiting for a frame. Preserve identity so that refresh
+      // does not cancel/restart the in-flight transition. Failed loads may retry.
+      setActiveSkin((current) => !applicationFailed.current && JSON.stringify(current) === JSON.stringify(active)
+        ? current : active);
       setError(null);
     } catch (reason) {
       if (request === generation.current) setError(reason instanceof Error ? reason.message : String(reason));
