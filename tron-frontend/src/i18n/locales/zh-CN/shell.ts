@@ -64,7 +64,7 @@ export const shell = {
       saving: "保存中",
       setPrimary: "设为主要",
     },
-    recent: "最近",
+    recent: "随聊",
     session: {
       archiveFailed: "归档会话失败",
       archived: "会话已归档",

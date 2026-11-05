@@ -64,7 +64,7 @@ export const shell = {
       saving: "Saving",
       setPrimary: "Set as primary",
     },
-    recent: "Recent",
+    recent: "Quick Chats",
     session: {
       archiveFailed: "Failed to archive chat",
       archived: "Chat archived",

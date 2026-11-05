@@ -252,7 +252,7 @@ export function NavigationDomainMenuTreePage() {
     <p className="font-medium">{text("arrangement.menuUsageExternal", "外部链接", "External link")}</p>
     <p>{text("arrangement.menuUsageExternalHelp", "打开菜单定义中配置的网址。", "Opens the URL configured in the menu definition.")}</p>
     <p className="font-medium">{text("arrangement.menuUsageWidget", "面板组件", "Panel widget")}</p>
-    <p>{text("arrangement.menuUsageWidgetHelp", "打开聊天侧栏中的会话面板，例如项目或最近会话。", "Opens a chat sidebar panel, such as projects or recent sessions.")}</p>
+    <p>{text("arrangement.menuUsageWidgetHelp", "打开聊天侧栏中的会话面板，例如主题或随聊。", "Opens a chat sidebar panel, such as topics or quick chats.")}</p>
   </div>;
   const parentValueHelp = <div className="space-y-1.5">
     <p>{text("arrangement.parentChoiceHelp", "每个选项决定菜单在侧栏中的层级：", "Each choice sets the item's level in the sidebar:")}</p>
