@@ -33,6 +33,9 @@ fn storage_error(error: SqliteError) -> ResourceError {
             ResourceError::Conflict
         }
         SqliteError::QueryReturnedNoRows => ResourceError::NotFound,
-        _ => ResourceError::StorageFailure,
+        error => {
+            tracing::error!(error = %error, "resource storage operation failed");
+            ResourceError::StorageFailure
+        }
     }
 }

@@ -1,3 +1,4 @@
+import { ChatAttachmentButton } from "../components/ChatAttachmentButton";
 import { contextBlockName, type ContextBlockUpdateMode } from "@/shared/context/contextBlockPresentation";
 import { ContextBlockHelp } from "@/shared/context/ContextBlockHelp";
 import { useContextBlockCatalog, type ContextBlockCatalog } from "@/shared/context/useContextBlockCatalog";
@@ -9,7 +10,6 @@ import {
   CircleDot,
   LoaderCircle,
   Pause,
-  Plus,
   Check,
   ChevronDown,
 } from "lucide-react";
@@ -3454,17 +3454,11 @@ export function ChatManagementPage() {
           type="file"
           onChange={(event) => { void handleAttachmentFileInputChange(event); }}
         />
-        <Button
-          aria-label={t("chat.management.composer.uploadAttachment")}
-          disabled={(!activeSession && !isDraft) || creatingSession || attachmentUploadPending}
-          size="icon-sm"
-          title={attachmentUploadPending ? t("chat.management.composer.uploading") : t("chat.management.composer.uploadAttachment")}
-          type="button"
-          variant="ghost"
+        <ChatAttachmentButton
+          disabled={(!activeSession && !isDraft) || creatingSession}
+          uploading={attachmentUploadPending}
           onClick={() => attachmentFileInputRef.current?.click()}
-        >
-          <Plus aria-hidden="true" className="!block size-4" />
-        </Button>
+        />
         <ChatExecutionModeSelector
           value={executionMode}
           disabled={(!activeSession && !isDraft) || activeSession?.status === "ARCHIVED" || creatingSession || savingExecutionMode}

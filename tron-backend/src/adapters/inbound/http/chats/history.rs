@@ -21,6 +21,7 @@ pub struct ReadHistoryRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadHistoryResponse {
+    pub can_delete_turns: bool,
     pub session_id: String,
     pub version: String,
     pub next_cursor: Option<fw::HistoryCursor>,
@@ -39,6 +40,7 @@ impl From<fw::SessionHistory> for ReadHistoryResponse {
                 .collect();
         }
         Self {
+            can_delete_turns: h.can_delete_turns,
             session_id: h.session_id,
             version: h.version,
             next_cursor: h.next_cursor,

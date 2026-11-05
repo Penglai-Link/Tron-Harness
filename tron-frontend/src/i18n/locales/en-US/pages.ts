@@ -1872,6 +1872,10 @@ export const pages = {
       skipped: "Skipped",
     },
     management: {
+      deleteTurn: {
+        action: "Delete turn", title: "Delete this turn?", cancel: "Cancel",
+        description: "Delete this user message, its agent replies and tool activity. They will no longer appear or be sent to the model. Other turns are kept. Rebuilding model context may reduce cache hits and increase latency and cost for subsequent requests.",
+      },
       sourceTabs: {
         aria: "Session source",
         chat: "Chat sessions",
@@ -2040,6 +2044,7 @@ export const pages = {
         nothingToSendTitle: "Nothing to send",
         nothingToSend: "Message content is required",
         chatSendFailedTitle: "Chat send failed",
+        chatDeleteFailedTitle: "Could not delete turn",
         chatLoadFailedTitle: "Chat load failed",
         chatLoadFailed: "Chat data could not be loaded",
         workspaceRequired: "Select a workspace before starting a chat",
@@ -2048,6 +2053,7 @@ export const pages = {
         responseRecoveredTitle: "Active response recovered",
         responseRecovered:
           "Message was kept in the queue while the current response finishes",
+        continuationFailedTitle: "Answer submitted; continuation incomplete",
         answerFailedTitle: "Answer submission failed",
         answerFailed: "Answer submission failed",
         answerUnconfirmedTitle: "Submission not confirmed",
@@ -2398,10 +2404,19 @@ export const pages = {
   capabilityManagement: {
     smartTitle: "Smart risk assessment",
     smartDescription: "Uses the current conversation model to assess a command's actual effects. Uncertain operations require approval; denied tools remain blocked. Turn off to use static assessment.",
-    smartEffective: "Changes apply to the next run or resume.",
     smartSaved: "Saved",
     noDescription: "No description declared.",
     noPluginProvides: "No contributions declared for this plugin.",
+    packDetails: {
+      "framework_external-agent": "- Run tasks through an independent loop for external agents.\n- Bridge native sessions in external runtimes, retaining session ownership and context for follow-up interactions.\n- Connect execution through host adapters and expose runtime activity as observability events.",
+      "framework_local_scoped": "- Browse, read and write files within authorized directories, including text and unified-diff patches.\n- Search local material by path, filename pattern or file contents.\n- Execute commands, inspect task status, read output, write input and stop tasks.\n- Create and share interactive terminals with ongoing input, output and session management.",
+      "framework_tool-pack_agent-collaboration": "- Discover named agents and delegate tasks with independent execution contexts.\n- Inspect child tasks, wait for results, read output, send follow-ups and cancel tasks.\n- Let child agents ask their caller questions and continue with the returned answers.\n- Create independent collaboration threads with send, wait, read, answer and close operations.",
+      "framework_a2ui": "- Publish structured cards and forms for clients to render using the A2UI protocol.\n- Collect user input and return form answers to the waiting agent.\n- Maintain components and shared data state for interface updates and interactions.\n- Provide an interface authoring skill, protocol guidance, component catalogs and examples.",
+      "framework_personai": "- Access PersonAI services using the host account identity without passing credentials on each call.\n- Provide web search, image generation, asynchronous task queries and AIGC detection tools.\n- Synchronize the account’s available model catalog and provide model execution capabilities.",
+      "framework_web": "- Fetch public webpages by URL and return text suitable for agent reading.\n- Provide the web_read tool for reading retrieved pages and collecting reference material.",
+      "framework_media": "- Read authorized images and PDF files, including session attachments.\n- Provide image and document content to agents for understanding, analysis and information extraction.",
+      "tron_harness": "- Connect Tron business tools so agents can use platform capabilities.\n- Assemble environment and business context for the current session within its context budget.\n- Apply platform tool permissions, risk assessment and approval controls.\n- Include bundled memory consolidation, memory specification and theme specification skills.",
+    },
     catalog: {
       "Pack_framework_external-agent": "External agent invocation and session bridging",
       "Pack_framework_local_scoped": "Scoped filesystem, command and shared PTY capabilities",
@@ -2965,22 +2980,16 @@ export const pages = {
           optionThree: "All read-only tools: automatically select tools declared as queries each run. Mutating and unknown tools are excluded. Declarations do not enforce execution isolation.",
         },
         maxSteps: {
-          ariaLabel: "Explain max steps",
-          summary:
-            "Caps how many model turns this internal agent can take in a single run.",
-          optionOne:
-            "Lower values stop long reasoning loops sooner and keep runs tight.",
-          optionTwo:
-            "Higher values allow more multi-step work, but they also increase runtime cost.",
+          ariaLabel: "About maximum run turns",
+          summary: "Limits model turns per run. Unlimited by default.",
+          optionOne: "Leave blank or enter 0 for unlimited; enter a positive integer to set a limit.",
+          optionTwo: "Resuming after an answer or approval keeps the same counter. A new run starts at zero.",
         },
         maxToolCalls: {
-          ariaLabel: "Explain max tool calls",
-          summary:
-            "Caps the total number of tool executions this internal agent can perform across the whole run.",
-          optionOne:
-            "Lower values keep the overall tool budget tight and stop long tool loops earlier.",
-          optionTwo:
-            "Higher values allow more tool-driven iteration before the run stops entirely.",
+          ariaLabel: "About maximum tool calls",
+          summary: "Limits total tool calls per run. Unlimited by default.",
+          optionOne: "Leave blank or enter 0 for unlimited. Each item in a batch counts separately.",
+          optionTwo: "Counts continue after answers and approvals. Tool permissions and concurrency limits still apply.",
         },
         maxParallelToolCalls: {
           ariaLabel: "Explain max parallel tool calls",
@@ -2992,8 +3001,9 @@ export const pages = {
             "Higher values allow wider fan-out when the model returns many independent tool calls.",
         },
       },
+      unlimited: "Unlimited",
       labels: {
-        maxSteps: "Max steps",
+        maxSteps: "Max run turns",
         maxToolCalls: "Max total tool calls",
         maxParallelToolCalls: "Max parallel tool calls",
         mcpAccessMode: "MCP access mode",
@@ -3024,7 +3034,6 @@ export const pages = {
         switchToFixedHint: "Tools matching the current rule are preselected. Confirming creates a fixed list; new tools will not be added automatically.",
         noneSelected: "No tools selected",
         categoryHint: "Select multiple categories; tools matching any selected category are included, including new tools. Platform permissions still apply.",
-        allHint: "Automatically include all tools available to Dude, including new tools. Platform permissions still apply.",
         readOnlyHint: "Automatically include tools declared as queries, including new read-only tools. Platform permissions still apply.",
         viewTools: "View tools",
         workspaceOnly: "Requires a workspace; unavailable to Dude",
@@ -4076,7 +4085,7 @@ export const pages = {
       select: "Select a Skill",
     },
     pagination: { itemLabel: "skills" },
-    title: "Skill Center",
+    title: "Skills",
   },
   skills: {
     actions: {

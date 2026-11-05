@@ -16,10 +16,10 @@ const aliases: Record<string, string> = {
   "--sidebar-accent": "--color-accent-container", "--sidebar-accent-foreground": "--color-on-accent-container",
   "--sidebar-border": "--color-outline-variant", "--sidebar-ring": "--color-focus-ring",
   "--sidebar-primary": "--color-primary", "--sidebar-primary-foreground": "--color-on-primary",
-  "--destructive": "--color-error", "--destructive-foreground": "--color-on-error",
-  "--success": "--color-success", "--success-foreground": "--color-on-success",
-  "--warning": "--color-warning", "--warning-foreground": "--color-on-warning",
-  "--info": "--color-accent", "--info-foreground": "--color-on-accent",
+  "--destructive": "--color-error", "--destructive-foreground": "--color-on-error-container",
+  "--success": "--color-success", "--success-foreground": "--color-on-success-container",
+  "--warning": "--color-warning", "--warning-foreground": "--color-on-warning-container",
+  "--info": "--color-accent", "--info-foreground": "--color-on-accent-container",
 };
 
 export function skinVariables(skin: ResolvedSkin): Record<string, string> {
@@ -30,8 +30,10 @@ export function skinVariables(skin: ResolvedSkin): Record<string, string> {
       throw new Error("Invalid skin variable");
     }
   }
+  // Copy values: Tailwind maps --color-success back to --success, so a var()
+  // alias here would create a cycle for skins without explicit component tokens.
   for (const [alias, source] of Object.entries(aliases)) {
-    if (!(alias in variables) && source in variables) variables[alias] = `var(${source})`;
+    if (!(alias in variables) && source in variables) variables[alias] = variables[source];
   }
   return variables;
 }

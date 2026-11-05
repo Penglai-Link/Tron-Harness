@@ -60,7 +60,7 @@ impl ChatStreamCompletion {
                         "RUN_ERROR",
                         json!({
                             "type": "RUN_ERROR", "threadId": session_code, "runId": result.run.run_code,
-                            "code": result.run.status, "message": "agent execution reached its configured limit",
+                            "code": result.run.status, "message": super::super::error_messages::message(result.run.status, ""),
                             "result": result, "timestamp": chrono::Utc::now().timestamp_millis(),
                         }),
                     );
@@ -155,57 +155,18 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
 }
 
 pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
-    match error {
-        ChatSendError::Chat(ChatError::AttachmentInvalid(message)) => message,
-        ChatSendError::Chat(ChatError::AttachmentNotFound) => {
-            "chat attachment was not found".into()
+    if let ChatSendError::Chat(ref chat_error) = error {
+        if crate::application::chat::composer_input::descriptor(chat_error).is_some() {
+            return super::super::error_mapper::composer_error_message(chat_error);
         }
-        ChatSendError::Chat(
-            error @ (ChatError::AnnotationsInvalid
-            | ChatError::RequestedSkillsInvalid
-            | ChatError::RequestedSkillForbidden
-            | ChatError::GoalCommandInvalid
-            | ChatError::GoalCommandUnavailable
-            | ChatError::GoalCommandConflict),
-        ) => super::super::error_mapper::composer_error_message(&error),
-        ChatSendError::Chat(ChatError::MessageRequired) => "message content is required".into(),
-        ChatSendError::Chat(ChatError::SessionNotFound) => "chat session was not found".into(),
-        ChatSendError::Chat(ChatError::SessionMustBeArchived) => {
-            "only archived chat sessions can be permanently deleted".into()
-        }
-        ChatSendError::Chat(ChatError::SessionArchived) => {
-            "archived chat sessions cannot be changed or resumed".into()
-        }
-        ChatSendError::Chat(ChatError::SessionRunActive) => {
-            "this operation is unavailable while the chat session is running".into()
-        }
-        ChatSendError::Chat(ChatError::SessionTitleRequired) => "session title is required".into(),
-        ChatSendError::Chat(ChatError::WorkspaceRequired) => "workspaceCode is required".into(),
-        ChatSendError::Chat(ChatError::WorkspaceForbidden) => {
-            "workspace access is forbidden".into()
-        }
-        ChatSendError::Chat(ChatError::ProjectRequired) => {
-            "projectCode is required for a manual chat session".into()
-        }
-        ChatSendError::Chat(ChatError::ProjectInvalid) => {
-            "chat project is invalid for this workspace".into()
-        }
-        ChatSendError::Chat(ChatError::UserInputAlreadyAnswered) => {
-            "chat user input request is already answered".into()
-        }
-        ChatSendError::Chat(ChatError::UserInputAnswerInvalid(message)) => {
-            super::super::error_mapper::user_input_error_message(&message)
-        }
-        ChatSendError::Chat(ChatError::UserInputPending) => {
-            "chat session is waiting for a user answer".into()
-        }
-        ChatSendError::Chat(ChatError::UserInputRequestNotFound) => {
-            "chat user input request was not found".into()
-        }
-        ChatSendError::Chat(ChatError::StorageFailure) => "chat storage failed".into(),
-        ChatSendError::Agent(error) => error.message(),
-        ChatSendError::RunAlreadyActive { .. } => "chat session already has an active run".into(),
     }
+    let code = chat_send_error_code(&error);
+    let detail = match &error {
+        ChatSendError::Agent(error) => error.message(),
+        ChatSendError::Chat(error) => format!("{error:?}"),
+        ChatSendError::RunAlreadyActive { .. } => String::new(),
+    };
+    super::super::error_messages::message(code, &detail)
 }
 
 pub(crate) fn normalized_required(value: Option<String>) -> Option<String> {

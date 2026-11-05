@@ -1,3 +1,4 @@
+use super::runtime_count_limit;
 use super::{
     context::TronContext,
     model::{HostExecution, HostRunState},
@@ -51,6 +52,8 @@ mod host_run;
 mod host_shutdown;
 #[path = "host_snapshot.rs"]
 mod host_snapshot;
+#[path = "host_history.rs"]
+mod host_history;
 #[path = "host_storage.rs"]
 mod host_storage;
 #[path = "host_working_directory.rs"]

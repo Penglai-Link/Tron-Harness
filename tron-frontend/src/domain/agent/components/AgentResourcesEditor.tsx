@@ -75,7 +75,7 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
   function validate() {
     if (!draft) { if (dirty) throw new Error(error || t("agentSkills.loading")); return; }
     for (const key of ["maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const) {
-      if (!Number.isSafeInteger(draft[key]) || draft[key] < 1) throw new Error(t(`workspaceAgents.internal.labels.${key}`));
+      if (!Number.isSafeInteger(draft[key]) || draft[key] < (key === "maxParallelToolCalls" ? 1 : 0) || draft[key] > 4294967295) throw new Error(t(`workspaceAgents.internal.labels.${key}`));
     }
   }
   useImperativeHandle(ref, () => ({ validate, save: async (createdCode) => {

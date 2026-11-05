@@ -161,7 +161,7 @@ fn chat_attachment_form_error_response(error: SessionAttachmentFormError) -> Res
             StatusCode::PAYLOAD_TOO_LARGE,
             Json(ApiResponse::error(
                 "CHAT_ATTACHMENT_TOO_LARGE",
-                "chat attachment exceeds the maximum allowed size",
+                super::error_messages::message("CHAT_ATTACHMENT_TOO_LARGE", ""),
             )),
         )
             .into_response(),

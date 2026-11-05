@@ -354,6 +354,9 @@ impl SqliteChatRepository {
             after = page.last().unwrap().sequence;
             result.extend(page);
         }
+        let deleted = self.framework().await?.history().map_err(|_| ChatError::StorageFailure)?
+            .deleted_runs(session).await.map_err(chat_error)?.into_iter().collect::<std::collections::HashSet<_>>();
+        result.retain(|event| event.run_id.is_none_or(|run| !deleted.contains(&run)));
         Ok(result)
     }
     async fn put_context(&self, id: &str, key: &str, value: Value) -> Result<(), ChatError> {

@@ -43,6 +43,8 @@ impl AgentManagementService {
             .find(|c| c.agent_code == "main-agent")
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
         config.agent_code = code.into();
+        config.max_steps = 0;
+        config.max_tool_calls = 0;
         config.avatar_id = match code {
             "main-dude" => "neo".into(),
             "memory-dude" => "black-hole".into(),
@@ -246,15 +248,7 @@ impl AgentManagementService {
         command: UpdateWorkspaceInternalAgentPolicyCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.validate_selected_categories(&command.selected_category_codes)?;
-        if [
-            command.max_steps,
-            command.max_tool_calls,
-            command.max_parallel_tool_calls,
-        ]
-        .into_iter()
-        .flatten()
-        .any(|limit| limit == 0)
-        {
+        if command.max_parallel_tool_calls == Some(0) {
             return Err(AgentManagementError::InternalAgentPolicyInvalid);
         }
         self.change_platform_internal_agent(code, |config| {

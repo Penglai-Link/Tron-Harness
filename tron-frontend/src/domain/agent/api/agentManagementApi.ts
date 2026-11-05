@@ -268,12 +268,12 @@ export function normalizeWorkspaceInternalAgentRecord(
     maxSteps:
       typeof record.maxSteps === "number" && Number.isFinite(record.maxSteps)
         ? record.maxSteps
-        : 100,
+        : 0,
     maxToolCalls:
       typeof record.maxToolCalls === "number" &&
       Number.isFinite(record.maxToolCalls)
         ? record.maxToolCalls
-        : 100,
+        : 0,
     maxParallelToolCalls:
       typeof record.maxParallelToolCalls === "number" &&
       Number.isFinite(record.maxParallelToolCalls)

@@ -9,7 +9,7 @@ use crate::{
         },
     },
     domain::{
-        agent::{AgentCollaborationOwner, AgentRunLimits},
+        agent::AgentCollaborationOwner,
         dude_memory::*,
     },
 };
@@ -80,11 +80,8 @@ impl DudeMemoryAgentRuntime for NativeDudeMemoryAgentRuntime {
                     execution_scope_override: None,
                     task_code: None,
                     model: Some(model),
-                    limits: Some(AgentRunLimits {
-                        max_steps: 12,
-                        max_tool_calls: 20,
-                        max_parallel_tool_calls: 2,
-                    }),
+                    // Use the Dude's configured policy, including unlimited defaults.
+                    limits: None,
                     tools: Vec::new(),
                     attachments: Vec::new(),
                     page_context: None,

@@ -90,16 +90,6 @@ pub(super) fn validate_context(context: &AgentRunContext) -> Result<(), AgentErr
             "modelName is required".into(),
         ));
     }
-    if context.limits.max_steps == 0 {
-        return Err(AgentError::InvalidConfiguration(
-            "maxSteps must be greater than zero".into(),
-        ));
-    }
-    if context.limits.max_tool_calls == 0 {
-        return Err(AgentError::InvalidConfiguration(
-            "maxToolCalls must be greater than zero".into(),
-        ));
-    }
     if context.limits.max_parallel_tool_calls == 0 {
         return Err(AgentError::InvalidConfiguration(
             "maxParallelToolCalls must be greater than zero".into(),

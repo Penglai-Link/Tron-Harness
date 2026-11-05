@@ -254,7 +254,7 @@ pub(crate) async fn stream_message_command(
                 {
                     match dudes.resolve_awaiting_input(&session_code_for_task, &result.run.final_output) {
                         Ok(()) => ChatStreamCompletion::Success(result),
-                        Err(error) => ChatStreamCompletion::Error { code: "101031004".into(), message: error.to_string() },
+                        Err(error) => ChatStreamCompletion::Error { code: "101031004".into(), message: super::error_messages::message("101031004", &error.to_string()) },
                     }
                 } else {
                     ChatStreamCompletion::Success(result)
@@ -273,7 +273,7 @@ pub(crate) async fn stream_message_command(
                 if let Ok(services)=framework.services() {
                     if let Some(service)=services.get::<eliteforge_agent_official_plugin_a2ui::A2uiService>() {
                         if let Err(error)=service.complete_action(&session_code_for_task,&id,done_payload.data.clone()).await {
-                            done_payload.data["productCompletionError"]=json!({"code":"101031004","message":"Could not persist UI action completion; refresh session"});
+                            done_payload.data["productCompletionError"]=json!({"code":"101031004","message":super::error_messages::message("101031004", "")});
                             let _ = error;
                         }
                     }
@@ -457,6 +457,13 @@ fn product_completion_payload(
             if let Some(object) = data.as_object_mut() {
                 if let Some(result) = completion.data.get("result") {
                     object.insert("result".into(), result.clone());
+                }
+                if completion.event_name == "RUN_ERROR" {
+                    for key in ["code", "message"] {
+                        if let Some(value) = completion.data.get(key) {
+                            object.insert(key.into(), value.clone());
+                        }
+                    }
                 }
                 // Enrich interrupt metadata with product question IDs, retaining native
                 // interaction records in the result rather than reconstructing execution.

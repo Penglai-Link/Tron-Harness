@@ -90,6 +90,12 @@ export const settingsNavigation = [
         translationKey: "shell:settings.items.tools",
       },
       {
+        label: "Skills",
+        href: "/settings/skills",
+        icon: Package,
+        translationKey: "shell:settings.items.skillCenter",
+      },
+      {
         label: "Capability Packs",
         href: "/settings/capability-packs",
         icon: Package,
@@ -127,19 +133,6 @@ export const settingsNavigation = [
       { label: "Traces", href: "/settings/observability/traces", icon: Activity, translationKey: "observability:traces" },
       { label: "Metrics", href: "/settings/observability/metrics", icon: ChartNoAxesCombined, translationKey: "observability:metrics" },
       { label: "Logs", href: "/settings/observability/logs", icon: ScrollText, translationKey: "observability:logs" },
-    ],
-  },
-  {
-    groupKey: "registry",
-    label: "Registry",
-    translationKey: "shell:settings.groups.registry",
-    items: [
-      {
-        label: "Skill Center",
-        href: "/settings/skills",
-        icon: Package,
-        translationKey: "shell:settings.items.skillCenter",
-      },
     ],
   },
   {

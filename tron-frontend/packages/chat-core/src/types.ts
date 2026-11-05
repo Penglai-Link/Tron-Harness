@@ -127,7 +127,7 @@ export interface ChatRunSummary {
   conversationCode?: string | null;
   workspaceCode: string | null;
   reasoningEffort?: ReasoningEffort | null;
-  status: "COMPLETED" | "AWAITING_USER_INPUT";
+  status: "COMPLETED" | "AWAITING_USER_INPUT" | "STEP_LIMIT" | "TOOL_CALL_LIMIT";
   finalOutput: string;
   finalMessageIds?: string[];
   stepCount: number;
@@ -440,6 +440,7 @@ export interface ChatAdapter {
   ) => Promise<ChatActiveRunResult>;
   loadAguiEvents: (sessionCode: string) => Promise<ChatAguiEvent[]>;
   loadMessages: (sessionCode: string) => Promise<ChatMessage[]>;
+  deleteTurn?: (sessionCode: string, input: { rootRunId: string; expectedVersion: string }, signal?: AbortSignal) => Promise<void>;
   loadHistory?: (sessionCode: string, query: import("@eliteforge/agent-ui-chat-core").HistoryQuery, signal?: AbortSignal) => Promise<import("@eliteforge/agent-ui-chat-core").SessionHistory>;
   loadUserInputRequests?: (
     sessionCode: string,

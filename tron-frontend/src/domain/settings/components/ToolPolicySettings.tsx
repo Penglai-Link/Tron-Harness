@@ -50,16 +50,17 @@ export function ToolPolicySettings({ revision, onSavingChange }: {
     }
   };
 
-  return <SurfaceCard className="mb-4 space-y-2" aria-busy={saving}>
-    <div className="flex items-center justify-between gap-4">
-      <label htmlFor={id} className="text-sm font-medium">{t("capabilityManagement.smartTitle")}</label>
-      <Switch id={id} checked={smart ?? true} disabled={smart === null || saving}
-        aria-describedby={`${id}-description`} onCheckedChange={(value) => void change(value)} />
+  return <SurfaceCard className="mb-4 flex items-center gap-6" aria-busy={saving}>
+    <div className="min-w-0 flex-1 space-y-2">
+      <label id={`${id}-label`} htmlFor={id} className="block text-sm font-medium">{t("capabilityManagement.smartTitle")}</label>
+      <p id={`${id}-description`} className="text-sm text-[var(--color-on-surface-variant)]">{t("capabilityManagement.smartDescription")}</p>
+      {smart === null && !error ? <p role="status" className="text-xs">{t("capabilityManagement.loading")}</p> : null}
+      {saved ? <p role="status" className="text-xs text-[var(--color-success)]">{t("capabilityManagement.smartSaved")}</p> : null}
+      {error ? <p role="alert" className="text-sm text-[var(--color-error)]">{error}</p> : null}
     </div>
-    <p id={`${id}-description`} className="text-sm text-[var(--color-on-surface-variant)]">{t("capabilityManagement.smartDescription")}</p>
-    <p className="text-xs text-[var(--color-on-surface-variant)]">{t("capabilityManagement.smartEffective")}</p>
-    {smart === null && !error ? <p role="status" className="text-xs">{t("capabilityManagement.loading")}</p> : null}
-    {saved ? <p role="status" className="text-xs text-[var(--color-success)]">{t("capabilityManagement.smartSaved")}</p> : null}
-    {error ? <p role="alert" className="text-sm text-[var(--color-error)]">{error}</p> : null}
+    <Switch id={id} checked={smart ?? true} disabled={smart === null || saving}
+      className="[--thumb-size:--spacing(6)] sm:[--thumb-size:--spacing(6)]"
+      aria-labelledby={`${id}-label`} aria-describedby={`${id}-description`}
+      onCheckedChange={(value) => void change(value)} />
   </SurfaceCard>;
 }

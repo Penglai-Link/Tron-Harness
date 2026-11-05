@@ -12,6 +12,7 @@ import { useTabVisibility } from "@/components/editable-tabs/TabVisibilityContex
 import { useChatSubagentDetail, useChatSubagents } from "../hooks/useChatSubagents";
 import type { ChatSubagent, ChatSubagentDetail } from "../model/ChatSubagent";
 import { SubagentAvatar } from "./SubagentAvatar";
+import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 
 export function ChatSubagentsPanel({ sessionCode, workspaceCode, data, workRailLabels, historyLabels }: {
   sessionCode: string;
@@ -27,7 +28,7 @@ export function ChatSubagentsPanel({ sessionCode, workspaceCode, data, workRailL
   const [selected, setSelected] = useState("");
   const item = items.find((item) => item.runId === selected);
   if (item) return <SubagentSession key={`${sessionCode}:${selected}`} parent={sessionCode} workspace={workspaceCode} item={item} workRailLabels={workRailLabels} historyLabels={historyLabels} onBack={() => setSelected("")} />;
-  return <section className="h-full overflow-y-auto p-4" aria-label={t("chat.subagents.title")}>
+  return <section className="tron-scrollbar h-full min-h-0 overflow-y-auto p-4" aria-label={t("chat.subagents.title")}>
     {error ? <p role="alert" className="py-3 text-sm text-[var(--color-error)]">{t("chat.subagents.loadFailed")}</p> : null}
     {loading ? <p role="status" className="py-3 text-sm text-[var(--color-on-surface-variant)]"><ShinyText>{t("chat.subagents.loading")}</ShinyText></p> : null}
     {!loading && !error && !items.length ? <p className="py-3 text-sm text-[var(--color-on-surface-variant)]">{t("chat.subagents.empty")}</p> : null}
@@ -53,14 +54,14 @@ function SubagentSession({ parent, workspace, item, onBack, workRailLabels, hist
   const { t } = useTranslation("pages");
   const visible = useTabVisibility();
   const { detail, error } = useChatSubagentDetail(parent, workspace, item.runId, visible);
-  return <section className="flex h-full min-h-0 flex-col" aria-label={t("chat.subagents.session")}>
-    <header className="flex items-center gap-2 border-b border-[var(--color-outline-variant)]/40 px-3 py-2">
+  return <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden" aria-label={t("chat.subagents.session")}>
+    <header className="flex shrink-0 items-center gap-2 border-b border-[var(--color-outline-variant)]/40 px-3 py-2">
       <Button size="icon" variant="ghost" aria-label={t("chat.subagents.back")} onClick={onBack}><ArrowLeft aria-hidden className="size-4" /></Button>
       <SubagentAvatar avatarId={item.avatarId} name={item.agentName} status={detail?.status ?? item.status} />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.agentName}</span>
     </header>
-    <div className="flex min-h-0 flex-1 flex-col">
-      <section className="max-h-40 shrink-0 overflow-y-auto px-4 py-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <section className="tron-scrollbar max-h-40 shrink-0 overflow-y-auto px-4 py-3">
         <h3 className="mb-1 text-xs font-medium text-[var(--color-on-surface-variant)]">{t("chat.subagents.task")}</h3>
         <MarkdownContent content={item.task} />
       </section>
@@ -79,6 +80,7 @@ function SubagentTranscript({ detail, item, workRailLabels, historyLabels }: {
 }) {
   const { i18n, t } = useTranslation("pages");
   const fallbackHistoryLabels = useChatHistoryLabels();
+  const { preferences: workPreferences } = useAguiWorkReplayPreferences();
   const messages = useMemo(() => {
     const run = {
       id: detail.runId, sessionId: detail.sessionId, parentRunId: null, rootRunId: detail.runId,
@@ -102,11 +104,12 @@ function SubagentTranscript({ detail, item, workRailLabels, historyLabels }: {
     id: detail.sessionId, sessionId: detail.sessionId, title: item.agentName, status: "ACTIVE" as const,
     createdAt: new Date(item.startedAtMs).toISOString(), updatedAt: new Date(item.finishedAtMs ?? item.startedAtMs).toISOString(),
   }), [detail.sessionId, item]);
-  return <div className="min-h-0 flex-1" data-subagent-session={detail.sessionId}>
+  return <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" data-subagent-session={detail.sessionId}>
     <ChatPanel session={session} messages={messages} protocolEvents={detail.events}
       locale={i18n.language} workRailLabels={workRailLabels} historyLabels={historyLabels ?? fallbackHistoryLabels}
+      showReasoningCards={workPreferences.showReasoningCards}
       showHeader={false} showHistoryRail={false} showComposer={false} showStop={false} a2uiDisabled
       draft="" onDraftChange={ignoreInput} onSend={ignoreInput} />
-    {detail.status === "Waiting" ? <p role="status" className="px-4 text-sm text-[var(--color-on-surface-variant)]">{t("chat.subagents.waiting")}</p> : null}
+    {detail.status === "Waiting" ? <p role="status" className="shrink-0 px-4 py-2 text-sm text-[var(--color-on-surface-variant)]">{t("chat.subagents.waiting")}</p> : null}
   </div>;
 }

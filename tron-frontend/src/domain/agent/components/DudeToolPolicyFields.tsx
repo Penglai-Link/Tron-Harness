@@ -31,6 +31,7 @@ export function DudeToolPolicyFields({ draft, tools, disabled, onChange, onChoos
     return [...grouped.values()];
   }, [tools, draft.selectedCategoryCodes, i18n.language, i18n.resolvedLanguage]);
   const chosen = new Set(draft.selectedCategoryCodes ?? []);
+  const allTools = draft.toolAssignmentMode === "all_platform_tools";
   const matching = dudeToolsForRule(tools, draft.toolAssignmentMode, draft.selectedCategoryCodes ?? [], draft.selectedToolCodes);
   const selectedNames = draft.selectedToolCodes.map((code) => tools.find((tool) => tool.toolCode === code)?.name ?? code);
   const modes: { value: ToolAssignmentMode; label: string }[] = [
@@ -48,7 +49,7 @@ export function DudeToolPolicyFields({ draft, tools, disabled, onChange, onChoos
     <section className="space-y-3" aria-label={text("title")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">{text("title")}</h3>
-        <span className="text-xs text-[var(--color-on-surface-variant)]">{text("matchingCount", { count: matching.length })}</span>
+        {!allTools && <span className="text-xs text-[var(--color-on-surface-variant)]">{text("matchingCount", { count: matching.length })}</span>}
       </div>
       <div className="flex flex-wrap gap-2" role="group" aria-label={text("modeLabel")}>
         {modes.map((mode) => <Button key={mode.value} type="button" size="sm"
@@ -67,9 +68,9 @@ export function DudeToolPolicyFields({ draft, tools, disabled, onChange, onChoos
           <p className="text-xs text-[var(--color-on-surface-variant)]">{text("fixedHint")}</p>
           {selectedNames.length ? <p className="break-words text-sm">{selectedNames.join(" · ")}</p> : <p className="text-sm text-[var(--color-on-surface-variant)]">{text("noneSelected")}</p>}
         </div>
-      ) : (
+      ) : !allTools ? (
         <>
-          <p className="text-xs text-[var(--color-on-surface-variant)]">{text(draft.toolAssignmentMode === "selected_categories" ? "categoryHint" : draft.toolAssignmentMode === "all_read_only_tools" ? "readOnlyHint" : "allHint")}</p>
+          <p className="text-xs text-[var(--color-on-surface-variant)]">{text(draft.toolAssignmentMode === "selected_categories" ? "categoryHint" : "readOnlyHint")}</p>
           {draft.toolAssignmentMode === "selected_categories" && (
             <div className="divide-y divide-[var(--color-outline-variant)] rounded-md border border-[var(--color-outline-variant)]">
               {[...categories, { code: "readonly", name: text("readOnly"), tools: tools.filter((tool) => tool.operationKind === "query") }].map((category) => (
@@ -98,7 +99,7 @@ export function DudeToolPolicyFields({ draft, tools, disabled, onChange, onChoos
             <ul className="mt-2 space-y-1">{matching.map((tool) => <li key={tool.toolCode} className="break-words">{tool.name}</li>)}</ul>
           </details>}
         </>
-      )}
+      ) : null}
     </section>
   );
 }

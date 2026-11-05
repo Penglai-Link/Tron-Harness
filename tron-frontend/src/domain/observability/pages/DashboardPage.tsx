@@ -161,11 +161,11 @@ export function DashboardPage() {
                       aria-label={`${formatDateTime(b.startedAt, { timeStyle: "short" })} · ${t("requestsValue", { count: b.requests })}`}
                     >
                       <div
-                        className="relative w-full rounded-t bg-[var(--chart-1)]"
+                        className="relative w-full overflow-hidden rounded-t bg-[var(--chart-3)]"
                         style={{ height: `${(b.requests / maximum) * 100}%` }}
                       >
                         <div
-                          className="absolute inset-x-0 bottom-0 bg-[var(--chart-5)]"
+                          className="absolute inset-x-0 bottom-0 bg-[var(--color-error)]"
                           style={{
                             height: `${
                               b.requests ? (b.errors / b.requests) * 100 : 0
@@ -268,9 +268,7 @@ export function DashboardPage() {
                   <InfoTooltip ariaLabel={t("diskUsage")}>
                     <div className="min-w-0 space-y-2 text-left leading-relaxed">
                       <p>{t("diskUsageHelp")}</p>
-                      <p>{t(disk?.measurement === "Logical" ? "diskUsageLogical" : "diskUsageAllocated")}</p>
                       {disk?.paths.length ? <ul className="space-y-1">{disk.paths.map(path => <li key={path} className="break-all font-mono text-xs">{path}</li>)}</ul> : null}
-                      {disk?.sampledAt != null ? <p>{t("sampledAt")} {formatDateTime(disk.sampledAt, { timeStyle: "medium" })}</p> : null}
                     </div>
                   </InfoTooltip>
                 </dt>

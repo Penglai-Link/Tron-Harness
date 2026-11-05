@@ -111,7 +111,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "chat storage failed".to_string(),
         ),
     };
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    (status, Json(ApiResponse::error(code, super::error_messages::message(code, &message)))).into_response()
 }
 
 pub(super) fn user_input_error_message(detail: &str) -> String {
@@ -152,7 +152,7 @@ pub fn chat_send_error_response(error: ChatSendError) -> Response {
             StatusCode::CONFLICT,
             Json(ApiResponse::error(
                 "CHAT_RUN_ALREADY_ACTIVE",
-                "chat session already has an active run",
+                super::error_messages::message("CHAT_RUN_ALREADY_ACTIVE", "chat session already has an active run"),
             )),
         )
             .into_response(),
@@ -205,7 +205,7 @@ pub fn chat_steer_error_response(error: ChatSteerError) -> Response {
             "active run registry is unavailable".to_string(),
         ),
     };
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    (status, Json(ApiResponse::error(code, super::error_messages::message(code, &message)))).into_response()
 }
 
 pub fn chat_run_control_error_response(error: ChatRunControlError) -> Response {
@@ -246,7 +246,7 @@ pub fn chat_run_control_error_response(error: ChatRunControlError) -> Response {
             "active run registry is unavailable".to_string(),
         ),
     };
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    (status, Json(ApiResponse::error(code, super::error_messages::message(code, &message)))).into_response()
 }
 
 pub fn stop_chat_run_request_rejection_response(_error: JsonRejection) -> Response {
@@ -254,7 +254,7 @@ pub fn stop_chat_run_request_rejection_response(_error: JsonRejection) -> Respon
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
             "CHAT_STOP_RUN_REQUEST_INVALID",
-            "stop run request body is invalid",
+            super::error_messages::message("CHAT_STOP_RUN_REQUEST_INVALID", "stop run request body is invalid"),
         )),
     )
         .into_response()
@@ -265,7 +265,7 @@ pub fn active_chat_run_query_rejection_response(_error: QueryRejection) -> Respo
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
             "CHAT_ACTIVE_RUN_QUERY_INVALID",
-            "active run query is invalid",
+            super::error_messages::message("CHAT_ACTIVE_RUN_QUERY_INVALID", "active run query is invalid"),
         )),
     )
         .into_response()
@@ -276,7 +276,7 @@ pub fn steer_chat_message_request_rejection_response(_error: JsonRejection) -> R
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
             "CHAT_STEER_REQUEST_INVALID",
-            "steer message request body is invalid",
+            super::error_messages::message("CHAT_STEER_REQUEST_INVALID", "steer message request body is invalid"),
         )),
     )
         .into_response()
@@ -353,5 +353,5 @@ fn agent_error_response(error: AgentInvocationError) -> Response {
             "agent run exceeded max tool calls".to_string(),
         ),
     };
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    (status, Json(ApiResponse::error(code, super::error_messages::message(code, &message)))).into_response()
 }

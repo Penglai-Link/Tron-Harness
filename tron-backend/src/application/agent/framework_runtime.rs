@@ -53,3 +53,12 @@ pub(crate) use auxiliary_models::attach_auxiliary_model;
 pub(crate) mod summary_loop;
 
 mod command_risk_review;
+
+/// Product policies use zero for unlimited; the SDK reserves zero for no tool access.
+fn runtime_count_limit(value: u32) -> usize {
+    if value == 0 {
+        eliteforge_agent_framework::RunLimits::UNLIMITED_COUNT
+    } else {
+        value as usize
+    }
+}

@@ -988,7 +988,7 @@ CREATE TABLE workspace_internal_agent_policies (
     agent_code TEXT NOT NULL,
     tool_assignment_mode TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL, max_steps INTEGER NOT NULL DEFAULT 100, max_tool_calls INTEGER NOT NULL DEFAULT 100, max_parallel_tool_calls INTEGER NOT NULL DEFAULT 4, mcp_access_mode TEXT NOT NULL DEFAULT 'DISABLED', overridden_fields TEXT NOT NULL
+    updated_at INTEGER NOT NULL, max_steps INTEGER NOT NULL DEFAULT 0, max_tool_calls INTEGER NOT NULL DEFAULT 0, max_parallel_tool_calls INTEGER NOT NULL DEFAULT 4, mcp_access_mode TEXT NOT NULL DEFAULT 'DISABLED', overridden_fields TEXT NOT NULL
                  DEFAULT '["toolAssignmentMode","mcpAccessMode","maxSteps","maxToolCalls","maxParallelToolCalls","selectedToolCodes","selectedServerCodes"]',
     PRIMARY KEY (workspace_code, agent_code)
 );
@@ -1427,6 +1427,7 @@ INSERT INTO rag_corpora (corpus_id, display_name, status, description, capabilit
 
 CREATE TABLE IF NOT EXISTS tron_schema_initialized (scope TEXT PRIMARY KEY);
 INSERT INTO tron_schema_initialized (scope) VALUES ('business');
+INSERT INTO tron_schema_initialized (scope) VALUES ('builtin-unlimited-run-counts');
 
 
 -- Platform-owned always-on agents, sessions and durable delivery.

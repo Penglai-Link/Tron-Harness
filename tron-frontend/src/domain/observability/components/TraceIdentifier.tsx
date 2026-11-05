@@ -18,7 +18,7 @@ export function TraceIdentifier({
   value: string;
   description?: string;
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
   className?: string;
 }) {
   const { t } = useTranslation("observability");
@@ -33,7 +33,7 @@ export function TraceIdentifier({
   };
   return (
     <div className={`flex items-center gap-1 ${className || "w-44"}`}>
-      <Tooltip>
+      {onClick ? <Tooltip>
         <TooltipTrigger
           render={
             <Button
@@ -53,7 +53,7 @@ export function TraceIdentifier({
             <div className="font-mono">{value || "—"}</div>
           </div>
         </TooltipContent>
-      </Tooltip>
+      </Tooltip> : <span className="min-w-0 break-all font-mono text-xs">{value || "—"}</span>}
       <Tooltip>
         <TooltipTrigger render={
           <Button

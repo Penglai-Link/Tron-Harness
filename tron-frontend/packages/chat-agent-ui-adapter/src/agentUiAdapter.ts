@@ -21,6 +21,7 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
     loadA2uiState: host.loadA2uiState ? (...args) => uiRequest(host.loadA2uiState!(...args)) : undefined,
     sendA2uiActionStream: host.sendA2uiActionStream ? async (session,input,events,signal) => toUiResult(await uiRequest(host.sendA2uiActionStream!(fromUiSession(session),input,handlers(events),signal))) : undefined,
     loadMessages: async (id) => (await uiRequest(host.loadMessages(id))).map(toUiMessage),
+    deleteTurn: host.deleteTurn ? (...args) => uiRequest(host.deleteTurn!(...args)) : undefined,
     loadHistory: host.loadHistory ? (...args) => uiRequest(host.loadHistory!(...args)) : undefined,
     loadAguiEvents: async (id) => (await uiRequest(host.loadAguiEvents(id))).map(({ runCode, ...event }) => ({ ...event, runId: runCode })),
     loadProtocolEvents: host.loadProtocolEvents ? async (id) => (await uiRequest(host.loadProtocolEvents!(id))).map(toUiEvent) : undefined,

@@ -9,6 +9,7 @@ import { createAgentUiAdapter } from "@tron/chat-agent-ui-adapter";
 import { fromUiAttachment, fromUiSession, toUiAttachment, toUiInput, toUiSession } from "@tron/chat-agent-ui-adapter";
 import { useChatContextRefreshInterval } from "../hooks/useChatContextRefreshInterval";
 import { useChatInputSuggestions } from "@/domain/chat/hooks/useChatInputSuggestions";
+import { useDeleteTurnConfirmation } from "../hooks/useDeleteTurnConfirmation";
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { latestChatComposerMetrics, type ChatComposerMetrics as ComposerMetrics } from "../model/chatComposerMetrics";
@@ -18,6 +19,7 @@ import { OPEN_CHAT_CONTEXT_EVENT } from "@/shared/lib/shellEvents";
 import { requestApi } from "@/shared/api/httpClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import "./AgentChatWindow.css";
+import { ChatAttachmentButton } from "./ChatAttachmentButton";
 
 const ChatContextInspector = lazy(() => import("./ChatContextInspector").then(module => ({ default: module.ChatContextInspector })));
 
@@ -45,6 +47,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   const feedback = useChatFeedback();
   const runtimeSubmitterRef = useRef<ChatRuntimeSubmitter | null>(null);
   const [activeSessionCode, setActiveSessionCode] = useState<string | null>(initialSession?.sessionCode ?? null);
+  const turnDeletion = useDeleteTurnConfirmation(activeSessionCode);
   const [activeSession, setActiveSession] = useState<ChatSession | null>(initialSession ?? null);
   const initialSessionRef = useRef(initialSession);
   initialSessionRef.current = initialSession;
@@ -168,10 +171,13 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     };
     return input ? toUiInput(input) : null;
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
-  return <><ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
+  return <>{turnDeletion.dialog}<ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
+    renderAttachmentControl={props.renderAttachmentControl ?? ((control) => <ChatAttachmentButton {...control} />)}
     footerAddon={<>{footerAddon}<ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /></>}
+    confirmDeleteTurn={props.confirmDeleteTurn ?? turnDeletion.confirm}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
+      turnDeletionLabels: { action: t("chat.management.deleteTurn.action"), confirm: t("chat.management.deleteTurn.description"), failed: t("chat.management.toasts.chatDeleteFailedTitle") },
       resizeHint: t("chat.floating.resizeHint"),
       locale: config.locale ?? i18n.language,
       showReasoningCards: workPreferences.showReasoningCards,

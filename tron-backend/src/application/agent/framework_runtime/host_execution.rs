@@ -329,15 +329,16 @@ impl FrameworkHost {
             })
             .await
             .map_err(|e| map_error(e.into()))?;
-        request.limits.max_steps = context.limits.max_steps as usize;
-        request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
+        request.limits.max_steps = super::runtime_count_limit(context.limits.max_steps);
+        request.limits.max_tool_calls = super::runtime_count_limit(context.limits.max_tool_calls);
         request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
         request.limits.max_parallel_tools = context.limits.max_parallel_tool_calls.max(1) as usize;
-        request.limits.max_context_messages = context
-            .messages
-            .len()
-            .max(256)
-            .saturating_add(request.limits.max_steps + request.limits.max_tool_calls * 2);
+        request.limits.max_context_messages = context.messages.len().max(256).saturating_add(
+            request
+                .limits
+                .max_steps
+                .saturating_add(request.limits.max_tool_calls.saturating_mul(2)),
+        );
         request.limits.max_context_tokens =
             context.model.context_window_tokens.unwrap_or(128_000) as usize;
         request.limits.max_model_output_tokens = context
@@ -527,7 +528,10 @@ impl FrameworkHost {
                 }
             }
         }
-        let final_message_ids = if result.as_ref().is_ok_and(|result| result.status == fw::RunStatus::Completed) {
+        let final_message_ids = if result
+            .as_ref()
+            .is_ok_and(|result| result.status == fw::RunStatus::Completed)
+        {
             agent.latest_checkpoint(&session).await.ok().flatten()
                 .filter(|checkpoint| checkpoint.run_id.to_string() == registration.run_id())
                 .map(|checkpoint| {
@@ -541,13 +545,16 @@ impl FrameworkHost {
                     messages.into_iter().filter(|message| message.phase.as_deref() == Some("final_answer")
                         || (!explicit && message.phase.is_none())).map(|message| message.id.clone()).collect()
                 }).unwrap_or_default()
-        } else { Vec::new() };
+        } else {
+            Vec::new()
+        };
         let state = state.lock().await;
         let failure = match &result {
             Err(error) => Some(match error.primary() {
                 fw::AgentError::SessionBusy(_) | fw::AgentError::Cancelled => map_error_ref(error),
                 fw::AgentError::State(fw::StateError::Busy)
-                    if runtime_input.is_some_and(|input| input.input_kind == "DUDE_MEMORY_BATCH")
+                    if runtime_input
+                        .is_some_and(|input| input.input_kind == "DUDE_MEMORY_BATCH")
                         && !matches!(error, fw::AgentError::WithCleanup { .. }) =>
                 {
                     AgentError::SessionBusy(session.clone())

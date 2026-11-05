@@ -109,7 +109,9 @@ pub struct AutoModelRouteContext {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRunLimits {
+    /// Zero means unlimited model steps for this run.
     pub max_steps: u32,
+    /// Zero means unlimited tool invocations for this run.
     pub max_tool_calls: u32,
     #[serde(default = "default_max_parallel_tool_calls")]
     pub max_parallel_tool_calls: u32,
@@ -118,8 +120,8 @@ pub struct AgentRunLimits {
 impl Default for AgentRunLimits {
     fn default() -> Self {
         Self {
-            max_steps: 100,
-            max_tool_calls: 100,
+            max_steps: 0,
+            max_tool_calls: 0,
             max_parallel_tool_calls: default_max_parallel_tool_calls(),
         }
     }

@@ -170,6 +170,9 @@ impl AgentManagementService {
         agent_code: &str,
         command: UpdateWorkspaceInternalAgentPolicyCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        if command.max_parallel_tool_calls == Some(0) {
+            return Err(AgentManagementError::InternalAgentPolicyInvalid);
+        }
         self.validate_selected_categories(&command.selected_category_codes)?;
         self.active_workspace_detail(workspace_code)?;
         let definition = self

@@ -155,7 +155,7 @@ export function fromUiResume(entries: Ui.ChatAguiResumeEntry[]): Ui.ChatAguiResu
 export async function uiRequest<T>(request: Promise<T>): Promise<T> {
   try { return await request; } catch (error) {
     if (error instanceof FetchTransportError) {
-      throw new Ui.ChatAdapterError(error.message, {
+      throw new Ui.ChatAdapterError(Ui.chatErrorPresentation(error.message, typeof document !== "undefined" && document.documentElement.lang.toLowerCase().startsWith("en") ? "Run failed" : "运行失败", error.code).summary, {
         code: error.code === "CHAT_RUN_ALREADY_ACTIVE" ? "RUN_ALREADY_ACTIVE" : error.code?.replace(/^CHAT_STEER_/, "STEER_"),
         details: error.data, status: error.status,
         // These composer errors are emitted before a user message is persisted.

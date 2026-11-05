@@ -1,3 +1,4 @@
+import { TraceIdentifier } from "./TraceIdentifier";
 import { triggerLabel } from "./traceTrigger";
 import { Copy } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -236,11 +237,9 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
             </div>
             <dl className="mb-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
               <dt>Span ID</dt>
-              <dd className="break-all font-mono">{span.spanId}</dd>
+              <dd><TraceIdentifier value={span.spanId} label="Span ID" className="w-fit max-w-full" /></dd>
               <dt>{t("parent")}</dt>
-              <dd className="break-all font-mono">
-                {span.parentSpanId ?? "—"}
-              </dd>
+              <dd>{span.parentSpanId ? <TraceIdentifier value={span.parentSpanId} label={t("parent")} className="w-fit max-w-full" /> : "—"}</dd>
               <dt>{t("startedAt")}</dt>
               <dd>
                 {formatDateTime(span.startedAt, {

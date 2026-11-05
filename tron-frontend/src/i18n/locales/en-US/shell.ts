@@ -162,7 +162,6 @@ export const shell = {
       foundation: "Foundation",
       integration: "Integrations",
       platform: "Platform Capabilities",
-      registry: "Registry Center",
     },
     items: {
       archivedChats: "Archived chats",
@@ -183,7 +182,7 @@ export const shell = {
       shortcuts: "Shortcuts",
       taskFlows: "Task Flows",
       tools: "Tools",
-      skillCenter: "Skill Center",
+      skillCenter: "Skills",
       capabilityPacks: "Capability Packs",
       capabilityConfiguration: "Capability Configuration",
       users: "Users",

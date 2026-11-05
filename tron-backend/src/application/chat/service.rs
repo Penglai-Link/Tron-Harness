@@ -7,3 +7,5 @@ include!("service/validation.inc");
 include!("service/application_context.inc");
 
 include!("service/composer_input.inc");
+
+mod history_deletion;

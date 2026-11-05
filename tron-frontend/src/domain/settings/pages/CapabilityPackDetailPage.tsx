@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { capabilityDescription } from "../model/capabilityDescription";
+import { MarkdownContent } from "@/components/markdown-content/MarkdownContent";
+import { capabilityDescription, capabilityPackDetails } from "../model/capabilityDescription";
 import { PageHeader, SurfaceCard } from "@/shared";
 import { listCapabilityPacks, type CapabilityPackRecord } from "../api/capabilityApi";
 
@@ -60,7 +61,7 @@ export function CapabilityPackDetailPage() {
     {loading ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{pageT("loading")}</p> : error ? <SurfaceCard role="alert" className="text-sm text-[var(--color-error)]">{pageT("loadFailed")}: {error}</SurfaceCard> : !record ? <SurfaceCard>{pageT("notFound")}</SurfaceCard> : <div className="flex min-w-0 flex-col gap-6">
       <SurfaceCard className="space-y-4">
         <div className="flex items-start gap-3"><Package size={24} className="shrink-0" /><div className="min-w-0 flex-1"><h1 className="text-lg font-semibold">{record.name}</h1><p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{record.id}</p></div><Badge variant={record.effective ? "success" : "outline"}>{pageT(record.effective ? "effective" : "inactive")}</Badge></div>
-        <p className="text-sm text-[var(--color-on-surface-variant)]">{capabilityDescription(t, "Pack", record.id, record.description)}</p>
+        <MarkdownContent className="max-w-4xl text-sm leading-6 text-[var(--color-on-surface-variant)]" content={capabilityPackDetails(t, record.id, record.description)} />
         <dl className="grid grid-cols-1 gap-3 border-t border-[var(--color-outline-variant)] pt-3 text-sm sm:grid-cols-3">
           {([["version", record.version], ["provider", record.provider], ["updatedAt", record.updatedAt ?? "—"]] as const).map(([key, value]) => <div key={key}><dt className="text-[var(--color-on-surface-variant)]">{pageT(key)}</dt><dd className="mt-1 break-words font-medium">{value}</dd></div>)}
         </dl>

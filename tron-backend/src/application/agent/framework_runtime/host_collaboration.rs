@@ -603,19 +603,20 @@ impl Runtime {
         });
         match limits {
             ExecutionLimits::AgentDefinition | ExecutionLimits::AgentDefinitionDetached => {
-                request.limits.max_steps = context.limits.max_steps as usize;
-                request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
+                request.limits.max_steps = super::runtime_count_limit(context.limits.max_steps);
+                request.limits.max_tool_calls =
+                    super::runtime_count_limit(context.limits.max_tool_calls);
             }
             ExecutionLimits::Request => {
                 request.limits.max_steps = request
                     .limits
                     .max_steps
-                    .min(context.limits.max_steps as usize)
+                    .min(super::runtime_count_limit(context.limits.max_steps))
                     .min(parent.map_or(usize::MAX, |parent| parent.limits.max_steps));
                 request.limits.max_tool_calls = request
                     .limits
                     .max_tool_calls
-                    .min(context.limits.max_tool_calls as usize);
+                    .min(super::runtime_count_limit(context.limits.max_tool_calls));
             }
         }
         request.limits.max_parallel_tools = context.limits.max_parallel_tool_calls.max(1) as usize;

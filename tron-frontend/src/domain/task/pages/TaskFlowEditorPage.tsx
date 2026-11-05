@@ -95,24 +95,39 @@ export function TaskFlowEditorPage() {
         title={editing ? flowT("editor.editTitle", "Edit task flow") : flowT("editor.createTitle", "Create task flow")}
         actions={<Button disabled={loading || saving} onClick={() => void save()}>{flowT("actions.save", "Save")}</Button>}
       />
-      <div className="max-w-4xl space-y-4">
-        <SurfaceCard className="grid gap-4 p-5 md:grid-cols-2">
-          <Field label={flowT("editor.code", "Code")}><TextInput disabled={editing} value={flowCode} onChange={(event) => setFlowCode(event.target.value)} /></Field>
-          <Field label={flowT("editor.name", "Name")}><TextInput value={name} onChange={(event) => setName(event.target.value)} /></Field>
-        </SurfaceCard>
-        <SurfaceCard className="p-5">
-          <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">{flowT("editor.statuses", "Statuses")}</h2><Button size="sm" variant="secondary" onClick={() => setStatuses((current) => [...current.slice(0, -1), { statusCode: "", name: "", required: false }, current[current.length - 1]])}>{flowT("actions.addStatus", "Add")}</Button></div>
-          <div className="space-y-2">
+      <SurfaceCard className="w-full max-w-4xl space-y-8 p-6 shadow-none">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field required label={flowT("editor.code", "Code")}>
+            <TextInput disabled={editing || loading} value={flowCode} onChange={(event) => setFlowCode(event.target.value)} />
+          </Field>
+          <Field required label={flowT("editor.name", "Name")}>
+            <TextInput disabled={loading} value={name} onChange={(event) => setName(event.target.value)} />
+          </Field>
+        </div>
+        <section aria-labelledby="task-flow-statuses" className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <h2 id="task-flow-statuses" className="text-sm font-semibold">{flowT("editor.statuses", "Statuses")}</h2>
+            <Button size="sm" variant="outline" disabled={loading || saving} onClick={() => setStatuses((current) => [...current.slice(0, -1), { statusCode: "", name: "", required: false }, current[current.length - 1]])}>
+              {flowT("actions.addStatus", "Add")}
+            </Button>
+          </div>
+          <div className="space-y-3">
+            <div aria-hidden="true" className="hidden grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1fr)_2rem] items-center gap-3 text-xs text-muted-foreground sm:grid">
+              <span />
+              <span>{flowT("editor.statusCode", "Status code")}</span>
+              <span>{flowT("editor.statusName", "Status name")}</span>
+            </div>
             {statuses.map((status, index) => (
-              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] gap-2" key={`${status.statusCode}-${index}`}>
-                <TextInput disabled={status.required} placeholder={flowT("editor.statusCode", "Status code")} value={status.statusCode} onChange={(event) => updateStatus(index, "statusCode", event.target.value)} />
-                <TextInput disabled={status.required} placeholder={flowT("editor.statusName", "Status name")} value={status.required ? taskFlowStatusDisplayName(status, flowT) : status.name} onChange={(event) => updateStatus(index, "name", event.target.value)} />
-                <Button aria-label={flowT("aria.deleteStatus", "Delete status")} disabled={status.required} size="icon" variant="ghost" onClick={() => setStatuses((current) => current.filter((_, currentIndex) => currentIndex !== index))}><Trash2 size={16} /></Button>
+              <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_2rem] items-center gap-3 sm:grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1fr)_2rem]" key={index}>
+                <span className="text-center text-xs tabular-nums text-muted-foreground">{index + 1}</span>
+                <TextInput aria-label={flowT("editor.statusCode", "Status code")} disabled={status.required || loading} placeholder={flowT("editor.statusCode", "Status code")} value={status.statusCode} onChange={(event) => updateStatus(index, "statusCode", event.target.value)} />
+                <TextInput className="col-start-2 row-start-2 sm:col-start-auto sm:row-start-auto" aria-label={flowT("editor.statusName", "Status name")} disabled={status.required || loading} placeholder={flowT("editor.statusName", "Status name")} value={status.required ? taskFlowStatusDisplayName(status, flowT) : status.name} onChange={(event) => updateStatus(index, "name", event.target.value)} />
+                <Button className="col-start-3 row-start-1 sm:col-start-auto sm:row-start-auto" aria-label={flowT("aria.deleteStatus", "Delete status")} disabled={status.required || loading || saving} size="icon-sm" variant="ghost" onClick={() => setStatuses((current) => current.filter((_, currentIndex) => currentIndex !== index))}><Trash2 size={14} /></Button>
               </div>
             ))}
           </div>
-        </SurfaceCard>
-      </div>
+        </section>
+      </SurfaceCard>
     </>
   );
 }

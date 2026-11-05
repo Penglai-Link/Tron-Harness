@@ -171,7 +171,9 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             let record = management
                 .describe_tool_binding(binding)
                 .map_err(fw::AgentError::ToolSetup)?;
-            if state.context.is_owning_dude() && crate::application::agent::tool_catalog::dude_workspace_tool(&record) {
+            if state.context.is_owning_dude()
+                && selection.mode != crate::domain::agent::ToolAssignmentMode::AllPlatformTools
+                && crate::application::agent::tool_catalog::dude_workspace_tool(&record) {
                 state.product_tool_authority.remove(name);
                 return Ok(fw::ToolBindingAdmission::Exclude);
             }

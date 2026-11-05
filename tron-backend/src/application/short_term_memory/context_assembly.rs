@@ -50,10 +50,9 @@ impl ShortTermMemoryService {
                 .into_iter()
                 .find(|event| event.sequence == sequence && event.kind == "tron.context-view"))
         } else {
-            events
-                .latest_by_kind(id, "tron.context-view")
-                .await
-                .map_err(|_| ShortTermMemoryError::StorageFailure)
+            let view = events.latest_by_kind(id, "tron.context-view").await.map_err(|_| ShortTermMemoryError::StorageFailure)?;
+            let edit = events.latest_by_kind(id, "tron.history-edited").await.map_err(|_| ShortTermMemoryError::StorageFailure)?;
+            Ok(view.filter(|view| edit.is_none_or(|edit| view.sequence > edit.sequence)))
         }
     }
     pub fn saved_context_assembly(

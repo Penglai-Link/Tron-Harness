@@ -163,6 +163,12 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
         pathParams: { sessionCode },
       }).then((messages) => messages.map(normalizeChatMessage));
     },
+    async deleteTurn(sessionCode, input, signal) {
+      await transport.requestJson({
+        method: "DELETE", path: "/api/v1/chats/sessions/{sessionCode}/history/turns/{rootRunId}",
+        pathParams: { sessionCode, rootRunId: input.rootRunId }, body: { expectedVersion: input.expectedVersion }, signal,
+      });
+    },
     loadHistory(sessionCode, query, signal) {
       return transport.requestJson<import("@eliteforge/agent-ui-chat-core").SessionHistory>({
         method: "POST", path: "/api/v1/chats/sessions/{sessionCode}/history/query", pathParams: { sessionCode },
@@ -256,6 +262,11 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
             const error=payload.productCompletionError as Record<string,unknown>;
             throw new FetchTransportError(String(error.message ?? "Product completion is unavailable"), {code:typeof error.code === "string" ? error.code : "CHAT_STREAM_COMPLETION_UNAVAILABLE",data:payload,status:200});
           }
+          // The answer/message was accepted; RUN_ERROR still reaches the transcript.
+          // Resolve the complete product result so the UI settles persisted answers.
+          if (type === "RUN_ERROR" && isChatSendResult(payload.result)) {
+            return normalizeChatSendResult(payload.result);
+          }
           if (type === "RUN_ERROR" && (payload.productCompletion === true || isChatSendResult(payload.result) || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
             throw new FetchTransportError(
               String(payload.message ?? payload.code ?? "Chat stream failed"),
@@ -309,6 +320,11 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
             const error=payload.productCompletionError as Record<string,unknown>;
             throw new FetchTransportError(String(error.message ?? "Product completion is unavailable"), {code:typeof error.code === "string" ? error.code : "CHAT_STREAM_COMPLETION_UNAVAILABLE",data:payload,status:200});
           }
+          // The answer/message was accepted; RUN_ERROR still reaches the transcript.
+          // Resolve the complete product result so the UI settles persisted answers.
+          if (type === "RUN_ERROR" && isChatSendResult(payload.result)) {
+            return normalizeChatSendResult(payload.result);
+          }
           if (type === "RUN_ERROR" && (payload.productCompletion === true || isChatSendResult(payload.result) || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
             throw new FetchTransportError(
               String(payload.message ?? payload.code ?? "Chat stream failed"),
@@ -360,6 +376,11 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
           if (payload.productCompletion === true && payload.productCompletionError && typeof payload.productCompletionError === "object") {
             const error=payload.productCompletionError as Record<string,unknown>;
             throw new FetchTransportError(String(error.message ?? "Product completion is unavailable"), {code:typeof error.code === "string" ? error.code : "CHAT_STREAM_COMPLETION_UNAVAILABLE",data:payload,status:200});
+          }
+          // The answer/message was accepted; RUN_ERROR still reaches the transcript.
+          // Resolve the complete product result so the UI settles persisted answers.
+          if (type === "RUN_ERROR" && isChatSendResult(payload.result)) {
+            return normalizeChatSendResult(payload.result);
           }
           if (type === "RUN_ERROR" && (payload.productCompletion === true || isChatSendResult(payload.result) || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
             throw new FetchTransportError(String(payload.message ?? payload.code ?? "Chat stream failed"), {

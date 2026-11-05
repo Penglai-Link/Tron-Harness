@@ -134,10 +134,13 @@ impl FrameworkHost {
             .map_err(AgentInvocationError::RuntimeFailed)?
             .content;
         let mut request = fw::RunRequest::new(&session, input);
-        request.annotations = context.short_term_memory.as_ref()
+        request.annotations = context
+            .short_term_memory
+            .as_ref()
             .and_then(|input| input.input_metadata.as_ref())
             .and_then(|metadata| metadata.get("annotations"))
-            .map(|value| serde_json::from_value(value.clone())).transpose()
+            .map(|value| serde_json::from_value(value.clone()))
+            .transpose()
             .map_err(|_| AgentInvocationError::RuntimeFailed("invalid annotations".into()))?
             .unwrap_or_default();
         request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(|e| {
@@ -161,7 +164,8 @@ impl FrameworkHost {
             })
             .await
             .map_err(|e| map(e.into()))?;
-        request.limits.max_steps = context.limits.max_steps.max(1) as usize;
+        request.limits.max_steps = super::runtime_count_limit(context.limits.max_steps);
+        request.limits.max_tool_calls = super::runtime_count_limit(context.limits.max_tool_calls);
         request.limits.max_model_calls_per_step = Some(1);
         request.limits.max_model_retries = 0;
         request.limits.max_context_tokens =

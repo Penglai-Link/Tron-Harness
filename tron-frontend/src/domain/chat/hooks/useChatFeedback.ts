@@ -1,3 +1,4 @@
+import { chatErrorPresentation } from "@eliteforge/agent-ui-chat-core";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/ui/toast";
@@ -6,7 +7,9 @@ const errorTitles = {
   "Chat suggestions failed": "suggestionsFailedTitle",
   "Chat send failed": "chatSendFailedTitle",
   "Chat load failed": "chatLoadFailedTitle",
+  "Chat delete failed": "chatDeleteFailedTitle",
   "Chat answer failed": "answerFailedTitle",
+  "Chat continuation failed": "continuationFailedTitle",
   "Chat steer failed": "steerFailedTitle",
   "Chat stop failed": "chatStopFailedTitle",
   "Chat attachment upload failed": "attachmentUploadFailed",
@@ -47,7 +50,7 @@ export function useChatFeedback() {
       : feedbackMessages[normalizedMessage as keyof typeof feedbackMessages];
     const titleKey = answerUnconfirmed ? "answerUnconfirmedTitle"
       : errorTitles[title as keyof typeof errorTitles] ?? "chatSendFailedTitle";
-    toast.error(messageKey ? t(`chat.management.toasts.${messageKey}`) : message, {
+    toast.error(messageKey ? t(`chat.management.toasts.${messageKey}`) : chatErrorPresentation(message, t("chat.management.toasts.chatSendFailedTitle")).summary, {
       title: t(`chat.management.toasts.${titleKey}`),
     });
   }, [t, toast]);

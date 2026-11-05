@@ -7,3 +7,12 @@
 .ef-chat .ef-chat__message-body {
   font-size: var(--tron-system-font-size);
 }
+
+/* Continue the transcript canvas behind the composer in every theme/mode. */
+.ef-chat > .ef-chat__footer {
+  background: var(
+    --agent-ui-chat-transcript-bg,
+    var(--agent-ui-chat-surface-muted-color, var(--color-surface-container-low))
+  );
+  box-shadow: none;
+}
