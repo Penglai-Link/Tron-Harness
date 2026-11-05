@@ -13,6 +13,8 @@ const errorTitles = {
 } as const;
 
 const feedbackMessages = {
+  "chat storage failed": "chatStorageFailed",
+  "chat session was not found": "chatSessionNotFound",
   "workspaceCode is required": "workspaceRequired",
   "Workspace code is required before starting a session": "workspaceRequired",
   "Chat send failed": "chatSendFailed",
@@ -25,12 +27,26 @@ const feedbackMessages = {
   "Another response is already running; your message was queued.": "messageQueued",
 } as const;
 
+const networkFailureMessages = new Set([
+  "failed to fetch",
+  "fetch failed",
+  "networkerror when attempting to fetch resource.",
+  "network request failed",
+  "load failed",
+]);
+
 export function useChatFeedback() {
   const toast = useToast();
   const { t } = useTranslation("pages");
   const error = useCallback((message: string, title?: string) => {
-    const messageKey = feedbackMessages[message as keyof typeof feedbackMessages];
-    const titleKey = errorTitles[title as keyof typeof errorTitles] ?? "chatSendFailedTitle";
+    const normalizedMessage = message.trim().replace(/^(?:TypeError|NetworkError|ChatAdapterError):\s*/i, "");
+    const networkFailure = networkFailureMessages.has(normalizedMessage.toLowerCase());
+    const answerUnconfirmed = networkFailure && title === "Chat answer failed";
+    const messageKey = answerUnconfirmed ? "answerConnectionLost"
+      : networkFailure ? "chatConnectionFailed"
+      : feedbackMessages[normalizedMessage as keyof typeof feedbackMessages];
+    const titleKey = answerUnconfirmed ? "answerUnconfirmedTitle"
+      : errorTitles[title as keyof typeof errorTitles] ?? "chatSendFailedTitle";
     toast.error(messageKey ? t(`chat.management.toasts.${messageKey}`) : message, {
       title: t(`chat.management.toasts.${titleKey}`),
     });
