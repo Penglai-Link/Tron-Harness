@@ -213,12 +213,11 @@ export const shell = {
     refresh: "Refresh",
   },
   theme: {
-    hint: "Light is the current default. Matrix Dark applies a neon-green dark console palette and stays active after reload.",
+    hint: "Each theme includes light and dark palettes and can follow your system appearance.",
     label: "Theme",
-    options: {
-      light: "Light",
-      matrixDark: "Matrix Dark",
-    },
+    mode: "Appearance",
+    modes: { light: "Light", dark: "Dark", system: "System" },
+    options: { default: "Default", light: "Light", matrixDark: "Matrix Dark" },
   },
   workspace: {
     current: "Workspace",

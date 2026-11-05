@@ -18,22 +18,39 @@ ZIP 根目录直接有 `skin.json`，不要带外层目录。只调颜色和组�
 {
   "id": "my-theme",
   "name": "我的主题",
-  "version": 2,
-  "mode": "Light",
-  "colors": { "--tron-button-primary-bg": "#245b8a" },
-  "layout": { "--tron-button-radius": "8px", "--tron-table-row-height": "44px" },
-  "resources": { "background": null, "font": null, "css": "assets/theme.css" }
+  "version": 3,
+  "variants": {
+    "light": {
+      "--color-background": "#faf9f5",
+      "--color-on-surface": "#30302b",
+      "--color-primary": "#a84f35",
+      "--color-on-primary": "#ffffff"
+    },
+    "dark": {
+      "--color-background": "#262624",
+      "--color-on-surface": "#e8e6dc",
+      "--color-primary": "#e5a184",
+      "--color-on-primary": "#30201a"
+    }
+  },
+  "layout": {
+    "--radius": "0.625rem"
+  },
+  "resources": {
+    "background": null,
+    "font": null,
+    "css": null
+  }
 }
 ```
 
 | 字段 | 规则 |
 | --- | --- |
-| id | 1–64 个小写字母、数字或连字符；内置 light/matrix-dark 不可覆盖 |
+| id | 1–64 个小写字母、数字或连字符；内置 default/brand 不可覆盖 |
 | name | 非空，UTF-8 最多 120 字节 |
-| version | 包协议版本。1 兼容旧格式；2 增加包内 CSS，不是主题发布版本 |
-| mode | Light / Dark；未覆盖的变量继承此模式 |
-| colors / layout | 可省略；变量名 `--[a-z0-9-]+`，最多 100 字符；非空字符串值最多 512 UTF-8 字节；两组共最多 512 个条目 |
-| resources | 可选 background / font / css。CSS 仅支持版本 2，必须存放在 ZIP 内；单独 JSON 不能带本地 CSS |
+| version | 包协议版本。固定为 3，不是主题发布版本 |
+| variants.light / variants.dark / layout | 两套配色必填，各包含 background、on-surface、primary、on-primary 四个 `--color-*` 变量；layout 可省略；变量名 `--[a-z0-9-]+`，最多 100 字符；非空字符串值最多 512 UTF-8 字节；三组共最多 1024 个条目 |
+| resources | 可选 background / font / css。必须存放在 ZIP 内；单独 JSON 不能带本地 CSS |
 
 不支持 JS、HTML、SVG、音效或图标替换。JSON 自定义属性值不接受分号、花括号、尖括号、反斜杠、@、CSS 注释、`url()`、`!important`。`var()`、`calc()`、`color-mix()` 等可用于变量值，但不能包含上述禁止字符或形成变量循环；变量值语法和颜色对比仍需浏览器验证。
 
@@ -68,11 +85,11 @@ python3 scripts/theme_pack.py pack assets/ocean-detail /你的输出目录/ocean
 
 1. 打开「平台配置 → 外观」。
 2. 点击「导入主题」并选择 ZIP 或 JSON。导入只安装，不自动激活。
-3. 点击该主题卡片。前端先加载背景和字体，成功后请求后端保存当前 ID，再替换变量与资源。
+3. 点击该主题卡片。保存主题 ID 后，前端按当前显示模式加载配色和资源；准备完成后替换原主题。
 4. 在实际业务页面检查按钮状态、输入框、表格数据行和弹窗。
-5. 刷新或重启后从后端恢复。切换到内置浅色/Matrix 可恢复默认效果。
+5. 刷新或重启后从后端恢复。切换到默认主题 可恢复默认效果。
 
-重复 ID 会拒绝导入。发布修改版时改 ID（如 ocean-v2），version 按内容使用 1 或 2。外观页支持卸载自定义主题；当前没有覆盖更新或导出界面。
+重复 ID 会拒绝导入。发布修改版时改 ID（如 ocean-v2），version 使用 3。外观页支持卸载自定义主题；当前没有覆盖更新或导出界面。
 
 ## 存储与多窗口
 
@@ -85,22 +102,23 @@ sequenceDiagram
   U->>B: 上传 JSON / ZIP
   B->>D: 校验后保存 id/skin.json 与资源
   B-->>U: 安装成功
-  U->>B: 读取图片/字体
-  U->>U: 解码与准备完成
   U->>B: PUT active {id}
   B->>D: 原子写入 active.json
   B-->>U: 激活成功
-  U->>U: 替换 CSS 变量与资源
+  U->>B: 读取图片/字体
+  U->>U: 按显示模式准备配色，替换 CSS 变量与资源
   B-->>W: skin-changed SSE
   W->>B: 读取当前主题
   W->>W: 加载资源并应用
 ```
 
-目录为后端 `application_config_path` 同级 `skins/`，默认 `~/.tron/skins/`。它属于后端实例，不是前端机器，也不是每个 Profile 独立存储。同一后端的窗口共享激活主题；不同后端各自保存。未进入 Profile 前使用本机保存的内置深浅模式，进入后以后端为准。字体大小是本客户端偏好。
+目录为后端 `application_config_path` 同级 `skins/`，默认 `~/.tron/skins/`。它属于后端实例，不是前端机器，也不是每个 Profile 独立存储。同一后端的窗口共享激活主题；不同后端各自保存。明暗模式独立保存在本机 `tron.color-mode`，支持 light / dark / system；system 监听操作系统外观变化。同源窗口通过 storage 事件同步模式。字体大小也是本客户端偏好。
 
-内置主题首次访问播种，清单缺失/损坏用编译内嵌文件兜底。active.json 不合法或指向不存在主题时回到浅色。正常操作无需手工改磁盘文件。
+内置主题首次访问播种，清单缺失/损坏用编译内嵌文件兜底。active.json 不合法或指向不存在主题时回到默认主题。正常操作无需手工改磁盘文件。
 
 开发时手工放目录要求名称与 id 一致。它不会触发 SSE；刷新或重新聚焦后重新读取清单。仅替换资源但清单不变可能命中缓存和前端签名，应改资源文件名并更新清单，或用新 ID 重新导入；当前不提供目录热监听。
+
+旧单配色包需补齐 `variants.light`、`variants.dark` 并升级到版本 3 后重新导入。共享 CSS 使用配色变量，从而适应两种模式。
 
 ## 失败处理
 
@@ -109,7 +127,7 @@ sequenceDiagram
 - 已激活主题的远程资源断网：该窗口保留现有主题/内置基底，外观页仍显示主题列表和重试入口。后端 active ID 不会被某个窗口的网络故障自动改写。
 - 多窗口网络不一致时，某个窗口可能暂时保留旧主题。SSE 重连和窗口聚焦会重读，不能承诺断网窗口瞬时一致。
 - 切换成功清理旧装饰层、观察器、动态样式、FontFace 和 Blob URL；异步旧请求不能覆盖新选择。
-- 主题 UI 无法使用时，可关闭后端后仅将 `skins/active.json` 改为 `{"id":"light"}`，再启动；不要删除其他用户配置。
+- 主题 UI 无法使用时，可关闭后端后仅将 `skins/active.json` 改为 `{"id":"default"}`，再启动；不要删除其他用户配置。
 
 ## HTTP 自动化
 

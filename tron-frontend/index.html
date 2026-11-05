@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#020305" />
     <title>Tron</title>
-    <script>try { document.documentElement.dataset.theme = localStorage.getItem("tron.theme") === "light" ? "light" : "matrix-dark"; } catch {}</script>
+    <script>try { const mode = localStorage.getItem("tron.color-mode"); const dark = mode === "system" ? matchMedia("(prefers-color-scheme: dark)").matches : mode ? mode === "dark" : localStorage.getItem("tron.theme") ? localStorage.getItem("tron.theme") !== "light" : matchMedia("(prefers-color-scheme: dark)").matches; document.documentElement.dataset.theme = dark ? "matrix-dark" : "light"; document.documentElement.style.colorScheme = dark ? "dark" : "light"; } catch {}</script>
     <style>html, body { background: #020305; } html[data-theme="light"], html[data-theme="light"] body { background: #fff; }</style>
   </head>
   <body>

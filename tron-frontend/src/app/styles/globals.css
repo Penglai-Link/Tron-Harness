@@ -358,16 +358,16 @@ body[data-background-effects] [data-theme-part="app-page"] {
 }
 
 /* Built-in Matrix sidebars use tonal separation instead of bright rules. */
-:root[data-skin="matrix-dark"] [data-theme-part="app-sidebar"] {
+:root[data-skin="default"][data-theme="matrix-dark"] [data-theme-part="app-sidebar"] {
   --sidebar-border: transparent;
   border-color: transparent;
 }
 
-:root[data-skin="matrix-dark"] [data-theme-part="app-sidebar"] :is([data-slot="sidebar-header"], [data-theme-part="app-sidebar-chats"]) {
+:root[data-skin="default"][data-theme="matrix-dark"] [data-theme-part="app-sidebar"] :is([data-slot="sidebar-header"], [data-theme-part="app-sidebar-chats"]) {
   border-color: transparent;
 }
 
-:root[data-skin="matrix-dark"] [data-theme-part="app-sidebar"] [data-slot="sidebar-inner"] {
+:root[data-skin="default"][data-theme="matrix-dark"] [data-theme-part="app-sidebar"] [data-slot="sidebar-inner"] {
   background: linear-gradient(
     180deg,
     color-mix(in srgb, color-mix(in srgb, var(--sidebar) 85%, var(--color-background)) var(--tron-sidebar-bg-opacity, 100%), transparent),

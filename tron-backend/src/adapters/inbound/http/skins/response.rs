@@ -1,4 +1,4 @@
-use crate::domain::skin::{Skin, SkinMode};
+use crate::domain::skin::Skin;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -9,10 +9,15 @@ pub struct SkinVo {
     id: String,
     name: String,
     version: u32,
-    mode: &'static str,
-    colors: BTreeMap<String, String>,
+    variants: SkinVariantsVo,
     layout: BTreeMap<String, String>,
     resources: ResourceVo,
+}
+
+#[derive(Serialize)]
+pub struct SkinVariantsVo {
+    light: BTreeMap<String, String>,
+    dark: BTreeMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -29,11 +34,10 @@ impl From<Skin> for SkinVo {
             id: skin.id,
             name: skin.name,
             version: skin.version,
-            mode: match skin.mode {
-                SkinMode::Light => "Light",
-                SkinMode::Dark => "Dark",
+            variants: SkinVariantsVo {
+                light: skin.variants.light,
+                dark: skin.variants.dark,
             },
-            colors: skin.colors,
             layout: skin.layout,
             resources: ResourceVo {
                 background: skin.resources.background,

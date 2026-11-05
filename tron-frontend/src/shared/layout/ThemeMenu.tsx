@@ -4,20 +4,22 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
+import type { ColorMode } from "@/shared/theme/Skin";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 
 export function ThemeMenu() {
   const { t } = useTranslation();
-  const { skins, activeSkin, loading, selectSkin } = useTheme();
+  const { skins, activeSkin, colorMode, setColorMode, loading, selectSkin } = useTheme();
   const toast = useToast();
 
-  const label = (skin: typeof activeSkin) => skin.id === "light" ? t("shell:theme.options.light")
-    : skin.id === "matrix-dark" ? t("shell:theme.options.matrixDark") : skin.name;
+  const label = (skin: typeof activeSkin) => skin.id === "default" ? t("shell:theme.options.default") : skin.name;
 
   async function select(id: string) {
     try { await selectSkin(id); }
@@ -35,6 +37,14 @@ export function ThemeMenu() {
         <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
       </DropdownMenuTrigger>
       <DropdownMenuContent data-tron-theme-menu side="right" align="end" sideOffset={8} className="w-56 max-w-[calc(100vw-2rem)]">
+        <DropdownMenuLabel>{t("shell:theme.mode")}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={colorMode} onValueChange={(mode) => setColorMode(mode as ColorMode)} aria-label={t("shell:theme.mode")}>
+          {(["light", "dark", "system"] as const).map((mode) => (
+            <DropdownMenuRadioItem key={mode} value={mode} closeOnClick={false}>{t(`shell:theme.modes.${mode}`)}</DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t("shell:theme.label")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={activeSkin.id} onValueChange={(id) => void select(id)} aria-label={t("shell:theme.label")}>
           {skins.map((skin) => (
             <DropdownMenuRadioItem key={skin.id} value={skin.id} disabled={loading} closeOnClick={false} className="min-h-9 break-words">

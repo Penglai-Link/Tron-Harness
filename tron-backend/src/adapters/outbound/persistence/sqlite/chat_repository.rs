@@ -16,12 +16,13 @@ pub struct SqliteChatRepository {
 
 /// One round trip builds the whole session projection: business link, native
 /// session record, latest non-summary run, and the external runtime reference.
+/// Child runs share ownership, but must not replace the owning chat's run.
 /// The correlated subqueries use the ef_runs_session index and
 /// ef_session_context primary key.
 const SESSION_PROJECTION_SQL: &str = "SELECT l.session_id, l.business_json, \
     json_extract(s.record,'$.title'), json_extract(s.record,'$.status'), \
     json_extract(s.record,'$.created_at_ms'), json_extract(s.record,'$.updated_at_ms'), \
-    (SELECT r.record FROM ef_runs r WHERE (r.session_id=l.session_id OR r.owner_session_id=l.session_id) \
+    (SELECT r.record FROM ef_runs r WHERE r.session_id=l.session_id \
         AND json_extract(r.record,'$.kind')<>'SUMMARY' \
         ORDER BY json_extract(r.record,'$.started_at_ms') DESC, r.id DESC LIMIT 1), \
     (SELECT c.value FROM ef_session_context c WHERE c.session_id=l.session_id AND c.key='tron.external-reference') \

@@ -43,6 +43,43 @@ pub trait ToolPermissionSource: Send + Sync {
     fn operation(&self, descriptor: &fw::ToolDescriptor) -> Option<bool>;
 }
 
+/// Persisted by the host; this never comes from tool arguments.
+pub const SMART_MODE_KEY: &str = "tool-policy.smart";
+
+#[derive(Debug, Clone, Copy)]
+pub struct ToolPolicyConfig {
+    pub smart: bool,
+}
+impl Default for ToolPolicyConfig {
+    fn default() -> Self {
+        Self { smart: true }
+    }
+}
+
+/// None means insufficient evidence, not a fabricated risk level.
+pub struct CommandRiskAssessment {
+    pub risk: Option<ToolRisk>,
+    pub reason: String,
+}
+#[async_trait]
+pub trait CommandRiskReviewer: Send + Sync {
+    async fn assess(
+        &self,
+        invocation: &fw::ToolInvocationContext<'_>,
+    ) -> Result<CommandRiskAssessment, fw::AgentError>;
+}
+pub struct CommandRiskReviewerService(pub Arc<dyn CommandRiskReviewer>);
+
+fn is_command_execution(id: &str) -> bool {
+    matches!(
+        id,
+        "system.command.exec"
+            | "framework.terminal.start"
+            | "system.command.task.write"
+            | "framework.terminal.write"
+    )
+}
+
 /// Display language supplied by the trusted host for this run, never by tool arguments.
 /// Missing language follows Tron's backend fallback to Simplified Chinese.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -84,14 +121,16 @@ impl TronToolPolicyLocale {
         }
     }
 
-    fn approval_prompt(self, risk: ToolRisk, reason: &str) -> fw::Content {
+    fn approval_prompt(self, risk: Option<ToolRisk>, reason: &str) -> fw::Content {
         fw::Content(vec![
-            fw::ContentBlock::Text { text: reason.into() },
+            fw::ContentBlock::Text {
+                text: reason.into(),
+            },
             fw::ContentBlock::Json {
                 value: serde_json::json!({
                     "kind": "toolApproval",
                     "risk": risk,
-                    "riskLabel": self.risk_label(risk),
+                    "riskLabel": risk.map(|risk| self.risk_label(risk)),
                 }),
             },
         ])
@@ -145,6 +184,72 @@ impl fw::ToolPolicy for TronToolPolicy {
                 fw::ToolPolicyDecision::Allow
             }
             ToolPermission::Ask => {
+                if is_command_execution(&invocation.descriptor.id) {
+                    let smart = invocation
+                        .run
+                        .extensions
+                        .get::<ToolPolicyConfig>()
+                        .is_none_or(|config| config.smart);
+                    let uncertain = || {
+                        CommandRiskAssessment {
+                        risk: None,
+                        reason: locale.text(
+                            "无法确定该命令的执行风险，需要人工确认",
+                            "The command's effects could not be assessed; manual approval is required",
+                        ).into(),
+                    }
+                    };
+                    let assessment = if smart {
+                        match invocation
+                            .run
+                            .extensions
+                            .get::<CommandRiskReviewerService>()
+                        {
+                            Some(reviewer) => match reviewer.0.assess(invocation).await {
+                                Ok(assessment) => assessment,
+                                Err(error)
+                                    if matches!(error.primary(), fw::AgentError::Cancelled) =>
+                                {
+                                    return Err(error);
+                                }
+                                Err(_) => uncertain(),
+                            },
+                            None => uncertain(),
+                        }
+                    } else {
+                        // Static rules may prove simple operations, but their conservative
+                        // high/critical fallback is not evidence of destructive effects.
+                        let risk = identify_tool_risk(
+                            invocation.descriptor,
+                            &invocation.call.arguments,
+                            None,
+                        );
+                        if risk >= ToolRisk::High {
+                            uncertain()
+                        } else {
+                            let (zh, en) = super::tool_risk::command_approval_reason(
+                                &invocation.call.arguments,
+                            );
+                            CommandRiskAssessment {
+                                risk: Some(risk),
+                                reason: locale.text(zh, en).into(),
+                            }
+                        }
+                    };
+                    invocation.run.check_cancelled()?;
+                    return Ok(
+                        if assessment
+                            .risk
+                            .is_none_or(|risk| risk >= setting.confirm_level)
+                        {
+                            fw::ToolPolicyDecision::RequireApproval(
+                                locale.approval_prompt(assessment.risk, &assessment.reason),
+                            )
+                        } else {
+                            fw::ToolPolicyDecision::Allow
+                        },
+                    );
+                }
                 let operation = self.0.operation(invocation.descriptor);
                 let risk = identify_tool_risk(
                     invocation.descriptor,
@@ -188,7 +293,7 @@ impl fw::ToolPolicy for TronToolPolicy {
                 if risk >= setting.confirm_level {
                     // Framework persists the original call and resumes it exactly once.
                     fw::ToolPolicyDecision::RequireApproval(
-                        locale.approval_prompt(risk, reason),
+                        locale.approval_prompt(Some(risk), reason),
                     )
                 } else {
                     fw::ToolPolicyDecision::Allow

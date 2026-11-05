@@ -1,6 +1,6 @@
 # Tron 皮肤包
 
-在「设置 → 外观」选择主题，无需重启。内置浅色、Matrix 深色；点眼睛按钮临时预览，点主题卡片正式应用。预览与应用使用同一个 CSS 解析、资源加载和校验流程；预览不会写入当前主题。主题保存在当前后端实例，连接同一实例的窗口共享主题；UI 字号仍是当前客户端的独立偏好。
+在「设置 → 外观」选择“默认”或“Brand”主题，再选择浅色、深色或跟随系统。默认主题的深色配色沿用 Matrix；Brand 使用暖中性色和陶土橙。每个主题包含两套配色，切换主题不会重置显示模式。主题 ID 保存在后端；显示模式保存在本机 `tron.color-mode`，跟随系统时监听系统外观变化，同源窗口同步显示模式。
 
 ```mermaid
 flowchart LR
@@ -13,9 +13,9 @@ flowchart LR
   G --> H[清理旧资源并注入 CSS 变量]
 ```
 
-皮肤目录位于后端 `application_config_path` 同级的 `skins/`，默认是 `~/.tron/skins/`。首次访问自动播种内置皮肤；内置文件缺失或损坏时使用编译期 JSON 兜底。无效的激活记录自动恢复浅色。写入 `active.json` 使用同目录临时文件和原子替换；安装通过临时目录校验后整体移入。
+皮肤目录位于后端 `application_config_path` 同级的 `skins/`，默认是 `~/.tron/skins/`。首次访问自动播种内置皮肤；内置文件缺失或损坏时使用编译期 JSON 兜底。无效的激活记录自动恢复默认主题。写入 `active.json` 使用同目录临时文件和原子替换；安装通过临时目录校验后整体移入。
 
-Matrix 使用黑绿色表面、绿色正文、较暗的绿色次要文字和亮绿交互强调；按钮、菜单、侧栏、表格、Markdown 和终端文字沿用同一色系，错误和警告保留红黄语义色。升级时，仅与原始内置 Matrix 内容完全相同的落盘清单会自动更新；用户修改过的清单保持原样。`version: 1` 表示包格式版本，不表示配色版本。
+内置主题 ID 为 `default` 和 `brand`。旧内置主题选择归并为默认主题，本地保存的明暗偏好保留。旧单配色包需要补齐双配色并使用版本 3 后重新导入。
 
 ## 文件格式
 
@@ -32,34 +32,41 @@ ocean.zip
 
 ```json
 {
-  "id": "ocean",
-  "name": "Ocean",
-  "version": 2,
-  "mode": "Light",
-  "colors": {
-    "--color-background": "#e8f1fb",
-    "--color-primary": "#164b85",
-    "--color-on-primary": "#ffffff"
+  "id": "my-theme",
+  "name": "我的主题",
+  "version": 3,
+  "variants": {
+    "light": {
+      "--color-background": "#faf9f5",
+      "--color-on-surface": "#30302b",
+      "--color-primary": "#a84f35",
+      "--color-on-primary": "#ffffff"
+    },
+    "dark": {
+      "--color-background": "#262624",
+      "--color-on-surface": "#e8e6dc",
+      "--color-primary": "#e5a184",
+      "--color-on-primary": "#30201a"
+    }
   },
   "layout": {
-    "--tron-card-radius": "20px",
-    "--tron-control-radius": "8px"
+    "--radius": "0.625rem"
   },
   "resources": {
-    "background": "assets/background.webp",
-    "font": "assets/interface.woff2",
-    "css": "theme.css"
+    "background": null,
+    "font": null,
+    "css": null
   }
 }
 ```
 
 - `id`：1–64 个小写字母、数字、连字符。ID 已存在时拒绝覆盖，包括内置主题。
-- `version`：版本 1 兼容旧主题；版本 2 增加受限的包内 CSS。`mode` 为 `Light` / `Dark`，控制未覆盖变量的基底、深色组件和终端 ANSI 默认配色。
-- `colors` / `layout`：CSS 自定义属性；合并时 `layout` 优先。常用颜色沿用 `packages/chat-theme/src/theme.scss` 的 `--color-*`，运行时将主要语义颜色同步到 shadcn 的 `--primary`、`--background` 等变量；显式声明的 shadcn 变量优先。
+- `version`：固定为 3。`variants.light`、`variants.dark` 都是必填颜色映射，分别包含 `--color-background`、`--color-on-surface`、`--color-primary`、`--color-on-primary`。
+- `variants.light` / `variants.dark` / `layout`：CSS 自定义属性；合并时 `layout` 优先。常用颜色沿用 `packages/chat-theme/src/theme.scss` 的 `--color-*`，运行时将主要语义颜色同步到 shadcn 的 `--primary`、`--background` 等变量；显式声明的 shadcn 变量优先。
 - `layout` 可设置 `--radius`、`--tron-card-radius`、`--tron-control-radius` 和 `--font-sans`。`--tron-system-font-size` 保留给字号设置，皮肤不可覆盖。未消费的变量不会改变界面。
 - 能力包管理和能力配置页消费 `--tron-capability-effective-fg`、`--tron-capability-inactive-fg`、`--tron-capability-id-fg`、`--tron-capability-provider-fg`，并暴露 `data-theme-part="capability-packs-page / capability-pack-card / capability-configuration-page / capability-implementation / capability-provider / capability-status-effective / capability-status-inactive"` 子部件选择器。主题制作说明与变量校验目录见 [tron-theme-spec](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/SKILL.md) 和 [tokens.md](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/tokens.md)。
 - `resources.background`：PNG、JPEG、WebP、GIF；作为工作台及设置页的背景，内容面板保留自身表面色。`resources.font`：WOFF、WOFF2、TTF、OTF。两者都可以为空或 HTTPS URL。本地资源通过受保护的资源接口读取为 Blob URL，切换时撤销 URL 并移除字体。
-- `resources.css`：版本 2 可选 CSS 文件，只能是包内 CSS 路径。CSS 解析后自动限定到 `body[data-tron-app][data-skin="主题ID"]` 子树，只接受颜色、边框、阴影、滤镜、背景、变换、伪元素内容及动画等视觉属性。尺寸、间距、布局、定位和层叠属性会被拒绝；独立特效层可使用定位和尺寸属性。`@import`、其他 at-rule、外部/数据 URL、脚本构造会被拒绝；`url()` 只能引用 ZIP 中的包内文件。CSS 加载错误会指出 CSS 文件和规则。
+- `resources.css`：版本 3 可选 CSS 文件，只能是包内 CSS 路径。CSS 解析后自动限定到 `body[data-tron-app][data-skin="主题ID"]` 子树，只接受颜色、边框、阴影、滤镜、背景、变换、伪元素内容及动画等视觉属性。尺寸、间距、布局、定位和层叠属性会被拒绝；独立特效层可使用定位和尺寸属性。`@import`、其他 at-rule、外部/数据 URL、脚本构造会被拒绝；`url()` 只能引用 ZIP 中的包内文件。CSS 加载错误会指出 CSS 文件和规则。
 - 主题 CSS 可使用普通 CSS 选择器覆盖当前 Tron 页面中的所有匹配组件，例如 `button`、`input`、`[data-theme-part="app-sidebar"]`；规则会自动限定在当前主题页面内，不会影响其他网站内容。应用额外提供固定于视口的 `data-theme-effect-layer="global"` 全局特效层，跨导航页面持续显示，不参与布局、不拦截点击，支持伪元素、关键帧、栅格、暗角、辉光和扫描线。动画遵循系统的减少动态效果设置。组件装饰支持 `app-shell / sidebar / page / panel / card / chat / chat-message / dialog`，详见[锚点协议](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/effect-anchors.md)。
 
 ```css
@@ -137,7 +144,7 @@ make fe-unit-test TEST=src/shared/theme
 仓库提供 [tron-theme-spec](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/SKILL.md)，包含浅/深色模板、[组件变量目录](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/tokens.md)、[加载与故障恢复](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/format-and-loading.md)，以及纯 Python 标准库校验/打包脚本。
 
 ```sh
-python3 tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/theme_pack.py init ./my-theme --id my-theme --name "My Theme" --mode Light
+python3 tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/theme_pack.py init ./my-theme --id my-theme --name "My Theme"
 # 编辑 my-theme/skin.json 后：
 python3 tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/theme_pack.py validate ./my-theme
 python3 tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/theme_pack.py pack ./my-theme ./my-theme.zip
@@ -190,7 +197,7 @@ Tron 当前显式配置的出现时长、位移和过渡时间优先于对应通
 - 主题切换/预览替换整个装饰实例；退出预览重建已激活主题的装饰；卸载时断开观察器并移除节点。仅静态定位宿主临时获得定位上下文，清理时恢复；已有 fixed/absolute/sticky 不改动。
 - CSS 几何权限仅适用于完整标准特效选择器列表，不能通过后代、兄弟、`:is()` 或混入按钮选择器扩大权限。position 仅接受 absolute、pointer-events 仅接受 none，不开放 z-index。关键帧仍只能用视觉属性，例如 transform、opacity。
 
-协议继续使用 `version: 2`，无需修改后端接口和清单字段。前端编译器、Rust 安装校验器、Python 制作脚本同步维护选择器白名单。针对动态节点、清理、样式隔离、几何越权与资源路径的回归检查见 `src/shared/theme`、Rust `domain::skin::manifest::effect_tests` 和 `make skill-theme-test`。
+协议使用 `version: 3`，后端响应与清单都包含双配色。前端编译器、Rust 安装校验器、Python 制作脚本同步维护选择器白名单。针对动态节点、清理、样式隔离、几何越权与资源路径的回归检查见 `src/shared/theme`、Rust `domain::skin::manifest::effect_tests` 和 `make skill-theme-test`。
 
 
 ### 锚点扩展验收（2026-09-26）

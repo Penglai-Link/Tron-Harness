@@ -91,7 +91,7 @@ impl HostExecution {
 #[path = "native_models.rs"]
 mod native;
 pub(crate) use native::NativeModelScope;
-pub(super) use native::{compaction_model_reference, synchronize_selected_model};
+pub(super) use native::{compaction_model_reference, risk_review_model, synchronize_selected_model};
 pub(super) struct TronChatModel {
     reference: fw::ModelRef,
     config: crate::domain::agent::AgentModelConfig,

@@ -12,15 +12,11 @@ use std::{
 
 const MAX_PACKAGE: usize = 20 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
-const ORIGINAL_MATRIX: &str =
-    include_str!("../../../resources/skins/migrations/matrix-dark-original.json");
-const PREVIOUS_MATRIX: &str = include_str!("../../../resources/matrix-dark-shipped-v1.json");
-const LEGACY_MATRIX_PARTICLES: &str =
-    include_str!("../../../resources/skins/migrations/matrix-particles.json");
 const BUILTINS: [&str; 2] = [
-    include_str!("../../../resources/skins/light.json"),
-    include_str!("../../../resources/skins/matrix-dark.json"),
+    include_str!("../../../resources/skins/default.json"),
+    include_str!("../../../resources/skins/brand.json"),
 ];
+const RETIRED_BUILTINS: [&str; 3] = ["light", "matrix-dark", "matrix-particles"];
 
 pub struct FileSkinStore {
     root: PathBuf,
@@ -43,54 +39,6 @@ impl FileSkinStore {
             if !dir.exists() {
                 fs::create_dir_all(&dir).map_err(|_| SkinError::Storage)?;
                 atomic_write(&dir.join("skin.json"), content.as_bytes())?;
-            } else if skin.id == "light" {
-                // Refresh only the former shipped chart palette; retain all authored colors.
-                let previous = self
-                    .checked_resource(&skin.id, "skin.json")
-                    .ok()
-                    .and_then(|path| fs::read(path).ok())
-                    .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
-                if let Some(mut previous) = previous
-                    && let Some(colors) = previous
-                        .get_mut("colors")
-                        .and_then(|value| value.as_object_mut())
-                {
-                    let legacy = [
-                        ("--chart-1", "oklch(0.87 0 0)"),
-                        ("--chart-2", "oklch(0.556 0 0)"),
-                        ("--chart-3", "oklch(0.439 0 0)"),
-                        ("--chart-4", "oklch(0.371 0 0)"),
-                        ("--chart-5", "oklch(0.269 0 0)"),
-                    ];
-                    if legacy.iter().all(|(key, value)| {
-                        colors.get(*key).and_then(|color| color.as_str()) == Some(*value)
-                    }) {
-                        for (key, _) in legacy {
-                            if let Some(value) = skin.colors.get(key) {
-                                colors.insert(key.into(), serde_json::Value::String(value.clone()));
-                            }
-                        }
-                        let bytes =
-                            serde_json::to_vec_pretty(&previous).map_err(|_| SkinError::Storage)?;
-                        atomic_write(&dir.join("skin.json"), &bytes)?;
-                    }
-                }
-            } else if skin.id == "matrix-dark" {
-                // Upgrade only the unmodified shipped palette, preserving authored skins.
-                let previous = self
-                    .checked_resource(&skin.id, "skin.json")
-                    .ok()
-                    .and_then(|path| fs::read(path).ok())
-                    .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
-                let original: serde_json::Value =
-                    serde_json::from_str(ORIGINAL_MATRIX).map_err(|_| SkinError::Storage)?;
-                let previous_shipped: serde_json::Value =
-                    serde_json::from_str(PREVIOUS_MATRIX).map_err(|_| SkinError::Storage)?;
-                if previous.as_ref() == Some(&original)
-                    || previous.as_ref() == Some(&previous_shipped)
-                {
-                    atomic_write(&dir.join("skin.json"), content.as_bytes())?;
-                }
             }
         }
         Ok(())
@@ -126,7 +74,6 @@ impl FileSkinStore {
             BUILTINS
                 .iter()
                 .copied()
-                .chain(std::iter::once(LEGACY_MATRIX_PARTICLES))
                 .filter_map(|content| serde_json::from_str::<Skin>(content).ok())
                 .find(|skin| skin.id == id)
                 .ok_or(error)
@@ -278,13 +225,13 @@ impl SkinStore for FileSkinStore {
     fn list(&self) -> Result<Vec<Skin>, SkinError> {
         let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
         self.initialize()?;
-        let mut skins = vec![self.read_skin("light")?, self.read_skin("matrix-dark")?];
+        let mut skins = vec![self.read_skin("default")?, self.read_skin("brand")?];
         for entry in fs::read_dir(&self.root)
             .map_err(|_| SkinError::Storage)?
             .flatten()
         {
             let id = entry.file_name().to_string_lossy().to_string();
-            if id == "light" || id == "matrix-dark" || id == "matrix-particles" {
+            if id == "default" || id == "brand" || RETIRED_BUILTINS.contains(&id.as_str()) {
                 continue;
             }
             if let Ok(skin) = self.read_skin(&id) {
@@ -310,12 +257,12 @@ impl SkinStore for FileSkinStore {
         if let Some(skin) = id.and_then(|id| self.read_skin(&id).ok()) {
             return Ok(skin);
         }
-        atomic_write(&self.root.join("active.json"), br#"{"id":"matrix-dark"}"#)?;
-        self.read_skin("matrix-dark")
+        atomic_write(&self.root.join("active.json"), br#"{"id":"default"}"#)?;
+        self.read_skin("default")
     }
 
     fn activate(&self, id: &str) -> Result<Skin, SkinError> {
-        if id == "matrix-particles" {
+        if RETIRED_BUILTINS.contains(&id) {
             return Err(SkinError::NotFound);
         }
         let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
@@ -349,7 +296,7 @@ impl SkinStore for FileSkinStore {
     }
 
     fn uninstall(&self, id: &str) -> Result<(), SkinError> {
-        if id == "light" || id == "matrix-dark" || id == "matrix-particles" {
+        if id == "default" || id == "brand" || RETIRED_BUILTINS.contains(&id) {
             return Err(SkinError::Protected);
         }
         if !valid_skin_id(id) {
@@ -371,7 +318,7 @@ impl SkinStore for FileSkinStore {
             });
         let was_active = active_id.as_deref() == Some(id);
         if was_active {
-            atomic_write(&active_path, br#"{"id":"light"}"#)?;
+            atomic_write(&active_path, br#"{"id":"default"}"#)?;
         }
 
         if fs::remove_dir_all(self.root.join(id)).is_err() {

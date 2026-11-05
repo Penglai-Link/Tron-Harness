@@ -252,6 +252,29 @@ pub(crate) fn compaction_model_reference(
         })
 }
 
+/// Reuse the auxiliary binding paired with the model selected by the existing router.
+pub(crate) fn risk_review_model(
+    extensions: &fw::Extensions,
+    config: &AgentModelConfig,
+) -> Result<fw::ModelRef, fw::AgentError> {
+    let bindings = extensions
+        .get::<Bindings>()
+        .ok_or(fw::AgentError::MissingService("authorized model bindings"))?;
+    bindings
+        .summaries
+        .iter()
+        .find_map(|(main, auxiliary)| {
+            bindings
+                .models
+                .get(main)
+                .filter(|binding| binding.config.identity() == config.identity())
+                .map(|_| auxiliary.clone())
+        })
+        .ok_or(fw::AgentError::MissingService(
+            "authorized risk review model",
+        ))
+}
+
 /// Re-read host authorization only. The SDK owns refresh fencing and recovery.
 /// No inference is sent by discovery, and a switched account cannot publish here.
 struct AuthorizedRefresh {

@@ -1,4 +1,4 @@
-import type { Skin } from "./Skin";
+import type { ResolvedSkin } from "./Skin";
 import { skinApi } from "./skinApi";
 import postcss from "postcss";
 import { effectLayerNames, effectSelectorName, mountEffectLayers, type EffectLayerName } from "./effectLayers";
@@ -22,7 +22,7 @@ const aliases: Record<string, string> = {
   "--info": "--color-accent", "--info-foreground": "--color-on-accent",
 };
 
-export function skinVariables(skin: Skin): Record<string, string> {
+export function skinVariables(skin: ResolvedSkin): Record<string, string> {
   const variables = { ...skin.colors, ...skin.layout };
   for (const [key, value] of Object.entries(variables)) {
     if (!/^--[a-z0-9-]+$/.test(key) || key === "--tron-system-font-size"
@@ -44,7 +44,7 @@ export interface PreparedSkin {
 const visualProperties = new Set(("color background background-color background-image background-position background-size background-repeat background-blend-mode border border-color border-style border-width border-radius outline outline-color outline-style outline-width box-shadow text-shadow opacity filter backdrop-filter mix-blend-mode animation animation-name animation-duration animation-delay animation-direction animation-fill-mode animation-iteration-count animation-play-state animation-timing-function transition transition-property transition-duration transition-delay transition-timing-function transform content font-family font-style font-weight text-decoration text-decoration-color text-decoration-style text-decoration-line -webkit-text-stroke -webkit-text-fill-color").split(/\s+/));
 const safeCssFunctions = new Set("url var rgb rgba hsl hsla hwb lab lch oklab oklch color color-mix linear-gradient repeating-linear-gradient radial-gradient repeating-radial-gradient conic-gradient repeating-conic-gradient blur brightness contrast drop-shadow grayscale hue-rotate invert opacity saturate sepia translate translatex translatey translatez translate3d scale scalex scaley scale3d rotate rotatex rotatey rotatez rotate3d skew skewx skewy matrix matrix3d cubic-bezier steps calc min max clamp".split(" "));
 
-async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: string) => Promise<string>): Promise<{ css: string; effects: Set<EffectLayerName> }> {
+async function compileSkinCss(source: string, skin: ResolvedSkin, resourceUrl: (path: string) => Promise<string>): Promise<{ css: string; effects: Set<EffectLayerName> }> {
   const effects = new Set<EffectLayerName>();
   let root: postcss.Root;
   try { root = postcss.parse(source, { from: skin.resources.css ?? "theme.css" }); }
@@ -107,7 +107,7 @@ async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: st
   return { css: root.toString(), effects };
 }
 
-export async function prepareSkin(skin: Skin): Promise<PreparedSkin> {
+export async function prepareSkin(skin: ResolvedSkin): Promise<PreparedSkin> {
   const variables = skinVariables(skin);
   const urls: string[] = [];
   let effects = new Set<EffectLayerName>();

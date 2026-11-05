@@ -2391,6 +2391,10 @@ export const pages = {
     },
   },
   capabilityManagement: {
+    smartTitle: "Smart risk assessment",
+    smartDescription: "Uses the current conversation model to assess a command's actual effects. Uncertain operations require approval; denied tools remain blocked. Turn off to use static assessment.",
+    smartEffective: "Changes apply to the next run or resume.",
+    smartSaved: "Saved",
     noDescription: "No description declared.",
     noPluginProvides: "No contributions declared for this plugin.",
     catalog: {
@@ -5193,7 +5197,7 @@ export const pages = {
     skinLoadFailed:
       "Could not load themes. Your current appearance is unchanged.",
     retrySkins: "Retry",
-    skinHint: "Import a ZIP skin package, up to 20 MB.",
+    skinHint: "Theme packages must include light and dark palettes. Import JSON or ZIP, up to 20 MB.",
 
     backgroundImage: "Background image",
     backgroundImageChoose: "Choose image",

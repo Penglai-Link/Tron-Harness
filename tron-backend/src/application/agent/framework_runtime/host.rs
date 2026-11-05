@@ -558,6 +558,59 @@ impl FrameworkHost {
         Ok(())
     }
 
+    pub fn tool_policy_smart(&self) -> bool {
+        self.0
+            .extension_state
+            .read()
+            .unwrap()
+            .get(tron_harness_capability::tool_policy::SMART_MODE_KEY)
+            .copied()
+            .unwrap_or(true)
+    }
+
+    pub async fn set_tool_policy_smart(&self, smart: bool) -> Result<(), String> {
+        let _guard = self.0.config_lock.lock().await;
+        self.ensure_open()?;
+        let packs = self.0.capability_state.read().unwrap().clone();
+        let mut extensions = self.0.extension_state.read().unwrap().clone();
+        extensions.insert(
+            tron_harness_capability::tool_policy::SMART_MODE_KEY.into(),
+            smart,
+        );
+        persist_capability_state(&self.0.state_path, &packs, &extensions)?;
+        *self.0.extension_state.write().unwrap() = extensions;
+        Ok(())
+    }
+
+    fn attach_tool_policy(&self, request: &mut fw::RunRequest, locale: &str) {
+        use tron_harness_capability::tool_policy::{CommandRiskReviewerService, ToolPolicyConfig};
+        let smart = self.tool_policy_smart();
+        request.extensions.insert(ToolPolicyConfig { smart });
+        request.extensions.insert(
+            match crate::shared::locale::SupportedLocale::from_raw(locale) {
+                crate::shared::locale::SupportedLocale::EnUs => {
+                    tron_harness_capability::TronToolPolicyLocale::EnUs
+                }
+                crate::shared::locale::SupportedLocale::ZhCn => {
+                    tron_harness_capability::TronToolPolicyLocale::ZhCn
+                }
+            },
+        );
+        if smart {
+            request
+                .extensions
+                .insert(CommandRiskReviewerService(Arc::new(
+                    super::command_risk_review::SmartCommandReviewer,
+                )));
+            // Each tool in a batch may require one auxiliary review. Preserve the
+            // original answer/retry allowance and all run-wide SDK ceilings.
+            request.limits.max_model_calls_per_step = request
+                .limits
+                .max_model_calls_per_step
+                .map(|limit| limit.saturating_add(request.limits.max_tool_calls));
+        }
+    }
+
     pub async fn set_extension_enabled(&self, point: &str, enabled: bool) -> Result<(), String> {
         let _guard = self.0.config_lock.lock().await;
         self.ensure_external_idle()?;

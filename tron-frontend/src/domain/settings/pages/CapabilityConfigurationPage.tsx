@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader, SurfaceCard } from "@/shared";
 import { capabilityDescription } from "../model/capabilityDescription";
+import { ToolPolicySettings } from "../components/ToolPolicySettings";
 import { listExtensionImplementations, setExtensionEnabled, type ExtensionImplementationRecord } from "../api/capabilityApi";
 
 const EXTENSION_POINT_ORDER = [
@@ -81,6 +82,7 @@ export function CapabilityConfigurationPage() {
         </TabsTrigger>)}
       </TabsList>
       {groups.map(({ point, items }) => <TabsContent key={point} value={point} className="min-w-0">
+        {point === "tool-policy" ? <ToolPolicySettings revision={revision} onSavingChange={(saving) => setBusyId(saving ? "tool-policy" : null)} /> : null}
         <DataTable className="overflow-x-auto" rows={items}
           rowKey={(row) => `${row.extensionPoint}:${row.providerPackId}:${row.implementation}`}
           pagination={null} emptyState={pageT("emptyExtensions")} columns={columns} tableClassName="min-w-[960px]" />

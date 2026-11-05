@@ -1,5 +1,17 @@
 import { requestApi } from "@/shared/api/httpClient";
 
+export interface ToolPolicyConfig {
+  smart: boolean;
+}
+
+export function getToolPolicyConfig(signal?: AbortSignal) {
+  return requestApi<ToolPolicyConfig>("GET /api/v1/capabilities/extensions/tool-policy/config", { signal });
+}
+
+export function updateToolPolicyConfig(smart: boolean) {
+  return requestApi<ToolPolicyConfig>("PUT /api/v1/capabilities/extensions/tool-policy/config", { body: { smart } });
+}
+
 export interface CapabilityPackRecord {
   id: string;
   name: string;

@@ -12,14 +12,11 @@ import {
   type TypingParticleShape,
   type TypingParticleStyle,
 } from "./typingParticles";
-import type { Skin } from "./Skin";
-import light from "./builtin/light.json";
-import matrix from "./builtin/matrix-dark.json";
-
-import legacyParticles from "./migrations/matrix-particles.json";
+import { resolveSkin, type Skin, type ColorMode } from "./Skin";
+import defaultSkin from "./builtin/default.json";
+import brandSkin from "./builtin/brand.json";
 import { BackgroundLayer } from "./BackgroundLayer";
 import {
-  defaultBackgroundEffectSettings,
   deleteBackgroundImage,
   hasStoredBackgroundEffectSettings,
   normalizeBackgroundEffectSettings,
@@ -80,7 +77,15 @@ function readTypingParticleSettings(): TypingParticleSettings {
     return defaultTypingParticleSettings;
   }
 }
-const builtins = [light, matrix] as Skin[];
+const builtins = [defaultSkin, brandSkin] as Skin[];
+const colorModeStorageKey = "tron.color-mode";
+function readColorMode(): ColorMode {
+  const stored = localStorage.getItem(colorModeStorageKey);
+  if (stored === "light" || stored === "dark" || stored === "system") return stored;
+  // Preserve an explicitly chosen legacy appearance on upgrade.
+  const previous = localStorage.getItem("tron.theme");
+  return previous === "light" ? "light" : previous === "matrix-dark" ? "dark" : "system";
+}
 interface ThemeContextValue {
   fontSize: number;
   setFontSize: (size: number) => void;
@@ -102,6 +107,9 @@ interface ThemeContextValue {
   setBackgroundImage: (image: File) => Promise<void>;
   clearBackgroundImage: () => Promise<void>;
   theme: AppTheme;
+  colorMode: ColorMode;
+  setColorMode: (mode: ColorMode) => void;
+  resolvedMode: "light" | "dark";
   activeSkin: Skin;
   skins: Skin[];
   loading: boolean;
@@ -119,7 +127,12 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const status = useAuthStore((state) => state.status);
-  const [activeSkin, setActiveSkin] = useState<Skin>(() => localStorage.getItem("tron.theme") === "light" ? builtins[0] : builtins[1]);
+  const [activeSkin, setActiveSkin] = useState<Skin>(() => builtins.find((skin) => skin.id === localStorage.getItem("tron.skin")) ?? builtins[0]);
+  const [colorMode, setColorModeState] = useState<ColorMode>(readColorMode);
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const resolvedMode = colorMode === "system" ? (systemDark ? "dark" : "light") : colorMode;
+  const [displayedSkin, setDisplayedSkin] = useState(activeSkin);
+  const [displayedMode, setDisplayedMode] = useState(resolvedMode);
   const [skins, setSkins] = useState<Skin[]>(builtins);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -168,61 +181,78 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applied.current?.apply();
   }, []);
 
-  const inheritLegacyParticleEffect = useCallback((skin: Skin) => {
-    if (hasExplicitBackgroundEffectSettings.current) return;
-    hasExplicitBackgroundEffectSettings.current = true;
-    const color = skin.colors["--color-on-surface"];
-    const settings = normalizeBackgroundEffectSettings({
-      ...defaultBackgroundEffectSettings,
-      effect: "particles",
-      color: typeof color === "string" && /^#[\da-f]{6}$/i.test(color)
-        ? color
-        : defaultBackgroundEffectSettings.color,
-    });
-    writeBackgroundEffectSettings(localStorage, settings);
-    setBackgroundEffectSettings(settings);
+  const setColorMode = useCallback((mode: ColorMode) => {
+    if (!["light", "dark", "system"].includes(mode)) return;
+    localStorage.setItem(colorModeStorageKey, mode);
+    setColorModeState(mode);
   }, []);
 
-  const commit = useCallback((skin: Skin, prepared: PreparedSkin) => {
-    applied.current?.dispose();
-    prepared.apply();
-    applied.current = prepared;
-    activeSignature.current = JSON.stringify(skin);
-    setActiveSkin(skin);
-    localStorage.setItem("tron.theme", skin.mode === "Dark" ? "matrix-dark" : "light");
+  useEffect(() => {
+    // Persist the migrated preference before the first palette application.
+    localStorage.setItem(colorModeStorageKey, readColorMode());
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemChange = () => setSystemDark(query.matches);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === colorModeStorageKey || event.key === null) setColorModeState(readColorMode());
+    };
+    onSystemChange();
+    query.addEventListener("change", onSystemChange);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      query.removeEventListener("change", onSystemChange);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
-  useLayoutEffect(() => {
-    document.documentElement.dataset.theme = activeSkin.mode === "Dark" ? "matrix-dark" : "light";
-  }, [activeSkin.mode]);
+  useEffect(() => {
+    let current = true;
+    let prepared: PreparedSkin | undefined;
+    stopPreviewSkin();
+    const resolved = resolveSkin(activeSkin, resolvedMode);
+    const signature = JSON.stringify(resolved);
+    if (signature === activeSignature.current && applied.current) return;
+    void (async () => {
+      try {
+        prepared = await prepareSkin(resolved);
+        if (!current) { prepared.dispose(); return; }
+        const apply = () => {
+          if (!current || !prepared) return;
+          applied.current?.dispose();
+          prepared.apply();
+          applied.current = prepared;
+          prepared = undefined;
+          activeSignature.current = signature;
+          flushSync(() => { setDisplayedSkin(activeSkin); setDisplayedMode(resolvedMode); });
+          localStorage.setItem("tron.skin", activeSkin.id);
+          localStorage.setItem("tron.theme", resolvedMode === "dark" ? "matrix-dark" : "light");
+        };
+        if (applied.current) await revealTheme(apply);
+        else apply();
+      } catch (reason) {
+        if (current) setError(reason instanceof Error ? reason.message : String(reason));
+      } finally { prepared?.dispose(); }
+    })();
+    return () => { current = false; };
+  }, [activeSkin, resolvedMode, stopPreviewSkin]);
 
   const refreshSkins = useCallback(async () => {
     if (mutation.current) return;
     const request = ++generation.current;
-    let prepared: PreparedSkin | undefined;
     try {
       const [list, { skin: active }] = await Promise.all([skinApi.list(), skinApi.active()]);
       if (request !== generation.current) return;
-      // Keep recovery choices available even when the active skin's assets fail.
-      setSkins(list.filter((item) => item.id !== legacyParticles.id));
-      let skin = active;
-      if (skin.id === legacyParticles.id) {
-        inheritLegacyParticleEffect(skin);
-        const replacement = list.find((item) => item.id === "matrix-dark") ?? matrix as Skin;
-        await skinApi.activate(replacement.id);
-        if (request !== generation.current) return;
-        skin = replacement;
+      if (!active.variants?.light || !active.variants?.dark) {
+        throw new Error("Theme package must include light and dark palettes");
       }
-      if (JSON.stringify(skin) !== activeSignature.current) prepared = await prepareSkin(skin);
-      if (request !== generation.current) { prepared?.dispose(); return; }
-      if (prepared) { stopPreviewSkin(); commit(skin, prepared); }
+      setSkins(list.filter((skin) => skin.variants?.light && skin.variants?.dark));
+      setActiveSkin(active);
       setError(null);
     } catch (reason) {
       if (request === generation.current) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       if (request === generation.current) setLoading(false);
     }
-  }, [commit, inheritLegacyParticleEffect, stopPreviewSkin]);
+  }, []);
 
   useEffect(() => {
     if (status !== "authenticated") { setLoading(false); return; }
@@ -233,32 +263,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     window.addEventListener("focus", onFocus);
     return () => { generation.current++; stop(); window.removeEventListener("focus", onFocus); };
   }, [status, refreshSkins]);
-  useEffect(() => () => { generation.current++; previewPrepared.current?.dispose(); applied.current?.dispose(); }, []);
+  useEffect(() => () => { generation.current++; previewPrepared.current?.dispose(); applied.current?.dispose(); applied.current = null; activeSignature.current = null; }, []);
 
   async function selectSkin(id: string) {
-    if (mutation.current) return;
-    const skin = skins.find((item) => item.id === id);
-    if (!skin) return;
-    if (JSON.stringify(skin) === activeSignature.current && !previewSkinId) return;
+    if (mutation.current || (id === activeSkin.id && id === displayedSkin.id && !previewSkinId)) return;
+    if (!skins.some((skin) => skin.id === id)) return;
     mutation.current = true;
     stopPreviewSkin();
     const request = ++generation.current;
     setLoading(true);
-    let prepared: PreparedSkin | undefined;
     try {
-      prepared = await prepareSkin(skin);
+      const { skin } = await skinApi.activate(id);
       if (request !== generation.current) return;
-      await skinApi.activate(id);
-      if (request !== generation.current) return;
-      const next = prepared;
-      await revealTheme(() => {
-        if (request !== generation.current) return;
-        flushSync(() => commit(skin, next));
-        prepared = undefined;
-      });
+      setActiveSkin(skin);
       setError(null);
     } finally {
-      prepared?.dispose();
       mutation.current = false;
       setLoading(false);
       if (request === generation.current) void refreshSkins();
@@ -280,23 +299,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     stopPreviewSkin();
     const request = ++generation.current;
     setLoading(true);
-    let prepared: PreparedSkin | undefined;
     try {
       const { skin } = await skinApi.installMarket(id);
+      if (request !== generation.current) return;
       setSkins((current) => [...current.filter((item) => item.id !== skin.id), skin]);
-      prepared = await prepareSkin(skin);
-      if (request !== generation.current) return;
       await skinApi.activate(skin.id);
-      if (request !== generation.current) return;
-      const next = prepared;
-      await revealTheme(() => {
-        if (request !== generation.current) return;
-        flushSync(() => commit(skin, next));
-        prepared = undefined;
-      });
-      setError(null);
+      if (request === generation.current) setActiveSkin(skin);
     } finally {
-      prepared?.dispose();
       mutation.current = false;
       setLoading(false);
       if (request === generation.current) void refreshSkins();
@@ -306,44 +315,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (mutation.current || builtins.some((skin) => skin.id === id)) return;
     mutation.current = true;
     stopPreviewSkin();
-    const request = ++generation.current;
+    ++generation.current;
     setLoading(true);
-    let fallback: PreparedSkin | undefined;
-    try {
-      // The backend is authoritative: another window may have changed the active
-      // skin since this provider last refreshed.
-      const { skin: persistedActive } = await skinApi.active();
-      if (persistedActive.id === id) {
-        fallback = await prepareSkin(builtins[0]);
-      } else if (persistedActive.id !== activeSkin.id) {
-        fallback = await prepareSkin(persistedActive);
-      }
-      await skinApi.uninstall(id);
-      if (request !== generation.current) return;
-      if (fallback) {
-        const nextSkin = persistedActive.id === id ? builtins[0] : persistedActive;
-        const next = fallback;
-        await revealTheme(() => {
-          if (request !== generation.current) return;
-          flushSync(() => commit(nextSkin, next));
-          fallback = undefined;
-        });
-      }
-      setSkins((current) => current.filter((skin) => skin.id !== id));
-      setError(null);
-    } finally {
-      fallback?.dispose();
-      mutation.current = false;
-      setLoading(false);
-      if (request === generation.current) void refreshSkins();
-    }
+    try { await skinApi.uninstall(id); }
+    finally { mutation.current = false; setLoading(false); }
+    await refreshSkins();
   }
   async function previewSkin(id: string) {
     const skin = skins.find((item) => item.id === id);
     if (!skin) return;
     stopPreviewSkin();
     const request = previewGeneration.current;
-    const prepared = await prepareSkin(skin);
+    const prepared = await prepareSkin(resolveSkin(skin, resolvedMode));
     if (request !== previewGeneration.current) { prepared.dispose(); return; }
     prepared.apply();
     previewPrepared.current = prepared;
@@ -453,7 +436,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     backgroundImageUrl,
     setBackgroundImage,
     clearBackgroundImage,
-    theme: activeSkin.mode === "Dark" ? "matrix-dark" : "light", activeSkin, skins,
+    theme: displayedMode === "dark" ? "matrix-dark" : "light", colorMode, setColorMode, resolvedMode: displayedMode, activeSkin: displayedSkin, skins,
     loading, error, refreshSkins, selectSkin, importSkin, installMarketSkin, uninstallSkin, previewSkin, stopPreviewSkin, previewSkinId,
   }}>
     <BackgroundLayer

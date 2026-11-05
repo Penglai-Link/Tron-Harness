@@ -4,7 +4,7 @@
 
 ## 设计目标
 
-界面优先呈现任务、会话和工作区信息。通过清晰的分组、稳定的操作位置和适量留白支持密集信息，减少重复标题、说明和装饰。浅色、Matrix 深色和导入皮肤共享相同的业务结构与操作语义。
+界面优先呈现任务、会话和工作区信息。通过清晰的分组、稳定的操作位置和适量留白支持密集信息，减少重复标题、说明和装饰。默认、Brand 和导入皮肤的浅色／深色模式共享相同的业务结构与操作语义。
 
 ## 实现与职责
 
@@ -22,7 +22,7 @@ flowchart TD
 ```
 
 - `src/app/styles/globals.css` 引入 Tailwind CSS 4、组件样式和字体，提供基础样式及主题映射。
-- `src/shared/theme/builtin/light.json`、`matrix-dark.json` 定义内置皮肤；`ThemeProvider.tsx` 管理当前皮肤、字号和外观偏好。
+- `src/shared/theme/builtin/default.json`、`brand.json` 定义内置皮肤；`ThemeProvider.tsx` 管理当前皮肤、字号和外观偏好。
 - `src/shared/theme/skinEngine.ts` 应用皮肤变量和资源；`effectLayers.ts` 管理装饰层及其清理。
 - `src/components/ui` 提供基础控件，`src/shared/layout` 提供应用布局，领域页面组合这些组件。
 - `AgentChatWindow.tsx` 位于 `src/domain/chat/components`，负责 Tron 上下文和数据适配。聊天窗口、流式呈现、队列、停止和回放使用共享 Agent UI 的 `ChatRuntimeWindow`。

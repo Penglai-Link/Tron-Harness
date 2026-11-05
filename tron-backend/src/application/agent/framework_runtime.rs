@@ -51,3 +51,5 @@ mod auxiliary_models;
 pub(crate) use auxiliary_models::attach_auxiliary_model;
 
 pub(crate) mod summary_loop;
+
+mod command_risk_review;

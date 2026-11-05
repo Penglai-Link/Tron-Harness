@@ -1,4 +1,4 @@
-import { Trash2, Check } from "lucide-react";
+import { Trash2, Check, Sun, Moon, Monitor } from "lucide-react";
 import { OnlineSkinMarket } from "./OnlineSkinMarket";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,17 +8,16 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useToast } from "@/components/ui/toast";
 import { SurfaceCard, useTheme } from "@/shared";
-import type { Skin } from "@/shared/theme/Skin";
+import type { Skin, ColorMode } from "@/shared/theme/Skin";
 
 export function SkinSettings() {
   const { t } = useTranslation("pages");
   const { t: shellT } = useTranslation("shell");
-  const { skins, activeSkin, loading, error, selectSkin, importSkin, uninstallSkin, refreshSkins } = useTheme();
+  const { skins, activeSkin, colorMode, setColorMode, resolvedMode, loading, error, selectSkin, importSkin, uninstallSkin, refreshSkins } = useTheme();
   const input = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const [skinToUninstall, setSkinToUninstall] = useState<Skin | null>(null);
-  const label = (skin: Skin) => skin.id === "light" ? shellT("theme.options.light")
-    : skin.id === "matrix-dark" ? shellT("theme.options.matrixDark") : skin.name;
+  const label = (skin: Skin) => skin.id === "default" ? shellT("theme.options.default") : skin.name;
 
   async function select(id: string) {
     try { await selectSkin(id); }
@@ -58,6 +57,18 @@ export function SkinSettings() {
             if (file) void install(file);
           }} />
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-muted-foreground">{shellT("theme.mode")}</span>
+        <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label={shellT("theme.mode")}>
+          {([{ value: "light", icon: Sun }, { value: "dark", icon: Moon }, { value: "system", icon: Monitor }] as const).map(({ value, icon: Icon }) => (
+            <Button key={value} size="sm" variant="ghost" aria-pressed={colorMode === value}
+              onClick={() => setColorMode(value as ColorMode)}
+              className="gap-1.5 aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm">
+              <Icon aria-hidden="true" className="size-3.5" />{shellT(`theme.modes.${value}`)}
+            </Button>
+          ))}
+        </div>
+      </div>
       {error ? <div className="flex items-center gap-3 text-sm" role="alert">
         <span>{t("settingsAppearance.skinLoadFailed")}</span>
         <Button variant="ghost" disabled={loading} onClick={() => void refreshSkins()}>{t("settingsAppearance.retrySkins")}</Button>
@@ -65,13 +76,13 @@ export function SkinSettings() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label={t("settingsAppearance.skins")}>
         {skins.map((skin) => {
           const selected = skin.id === activeSkin.id;
-          const colors = { ...skin.colors, ...skin.layout };
-          const dark = skin.mode === "Dark";
+          const colors = { ...skin.variants[resolvedMode], ...skin.layout };
+          const dark = resolvedMode === "dark";
           const background = colors["--color-background"] ?? (dark ? "#010603" : "#fdf8f8");
           const surface = colors["--color-surface-container"] ?? (dark ? "#102017" : "#f1edec");
           const foreground = colors["--color-on-surface"] ?? (dark ? "#e4ffe8" : "#1c1b1b");
           const accent = colors["--color-primary"] ?? (dark ? "#5cff85" : "#000000");
-          const imported = !["light", "matrix-dark"].includes(skin.id);
+          const imported = !["default", "brand"].includes(skin.id);
           return <div key={skin.id} data-theme-anchor="card" className="relative min-w-0">
             <Button variant="outline" aria-label={label(skin)} aria-pressed={selected}
               disabled={loading} onClick={() => void select(skin.id)}

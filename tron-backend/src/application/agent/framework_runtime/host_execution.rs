@@ -272,17 +272,6 @@ impl FrameworkHost {
                 .extensions
                 .insert(tron_harness_capability::TronToolAutoApproval);
         }
-        // Resolve the display language per run, including approval continuations.
-        request.extensions.insert(
-            match crate::shared::locale::SupportedLocale::from_raw(&context.locale) {
-                crate::shared::locale::SupportedLocale::EnUs => {
-                    tron_harness_capability::TronToolPolicyLocale::EnUs
-                }
-                crate::shared::locale::SupportedLocale::ZhCn => {
-                    tron_harness_capability::TronToolPolicyLocale::ZhCn
-                }
-            },
-        );
         if let Some(prompts) = self.0.prompt_service.get() {
             let mut keys = vec![
                 "agent.goal-judge",
@@ -369,6 +358,7 @@ impl FrameworkHost {
         };
         request.limits.max_model_calls_per_step =
             Some((request.limits.max_model_retries + 1).max(3));
+        self.attach_tool_policy(&mut request, &context.locale);
         request.limits.max_overflow_recoveries = harness.framework_overflow_limit();
         request.generation.temperature = context.model.temperature;
         request.generation.top_p = context.model.top_p;

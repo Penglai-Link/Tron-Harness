@@ -1,7 +1,13 @@
 import "./themeTransition.css";
 
+let activeTransition: ViewTransition | undefined;
+let revealGeneration = 0;
+
 /** Reveal the new theme from the viewport's bottom centre over the old snapshot. */
 export async function revealTheme(update: () => void): Promise<void> {
+  const generation = ++revealGeneration;
+  activeTransition?.skipTransition();
+  activeTransition = undefined;
   const root = document.documentElement;
   const policy = root.dataset.tronMotionPolicy;
   if (typeof document.startViewTransition !== "function"
@@ -9,6 +15,8 @@ export async function revealTheme(update: () => void): Promise<void> {
     || policy === "off"
     || policy === "reduced"
     || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    delete root.dataset.tronThemeTransition;
+    root.style.removeProperty("--tron-theme-reveal-radius");
     update();
     return;
   }
@@ -19,12 +27,15 @@ export async function revealTheme(update: () => void): Promise<void> {
   root.dataset.tronThemeTransition = "";
 
   const cleanup = () => {
+    if (generation !== revealGeneration) return;
+    activeTransition = undefined;
     delete root.dataset.tronThemeTransition;
     root.style.removeProperty("--tron-theme-reveal-radius");
   };
   let transition: ViewTransition;
   try {
     transition = document.startViewTransition(update);
+    activeTransition = transition;
   } catch {
     cleanup();
     update();

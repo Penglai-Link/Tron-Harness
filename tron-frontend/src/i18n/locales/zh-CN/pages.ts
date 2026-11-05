@@ -2310,6 +2310,10 @@ export const pages = {
     },
   },
   capabilityManagement: {
+    smartTitle: "智能风险评估（Smart）",
+    smartDescription: "复用当前会话模型，根据命令的实际影响评估风险。无法判断时要求确认；禁止的工具始终不会执行。关闭后使用静态评估。",
+    smartEffective: "修改从下一次运行或续跑生效。",
+    smartSaved: "已保存",
     noDescription: "此内容未声明描述。",
     noPluginProvides: "此插件未声明提供的内容。",
     catalog: {
@@ -4973,7 +4977,7 @@ export const pages = {
     skinUninstallFailed: "主题卸载失败",
     skinLoadFailed: "主题加载失败，已保留当前外观。",
     retrySkins: "重试",
-    skinHint: "可导入 ZIP 皮肤包，最大 20 MB。",
+    skinHint: "主题包需包含浅色与深色配色，支持 JSON 或 ZIP，最大 20 MB。",
 
     backgroundImage: "背景图片",
     backgroundImageChoose: "选择图片",

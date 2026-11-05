@@ -493,7 +493,7 @@ async fn ensure_native_resume(
         .validate_native_resume(session_code, resume)
         .await
     {
-        Ok(()) => Ok(()),
+        Ok(_) => Ok(()),
         Err(AgentError::AwaitingUserInput) => Err(chat_error_response(ChatError::UserInputPending)),
         Err(AgentError::InvalidConfiguration(_)) => Err(chat_error_response(
             ChatError::UserInputAnswerInvalid("invalid native interaction response".into()),

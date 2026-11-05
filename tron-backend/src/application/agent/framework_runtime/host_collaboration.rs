@@ -633,6 +633,7 @@ impl Runtime {
         };
         request.limits.max_model_calls_per_step =
             Some((request.limits.max_model_retries + 1).max(3));
+        host.attach_tool_policy(&mut request, &context.locale);
         request.limits.max_overflow_recoveries = harness.framework_overflow_limit();
         request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
         request.limits.max_context_tokens =

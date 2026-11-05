@@ -378,10 +378,9 @@ pub async fn answer_user_input(
         Ok(request) => request,
         Err(error) => return steer_chat_message_request_rejection_response(error),
     };
-    let session = match state.chats.get_session(&session_code) {
-        Ok(session) => session,
-        Err(error) => return chat_error_response(error),
-    };
+    if let Err(error) = state.chats.get_session(&session_code) {
+        return chat_error_response(error);
+    }
     if let Err(error) = state.chats.ensure_session_writable(&session_code) {
         return chat_error_response(error);
     }
@@ -421,25 +420,30 @@ pub async fn answer_user_input(
     } else {
         request.resume
     };
-    if let Err(error) = state
+    let interaction_run = match state
         .agent_framework
         .validate_native_resume(&session_code, &entries)
         .await
     {
-        return chat_error_response(ChatError::UserInputAnswerInvalid(error.to_string()));
-    }
-    let history = match session.last_run_code.as_deref() {
-        Some(run) => match state.agent_runs.get_run(run) {
-            Ok(record) => Some(record),
-            Err(_) => return chat_error_response(ChatError::StorageFailure),
-        },
-        None => None,
+        Ok(Some(run)) => run.to_string(),
+        Ok(None) => return chat_error_response(ChatError::UserInputRequestNotFound),
+        Err(error) => {
+            return chat_error_response(ChatError::UserInputAnswerInvalid(error.to_string()));
+        }
+    };
+    let history = match state.agent_runs.get_run(&interaction_run) {
+        Ok(record) => record,
+        Err(error) => {
+            tracing::error!(%session_code, run_code = %interaction_run, ?error,
+                "failed to load interaction run for answer submission");
+            return chat_error_response(ChatError::StorageFailure);
+        }
     };
     let mut command = match state.chats.native_resume_command(
         &session_code,
         entries,
-        history.as_ref().map(|record| record.model_code.clone()),
-        history.and_then(|record| record.reasoning_effort),
+        Some(history.model_code),
+        history.reasoning_effort,
     ) {
         Ok(command) => command,
         Err(error) => return chat_error_response(error),

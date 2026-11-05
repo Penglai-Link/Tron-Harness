@@ -3,9 +3,10 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SkinMode {
-    Light,
-    Dark,
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SkinVariants {
+    pub light: BTreeMap<String, String>,
+    pub dark: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -24,9 +25,7 @@ pub struct Skin {
     pub id: String,
     pub name: String,
     pub version: u32,
-    pub mode: SkinMode,
-    #[serde(default)]
-    pub colors: BTreeMap<String, String>,
+    pub variants: SkinVariants,
     #[serde(default)]
     pub layout: BTreeMap<String, String>,
     #[serde(default)]
@@ -59,28 +58,45 @@ impl Skin {
         valid_skin_id(&self.id)
             && !self.name.trim().is_empty()
             && self.name.len() <= 120
-            && matches!(self.version, 1 | 2)
-            && (self.resources.css.is_none() || self.version == 2)
-            && self.colors.len() + self.layout.len() <= 512
-            && self.colors.iter().chain(&self.layout).all(|(key, value)| {
-                key.starts_with("--")
-                    && key.len() > 2
-                    && key.len() <= 100
-                    && key
-                        .bytes()
-                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-                    && key != "--tron-system-font-size"
-                    && !value.is_empty()
-                    && value.len() <= 512
-                    && !value.contains([';', '{', '}', '<', '>', '\\', '@'])
-                    && !value
-                        .split_whitespace()
-                        .collect::<String>()
-                        .to_ascii_lowercase()
-                        .contains("url(")
-                    && !value.contains("/*")
-                    && !value.to_ascii_lowercase().contains("!important")
-            })
+            && self.version == 3
+            && [&self.variants.light, &self.variants.dark]
+                .into_iter()
+                .all(|colors| {
+                    [
+                        "--color-background",
+                        "--color-on-surface",
+                        "--color-primary",
+                        "--color-on-primary",
+                    ]
+                    .into_iter()
+                    .all(|key| colors.contains_key(key))
+                })
+            && self.variants.light.len() + self.variants.dark.len() + self.layout.len() <= 1024
+            && self
+                .variants
+                .light
+                .iter()
+                .chain(&self.variants.dark)
+                .chain(&self.layout)
+                .all(|(key, value)| {
+                    key.starts_with("--")
+                        && key.len() > 2
+                        && key.len() <= 100
+                        && key
+                            .bytes()
+                            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                        && key != "--tron-system-font-size"
+                        && !value.is_empty()
+                        && value.len() <= 512
+                        && !value.contains([';', '{', '}', '<', '>', '\\', '@'])
+                        && !value
+                            .split_whitespace()
+                            .collect::<String>()
+                            .to_ascii_lowercase()
+                            .contains("url(")
+                        && !value.contains("/*")
+                        && !value.to_ascii_lowercase().contains("!important")
+                })
             && self
                 .resources
                 .css

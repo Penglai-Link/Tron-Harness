@@ -22,15 +22,16 @@ impl FrameworkHost {
             .await
             .map_err(map_error)
     }
+    /// Returns the validated interactions' logical run, not the latest owned run.
     pub async fn validate_native_resume(
         &self,
         session: &str,
         resume: &[ChatResumeEntry],
-    ) -> Result<(), AgentError> {
+    ) -> Result<Option<fw::RunId>, AgentError> {
         let pending = self.pending_native_interactions(session).await?;
         if resume.is_empty() {
             if pending.is_empty() {
-                return Ok(());
+                return Ok(None);
             }
             return Err(AgentError::AwaitingUserInput);
         }
@@ -64,7 +65,7 @@ impl FrameworkHost {
         if let Some(run) = logical_run {
             ensure_waiting(&agent, session, run).await?;
         }
-        Ok(())
+        Ok(logical_run)
     }
 }
 pub(super) fn native_id(value: &str) -> Result<fw::RunId, AgentError> {

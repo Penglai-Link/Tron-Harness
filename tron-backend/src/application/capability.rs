@@ -1,4 +1,5 @@
 //! Stable ownership for capability package resources.
+pub mod error;
 use std::sync::{Arc, Mutex};
 #[derive(Clone, Debug)]
 pub struct CapabilityResource {

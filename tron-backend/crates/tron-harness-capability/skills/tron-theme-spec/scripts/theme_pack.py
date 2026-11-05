@@ -43,44 +43,45 @@ def manifest(raw):
     require(len(raw) <= MAX_MANIFEST, 'skin.json exceeds 256 KiB')
     data = json.loads(raw, object_pairs_hook=unique_object)
     require(isinstance(data, dict), 'Manifest must be an object')
-    require(not set(data) - {'id', 'name', 'version', 'mode', 'colors', 'layout', 'resources'}, 'Unknown manifest field')
+    require(not set(data) - {'id', 'name', 'version', 'variants', 'layout', 'resources'}, 'Unknown manifest field')
     require(isinstance(data.get('id'), str) and re.fullmatch(r'[a-z0-9-]{1,64}', data['id']), 'Invalid id')
-    require(data['id'] not in ('light', 'matrix-dark'), 'Use a new id, not a built-in id')
+    require(data['id'] not in ('default', 'brand', 'light', 'matrix-dark', 'matrix-particles'), 'Use a new id, not a built-in id')
     require(isinstance(data.get('name'), str) and data['name'].strip() and len(data['name'].encode()) <= 120, 'Invalid name')
-    require(type(data.get('version')) is int and data['version'] in (1, 2), 'version must be 1 or 2')
-    require(data.get('mode') in ('Light', 'Dark'), 'mode must be Light or Dark')
-    variables = {}
-    count = 0
-    for field in ('colors', 'layout'):
-        values = data.get(field, {})
-        require(isinstance(values, dict), f'{field} must be an object')
-        count += len(values)
-        for key, value in values.items():
+    require(type(data.get('version')) is int and data['version'] == 3, 'version must be 3')
+    variants = data.get('variants')
+    require(isinstance(variants, dict) and set(variants) == {'light', 'dark'}, 'variants must provide light and dark palettes')
+    layout = data.get('layout', {})
+    require(isinstance(layout, dict), 'layout must be an object')
+    count = len(layout)
+    known_file = SKILL / 'references' / 'tokens.json'
+    known = set(json.loads(known_file.read_text())) if known_file.exists() else set()
+    for mode, colors in variants.items():
+        require(isinstance(colors, dict), f'{mode} palette must be an object')
+        required = {'--color-background', '--color-on-surface', '--color-primary', '--color-on-primary'}
+        require(required <= colors.keys(), f'{mode} palette is missing required colors')
+        count += len(colors)
+        # Validate all fields even when layout overrides a color.
+        for key, value in [*colors.items(), *layout.items()]:
             require(re.fullmatch(r'--[a-z0-9-]+', key) and len(key) <= 100 and key != '--tron-system-font-size', f'Invalid/reserved variable: {key}')
             require(isinstance(value, str) and 0 < len(value.encode()) <= 512, f'Invalid value for {key}')
             require(not re.search(r'[;{}<>\\@]|url\s*\(|/\*|!important', value, re.I), f'Forbidden CSS in {key}')
-        variables.update(values)
-    require(count <= 512, 'At most 512 variables across colors and layout')
-    known_file = SKILL / 'references' / 'tokens.json'
-    known = set(json.loads(known_file.read_text())) if known_file.exists() else set()
-    for key in variables:
-        if known and key not in known:
-            print(f'WARNING: undocumented variable {key}; confirm a consumer exists', file=sys.stderr)
-    # Reject direct/indirect cycles in author-supplied variables; CSS silently unsets them.
-    visited = set()
-    def visit(key, stack):
-        require(key not in stack, f'CSS variable cycle: {" -> ".join([*stack, key])}')
-        if key in visited:
-            return
-        for target in re.findall(r'var\(\s*(--[a-z0-9-]+)', variables[key]):
-            if target in variables:
-                visit(target, [*stack, key])
-        visited.add(key)
-    for key in variables:
-        visit(key, [])
+            if known and key not in known:
+                print(f'WARNING: undocumented variable {key}; confirm a consumer exists', file=sys.stderr)
+        variables = {**colors, **layout}
+        visited = set()
+        def visit(key, stack):
+            require(key not in stack, f'CSS variable cycle: {" -> ".join([*stack, key])}')
+            if key in visited:
+                return
+            for target in re.findall(r'var\(\s*(--[a-z0-9-]+)', variables[key]):
+                if target in variables:
+                    visit(target, [*stack, key])
+            visited.add(key)
+        for key in variables:
+            visit(key, [])
+    require(count <= 1024, 'At most 1024 variables across palettes and layout')
     resources = data.get('resources', {})
     require(isinstance(resources, dict) and not set(resources) - {'background', 'font', 'css'}, 'Invalid resources object')
-    require(not resources.get('css') or data['version'] == 2, 'CSS resources require format version 2')
     local = []
     for kind, value in resources.items():
         if value is None:
@@ -244,7 +245,6 @@ def main():
     init.add_argument('directory', type=Path)
     init.add_argument('--id', required=True)
     init.add_argument('--name', required=True)
-    init.add_argument('--mode', choices=['Light', 'Dark'], default='Light')
     validate = commands.add_parser('validate')
     validate.add_argument('source', type=Path)
     package = commands.add_parser('pack')
@@ -254,7 +254,7 @@ def main():
     try:
         if args.command == 'init':
             require(not args.directory.exists(), 'Destination already exists')
-            data = json.loads((SKILL / 'assets' / args.mode.lower() / 'skin.json').read_text())
+            data = json.loads((SKILL / 'assets' / 'light' / 'skin.json').read_text())
             data.update(id=args.id, name=args.name)
             raw = (json.dumps(data, ensure_ascii=False, indent=2) + '\n').encode()
             manifest(raw)

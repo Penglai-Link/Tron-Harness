@@ -32,6 +32,89 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/capabilities/extensions/{point}/enabled",
             put(set_extension_enabled),
         )
+        .route(
+            "/api/v1/capabilities/extensions/tool-policy/config",
+            get(get_tool_policy_config).put(update_tool_policy_config),
+        )
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UpdateToolPolicyConfigRequest {
+    smart: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GetToolPolicyConfigVo {
+    smart: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateToolPolicyConfigVo {
+    smart: bool,
+}
+
+async fn get_tool_policy_config(
+    State(state): State<AppState>,
+) -> Json<ApiResponse<GetToolPolicyConfigVo>> {
+    Json(ApiResponse::protocol_success(GetToolPolicyConfigVo {
+        smart: state.agent_framework.tool_policy_smart(),
+    }))
+}
+
+async fn update_tool_policy_config(
+    auth: crate::adapters::inbound::http::auth::RequestAuthContext,
+    State(state): State<AppState>,
+    request: Result<Json<UpdateToolPolicyConfigRequest>, axum::extract::rejection::JsonRejection>,
+) -> Response {
+    let request = match request {
+        Ok(Json(request)) => request,
+        Err(_) => {
+            return tool_policy_failure(
+                StatusCode::BAD_REQUEST,
+                crate::application::capability::error::TOOL_POLICY_INVALID,
+                &auth.locale,
+            );
+        }
+    };
+    match state
+        .agent_framework
+        .set_tool_policy_smart(request.smart)
+        .await
+    {
+        Ok(()) => Json(ApiResponse::protocol_success(UpdateToolPolicyConfigVo {
+            smart: request.smart,
+        }))
+        .into_response(),
+        Err(error) => {
+            tracing::error!(%error, "failed to persist tool policy configuration");
+            tool_policy_failure(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                crate::application::capability::error::TOOL_POLICY_SAVE_FAILED,
+                &auth.locale,
+            )
+        }
+    }
+}
+
+fn tool_policy_failure(
+    status: StatusCode,
+    descriptor: crate::application::capability::error::ApplicationErrorDescriptor,
+    locale: &str,
+) -> Response {
+    let message = match (descriptor.message_key, locale.starts_with("zh")) {
+        ("tron.capability.tool_policy_invalid", true) => "请提供有效的 Smart 开关状态",
+        ("tron.capability.tool_policy_invalid", false) => "Provide a valid Smart setting.",
+        (_, true) => "工具权限策略保存失败，请重试",
+        (_, false) => "Unable to save tool policy settings. Please retry.",
+    };
+    (
+        status,
+        Json(ApiResponse::protocol_error(descriptor.code, message)),
+    )
+        .into_response()
 }
 
 async fn list_capability_packs(

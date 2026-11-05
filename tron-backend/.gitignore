@@ -41,3 +41,4 @@ perf.data.old
 tron-backend/resources/frontend/
 logs/
 skins/
+!resources/skins/

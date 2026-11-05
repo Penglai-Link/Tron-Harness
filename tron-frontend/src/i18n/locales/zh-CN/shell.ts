@@ -213,12 +213,11 @@ export const shell = {
     refresh: "刷新",
   },
   theme: {
-    hint: "当前默认主题为浅色。Matrix Dark 会启用霓虹绿色的深色控制台配色，并在刷新后保持。",
+    hint: "主题提供浅色和深色配色，可跟随系统自动切换。",
     label: "主题",
-    options: {
-      light: "浅色",
-      matrixDark: "矩阵深色",
-    },
+    mode: "显示模式",
+    modes: { light: "浅色", dark: "深色", system: "跟随系统" },
+    options: { default: "默认", light: "浅色", matrixDark: "矩阵深色" },
   },
   workspace: {
     current: "工作区",
