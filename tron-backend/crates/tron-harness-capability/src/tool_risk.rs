@@ -278,8 +278,8 @@ pub(crate) fn command_approval_reason(input: &Value) -> (&'static str, &'static 
     } else {
         let Some(words) = shell_words(command) else {
             return (
-                "命令包含 shell 控制、展开或无法静态解析的语法，按非常危险处理",
-                "The command contains shell control, expansion, or syntax outside the static parser; it is classified as critical",
+                "命令包含 shell 控制、展开或无法静态解析的语法",
+                "The command contains shell control, expansion, or syntax outside the static parser",
             );
         };
         words

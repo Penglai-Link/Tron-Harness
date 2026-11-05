@@ -72,7 +72,7 @@ import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 import { useShellShortcuts } from "@/shared/hooks/useShellShortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
+import { DEFAULT_TAB_ID, panelTabId, useTabStore } from "@/store/tabStore";
 import { useAuthStore } from "@/store/authStore";
 import type { TronNavItem, TronNavSection } from "@/shared/types/ShellNavigation";
 import type {
@@ -232,9 +232,10 @@ export function TronShell({
   const [workspaceSwitcherValidated, setWorkspaceSwitcherValidated] = useState(false);
   const tabPanelRegistry = useTabPanelRegistry();
   const activeTabId = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
+  const activePanelId = useTabStore((state) => panelTabId(state.activeTabId, state.workspaceCode));
   const activeTab = useTabStore((state) => state.tabs.find((tab) => tab.id === (state.activeTabId ?? DEFAULT_TAB_ID)));
   const closeTab = useTabStore((state) => state.closeTab);
-  const activeShellConfig = activeTabId ? tabPanelRegistry.get(activeTabId) : undefined;
+  const activeShellConfig = activeTabId ? tabPanelRegistry.get(activePanelId) : undefined;
   const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
   const setActiveTab = useTabStore((state) => state.setActiveTab);
   const dataSource = getServiceDataSource("admin");
@@ -255,11 +256,11 @@ export function TronShell({
       if (typeof url !== "string" || !url.trim()) return;
 
       const normalizedUrl = url.trim();
-      const ownerKey = tabPanelRegistry.getRightPanelOwnerKey(activeTabId);
+      const ownerKey = tabPanelRegistry.getRightPanelOwnerKey(activePanelId);
       const scopedPrefix = ownerKey ? `${encodeURIComponent(ownerKey)}:` : "";
       const key = `${scopedPrefix}markdown-page:${normalizedUrl}`;
 
-      tabPanelRegistry.openRightPanelTab(activeTabId, {
+      tabPanelRegistry.openRightPanelTab(activePanelId, {
         key,
         stableId: key,
         ownerKey,
@@ -272,15 +273,15 @@ export function TronShell({
 
     window.addEventListener(OPEN_CHATS_PAGE_VIEW_EVENT, handleOpenPageView);
     return () => window.removeEventListener(OPEN_CHATS_PAGE_VIEW_EVENT, handleOpenPageView);
-  }, [activeTabId, tabPanelRegistry, updateRightPanelState]);
+  }, [activeTabId, activePanelId, tabPanelRegistry, updateRightPanelState]);
 
   useEffect(() => {
     const handleOpenContext = (event: Event) => {
       const session = (event as CustomEvent<ChatSession | null>).detail ?? null;
-      const ownerKey = tabPanelRegistry.getRightPanelOwnerKey(activeTabId);
-      const configuredContext = tabPanelRegistry.get(activeTabId)?.rightPanelTabs?.some((tab) => tab.key === "context");
+      const ownerKey = tabPanelRegistry.getRightPanelOwnerKey(activePanelId);
+      const configuredContext = tabPanelRegistry.get(activePanelId)?.rightPanelTabs?.some((tab) => tab.key === "context");
       if (session?.sessionCode && ownerKey === session.sessionCode && configuredContext) {
-        tabPanelRegistry.setRightPanelActiveKey(activeTabId, "context");
+        tabPanelRegistry.setRightPanelActiveKey(activePanelId, "context");
       } else {
         const prefix = ownerKey ? `${encodeURIComponent(ownerKey)}:` : "";
         const key = `${prefix}chat-context:${session?.sessionCode ?? "draft"}`;
@@ -289,18 +290,18 @@ export function TronShell({
           label: t("pages:chat.shortTermMemory.shortTermMemoryTab"),
           children: <Suspense fallback={null}><ChatContextInspector session={session} /></Suspense>,
         };
-        if (tabPanelRegistry.getRightPanelTabs(activeTabId).some((item) => item.key === key)) {
-          tabPanelRegistry.updateRightPanelTab(activeTabId, key, tab);
+        if (tabPanelRegistry.getRightPanelTabs(activePanelId).some((item) => item.key === key)) {
+          tabPanelRegistry.updateRightPanelTab(activePanelId, key, tab);
         } else {
-          tabPanelRegistry.openRightPanelTab(activeTabId, tab);
+          tabPanelRegistry.openRightPanelTab(activePanelId, tab);
         }
-        tabPanelRegistry.setRightPanelActiveKey(activeTabId, key);
+        tabPanelRegistry.setRightPanelActiveKey(activePanelId, key);
       }
       updateRightPanelState(activeTabId, { open: true });
     };
     window.addEventListener(OPEN_CHAT_CONTEXT_EVENT, handleOpenContext);
     return () => window.removeEventListener(OPEN_CHAT_CONTEXT_EVENT, handleOpenContext);
-  }, [activeTabId, tabPanelRegistry, t, updateRightPanelState]);
+  }, [activeTabId, activePanelId, tabPanelRegistry, t, updateRightPanelState]);
 
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
@@ -446,13 +447,24 @@ export function TronShell({
       tab: tabs.tabs.find((tab) => tab.id === tabs.activeTabId),
     });
   }, []);
-  useLayoutEffect(() => { setApiWorkspaceCode(activeWorkspaceCode || null); return () => setApiWorkspaceCode(null); }, [activeWorkspaceCode]);
+  useLayoutEffect(() => {
+    setApiWorkspaceCode(activeWorkspaceCode || null);
+    if (activeWorkspaceCode) {
+      const path = useTabStore.getState().switchWorkspace(activeWorkspaceCode);
+      if (path) navigate(path, { replace: true });
+    }
+    return () => setApiWorkspaceCode(null);
+  }, [activeWorkspaceCode, navigate]);
 
   useEffect(() => {
     if (pathname !== "/chats") return;
+    const pendingPath = useTabStore.getState().pendingWorkspacePath;
+    if (pendingPath && pendingPath !== `${pathname}${search}`) return;
 
     const params = new URLSearchParams(search);
-    const requestedWorkspaceCode = params.get("workspaceCode");
+    const explicitWorkspaceCode = params.get("workspaceCode");
+    const requestedWorkspaceCode = explicitWorkspaceCode
+      ?? useTabStore.getState().getWorkspaceForPath(`${pathname}${search}`);
     if (!requestedWorkspaceCode || (dataSource === "api" && !workspaceSwitcherValidated)) return;
 
     const secondarySpace = workspaceSwitcher.secondarySpaces.find(
@@ -462,20 +474,24 @@ export function TronShell({
       (space) => space.workspaceCode === requestedWorkspaceCode,
     );
     const targetPrimarySpaceId = secondarySpace?.primaryWorkspaceCode ?? primarySpace?.workspaceCode;
+    const targetPath = `${pathname}${search}`;
+    let switched = false;
     if (targetPrimarySpaceId) {
       const targetSecondarySpaceId = secondarySpace?.depth && secondarySpace.depth > 1
         ? secondarySpace.workspaceCode
         : "";
       if (targetPrimarySpaceId !== selectedPrimarySpaceId || targetSecondarySpaceId !== selectedSecondarySpaceId) {
+        useTabStore.getState().switchWorkspace(requestedWorkspaceCode, targetPath);
+        setApiWorkspaceCode(requestedWorkspaceCode);
         selectPrimarySpaceInStore(targetPrimarySpaceId, targetSecondarySpaceId);
+        switched = true;
       }
     }
 
-    // The workspace is a one-time routing hint. Drop it after applying so the
-    // user's later workspace selection is not overridden by the old URL.
-    params.delete("workspaceCode");
-    const nextSearch = params.toString();
-    navigate({ pathname, search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
+    // Chat links retain their owner so reload/back/forward can restore its space.
+    // Workspace-picker navigation already moves to that space's saved route.
+    if (switched) navigate(targetPath, { replace: true });
+    else if (explicitWorkspaceCode && !targetPrimarySpaceId) navigate("/workspace", { replace: true });
   }, [
     dataSource,
     navigate,
@@ -908,7 +924,11 @@ export function TronShell({
 
   function selectWorkspaceNode(space: WorkspaceSwitcherData["secondarySpaces"][number]) {
     const nextSecondarySpaceId = space.depth > 1 ? space.workspaceCode : "";
+    const path = useTabStore.getState().switchWorkspace(space.workspaceCode);
+    setApiWorkspaceCode(space.workspaceCode);
     selectPrimarySpaceInStore(space.primaryWorkspaceCode, nextSecondarySpaceId);
+    setBottomPanel(false);
+    if (path) navigate(path, { replace: true });
   }
 
   function toggleWorkspaceExpanded(workspaceCode: string) {

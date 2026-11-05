@@ -32,7 +32,7 @@ pub use collaboration::{
 pub use context::{
     AgentCollaborationOwner, AgentExecutionScope, AgentPromptPrefixSource, AgentRunContext,
     AgentRunLimits, AgentShortTermMemoryRunContext, AgentToolAssignment, AutoModelCandidate,
-    AutoModelRouteContext, EffectiveSkill, EffectiveTool, EffectiveVariable,
+    AutoModelRouteContext, EffectiveSkill, EffectiveTool, EffectiveVariable, ToolExecutionMode,
 };
 pub use error::AgentError;
 pub use history::{

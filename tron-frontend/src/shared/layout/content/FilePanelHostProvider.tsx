@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { FileTabCoordinatorProvider } from "@/components/files/FileTabCoordinator";
 import { useFileTabsStore } from "@/store/fileTabsStore";
-import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
+import { panelTabId, useTabStore } from "@/store/tabStore";
 import { cn } from "@/lib/utils";
 
 const FilePanel = lazy(() =>
@@ -37,7 +37,7 @@ export function useFilePanelTarget() {
 function FilePanelHost() {
   const { t } = useTranslation("common");
   const fileTabKeys = useFileTabsStore((state) => state.fileTabKeys);
-  const owner = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
+  const owner = useTabStore((state) => panelTabId(state.activeTabId, state.workspaceCode));
   const activeFileTabKey = useFileTabsStore((state) => state.activeKeysByOwner[owner] ?? null);
 
   if (!fileTabKeys.length) return null;

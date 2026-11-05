@@ -149,7 +149,8 @@ export function Panel({ children, contentClassName }: IPanelProps) {
               data-theme-part="app-page"
               data-theme-anchor="page"
             >
-              {hasOpenTabs ? children : <EmptyTabWorkspace />}
+              <div className="h-full" hidden={!hasOpenTabs}>{children}</div>
+              {!hasOpenTabs ? <EmptyTabWorkspace /> : null}
             </main>
           </ResizablePanel>
           <>

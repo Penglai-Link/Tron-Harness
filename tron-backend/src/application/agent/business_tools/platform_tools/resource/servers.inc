@@ -60,7 +60,6 @@ struct ServerAccountCreateTool {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ServerAccountCreateToolInput {
     workspace_code: Option<String>,
-    server_code: String,
     account: ResourceServerAccountInput,
 }
 
@@ -84,7 +83,6 @@ impl Tool for ServerAccountCreateTool {
                 actor_user_code,
                 ServerAccountCreateCommand {
                     workspace_code,
-                    server_code: input.server_code,
                     account: input.account.into_command(),
                 },
             )
@@ -101,9 +99,9 @@ struct ResourceServerAccountInput {
     description: Option<String>,
     username: String,
     authentication_type: ServerAuthenticationType,
-    password_variable_key: Option<String>,
-    private_key_variable_key: Option<String>,
-    private_key_passphrase_variable_key: Option<String>,
+    password: Option<String>,
+    private_key: Option<String>,
+    private_key_passphrase: Option<String>,
     allow_inheritance: bool,
 }
 
@@ -115,9 +113,9 @@ impl ResourceServerAccountInput {
             description: self.description.unwrap_or_default(),
             username: self.username,
             authentication_type: self.authentication_type,
-            password_variable_key: self.password_variable_key,
-            private_key_variable_key: self.private_key_variable_key,
-            private_key_passphrase_variable_key: self.private_key_passphrase_variable_key,
+            password: self.password,
+            private_key: self.private_key,
+            private_key_passphrase: self.private_key_passphrase,
             allow_inheritance: self.allow_inheritance,
         }
     }

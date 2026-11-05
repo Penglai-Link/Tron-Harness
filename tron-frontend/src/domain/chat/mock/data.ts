@@ -480,6 +480,7 @@ export function createMockChatSession(input: CreateChatSessionInput): ChatSessio
   const now = new Date().toISOString();
   const id = Date.now();
   const session: ChatSession = {
+    executionMode: input.executionMode ?? "CONTROLLED",
     id,
     sessionCode: `SESSION-${id}`,
     workspaceCode: input.workspaceCode,
@@ -534,12 +535,13 @@ export function updateMockChatSession(sessionCode: string, input: UpdateChatSess
     throw new Error("chat session was not found");
   }
 
-  const title = input.title.trim();
-  if (!title) {
+  const title = input.title?.trim();
+  if (input.title !== undefined && !title) {
     throw new Error("session title is required");
   }
 
-  session.title = title;
+  if (title !== undefined) session.title = title;
+  if (input.executionMode !== undefined) session.executionMode = input.executionMode;
   session.updatedAt = new Date().toISOString();
   return { ...session };
 }

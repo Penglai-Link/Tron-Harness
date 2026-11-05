@@ -2,7 +2,7 @@ import { Archive, Copy, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Trash
 import { memo, useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
-import { archiveChatSession, deleteArchivedChatSession, updateChatSession } from "@/domain/chat/hooks";
+import { archiveChatSession, deleteChatSession, updateChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import ActionButton from "./ActionButton";
 import Item from "./Item";
 
 const MessageItem = ({
-  active, onNavigate, onRemovePin, onTogglePin, pinned, running, session,
+  active, onRemovePin, onTogglePin, pinned, running, session,
 }: {
   active: boolean;
   onNavigate: (path: string) => void;
@@ -33,29 +33,15 @@ const MessageItem = ({
   const [renameTitle, setRenameTitle] = useState(session.title);
   const [renaming, setRenaming] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-
-  function removeFromSidebar() {
-    window.dispatchEvent(new CustomEvent("tron:chat-session-archived", {
-      detail: { sessionCode: session.sessionCode },
-    }));
-    const tabStore = useTabStore.getState();
-    const sessionTab = tabStore.tabs.find((tab) => tab.activeNav === `chat-session:${session.sessionCode}`);
-    if (!sessionTab) return;
-    const wasActive = tabStore.activeTabId === sessionTab.id;
-    const nextTab = tabStore.tabs.find((tab) => !tab.hide && tab.id !== sessionTab.id);
-    tabStore.removeTab(sessionTab.id);
-    if (wasActive && nextTab) {
-      useTabStore.getState().setActiveTab(nextTab.id);
-      onNavigate(nextTab.path);
-    }
-  }
+  const sessionParams = new URLSearchParams({ sessionCode: session.sessionCode });
+  if (session.workspaceCode) sessionParams.set("workspaceCode", session.workspaceCode);
+  const sessionPath = `/chats?${sessionParams}`;
 
   async function archive() {
     if (pendingAction || running) return;
     setPendingAction("archive");
     try {
       await archiveChatSession(session.sessionCode);
-      removeFromSidebar();
       toast.success(t("shell:chatSidebar.session.archived"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.session.archiveFailed"));
@@ -68,9 +54,7 @@ const MessageItem = ({
     if (pendingAction || running) return;
     setPendingAction("delete");
     try {
-      await archiveChatSession(session.sessionCode);
-      removeFromSidebar();
-      await deleteArchivedChatSession(session.sessionCode);
+      await deleteChatSession(session.sessionCode);
       onRemovePin();
       setDeleteOpen(false);
       toast.success(t("shell:chatSidebar.session.deleted"));
@@ -92,7 +76,7 @@ const MessageItem = ({
       const updated = await updateChatSession(session.sessionCode, { title });
       window.dispatchEvent(new CustomEvent("tron:chat-session-updated", { detail: { session: updated } }));
       const tabStore = useTabStore.getState();
-      const sessionTab = tabStore.tabs.find((tab) => tab.activeNav === `chat-session:${session.sessionCode}`);
+      const sessionTab = tabStore.getAllTabs().find((tab) => tab.activeNav === `chat-session:${session.sessionCode}`);
       if (sessionTab) tabStore.updateTab(sessionTab.id, { title: updated.title });
       setRenameOpen(false);
       toast.success(t("shell:chatSidebar.session.renamed"));
@@ -130,11 +114,12 @@ const MessageItem = ({
         className={cn("group/session relative flex h-8 min-w-0 items-center pl-6", active && "bg-sidebar-accent text-sidebar-accent-foreground")}
         left={
           <Link
-            to={`/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`}
+            to={sessionPath}
             className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
             onClick={(event) => {
               if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-              const path = `/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`;
+              if (session.workspaceCode && useTabStore.getState().workspaceCode !== session.workspaceCode) return;
+              const path = sessionPath;
               useTabStore.getState().addTab({ title: session.title, path, closable: true, activeNav: `chat-session:${session.sessionCode}` });
             }}
           >

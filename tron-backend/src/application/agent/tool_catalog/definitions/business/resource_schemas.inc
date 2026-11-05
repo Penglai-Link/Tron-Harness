@@ -292,14 +292,14 @@ fn resource_server_account_schema() -> serde_json::Value {
             "description": { "type": "string" },
             "username": { "type": "string", "minLength": 1 },
             "authenticationType": { "type": "string", "enum": ["Password", "PrivateKey"] },
-            "passwordVariableKey": { "type": "string", "minLength": 1 },
-            "privateKeyVariableKey": { "type": "string", "minLength": 1 },
-            "privateKeyPassphraseVariableKey": { "type": "string", "minLength": 1 },
+            "password": { "type": "string", "minLength": 1 },
+            "privateKey": { "type": "string", "minLength": 1 },
+            "privateKeyPassphrase": { "type": "string", "minLength": 1 },
             "allowInheritance": { "type": "boolean" }
         },
         "allOf": [{ "oneOf": [
-            { "properties": { "authenticationType": { "const": "Password" } }, "required": ["passwordVariableKey"] },
-            { "properties": { "authenticationType": { "const": "PrivateKey" } }, "required": ["privateKeyVariableKey"] }
+            { "properties": { "authenticationType": { "const": "Password" } }, "required": ["password"] },
+            { "properties": { "authenticationType": { "const": "PrivateKey" } }, "required": ["privateKey"] }
         ] }],
         "additionalProperties": false
     })

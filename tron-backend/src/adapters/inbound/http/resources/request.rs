@@ -295,7 +295,7 @@ impl TryFrom<DataSourceUpdateRequest> for DataSourceUpdateCommand {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ServerAccountCreateInputRequest {
     pub account_code: String,
@@ -305,11 +305,11 @@ pub struct ServerAccountCreateInputRequest {
     pub username: String,
     pub authentication_type: ServerAuthenticationType,
     #[serde(default)]
-    pub password_variable_key: Option<String>,
+    pub password: Option<String>,
     #[serde(default)]
-    pub private_key_variable_key: Option<String>,
+    pub private_key: Option<String>,
     #[serde(default)]
-    pub private_key_passphrase_variable_key: Option<String>,
+    pub private_key_passphrase: Option<String>,
     pub allow_inheritance: bool,
 }
 
@@ -321,15 +321,15 @@ impl From<ServerAccountCreateInputRequest> for ServerAccountCreateInput {
             description: value.description.unwrap_or_default(),
             username: value.username,
             authentication_type: value.authentication_type,
-            password_variable_key: value.password_variable_key,
-            private_key_variable_key: value.private_key_variable_key,
-            private_key_passphrase_variable_key: value.private_key_passphrase_variable_key,
+            password: value.password,
+            private_key: value.private_key,
+            private_key_passphrase: value.private_key_passphrase,
             allow_inheritance: value.allow_inheritance,
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ServerCreateRequest {
     pub workspace_code: String,
@@ -374,11 +374,10 @@ impl TryFrom<ServerCreateRequest> for ServerCreateCommand {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ServerAccountCreateRequest {
     pub workspace_code: String,
-    pub server_code: String,
     pub account: ServerAccountCreateInputRequest,
 }
 
@@ -387,13 +386,11 @@ impl TryFrom<ServerAccountCreateRequest> for ServerAccountCreateCommand {
 
     fn try_from(value: ServerAccountCreateRequest) -> Result<Self, Self::Error> {
         validate_non_blank(&value.workspace_code, "workspaceCode")?;
-        validate_code(&value.server_code, "serverCode")?;
         validate_code(&value.account.account_code, "account.accountCode")?;
         validate_non_blank(&value.account.name, "account.name")?;
         validate_non_blank(&value.account.username, "account.username")?;
         Ok(Self {
             workspace_code: value.workspace_code,
-            server_code: value.server_code,
             account: value.account.into(),
         })
     }

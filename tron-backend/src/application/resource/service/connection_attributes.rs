@@ -282,29 +282,24 @@ impl ResourceService {
 
     pub(super) fn ssh_connection_target(
         &self,
-        workspace_code: &str,
         host: String,
         port: u16,
         account: &ServerAccountCreateInput,
     ) -> Result<ResourceConnectionTarget, ResourceError> {
-        let mut keys = BTreeSet::new();
-        extend_key(&mut keys, account.password_variable_key.as_deref());
-        extend_key(&mut keys, account.private_key_variable_key.as_deref());
-        extend_key(
-            &mut keys,
-            account.private_key_passphrase_variable_key.as_deref(),
-        );
-        let values = self.resolve_connection_variables(workspace_code, keys)?;
+        super::server_accounts::validate_account_credentials(account)?;
         let authentication = match account.authentication_type {
             ServerAuthenticationType::Password => SshAuthenticationTarget::Password {
-                password: secret_required(&values, account.password_variable_key.as_deref())?,
+                password: account
+                    .password
+                    .clone()
+                    .ok_or(ResourceError::InvalidInput)?,
             },
             ServerAuthenticationType::PrivateKey => SshAuthenticationTarget::PrivateKey {
-                private_key: secret_required(&values, account.private_key_variable_key.as_deref())?,
-                passphrase: optional_secret(
-                    &values,
-                    account.private_key_passphrase_variable_key.as_deref(),
-                )?,
+                private_key: account
+                    .private_key
+                    .clone()
+                    .ok_or(ResourceError::InvalidInput)?,
+                passphrase: account.private_key_passphrase.clone(),
             },
         };
         Ok(ResourceConnectionTarget::Ssh(SshConnectionTarget {

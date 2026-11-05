@@ -43,6 +43,15 @@ pub trait ChatRepository: Send {
         session_code: &str,
         title: &str,
         updated_at: &str,
+    ) -> Result<(), ChatError> {
+        self.update_session_settings(session_code, Some(title), None, updated_at)
+    }
+    fn update_session_settings(
+        &mut self,
+        session_code: &str,
+        title: Option<&str>,
+        execution_mode: Option<crate::domain::agent::ToolExecutionMode>,
+        updated_at: &str,
     ) -> Result<(), ChatError>;
     fn update_session_run(
         &mut self,

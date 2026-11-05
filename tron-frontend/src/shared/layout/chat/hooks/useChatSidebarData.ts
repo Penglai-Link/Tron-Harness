@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChatSession } from "@/domain/chat/model";
 import { useChatSessionGroupList } from "@/domain/chat/hooks";
 import { useProjectList } from "@/domain/project";
+import { CHAT_SESSIONS_REMOVED_EVENT } from "@/shared/lib/shellEvents";
 
 export function useChatSidebarData(workspaceCode: string) {
   const projects = useProjectList(workspaceCode);
@@ -22,14 +23,14 @@ export function useChatSidebarData(workspaceCode: string) {
         ...current.filter((item) => item.sessionCode !== session.sessionCode),
       ]);
     };
-    const handleSessionArchived = (event: Event) => {
-      const sessionCode = (event as CustomEvent<{ sessionCode?: string }>).detail?.sessionCode;
-      if (sessionCode) {
-        setCreatedSessions((current) => current.filter((session) => session.sessionCode !== sessionCode));
+    const handleSessionsRemoved = (event: Event) => {
+      const sessionCodes = (event as CustomEvent<{ sessionCodes: string[] }>).detail?.sessionCodes;
+      if (sessionCodes?.length) {
+        const removed = new Set(sessionCodes);
+        setCreatedSessions((current) => current.filter((session) => !removed.has(session.sessionCode)));
         setSessionOverrides((current) => {
-          if (!(sessionCode in current)) return current;
           const next = { ...current };
-          delete next[sessionCode];
+          sessionCodes.forEach((sessionCode) => { delete next[sessionCode]; });
           return next;
         });
       }
@@ -48,12 +49,12 @@ export function useChatSidebarData(workspaceCode: string) {
       refreshSessions();
     };
     window.addEventListener("tron:chat-session-created", handleSessionCreated);
-    window.addEventListener("tron:chat-session-archived", handleSessionArchived);
+    window.addEventListener(CHAT_SESSIONS_REMOVED_EVENT, handleSessionsRemoved);
     window.addEventListener("tron:chat-session-updated", handleSessionUpdated);
     window.addEventListener("tron:project-created", refreshProjectAndSessions);
     return () => {
       window.removeEventListener("tron:chat-session-created", handleSessionCreated);
-      window.removeEventListener("tron:chat-session-archived", handleSessionArchived);
+      window.removeEventListener(CHAT_SESSIONS_REMOVED_EVENT, handleSessionsRemoved);
       window.removeEventListener("tron:chat-session-updated", handleSessionUpdated);
       window.removeEventListener("tron:project-created", refreshProjectAndSessions);
     };

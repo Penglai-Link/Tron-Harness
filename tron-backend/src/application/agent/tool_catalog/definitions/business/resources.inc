@@ -374,7 +374,7 @@ fn resource_server_create_definition() -> ToolCatalogDefinition {
                     "name": "Operations account",
                     "username": "ops",
                     "authenticationType": "Password",
-                    "passwordVariableKey": "BASTION_PASSWORD",
+                    "password": "<password>",
                     "allowInheritance": false
                 }
             }]),
@@ -406,22 +406,20 @@ fn resource_server_account_create_definition() -> ToolCatalogDefinition {
             "agent.toolCatalog.tools.resource.server_account.create.description",
             json!([{
                 "workspaceCode": "TRON_CORE",
-                "serverCode": "production-bastion",
                 "account": {
                     "accountCode": "bastion-deploy",
                     "name": "Deploy account",
                     "username": "deploy",
                     "authenticationType": "PrivateKey",
-                    "privateKeyVariableKey": "DEPLOY_PRIVATE_KEY",
+                    "privateKey": "<PEM private key>",
                     "allowInheritance": false
                 }
             }]),
             json!({
                 "type": "object",
-                "required": ["serverCode", "account"],
+                "required": ["account"],
                 "properties": {
                     "workspaceCode": resource_workspace_code_schema(),
-                    "serverCode": resource_code_schema(),
                     "account": resource_server_account_schema()
                 },
                 "additionalProperties": false

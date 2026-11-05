@@ -33,6 +33,7 @@ use helpers::safe_preview;
 pub(crate) use run_context_builder::{AgentRunContextBuilder, PreparedAgentRun};
 #[derive(Clone)]
 pub struct AgentInvocationService {
+    tool_execution_mode: crate::domain::agent::ToolExecutionMode,
     platform_scope: bool,
     collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
     runtime_input: Option<(String, serde_json::Value)>,
@@ -93,6 +94,7 @@ impl AgentInvocationService {
         runtime_http_client: reqwest::Client,
     ) -> Self {
         Self {
+            tool_execution_mode: Default::default(),
             platform_scope: false,
             collaboration_owner: None,
             runtime_input: None,
@@ -121,6 +123,14 @@ impl AgentInvocationService {
     /// Enable platform execution on a host-owned service clone. HTTP request payloads cannot set this.
     pub fn with_platform_scope(mut self) -> Self {
         self.platform_scope = true;
+        self
+    }
+
+    pub(crate) fn with_tool_execution_mode(
+        mut self,
+        mode: crate::domain::agent::ToolExecutionMode,
+    ) -> Self {
+        self.tool_execution_mode = mode;
         self
     }
 
@@ -230,6 +240,7 @@ impl AgentInvocationService {
         )
         .with_framework_host(self.framework_host.clone())
         .with_execution_identity(self.platform_scope, self.collaboration_owner.clone())
+        .with_tool_execution_mode(self.tool_execution_mode)
         .with_dude_work_context(self.dude_work_context.clone());
         match &self.auto_model_router {
             Some(router) => builder.with_model_router(router.clone()),

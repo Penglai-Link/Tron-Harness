@@ -413,6 +413,7 @@ impl Runtime {
                 base.workspace_code.is_empty(),
                 Some(collaboration_owner.clone()),
             )
+            .with_tool_execution_mode(caller_context.tool_execution_mode)
             .prepare(command, base.user_code.clone(), Some(base.locale.clone()))
             .await
             .map_err(|error| failure(error.message()))?;
@@ -537,6 +538,11 @@ impl Runtime {
         request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(failure)?);
         request.model = None;
         request.extensions = fw::Extensions::default();
+        if context.tool_execution_mode == crate::domain::agent::ToolExecutionMode::AutoApprove {
+            request
+                .extensions
+                .insert(tron_harness_capability::TronToolAutoApproval);
+        }
         request.extensions.insert(fw::CallerInteractionScope);
         // Capture the active caller tool span before SDK-owned tasks are started.
         let trace_parent = opentelemetry::Context::current();

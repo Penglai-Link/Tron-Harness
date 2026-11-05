@@ -19,7 +19,7 @@ import {
 
 import { cn } from "@/shared/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import { useTabStore } from "@/store/tabStore";
+import { useTabStore, type TabItem } from "@/store/tabStore";
 
 interface SettingsNavItem {
   href: string;
@@ -44,18 +44,29 @@ interface SettingsShellProps {
 
 const settingsReturnToStorageKey = "tron.settings.returnTo";
 
-function resolveReturnTo(state: unknown, hasOpenTabs: boolean) {
+function resolveReturnTo(state: unknown, tabs: TabItem[], activeTabId: string | null) {
   // Closing the last tab retains its URL; returning to it would reopen that tab.
-  if (!hasOpenTabs) return "/workspace";
+  if (!tabs.some((tab) => !tab.hide)) return "/workspace";
+
+  const availablePath = (path: string) => {
+    const target = new URL(path, "https://tron.local");
+    const sessionCode = target.pathname === "/chats" ? target.searchParams.get("sessionCode") : null;
+    if (!sessionCode || tabs.some((tab) => {
+      const url = new URL(tab.path, "https://tron.local");
+      return url.pathname === "/chats" && url.searchParams.get("sessionCode") === sessionCode;
+    })) return path;
+    return tabs.find((tab) => tab.id === activeTabId && !tab.hide)?.path
+      ?? tabs.find((tab) => !tab.hide)?.path ?? "/workspace";
+  };
 
   if (state && typeof state === "object" && "from" in state && typeof state.from === "string" && state.from.length > 0) {
-    return state.from;
+    return availablePath(state.from);
   }
 
   if (typeof window !== "undefined") {
     const storedReturnTo = window.sessionStorage.getItem(settingsReturnToStorageKey);
     if (storedReturnTo) {
-      return storedReturnTo;
+      return availablePath(storedReturnTo);
     }
   }
 
@@ -65,8 +76,9 @@ function resolveReturnTo(state: unknown, hasOpenTabs: boolean) {
 export function SettingsShell({ activeItem, children, contentClassName, items }: SettingsShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const location = useLocation();
-  const hasOpenTabs = useTabStore((state) => state.tabs.some((tab) => !tab.hide));
-  const returnTo = resolveReturnTo(location.state, hasOpenTabs);
+  const tabs = useTabStore((state) => state.tabs);
+  const activeTabId = useTabStore((state) => state.activeTabId);
+  const returnTo = resolveReturnTo(location.state, tabs, activeTabId);
   const visibleItems = useMemo(() => items, [items]);
   const flatItems = useMemo(() => visibleItems.flatMap((group) => group.items), [visibleItems]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => (

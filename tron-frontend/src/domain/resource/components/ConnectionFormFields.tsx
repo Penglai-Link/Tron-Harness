@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 
 import {
   Field,
@@ -17,6 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 
 interface TextFieldProps {
   description?: string;
+  autoComplete?: string;
+  disabled?: boolean;
   id: string;
   label: string;
   min?: number;
@@ -37,7 +39,7 @@ export function ConnectionTextField({
 }: TextFieldProps) {
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel htmlFor={id}>{label}{props.required ? <span aria-hidden="true" className="text-destructive"> *</span> : null}</FieldLabel>
       <Input id={id} onChange={(event) => onChange(event.target.value)} {...props} />
       {description ? <FieldDescription>{description}</FieldDescription> : null}
     </Field>
@@ -45,6 +47,8 @@ export function ConnectionTextField({
 }
 
 interface TextareaFieldProps {
+  required?: boolean;
+  description?: string;
   id: string;
   label: string;
   onChange: (value: string) => void;
@@ -53,6 +57,7 @@ interface TextareaFieldProps {
 }
 
 export function ConnectionTextareaField({
+  description,
   id,
   label,
   onChange,
@@ -60,13 +65,15 @@ export function ConnectionTextareaField({
 }: TextareaFieldProps) {
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Textarea id={id} onChange={(event) => onChange(event.target.value)} {...props} />
+      <FieldLabel htmlFor={id}>{label}{props.required ? <span aria-hidden="true" className="text-destructive"> *</span> : null}</FieldLabel>
+      <Textarea id={id} onChange={(event) => onChange(event.target.value)} autoComplete="off" spellCheck={false} {...props} />
+      {description ? <FieldDescription>{description}</FieldDescription> : null}
     </Field>
   );
 }
 
 interface SelectFieldProps {
+  required?: boolean;
   children: ReactNode;
   description?: string;
   id: string;
@@ -76,6 +83,7 @@ interface SelectFieldProps {
 }
 
 export function ConnectionSelectField({
+  required,
   children,
   description,
   id,
@@ -83,12 +91,14 @@ export function ConnectionSelectField({
   onValueChange,
   value,
 }: SelectFieldProps) {
+  const selectedItem = Children.toArray(children).find((child) => isValidElement<{ value: string }>(child) && child.props.value === value);
+  const selectedLabel = isValidElement<{ children: ReactNode }>(selectedItem) ? selectedItem.props.children : undefined;
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Select onValueChange={(next) => next && onValueChange(next)} value={value}>
-        <SelectTrigger id={id}>
-          <SelectValue />
+      <FieldLabel htmlFor={id}>{label}{required ? <span aria-hidden="true" className="text-destructive"> *</span> : null}</FieldLabel>
+      <Select required={required} onValueChange={(next) => next && onValueChange(next)} value={value}>
+        <SelectTrigger id={id} aria-required={required}>
+          <SelectValue>{selectedLabel}</SelectValue>
         </SelectTrigger>
         <SelectPopup>{children}</SelectPopup>
       </Select>

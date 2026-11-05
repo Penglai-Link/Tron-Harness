@@ -15,15 +15,11 @@ import {
 } from "@/components/ui/dialog";
 
 import { toastManager } from "@/components/ui/toast";
-import { createServerAccountConnection } from "@/domain/resource/api";
-import type { ManagedResourceRecord } from "@/domain/resource/hooks";
-import { createMockManagedResource } from "@/domain/resource/mock";
+import { createServerAccountConnection, updateServerAccountConnection } from "@/domain/resource/api";
+import type { ResourceRecord } from "@/domain/resource/model";
+import { createMockManagedResource, updateMockResource } from "@/domain/resource/mock";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
-import {
-  ConnectionSelectField,
-  ConnectionSelectItem,
-} from "./ConnectionFormFields";
 import { generateConnectionResourceCode } from "./connectionResourceCode";
 import {
   emptyServerAccount,
@@ -35,7 +31,7 @@ interface ServerAccountCreateDialogProps {
   onCreated: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
-  servers: ManagedResourceRecord[];
+  record?: ResourceRecord | null;
   workspaceCode: string;
 }
 
@@ -43,18 +39,27 @@ export function ServerAccountCreateDialog({
   onCreated,
   onOpenChange,
   open,
-  servers,
+  record,
   workspaceCode,
 }: ServerAccountCreateDialogProps) {
   const { t } = useTranslation("pages");
-  const [serverCode, setServerCode] = useState("");
   const [account, setAccount] = useState<ServerAccountFormValue>({ ...emptyServerAccount });
   const [submitting, setSubmitting] = useState(false);
   const pageT = (key: string) => t(`resourceConnections.${key}`);
 
   useEffect(() => {
-    if (open) setAccount({ ...emptyServerAccount, accountCode: generateConnectionResourceCode("SERVER_ACCOUNT") });
-  }, [open]);
+    setAccount(open ? {
+      ...emptyServerAccount,
+      accountCode: record?.resourceCode ?? generateConnectionResourceCode("SERVER_ACCOUNT"),
+      name: record?.name ?? "",
+      description: record?.description ?? "",
+      username: typeof record?.attributes?.username === "string" ? record.attributes.username : "",
+      authenticationType: record?.attributes?.authenticationType === "PrivateKey" ? "PrivateKey" : "Password",
+    } : { ...emptyServerAccount });
+  }, [open, record, workspaceCode]);
+
+  const credentialsRequired = !record || record.attributes?.credentialConfigured !== true
+    || account.authenticationType !== record.attributes?.authenticationType;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,54 +67,54 @@ export function ServerAccountCreateDialog({
     try {
       const accountRequest = {
         accountCode: account.accountCode.trim(),
-        allowInheritance: false,
+        allowInheritance: record?.allowInheritance ?? false,
         authenticationType: account.authenticationType,
         description: account.description.trim() || null,
         name: account.name.trim(),
-        ...(account.authenticationType === "Password"
-          ? { passwordVariableKey: account.passwordVariableKey.trim() }
-          : {
-              privateKeyVariableKey: account.privateKeyVariableKey.trim(),
-              ...(account.privateKeyPassphraseVariableKey.trim()
-                ? { privateKeyPassphraseVariableKey: account.privateKeyPassphraseVariableKey.trim() }
-                : {}),
-            }),
+        password: account.authenticationType === "Password" ? account.password || null : null,
+        privateKey: account.authenticationType === "PrivateKey" ? account.privateKey || null : null,
+        privateKeyPassphrase: account.authenticationType === "PrivateKey" && account.privateKey
+          ? account.privateKeyPassphrase || null : null,
         username: account.username.trim(),
       };
       if (getServiceDataSource("resource") === "api") {
-        await createServerAccountConnection({
-          account: accountRequest,
-          serverCode,
-          workspaceCode,
-        });
+        if (record) {
+          const { accountCode: _, ...changes } = accountRequest;
+          await updateServerAccountConnection(record.resourceCode, { ...changes, workspaceCode });
+        } else {
+          await createServerAccountConnection({ account: accountRequest, workspaceCode });
+        }
       } else {
-        createMockManagedResource({
-          allowInheritance: false,
+        // Mock resources keep public metadata only; credentials never enter the mock store.
+        const metadata = {
+          allowInheritance: accountRequest.allowInheritance,
           attributes: {
+            servers: record?.attributes?.servers ?? [],
+            credentialConfigured: true,
             authenticationType: accountRequest.authenticationType,
-            serverCode,
-            serverWorkspaceCode: workspaceCode,
             username: accountRequest.username,
           },
           description: accountRequest.description ?? "",
-          file: null,
-          kind: "SERVER_ACCOUNT",
           name: accountRequest.name,
-          resourceCode: accountRequest.accountCode,
-          workspaceCode,
-        });
+        };
+        if (record) {
+          if (!updateMockResource(workspaceCode, record.resourceCode, metadata)) throw new Error(pageT("serverAccount.saveFailed"));
+        } else {
+          createMockManagedResource({ ...metadata, file: null, kind: "SERVER_ACCOUNT", resourceCode: accountRequest.accountCode, workspaceCode });
+        }
       }
+      setAccount({ ...emptyServerAccount });
       toastManager.add({
-        description: pageT("messages.accountCreated"),
-        title: pageT("messages.created"),
+        description: pageT(record ? "serverAccount.saved" : "messages.accountCreated"),
+        title: pageT(record ? "serverAccount.saved" : "messages.created"),
         type: "success",
       });
       onOpenChange(false);
       onCreated();
     } catch (cause) {
       toastManager.add({
-        description: cause instanceof Error ? cause.message : pageT("messages.createFailed"),
-        title: pageT("messages.createFailed"),
+        description: cause instanceof Error ? cause.message : pageT(record ? "serverAccount.saveFailed" : "messages.createFailed"),
+        title: pageT(record ? "serverAccount.saveFailed" : "messages.createFailed"),
         type: "error",
       });
     } finally {
@@ -118,29 +123,20 @@ export function ServerAccountCreateDialog({
   }
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <Dialog onOpenChange={(next) => { if (!submitting) onOpenChange(next); }} open={open}>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
         <form onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>{pageT("serverAccount.createTitle")}</DialogTitle>
+            <DialogTitle>{pageT(record ? "serverAccount.editTitle" : "serverAccount.createTitle")}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-5 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <ConnectionSelectField id="account-server" label={pageT("fields.server")} onValueChange={setServerCode} value={serverCode}>
-                {servers.map((server) => (
-                  <ConnectionSelectItem key={server.resourceCode} value={server.resourceCode}>
-                    {server.name} · {server.resourceCode}
-                  </ConnectionSelectItem>
-                ))}
-              </ConnectionSelectField>
-            </div>
-            <ServerAccountFields idPrefix="server-account" onChange={setAccount} value={account} />
-          </div>
+          <fieldset disabled={submitting} className="grid gap-4 py-5 sm:grid-cols-2">
+            <ServerAccountFields credentialsRequired={credentialsRequired} idPrefix="server-account" onChange={setAccount} value={account} />
+          </fieldset>
           <DialogFooter>
             <Button disabled={submitting} type="button" variant="outline" onClick={() => onOpenChange(false)}>{pageT("actions.cancel")}</Button>
-            <Button disabled={submitting || !serverCode} type="submit">
+            <Button disabled={submitting || !workspaceCode || !account.name.trim() || !account.username.trim()} type="submit">
 
-              {submitting ? pageT("actions.creating") : pageT("actions.create")}
+              {submitting ? pageT("serverAccount.saving") : pageT(record ? "serverAccount.save" : "actions.create")}
             </Button>
           </DialogFooter>
         </form>

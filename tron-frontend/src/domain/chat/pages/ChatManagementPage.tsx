@@ -31,6 +31,7 @@ import { useToast } from "@/components/ui/toast";
 import { MarkdownLink } from "@/components/markdown-link";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { cn } from "@/shared/lib/utils";
+import { CHAT_SESSIONS_REMOVED_EVENT } from "@/shared/lib/shellEvents";
 import {
   createChatSession,
   useChatAguiEvents,
@@ -74,6 +75,8 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { AgentChatWindow, type AgentChatSubmitter } from "@/domain/chat/components/AgentChatWindow";
 import { ChatDraftResources } from "../model/chatDraftResources";
+import { ChatExecutionModeSelector } from "../components/ChatExecutionModeSelector";
+import { useChatExecutionMode } from "../hooks/useChatExecutionMode";
 import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
 import { ContextDetailPreview, contextDetailRawValue, type ContextDetailBlock } from "@/domain/chat/components/ContextDetailPreview";
 import { useSavedContextAssembly } from "../hooks/useSavedContextAssembly";
@@ -2610,7 +2613,11 @@ export function ChatManagementPage() {
     next: t("chat.userInput.next"),
     continue: t("chat.userInput.continue"),
     approve: t("chat.userInput.approve"),
+    approveAll: t("chat.userInput.approveAll"),
+    rejectAll: t("chat.userInput.rejectAll"),
     approvalTitle: t("chat.userInput.approvalTitle"),
+    approvalQuestion: (action: string) => t("chat.userInput.approvalQuestion", { action }),
+    approvalFallbackQuestion: t("chat.userInput.approvalFallbackQuestion"),
     approvalTool: t("chat.userInput.approvalTool"),
     approvalExecution: t("chat.userInput.approvalExecution"),
     approvalReason: t("chat.userInput.approvalReason"),
@@ -2652,12 +2659,13 @@ export function ChatManagementPage() {
         [sessionModelSelectionKey(session.sessionCode, session.agentCode ?? selectedAgentCode)]: selectedModelCode,
       }));
     }
-    const path = `/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`;
+    const sessionParams = new URLSearchParams({ sessionCode: session.sessionCode, workspaceCode: activeWorkspaceCode });
+    const path = `/chats?${sessionParams}`;
     useTabStore.getState().updateTab(scopeTabId, {
       path, activeNav: `chat-session:${session.sessionCode}`,
       title: session.title, titleTranslationKey: undefined,
     });
-    setCurrentSearchText(new URLSearchParams({ sessionCode: session.sessionCode }).toString());
+    setCurrentSearchText(sessionParams.toString());
     if (useTabStore.getState().activeTabId === scopeTabId) navigate(path, { replace: true });
     window.dispatchEvent(new CustomEvent("tron:chat-session-created", { detail: session }));
   });
@@ -2666,7 +2674,7 @@ export function ChatManagementPage() {
       setCreatingSession(true);
       try {
         // Localized composer labels are not user-assigned session titles.
-        const session = await createChatSession({ ...input, title: undefined, projectCode: draftProjectCode });
+        const session = await createChatSession({ ...input, title: undefined, projectCode: draftProjectCode, executionMode });
         promoteDraftSession(session);
         return session;
       } finally {
@@ -2711,6 +2719,16 @@ export function ChatManagementPage() {
       : undefined
   );
   const [runtimeRunState, setRuntimeRunState] = useState<ChatRuntimeRunState | null>(null);
+  const { mode: executionMode, saving: savingExecutionMode, changeMode: changeExecutionMode } = useChatExecutionMode(
+    activeSession,
+    isDraft ? requestedDraftCode : "",
+    useStableCallback((updated: ChatSession) => {
+      setSessionGroups((current) => replaceSession(current, updated));
+      setOptimisticActiveSession((current) => current?.sessionCode === updated.sessionCode ? updated : current);
+      setActiveChatDataRefreshKey((current) => current + 1);
+      window.dispatchEvent(new Event("tron:chat-session-updated"));
+    }),
+  );
   const currentSessionRunActive = Boolean(runtimeRunState?.active && runtimeRunState.sessionCode === activeSession?.sessionCode);
   useChatGeneratedTitle(activeSession, useStableCallback((updated: ChatSession) => {
     setSessionGroups((current) => replaceSession(current, updated));
@@ -2878,7 +2896,7 @@ export function ChatManagementPage() {
     content: string,
     attachments: ChatMessageAttachment[],
   ): SendChatMessageInput | null {
-    if (!selectedModel || !selectedModel.enabled) return null;
+    if (savingExecutionMode || !selectedModel || !selectedModel.enabled) return null;
     const input: SendChatMessageInput = {
       agentCode: effectiveAgentCode,
       appCode: session.appCode,
@@ -2910,7 +2928,7 @@ export function ChatManagementPage() {
     (session: RuntimeChatSession, content: string, attachments: ChatMessageAttachment[]) => (
       createSendInput(toPageChatSession(session), content, attachments)
     ),
-    [effectiveAgentCode, selectedModel, selectedReasoningEffort],
+    [effectiveAgentCode, selectedModel, selectedReasoningEffort, savingExecutionMode],
   );
 
   const handleRuntimeSessionChange = useCallback((nextSession: RuntimeChatSession | null) => {
@@ -3051,7 +3069,7 @@ export function ChatManagementPage() {
     if (!activeSession?.title.trim()) return;
     const tab = useTabStore
       .getState()
-      .tabs.find((item) => item.activeNav === `chat-session:${activeSession.sessionCode}`);
+      .getAllTabs().find((item) => item.activeNav === `chat-session:${activeSession.sessionCode}`);
     if (tab && tab.title !== activeSession.title) {
       useTabStore.getState().updateTab(tab.id, {
         title: activeSession.title,
@@ -3062,8 +3080,8 @@ export function ChatManagementPage() {
 
   useEffect(() => {
     const refresh = () => setActiveChatDataRefreshKey((current) => current + 1);
-    window.addEventListener("tron:chat-session-archived", refresh);
-    return () => window.removeEventListener("tron:chat-session-archived", refresh);
+    window.addEventListener(CHAT_SESSIONS_REMOVED_EVENT, refresh);
+    return () => window.removeEventListener(CHAT_SESSIONS_REMOVED_EVENT, refresh);
   }, []);
 
   useEffect(() => () => {
@@ -3447,6 +3465,11 @@ export function ChatManagementPage() {
         >
           <Plus aria-hidden="true" className="!block size-4" />
         </Button>
+        <ChatExecutionModeSelector
+          value={executionMode}
+          disabled={(!activeSession && !isDraft) || activeSession?.status === "ARCHIVED" || creatingSession || savingExecutionMode}
+          onChange={(mode) => { void changeExecutionMode(mode); }}
+        />
         <div className="min-w-0 max-w-[9.5rem] shrink">
           <ChatAgentSelector
             locked={agentSelectionLocked}
@@ -3514,6 +3537,9 @@ export function ChatManagementPage() {
     activeSession,
     isDraft,
     creatingSession,
+    executionMode,
+    savingExecutionMode,
+    changeExecutionMode,
     attachmentUploadPending,
     chatAgents,
     handleAttachmentFileInputChange,
@@ -3690,7 +3716,7 @@ export function ChatManagementPage() {
             submitterRef={submitterRef}
             config={{
               agentCode: effectiveAgentCode,
-              disabledInput: creatingSession || !selectedModel?.enabled,
+              disabledInput: creatingSession || savingExecutionMode || !selectedModel?.enabled,
               floating: false,
               inputPlaceholder: t("chat.management.composer.inputPlaceholder"),
               showAgui: true,

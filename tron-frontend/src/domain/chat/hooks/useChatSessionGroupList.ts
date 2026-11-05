@@ -9,11 +9,14 @@ import { useEffect, useMemo } from "react";
 import { chatApiEndpoints } from "@/domain/chat/api";
 import type { ChatSession, ChatSessionGroup, CreateChatSessionInput, UpdateChatSessionInput } from "@/domain/chat/model";
 import { requestApi } from "@/shared/api/httpClient";
+import { rememberChatWorkspace } from "@/shared/api/chatWorkspaceScope";
+import { notifyChatSessionsRemoved } from "@/shared/lib/shellEvents";
 import { getServiceDataSource, useServiceQuery } from "@/shared/api/serviceConfig";
 
 const recentlyCreatedSessions = new Map<string, ChatSession>();
 
 export function rememberCreatedChatSession(session: ChatSession) {
+  rememberChatWorkspace(session.sessionCode, session.workspaceCode);
   recentlyCreatedSessions.set(session.sessionCode, session);
 }
 
@@ -67,7 +70,15 @@ export function useChatSessionGroupList(workspaceCode: string, refreshKey = 0) {
   });
 
   const mergedGroups = useMemo(
-    () => mergeRecentlyCreatedSessions(groups, workspaceCode),
+    () => {
+      // A query can still hold the previous space's data for one render.
+      const scopedGroups = groups.map((group) => ({
+        ...group, sessions: group.sessions.filter((session) => session.workspaceCode === workspaceCode),
+      })).filter((group) => group.sessions.length > 0);
+      const merged = mergeRecentlyCreatedSessions(scopedGroups, workspaceCode);
+      merged.forEach((group) => group.sessions.forEach((session) => rememberChatWorkspace(session.sessionCode, session.workspaceCode)));
+      return merged;
+    },
     [groups, workspaceCode],
   );
 
@@ -97,6 +108,7 @@ export async function archiveChatSession(sessionCode: string): Promise<ChatSessi
   if (getServiceDataSource("chat") === "mock") {
     const archived = archiveMockChatSession(sessionCode);
     recentlyCreatedSessions.delete(sessionCode);
+    notifyChatSessionsRemoved([sessionCode]);
     return archived;
   }
 
@@ -104,18 +116,23 @@ export async function archiveChatSession(sessionCode: string): Promise<ChatSessi
     pathParams: { sessionCode },
   });
   recentlyCreatedSessions.delete(sessionCode);
+  notifyChatSessionsRemoved([sessionCode]);
   return archived;
 }
 
-export async function deleteArchivedChatSession(sessionCode: string): Promise<void> {
+export async function deleteChatSession(sessionCode: string): Promise<void> {
   if (getServiceDataSource("chat") === "mock") {
     deleteMockChatSession(sessionCode);
+    recentlyCreatedSessions.delete(sessionCode);
+    notifyChatSessionsRemoved([sessionCode]);
     return;
   }
 
   await requestApi(chatApiEndpoints.deleteChatSession, {
     pathParams: { sessionCode },
   });
+  recentlyCreatedSessions.delete(sessionCode);
+  notifyChatSessionsRemoved([sessionCode]);
 }
 
 export function updateChatSession(sessionCode: string, input: UpdateChatSessionInput): Promise<ChatSession> {

@@ -201,6 +201,7 @@ pub(crate) struct PreparedAgentRun {
 
 #[derive(Clone)]
 pub(crate) struct AgentRunContextBuilder {
+    tool_execution_mode: crate::domain::agent::ToolExecutionMode,
     platform_scope: bool,
     framework_host: Option<crate::application::agent::FrameworkHost>,
     collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
@@ -222,6 +223,14 @@ pub(crate) struct AgentRunContextBuilder {
 }
 
 impl AgentRunContextBuilder {
+    pub(crate) fn with_tool_execution_mode(
+        mut self,
+        mode: crate::domain::agent::ToolExecutionMode,
+    ) -> Self {
+        self.tool_execution_mode = mode;
+        self
+    }
+
     pub(crate) fn with_framework_host(
         mut self,
         host: Option<crate::application::agent::FrameworkHost>,
@@ -290,6 +299,7 @@ impl AgentRunContextBuilder {
     ) -> Self {
         Self {
             platform_scope: false,
+            tool_execution_mode: Default::default(),
             framework_host: None,
             collaboration_owner: None,
             dude_work_context: None,
@@ -623,6 +633,7 @@ impl AgentRunContextBuilder {
         let requested_system_agent_session_id =
             normalize_optional(requested_system_agent_session_id);
         let mut context = AgentRunContext {
+            tool_execution_mode: self.tool_execution_mode,
             system_agent_fast_mode: resolved_agent.system_fast_mode,
             collaboration_owner: self.collaboration_owner.clone(),
             agent_code: Some(resolved_agent.agent_code.clone()),

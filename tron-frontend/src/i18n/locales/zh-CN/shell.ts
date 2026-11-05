@@ -57,7 +57,6 @@ export const shell = {
       createTitle: "创建主题",
       editTitle: "编辑主题",
       linkedApps: "关联应用",
-      linkedAppsDescription: "可选：选择主题会话可以访问的应用目录。",
       namePlaceholder: "输入主题名称",
       nameLabel: "主题名称",
       primary: "主要",

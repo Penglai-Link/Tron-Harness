@@ -89,6 +89,8 @@ export function TabPanelRegistryProvider({
 
 function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
+  const workspaceCode = useTabStore((state) => state.workspaceCode);
+  const workspaceTabs = useTabStore((state) => state.workspaceTabs);
   const resetVersion = useTabStore((state) => state.resetVersion);
   const previousResetVersion = useRef(resetVersion);
   const [cacheConfigs, setCacheConfigs] = useState<
@@ -225,9 +227,10 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const cachedTabIds = new Set(cachedTabsList.map((tab) => tab.tabId));
+    const panelOwnerIds = new Set(useTabStore.getState().getPanelOwnerIds());
     setCacheConfigs((current) => {
       const staleTabIds = Object.keys(current).filter(
-        (tabId) => tabId !== DEFAULT_TAB_ID && !cachedTabIds.has(tabId)
+        (tabId) => !cachedTabIds.has(tabId) && !(tabId.startsWith(DEFAULT_TAB_ID) && panelOwnerIds.has(tabId))
       );
       if (!staleTabIds.length) return current;
 
@@ -250,7 +253,7 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
       });
       return next;
     });
-  }, [cachedTabsList]);
+  }, [cachedTabsList, workspaceCode, workspaceTabs]);
 
   useEffect(() => {
     if (previousResetVersion.current === resetVersion) return;

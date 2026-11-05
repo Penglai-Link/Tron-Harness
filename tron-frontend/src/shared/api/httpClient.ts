@@ -1,5 +1,6 @@
 import { tracedFetch } from "@tron/chat-core";
 import { applyCurrentLocaleHeader } from "@/i18n";
+import { chatWorkspaceForSession } from "./chatWorkspaceScope";
 
 export type EndpointParams = Record<string, string | number | boolean | null | undefined>;
 
@@ -138,10 +139,28 @@ export function buildApiUrl(
     url.searchParams.set(key, String(value));
   });
 
-  if ((url.pathname.startsWith("/api/v1/chats/") || url.pathname.startsWith("/api/v1/agents/agui/streams/") || url.pathname.startsWith("/api/v1/agents/runs")) && !url.searchParams.has("workspaceCode") && apiWorkspaceCode) {
-    url.searchParams.set("workspaceCode", apiWorkspaceCode);
+  if (isWorkspaceChatPath(url.pathname) && !url.searchParams.has("workspaceCode")) {
+    const sessionCode = (url.searchParams.get("sessionCode")
+      ?? String(pathParams.sessionCode ?? pathParams.streamKey ?? ""))
+      || decodeURIComponent(url.pathname.match(/\/api\/v1\/(?:chats\/sessions|agents\/agui\/streams)\/([^/]+)/)?.[1] ?? "");
+    const workspaceCode = chatWorkspaceForSession(sessionCode) ?? apiWorkspaceCode;
+    if (workspaceCode) url.searchParams.set("workspaceCode", workspaceCode);
   }
   return url.toString();
+}
+
+function isWorkspaceChatPath(path: string) {
+  return path.startsWith("/api/v1/chats/") || path.startsWith("/api/v1/agents/agui/streams/") || path.startsWith("/api/v1/agents/runs");
+}
+
+function requestUrl(path: string, options: ApiRequestOptions) {
+  const body = isRecord(options.body) ? options.body : undefined;
+  const workspaceCode = typeof body?.workspaceCode === "string" ? body.workspaceCode
+    : typeof body?.sessionCode === "string" ? chatWorkspaceForSession(body.sessionCode) : undefined;
+  return buildApiUrl(path, options.pathParams, {
+    ...(isWorkspaceChatPath(path) && workspaceCode ? { workspaceCode } : {}),
+    ...options.queryParams,
+  });
 }
 
 export function unwrapApiEnvelope<T>(payload: unknown): T {
@@ -161,9 +180,13 @@ export function unwrapApiEnvelope<T>(payload: unknown): T {
 }
 
 export async function requestApi<T>(endpoint: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { method, path } = parseEndpoint(endpoint);
+  return executeApiRequest<T>(endpoint, options, requestUrl(parseEndpoint(endpoint).path, options));
+}
+
+async function executeApiRequest<T>(endpoint: string, options: ApiRequestOptions, url: string): Promise<T> {
+  const { method } = parseEndpoint(endpoint);
   const headers = resolveHeaders(options.body, options.headers);
-  const response = await tracedFetch(buildApiUrl(path, options.pathParams, options.queryParams), {
+  const response = await tracedFetch(url, {
     body: resolveRequestBody(options.body),
     cache: options.cache,
     credentials: options.credentials ?? "include",
@@ -179,10 +202,10 @@ export async function requestApi<T>(endpoint: string, options: ApiRequestOptions
     && apiAccessToken
     && readBearerToken(headers) !== apiAccessToken
   ) {
-    return requestApi<T>(endpoint, {
+    return executeApiRequest<T>(endpoint, {
       ...options,
       retryOnUnauthorized: false,
-    });
+    }, url);
   }
 
   if (
@@ -191,10 +214,10 @@ export async function requestApi<T>(endpoint: string, options: ApiRequestOptions
     && unauthorizedHandler
     && await unauthorizedHandler()
   ) {
-    return requestApi<T>(endpoint, {
+    return executeApiRequest<T>(endpoint, {
       ...options,
       retryOnUnauthorized: false,
-    });
+    }, url);
   }
 
   if (!response.ok) {
@@ -219,9 +242,13 @@ export async function requestApiBlob(
   endpoint: string,
   options: ApiRequestOptions = {},
 ): Promise<ApiBlobResponse> {
-  const { method, path } = parseEndpoint(endpoint);
+  return executeBlobRequest(endpoint, options, requestUrl(parseEndpoint(endpoint).path, options));
+}
+
+async function executeBlobRequest(endpoint: string, options: ApiRequestOptions, url: string): Promise<ApiBlobResponse> {
+  const { method } = parseEndpoint(endpoint);
   const headers = resolveHeaders(options.body, options.headers);
-  const response = await tracedFetch(buildApiUrl(path, options.pathParams, options.queryParams), {
+  const response = await tracedFetch(url, {
     body: resolveRequestBody(options.body),
     credentials: options.credentials ?? "include",
     headers,
@@ -235,10 +262,10 @@ export async function requestApiBlob(
     && apiAccessToken
     && readBearerToken(headers) !== apiAccessToken
   ) {
-    return requestApiBlob(endpoint, {
+    return executeBlobRequest(endpoint, {
       ...options,
       retryOnUnauthorized: false,
-    });
+    }, url);
   }
 
   if (
@@ -247,10 +274,10 @@ export async function requestApiBlob(
     && unauthorizedHandler
     && await unauthorizedHandler()
   ) {
-    return requestApiBlob(endpoint, {
+    return executeBlobRequest(endpoint, {
       ...options,
       retryOnUnauthorized: false,
-    });
+    }, url);
   }
 
   if (!response.ok) {

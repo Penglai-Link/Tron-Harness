@@ -57,7 +57,6 @@ export const shell = {
       createTitle: "Create topic",
       editTitle: "Edit topic",
       linkedApps: "Linked apps",
-      linkedAppsDescription: "Optional: Select the app directories that topic chats can access.",
       namePlaceholder: "Enter topic name",
       nameLabel: "Topic name",
       primary: "Primary",

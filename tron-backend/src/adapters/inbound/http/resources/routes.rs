@@ -1,4 +1,7 @@
-use axum::{Router, routing::post};
+use axum::{
+    Router,
+    routing::{post, put},
+};
 
 use crate::{app::AppState, application::resource::ResourceService};
 
@@ -11,6 +14,7 @@ use super::{
         commit_body_limit, create_resource, delete_resource, download_binary, get_resource,
         page_resources, update_resource, upload_binary, upload_body_limit,
     },
+    server_account_handler::{assign_server_account, update_server_account, verify_server_account},
 };
 
 pub fn routes(resources: &ResourceService) -> Router<AppState> {
@@ -40,7 +44,19 @@ pub fn routes(resources: &ResourceService) -> Router<AppState> {
         .route("/api/v1/resource-connections/servers", post(create_server))
         .route(
             "/api/v1/resource-connections/server-accounts",
-            post(create_server_account),
+            post(create_server_account).layer(commit_body_limit(262_144)),
+        )
+        .route(
+            "/api/v1/resource-connections/server-accounts/{account_code}",
+            put(update_server_account).layer(commit_body_limit(262_144)),
+        )
+        .route(
+            "/api/v1/resource-connections/server-accounts/{account_code}/servers",
+            put(assign_server_account).layer(commit_body_limit(65_536)),
+        )
+        .route(
+            "/api/v1/resource-connections/server-accounts/{account_code}/verify",
+            post(verify_server_account).layer(commit_body_limit(16_384)),
         )
         .route(
             "/api/v1/resource-connections/delete",

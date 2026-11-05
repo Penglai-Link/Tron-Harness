@@ -57,9 +57,9 @@ export interface ServerAccountCreateInputApiRequest {
   description: string | null;
   username: string;
   authenticationType: ServerAuthenticationType;
-  passwordVariableKey?: string;
-  privateKeyVariableKey?: string;
-  privateKeyPassphraseVariableKey?: string;
+  password: string | null;
+  privateKey: string | null;
+  privateKeyPassphrase: string | null;
   allowInheritance: boolean;
 }
 
@@ -76,7 +76,6 @@ export interface ServerCreateApiRequest {
 
 export interface ServerAccountCreateApiRequest {
   workspaceCode: string;
-  serverCode: string;
   account: ServerAccountCreateInputApiRequest;
 }
 
@@ -84,4 +83,26 @@ export interface ServerCreateApiResult {
   server: ConnectionCommitApiResult;
   initialAccount?: ConnectionCommitApiResult | null;
   connectivityVerified: boolean;
+}
+
+export interface ServerAccountUpdateApiRequest {
+  workspaceCode: string;
+  name: string;
+  description: string | null;
+  username: string;
+  authenticationType: ServerAuthenticationType;
+  password: string | null;
+  privateKey: string | null;
+  privateKeyPassphrase: string | null;
+  allowInheritance: boolean;
+}
+
+export interface ServerAccountAssignApiRequest {
+  workspaceCode: string;
+  serverCodes: string[];
+}
+
+export interface ServerAccountVerifyApiRequest {
+  workspaceCode: string;
+  serverCode: string;
 }

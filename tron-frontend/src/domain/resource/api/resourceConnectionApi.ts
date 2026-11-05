@@ -11,6 +11,9 @@ import type {
   DataSourceCreateApiRequest,
   DataSourceUpdateApiRequest,
   ServerAccountCreateApiRequest,
+  ServerAccountUpdateApiRequest,
+  ServerAccountAssignApiRequest,
+  ServerAccountVerifyApiRequest,
   ServerCreateApiRequest,
   ServerCreateApiResult,
 } from "./resourceConnectionApiContract";
@@ -64,5 +67,26 @@ export function deleteConnection(request: ConnectionDeleteApiRequest) {
   return requestApi<ConnectionDeleteApiResult>(
     resourceConnectionApiEndpoints.connectionDelete,
     { body: request },
+  );
+}
+
+export function updateServerAccountConnection(accountCode: string, request: ServerAccountUpdateApiRequest) {
+  return requestApi<{ workspaceCode: string; resourceCode: string }>(
+    "PUT /api/v1/resource-connections/server-accounts/{accountCode}",
+    { pathParams: { accountCode }, body: request },
+  );
+}
+
+export function assignServerAccount(accountCode: string, request: ServerAccountAssignApiRequest) {
+  return requestApi<{ workspaceCode: string; resourceCode: string }>(
+    "PUT /api/v1/resource-connections/server-accounts/{accountCode}/servers",
+    { pathParams: { accountCode }, body: request },
+  );
+}
+
+export function verifyServerAccount(accountCode: string, request: ServerAccountVerifyApiRequest) {
+  return requestApi<{ verified: boolean }>(
+    "POST /api/v1/resource-connections/server-accounts/{accountCode}/verify",
+    { pathParams: { accountCode }, body: request },
   );
 }

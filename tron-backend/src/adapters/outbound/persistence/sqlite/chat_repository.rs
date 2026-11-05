@@ -71,6 +71,7 @@ fn chat_session_from_row(row: SessionProjection) -> Result<ChatSession, ChatErro
         .and_then(|value| serde_json::from_str::<Value>(value).ok())
         .and_then(|value| value["sessionId"].as_str().map(str::to_owned));
     Ok(ChatSession {
+        execution_mode: link.execution_mode,
         id: link.id,
         session_code: row.session_id,
         workspace_code: link.workspace_code,
@@ -102,6 +103,8 @@ fn chat_session_from_row(row: SessionProjection) -> Result<ChatSession, ChatErro
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Link {
+    #[serde(default)]
+    execution_mode: crate::domain::agent::ToolExecutionMode,
     id: i64,
     workspace_code: String,
     project_code: Option<String>,
@@ -115,6 +118,7 @@ struct Link {
 impl Link {
     fn from_session(s: &ChatSession) -> Self {
         Self {
+            execution_mode: s.execution_mode,
             id: s.id,
             workspace_code: s.workspace_code.clone(),
             project_code: s.project_code.clone(),
@@ -163,7 +167,7 @@ impl SqliteChatRepository {
             let code = id.to_owned();
             db.transaction(async {
                 let record=sessions.get(id).await?;
-                if record.status!=fw::SessionStatus::Archived {return Err(fw::StateError::Invalid("session must be archived".into()));}
+                if heartbeat_retention && record.status!=fw::SessionStatus::Archived {return Err(fw::StateError::Invalid("session must be archived".into()));}
                 if self.framework().await.map_err(|e|fw::StateError::Backend(e.to_string()))?.goals().map_err(|e|fw::StateError::Backend(e.to_string()))?.active(id).await?.is_some_and(|goal| goal.status == fw::GoalStatus::Active) {
                     return Err(fw::StateError::Busy);
                 }
@@ -242,6 +246,7 @@ impl SqliteChatRepository {
         let mut record = fw::SessionRecord::new("临时运行");
         record.id = id.into();
         let link = Link {
+            execution_mode: context.tool_execution_mode,
             id: 0,
             workspace_code: context.workspace_code.clone(),
             project_code: None,
@@ -578,19 +583,43 @@ impl ChatRepository for SqliteChatRepository {
             Ok(())
         })
     }
-    fn update_session_title(&mut self, id: &str, title: &str, _at: &str) -> Result<(), ChatError> {
+    fn update_session_settings(
+        &mut self,
+        id: &str,
+        title: Option<&str>,
+        execution_mode: Option<crate::domain::agent::ToolExecutionMode>,
+        _at: &str,
+    ) -> Result<(), ChatError> {
         blocking(async {
-            self.link(id).await?;
-            let s = self
+            let db = self.host.shared_database().await.map_err(chat_error)?;
+            let sessions = self
                 .framework()
                 .await?
                 .sessions()
                 .map_err(|_| ChatError::StorageFailure)?;
-            let mut record = s.get(id).await.map_err(chat_error)?;
-            let expected = record.revision;
-            record.title = title.into();
-            s.update(record, expected).await.map_err(chat_error)?;
-            Ok(())
+            db.transaction(async {
+                let mut link = self.link(id).await
+                    .map_err(|error| fw::StateError::Backend(error.to_string()))?;
+                if let Some(mode) = execution_mode {
+                    link.execution_mode = mode;
+                    let value = serde_json::to_string(&link)
+                        .map_err(|error| fw::StateError::Backend(error.to_string()))?;
+                    let code = id.to_owned();
+                    db.call(move |connection| {
+                        connection.execute(
+                            "UPDATE workspace_session_links SET business_json=?2 WHERE session_id=?1",
+                            params![code, value],
+                        )
+                    }).await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
+                }
+                let mut record = sessions.get(id).await?;
+                let expected = record.revision;
+                if let Some(title) = title {
+                    record.title = title.into();
+                }
+                sessions.update(record, expected).await?;
+                Ok(())
+            }).await.map_err(chat_error)
         })
     }
     fn update_session_run(

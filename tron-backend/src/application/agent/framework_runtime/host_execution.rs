@@ -266,6 +266,12 @@ impl FrameworkHost {
             source: Some("AgentResponse".into()),
             correlation: None,
         });
+        // Only Ask permissions are auto-approved; No remains enforced by both policies.
+        if context.tool_execution_mode == crate::domain::agent::ToolExecutionMode::AutoApprove {
+            request
+                .extensions
+                .insert(tron_harness_capability::TronToolAutoApproval);
+        }
         // Resolve the display language per run, including approval continuations.
         request.extensions.insert(
             match crate::shared::locale::SupportedLocale::from_raw(&context.locale) {

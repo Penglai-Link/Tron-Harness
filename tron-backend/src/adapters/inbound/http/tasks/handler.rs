@@ -220,6 +220,7 @@ pub async fn execute_task(
 
     let session = match state.chats.create_session(
         CreateChatSessionCommand {
+            execution_mode: Default::default(),
             workspace_code: task.workspace_code.clone(),
             project_code: None,
             title: Some(format!("Task: {}", task.title)),

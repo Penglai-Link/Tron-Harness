@@ -1,5 +1,6 @@
 import type { ChatAnnotation, ToolActionSummary } from "@eliteforge/agent-ui-chat-core";
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
+export type ToolExecutionMode = "CONTROLLED" | "AUTO_APPROVE";
 export type ChatSessionSourceType = "MANUAL" | "TASK" | "AUTOMATION" | "TERMINAL";
 export type ChatMessageRole = "USER" | "ASSISTANT";
 export type ChatMessageChannel = "MAIN_AGENT" | "TASK_AGENT";
@@ -24,6 +25,7 @@ export interface ChatModelSelection {
 }
 
 export interface ChatSession {
+  executionMode?: ToolExecutionMode;
   sourceCode?: string | null;
   id: number | string;
   sessionCode: string;
@@ -53,6 +55,7 @@ export interface ChatSessionGroup {
 }
 
 export interface CreateChatSessionInput {
+  executionMode?: ToolExecutionMode;
   workspaceCode: string | null;
   title?: string | null;
   appCode?: string | null;
@@ -62,7 +65,8 @@ export interface CreateChatSessionInput {
 }
 
 export interface UpdateChatSessionInput {
-  title: string;
+  title?: string;
+  executionMode?: ToolExecutionMode;
 }
 
 export interface ChatMessage {

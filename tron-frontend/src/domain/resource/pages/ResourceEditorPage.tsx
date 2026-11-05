@@ -46,6 +46,8 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Badge } from "@/components/ui/badge";
 import { ResourceFilePreviewDialog } from "../components/ResourceFilePreviewDialog";
 
+import { ServerAccountDetailPage } from "./ServerAccountDetailPage";
+
 const fileKinds: ResourceKind[] = ["FILE", "IMAGE", "PDF"];
 const dataSourceKinds: ResourceKind[] = [
   "MYSQL_CONNECTION",
@@ -107,6 +109,12 @@ function displayResourceAttribute(attributes: Record<string, unknown> | null | u
 }
 
 export function ResourceEditorPage() {
+  const location = useLocation();
+  if (location.pathname.startsWith("/resource-management/server-accounts/")) return <ServerAccountDetailPage />;
+  return <GenericResourceEditorPage />;
+}
+
+function GenericResourceEditorPage() {
   const { t } = useTranslation(["common", "pages"]);
   const toast = useToast();
   const location = useLocation();

@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
@@ -99,9 +99,13 @@ export function ProjectCreateDialog({
         </DialogHeader>
         <div className="flex flex-col gap-6">
           <Field>
-            <FieldLabel htmlFor="project-name">{t("shell:chatSidebar.projectDialog.nameLabel")}</FieldLabel>
+            <FieldLabel className="gap-1" htmlFor="project-name">
+              {t("shell:chatSidebar.projectDialog.nameLabel")}
+              <span className="text-destructive-foreground" aria-hidden="true">*</span>
+            </FieldLabel>
             <Input
               id="project-name"
+              required
               placeholder={t("shell:chatSidebar.projectDialog.namePlaceholder")}
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -109,9 +113,6 @@ export function ProjectCreateDialog({
           </Field>
           <Field>
             <FieldLabel>{t("shell:chatSidebar.projectDialog.linkedApps")}</FieldLabel>
-            <FieldDescription>
-              {t("shell:chatSidebar.projectDialog.linkedAppsDescription")}
-            </FieldDescription>
             <div className="w-full overflow-hidden rounded-[4px] border border-input">
               {selectedApps.map((app) => (
                 <div

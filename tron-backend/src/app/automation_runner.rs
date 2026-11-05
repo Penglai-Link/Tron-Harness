@@ -221,6 +221,7 @@ async fn run_automation_with_main_agent(
     let session = chats
         .create_session(
             CreateChatSessionCommand {
+                execution_mode: Default::default(),
                 workspace_code: Some(automation.workspace_code.clone()),
                 project_code: None,
                 title: Some(format!("Automation: {}", automation.name)),

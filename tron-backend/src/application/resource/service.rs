@@ -5,6 +5,7 @@ mod connections;
 mod projection;
 mod resources;
 mod session_attachments;
+mod server_accounts;
 mod storage;
 mod system;
 

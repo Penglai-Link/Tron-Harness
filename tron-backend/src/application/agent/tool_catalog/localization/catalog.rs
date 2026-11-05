@@ -179,7 +179,7 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.resource.server_account.create.name" => "Create server account",
         "agent.toolCatalog.tools.resource.server_account.create.description" => {
-            "Create an account for an effective SSH server."
+            "Create a standalone SSH account with encrypted credentials; assign servers separately."
         }
         "agent.toolCatalog.tools.resource.server_account.create.sampleResultSummary" => {
             "Returns the created server-account code and kind."
@@ -529,7 +529,7 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.resource.server_account.create.name" => "创建服务器账号",
         "agent.toolCatalog.tools.resource.server_account.create.description" => {
-            "为生效的 SSH 服务器创建账号。"
+            "独立创建 SSH 账号并加密保存凭据，服务器另行分配。"
         }
         "agent.toolCatalog.tools.resource.server_account.create.sampleResultSummary" => {
             "返回已创建服务器账号的编码和类型。"

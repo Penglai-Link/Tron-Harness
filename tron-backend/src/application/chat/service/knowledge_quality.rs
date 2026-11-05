@@ -27,6 +27,7 @@ impl ChatService {
         }
         let now = current_timestamp();
         let session = ChatSession {
+            execution_mode: Default::default(),
             id: self
                 .id_provider
                 .next_id()

@@ -246,6 +246,6 @@ pub mod tool_policy;
 pub mod tool_risk;
 pub use tool_policy::{
     ToolPermission, ToolPermissionSetting, ToolPermissionSource, TronToolPolicy,
-    TronToolPolicyLocale,
+    TronToolAutoApproval, TronToolPolicyLocale,
 };
 pub use tool_risk::{ToolRisk, identify_tool_risk};

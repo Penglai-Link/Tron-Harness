@@ -116,8 +116,12 @@ pub async fn create_server_account(
         Err(error) => return resource_error_response(error, &locale),
     };
     match resources.create_server_account_for_http(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceCommitOutcomeResponse::from(result),
+        Ok(result) => Json(crate::response::ApiResponse::protocol_success(
+            super::server_account_handler::ServerAccountCreateResponse {
+                workspace_code: result.workspace_code,
+                resource_code: result.resource_code,
+                kind: result.kind,
+            },
         ))
         .into_response(),
         Err(error) => resource_error_response(resource_error_with_field(error, "account"), &locale),

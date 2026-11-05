@@ -24,7 +24,7 @@ export function useCreateChatTab(workspaceCode: string, projectCode?: string) {
       return;
     }
     const draftCode = crypto.randomUUID();
-    const params = new URLSearchParams({ draftCode });
+    const params = new URLSearchParams({ draftCode, workspaceCode });
     if (projectCode) params.set("projectCode", projectCode);
     const path = `/chats?${params}`;
     const tabId = useTabStore.getState().addTab({

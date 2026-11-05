@@ -39,6 +39,8 @@ pub enum ChatSessionSourceType {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatSession {
+    #[serde(default)]
+    pub execution_mode: crate::domain::agent::ToolExecutionMode,
     pub id: i64,
     pub session_code: String,
     pub workspace_code: String,

@@ -24,13 +24,14 @@ import {
   ServerAccountCreateDialog,
   ServerCreateDialog,
 } from "@/domain/resource/components";
+import { ServerAccountAssignDialog } from "@/domain/resource/components/ServerAccountAssignDialog";
+import { serverAccountBindings } from "@/domain/resource/model/serverAccount";
 import { deleteConnection } from "@/domain/resource/api";
 import { deleteMockResource } from "@/domain/resource/mock";
 import type { ResourceKind, ResourceRecord } from "@/domain/resource/model";
 import {
   queryResourcePage,
   queryResourceConnectionPage,
-  useManagedResourceRecords,
 } from "@/domain/resource/hooks";
 import { SearchField } from "@/components/search-field";
 import {
@@ -107,9 +108,13 @@ function stringAttribute(record: ResourceRecord, key: string) {
   return typeof value === "string" ? value : "—";
 }
 
-export function ResourceConnectionManagementPage({
-  kind,
-}: ResourceConnectionManagementPageProps) {
+export function ResourceConnectionManagementPage(props: ResourceConnectionManagementPageProps) {
+  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
+  const workspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
+  return <ResourceConnectionList key={`${workspaceCode}:${props.kind}`} {...props} />;
+}
+
+function ResourceConnectionList({ kind }: ResourceConnectionManagementPageProps) {
   const { t } = useTranslation("pages");
   const navigate = useNavigate();
   const { formatDateTime } = useLocaleFormatters();
@@ -122,6 +127,8 @@ export function ResourceConnectionManagementPage({
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ResourceRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editAccount, setEditAccount] = useState<ResourceRecord | null>(null);
+  const [assignAccount, setAssignAccount] = useState<ResourceRecord | null>(null);
   const resourceQueryParams = useMemo(
     () => ({
       context: "ALL" as const,
@@ -132,12 +139,6 @@ export function ResourceConnectionManagementPage({
     }),
     [config.kinds, search, workspaceCode, workspaceName],
   );
-  const serversQuery = useManagedResourceRecords({
-    kinds: ["SERVER_CONNECTION"],
-    search: "",
-    workspaceCode: workspaceCode || null,
-    workspaceName,
-  });
   const pageT = (key: string, options?: Record<string, unknown>) =>
     t(`resourceConnections.${key}`, options);
 
@@ -148,10 +149,7 @@ export function ResourceConnectionManagementPage({
       return `${host}:${typeof port === "number" ? port : "—"}`;
     }
     if (kind === "serverAccount") {
-      return `${stringAttribute(record, "username")} @ ${stringAttribute(
-        record,
-        "serverCode",
-      )}`;
+      return stringAttribute(record, "username");
     }
     return firstEndpoint(record.attributes ?? {}) ?? "—";
   }
@@ -204,7 +202,7 @@ export function ResourceConnectionManagementPage({
         ),
         header: pageT(
           kind === "serverAccount"
-            ? "columns.accountBinding"
+            ? "fields.username"
             : "columns.endpoint",
         ),
         id: "endpoint",
@@ -222,6 +220,14 @@ export function ResourceConnectionManagementPage({
         ),
         id: "type",
       },
+      ...(kind === "serverAccount" ? [{
+        id: "servers",
+        header: pageT("serverAccount.servers"),
+        cell: ({ row }: { row: { original: ResourceRecord } }) => {
+          const bindings = serverAccountBindings(row.original);
+          return <span className="text-sm text-muted-foreground">{pageT(bindings.length ? "serverAccount.serverCount" : "serverAccount.unassigned", { count: bindings.length })}</span>;
+        },
+      }] : []),
       {
         cell: ({ row }) => (
           <Badge
@@ -274,6 +280,7 @@ export function ResourceConnectionManagementPage({
                 <DropdownMenuItem
                   onClick={(event) => {
                     event.stopPropagation();
+                    if (kind === "serverAccount") { setEditAccount(row.original); return; }
                     navigate(
                       `${
                         config.basePath
@@ -285,6 +292,9 @@ export function ResourceConnectionManagementPage({
                 >
                   {pageT("actions.edit")}
                 </DropdownMenuItem>
+                {kind === "serverAccount" ? <DropdownMenuItem onClick={(event) => { event.stopPropagation(); setAssignAccount(row.original); }}>
+                  {pageT("serverAccount.assign")}
+                </DropdownMenuItem> : null}
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={(event) => {
@@ -441,7 +451,6 @@ export function ResourceConnectionManagementPage({
         <ServerCreateDialog
           onCreated={() => {
             void resourceTable.refresh();
-            serversQuery.refresh();
           }}
           onOpenChange={setCreateOpen}
           open={createOpen}
@@ -449,13 +458,16 @@ export function ResourceConnectionManagementPage({
         />
       ) : (
         <ServerAccountCreateDialog
+          key={workspaceCode}
           onCreated={resourceTable.refresh}
           onOpenChange={setCreateOpen}
           open={createOpen}
-          servers={serversQuery.data}
           workspaceCode={workspaceCode}
         />
       )}
+
+      {editAccount ? <ServerAccountCreateDialog key={`${workspaceCode}:${editAccount.resourceCode}`} record={editAccount} open onOpenChange={(open) => { if (!open) setEditAccount(null); }} onCreated={resourceTable.refresh} workspaceCode={workspaceCode} /> : null}
+      {assignAccount ? <ServerAccountAssignDialog key={`${workspaceCode}:${assignAccount.resourceCode}`} record={assignAccount} workspaceCode={workspaceCode} workspaceName={workspaceName} onClose={() => setAssignAccount(null)} onSaved={resourceTable.refresh} /> : null}
 
       <Dialog
         onOpenChange={(open) => !open && setDeleteTarget(null)}

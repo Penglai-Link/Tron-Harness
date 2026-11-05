@@ -45,23 +45,18 @@ pub(super) fn insert_server_account_record(
     transaction
         .execute(
             "INSERT INTO resource_server_accounts (
-                workspace_code, resource_code, server_workspace_code, server_code, name, description,
-                username, authentication_type, password_variable_key,
-                private_key_variable_key, private_key_passphrase_variable_key,
+                workspace_code, resource_code, name, description, username,
+                authentication_type, encrypted_credentials,
                 allow_inheritance, revision, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 record.workspace_code,
                 record.resource_code,
-                record.server_workspace_code,
-                record.server_code,
                 record.name,
                 record.description,
                 record.username,
                 authentication_type_to_storage(record.authentication_type),
-                record.password_variable_key,
-                record.private_key_variable_key,
-                record.private_key_passphrase_variable_key,
+                record.encrypted_credentials,
                 bool_to_int(record.allow_inheritance),
                 record.revision as i64,
                 timestamp_to_millis(&record.created_at),
@@ -69,12 +64,25 @@ pub(super) fn insert_server_account_record(
             ],
         )
         .map_err(storage_error)?;
-    Ok(())
+    replace_server_account_bindings(transaction, record)
 }
 
-
-
-
+pub(super) fn replace_server_account_bindings(
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    record: &ServerAccountRecord,
+) -> Result<(), ResourceError> {
+    transaction.execute(
+        "DELETE FROM resource_server_account_bindings WHERE account_workspace_code = ?1 AND account_code = ?2",
+        params![record.workspace_code, record.resource_code],
+    ).map_err(storage_error)?;
+    for server in &record.servers {
+        transaction.execute(
+            "INSERT INTO resource_server_account_bindings (account_workspace_code, account_code, server_workspace_code, server_code) VALUES (?1, ?2, ?3, ?4)",
+            params![record.workspace_code, record.resource_code, server.workspace_code, server.server_code],
+        ).map_err(storage_error)?;
+    }
+    Ok(())
+}
 
 pub(super) fn file_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceFileRecord> {
     let kind_text: String = row.get(2)?;
@@ -137,24 +145,21 @@ pub(super) fn server_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Serve
 pub(super) fn server_account_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<ServerAccountRecord> {
-    let authentication_text: String = row.get(7)?;
+    let authentication_text: String = row.get(5)?;
     Ok(ServerAccountRecord {
         workspace_code: row.get(0)?,
         resource_code: row.get(1)?,
-        server_workspace_code: row.get(2)?,
-        server_code: row.get(3)?,
-        name: row.get(4)?,
-        description: row.get(5)?,
-        username: row.get(6)?,
+        servers: Vec::new(),
+        name: row.get(2)?,
+        description: row.get(3)?,
+        username: row.get(4)?,
         authentication_type: authentication_type_from_storage(&authentication_text)
             .map_err(resource_to_sqlite_error)?,
-        password_variable_key: row.get(8)?,
-        private_key_variable_key: row.get(9)?,
-        private_key_passphrase_variable_key: row.get(10)?,
-        allow_inheritance: row.get::<_, i64>(11)? != 0,
-        revision: row.get::<_, i64>(12)? as u64,
-        created_at: timestamp_from_millis(row.get(13)?),
-        updated_at: timestamp_from_millis(row.get(14)?),
+        encrypted_credentials: row.get(6)?,
+        allow_inheritance: row.get::<_, i64>(7)? != 0,
+        revision: row.get::<_, i64>(8)? as u64,
+        created_at: timestamp_from_millis(row.get(9)?),
+        updated_at: timestamp_from_millis(row.get(10)?),
     })
 }
 

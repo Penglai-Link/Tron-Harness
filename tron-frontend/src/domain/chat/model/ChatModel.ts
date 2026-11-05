@@ -4,6 +4,7 @@ import type {
   ChatUserInputAnswerInput,
   ChatUserInputRequest,
   ReasoningEffort,
+  ToolExecutionMode,
 } from "@tron/chat-core";
 import type { ModelSelection } from "@/domain/model/model";
 
@@ -18,6 +19,7 @@ export type ChatMessageRole = "USER" | "ASSISTANT";
 export type ChatMessageChannel = "MAIN_AGENT" | "TASK_AGENT";
 
 export interface ChatSession {
+  executionMode?: ToolExecutionMode;
   id: number | string;
   sessionCode: string;
   workspaceCode: string | null;
@@ -48,6 +50,7 @@ export interface ChatSessionGroup {
 }
 
 export interface CreateChatSessionInput {
+  executionMode?: ToolExecutionMode;
   workspaceCode: string | null;
   projectCode?: string | null;
   title?: string | null;
@@ -57,7 +60,8 @@ export interface CreateChatSessionInput {
 }
 
 export interface UpdateChatSessionInput {
-  title: string;
+  title?: string;
+  executionMode?: ToolExecutionMode;
 }
 
 export interface ChatMessage {

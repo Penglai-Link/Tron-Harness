@@ -1,5 +1,6 @@
 import { requestApi, requestApiBlob } from "@/shared/api/httpClient";
 import type { ChatMessageAttachment } from "@/domain/chat/model";
+import { notifyChatSessionsRemoved } from "@/shared/lib/shellEvents";
 
 export interface ArchivedSession {
   sessionCode: string; workspaceCode: string; projectCode: string | null;
@@ -31,11 +32,15 @@ export function fetchArchivedChatDetail(sessionCode: string, signal?: AbortSigna
 export function restoreArchivedChatSession(sessionCode: string) {
   return requestApi<ArchivedSession>(`POST ${root}/{sessionCode}/restore`, { pathParams: { sessionCode } });
 }
-export function deleteArchivedChatSession(sessionCode: string) {
-  return requestApi<ArchivedSession>(`DELETE ${root}/{sessionCode}`, { pathParams: { sessionCode } });
+export async function deleteArchivedChatSession(sessionCode: string) {
+  const session = await requestApi<ArchivedSession>(`DELETE ${root}/{sessionCode}`, { pathParams: { sessionCode } });
+  notifyChatSessionsRemoved([sessionCode]);
+  return session;
 }
-export function deleteArchivedChatSessions(sessionCodes: string[]) {
-  return requestApi<ArchivedChatSessionBatchDeleteResult>(`POST ${root}/batch-delete`, { body: { sessionCodes } });
+export async function deleteArchivedChatSessions(sessionCodes: string[]) {
+  const result = await requestApi<ArchivedChatSessionBatchDeleteResult>(`POST ${root}/batch-delete`, { body: { sessionCodes } });
+  notifyChatSessionsRemoved(result.items.filter((item) => item.success).map((item) => item.sessionCode));
+  return result;
 }
 export function downloadArchivedChatAttachment(sessionCode: string, attachmentCode: string) {
   return requestApiBlob(`GET ${root}/{sessionCode}/attachments/{attachmentCode}`, { pathParams: { sessionCode, attachmentCode } });

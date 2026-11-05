@@ -820,23 +820,28 @@ CREATE TABLE resource_server_accounts (
     id INTEGER PRIMARY KEY,
     workspace_code TEXT NOT NULL COLLATE BINARY,
     resource_code TEXT NOT NULL COLLATE BINARY,
-    server_workspace_code TEXT NOT NULL COLLATE BINARY,
-    server_code TEXT NOT NULL COLLATE BINARY,
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     username TEXT NOT NULL,
     authentication_type TEXT NOT NULL CHECK (authentication_type IN ('Password', 'PrivateKey')),
-    password_variable_key TEXT,
-    private_key_variable_key TEXT,
-    private_key_passphrase_variable_key TEXT,
+    encrypted_credentials TEXT NOT NULL,
     allow_inheritance INTEGER NOT NULL CHECK (allow_inheritance IN (0, 1)) DEFAULT 0,
     revision INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    UNIQUE(workspace_code, resource_code),
+    UNIQUE(workspace_code, resource_code)
+);
+
+CREATE TABLE resource_server_account_bindings (
+    account_workspace_code TEXT NOT NULL COLLATE BINARY,
+    account_code TEXT NOT NULL COLLATE BINARY,
+    server_workspace_code TEXT NOT NULL COLLATE BINARY,
+    server_code TEXT NOT NULL COLLATE BINARY,
+    PRIMARY KEY(account_workspace_code, account_code, server_workspace_code, server_code),
+    FOREIGN KEY (account_workspace_code, account_code)
+        REFERENCES resource_server_accounts (workspace_code, resource_code) ON DELETE CASCADE,
     FOREIGN KEY (server_workspace_code, server_code)
-        REFERENCES resource_servers (workspace_code, resource_code)
-        ON DELETE RESTRICT
+        REFERENCES resource_servers (workspace_code, resource_code) ON DELETE RESTRICT
 );
 
 CREATE TABLE resource_servers (
@@ -1206,7 +1211,7 @@ CREATE INDEX idx_resource_files_workspace
     ON resource_files (workspace_code);
 
 CREATE INDEX idx_resource_server_accounts_server
-    ON resource_server_accounts (workspace_code, server_code);
+    ON resource_server_account_bindings (server_workspace_code, server_code);
 
 CREATE INDEX idx_resource_server_accounts_workspace
     ON resource_server_accounts (workspace_code);
@@ -1274,37 +1279,11 @@ CREATE INDEX workspace_session_links_owner_source ON workspace_session_links(jso
 
 
 
-CREATE TRIGGER resource_server_accounts_require_parent_insert
-             BEFORE INSERT ON resource_server_accounts
-             FOR EACH ROW
-             WHEN NEW.server_workspace_code IS NULL
-                  OR NOT EXISTS (
-                      SELECT 1 FROM resource_servers
-                      WHERE workspace_code = NEW.server_workspace_code
-                        AND resource_code = NEW.server_code
-                  )
-             BEGIN
-                 SELECT RAISE(ABORT, 'resource server account parent does not exist');
-             END;
-
-CREATE TRIGGER resource_server_accounts_require_parent_update
-             BEFORE UPDATE OF server_workspace_code, server_code ON resource_server_accounts
-             FOR EACH ROW
-             WHEN NEW.server_workspace_code IS NULL
-                  OR NOT EXISTS (
-                      SELECT 1 FROM resource_servers
-                      WHERE workspace_code = NEW.server_workspace_code
-                        AND resource_code = NEW.server_code
-                  )
-             BEGIN
-                 SELECT RAISE(ABORT, 'resource server account parent does not exist');
-             END;
-
 CREATE TRIGGER resource_servers_prevent_parent_delete
              BEFORE DELETE ON resource_servers
              FOR EACH ROW
              WHEN EXISTS (
-                 SELECT 1 FROM resource_server_accounts
+                 SELECT 1 FROM resource_server_account_bindings
                  WHERE server_workspace_code = OLD.workspace_code
                    AND server_code = OLD.resource_code
              )

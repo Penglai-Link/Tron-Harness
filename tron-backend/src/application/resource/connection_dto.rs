@@ -24,20 +24,20 @@ pub struct DataSourceUpdateCommand {
     pub allow_inheritance: Option<bool>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ServerAccountCreateInput {
     pub account_code: String,
     pub name: String,
     pub description: String,
     pub username: String,
     pub authentication_type: ServerAuthenticationType,
-    pub password_variable_key: Option<String>,
-    pub private_key_variable_key: Option<String>,
-    pub private_key_passphrase_variable_key: Option<String>,
+    pub password: Option<String>,
+    pub private_key: Option<String>,
+    pub private_key_passphrase: Option<String>,
     pub allow_inheritance: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ServerCreateCommand {
     pub workspace_code: String,
     pub server_code: String,
@@ -53,11 +53,39 @@ pub struct ServerCreateCommand {
     pub initial_account: Option<ServerAccountCreateInput>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ServerAccountCreateCommand {
     pub workspace_code: String,
-    pub server_code: String,
     pub account: ServerAccountCreateInput,
+}
+
+#[derive(Clone)]
+pub struct ServerAccountUpdateCommand {
+    pub workspace_code: String,
+    pub account_code: String,
+    pub name: String,
+    pub description: String,
+    pub username: String,
+    pub authentication_type: ServerAuthenticationType,
+    /// None preserves the existing credential when the authentication type is unchanged.
+    pub password: Option<String>,
+    pub private_key: Option<String>,
+    pub private_key_passphrase: Option<String>,
+    pub allow_inheritance: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ServerAccountAssignCommand {
+    pub workspace_code: String,
+    pub account_code: String,
+    pub server_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ServerAccountVerifyCommand {
+    pub workspace_code: String,
+    pub account_code: String,
+    pub server_code: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

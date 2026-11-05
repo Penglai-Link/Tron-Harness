@@ -84,27 +84,26 @@ impl TronToolPolicyLocale {
         }
     }
 
-    fn approval_prompt(
-        self,
-        tool: &str,
-        risk: ToolRisk,
-        threshold: ToolRisk,
-        reason: &str,
-    ) -> String {
-        let risk = self.risk_label(risk);
-        let threshold = self.risk_label(threshold);
-        match self {
-            Self::ZhCn => format!(
-                "工具 {tool} 的风险为{risk}，达到确认阈值{threshold}。{reason}。是否执行本次调用？"
-            ),
-            Self::EnUs => format!(
-                "Tool {tool} has {risk} risk, meeting the {threshold} approval threshold. {reason}. Execute this call?"
-            ),
-        }
+    fn approval_prompt(self, risk: ToolRisk, reason: &str) -> fw::Content {
+        fw::Content(vec![
+            fw::ContentBlock::Text { text: reason.into() },
+            fw::ContentBlock::Json {
+                value: serde_json::json!({
+                    "kind": "toolApproval",
+                    "risk": risk,
+                    "riskLabel": self.risk_label(risk),
+                }),
+            },
+        ])
     }
 }
 
 pub struct TronToolPolicy(pub Arc<dyn ToolPermissionSource>);
+
+/// Trusted run-local approval preference. Denied tools remain denied.
+#[derive(Debug, Clone, Copy)]
+pub struct TronToolAutoApproval;
+
 #[async_trait]
 impl fw::ToolPolicy for TronToolPolicy {
     async fn admit_binding(
@@ -136,6 +135,15 @@ impl fw::ToolPolicy for TronToolPolicy {
                 fw::ToolPolicyDecision::Deny(locale.permission_denied_message().into())
             }
             ToolPermission::Run => fw::ToolPolicyDecision::Allow,
+            ToolPermission::Ask
+                if invocation
+                    .run
+                    .extensions
+                    .get::<TronToolAutoApproval>()
+                    .is_some() =>
+            {
+                fw::ToolPolicyDecision::Allow
+            }
             ToolPermission::Ask => {
                 let operation = self.0.operation(invocation.descriptor);
                 let risk = identify_tool_risk(
@@ -180,14 +188,7 @@ impl fw::ToolPolicy for TronToolPolicy {
                 if risk >= setting.confirm_level {
                     // Framework persists the original call and resumes it exactly once.
                     fw::ToolPolicyDecision::RequireApproval(
-                        locale
-                            .approval_prompt(
-                                &invocation.descriptor.call_name,
-                                risk,
-                                setting.confirm_level,
-                                reason,
-                            )
-                            .into(),
+                        locale.approval_prompt(risk, reason),
                     )
                 } else {
                     fw::ToolPolicyDecision::Allow

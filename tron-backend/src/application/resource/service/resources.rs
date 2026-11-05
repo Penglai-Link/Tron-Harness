@@ -384,8 +384,8 @@ impl ResourceService {
                 file: None,
                 attributes: include_attributes.then(|| {
                     serde_json::json!({
-                        "serverWorkspaceCode": record.server_workspace_code,
-                        "serverCode": record.server_code,
+                        "servers": record.servers,
+                        "credentialConfigured": !record.encrypted_credentials.is_empty(),
                         "username": record.username,
                         "authenticationType": record.authentication_type,
                     })

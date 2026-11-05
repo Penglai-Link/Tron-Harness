@@ -1,5 +1,6 @@
 import { DEFAULT_AUTH_REDIRECT } from "@/domain/auth";
 import { create } from "zustand";
+import { clearChatWorkspaces, rememberChatWorkspace } from "@/shared/api/chatWorkspaceScope";
 
 export interface TabItem {
   id: string;
@@ -25,9 +26,21 @@ export interface CachedTabInfo {
   pageId: string;
   lastAccessTime: number;
   revision: number;
+  workspaceCode?: string;
+}
+
+interface WorkspaceTabs {
+  tabs: TabItem[];
+  activeTabId: string | null;
 }
 
 export const DEFAULT_TAB_ID = "default_tab";
+
+export function panelTabId(tabId: string | null, workspaceCode: string | null | undefined) {
+  return (!tabId || tabId === DEFAULT_TAB_ID) && workspaceCode
+    ? `${DEFAULT_TAB_ID}:${workspaceCode}`
+    : tabId ?? DEFAULT_TAB_ID;
+}
 
 function createDefaultTab(): TabItem {
   return {
@@ -42,6 +55,14 @@ function createDefaultTab(): TabItem {
 }
 
 interface TabState {
+  workspaceCode: string | null;
+  workspaceTabs: Record<string, WorkspaceTabs>;
+  pendingWorkspacePath: string | null;
+  switchWorkspace: (workspaceCode: string, requestedPath?: string) => string | null;
+  finishWorkspaceSwitch: (path: string) => void;
+  getAllTabs: () => TabItem[];
+  getPanelOwnerIds: () => string[];
+  getWorkspaceForPath: (path: string) => string | undefined;
   tabs: TabItem[];
   activeTabId: string | null;
   cachedTabsMap: Map<string, CachedTabInfo>; // key: tabId, value: 缓存信息
@@ -72,7 +93,61 @@ function generateTabId(): string {
   return `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
+function chatIdentity(path: string) {
+  const url = new URL(path, "https://tron.local");
+  if (url.pathname !== "/chats") return null;
+  return url.searchParams.get("sessionCode") || url.searchParams.get("draftCode");
+}
+
+function rememberTabWorkspace(tab: TabItem, workspaceCode: string | null) {
+  const url = new URL(tab.path, "https://tron.local");
+  if (url.pathname === "/chats" && workspaceCode) {
+    rememberChatWorkspace(url.searchParams.get("sessionCode") ?? "", workspaceCode);
+  }
+}
+
 export const useTabStore = create<TabState>()((set, get) => ({
+  workspaceCode: null,
+  workspaceTabs: {},
+  pendingWorkspacePath: null,
+  switchWorkspace: (workspaceCode, requestedPath) => {
+    const state = get();
+    if (state.workspaceCode === workspaceCode) return null;
+    if (!state.workspaceCode) {
+      state.tabs.forEach((tab) => rememberTabWorkspace(tab, workspaceCode));
+      const cachedTabsList = state.cachedTabsList.map((tab) => ({ ...tab, workspaceCode }));
+      set({ workspaceCode, cachedTabsList, cachedTabsMap: new Map(cachedTabsList.map((tab) => [tab.tabId, tab])) });
+      return null;
+    }
+    const workspaceTabs = { ...state.workspaceTabs, [state.workspaceCode]: { tabs: state.tabs, activeTabId: state.activeTabId } };
+    const target = workspaceTabs[workspaceCode] ?? { tabs: [createDefaultTab()], activeTabId: DEFAULT_TAB_ID };
+    delete workspaceTabs[workspaceCode];
+    const active = target.tabs.find((tab) => tab.id === target.activeTabId);
+    const path = requestedPath ?? (active && !active.hide ? active.path : "/workspace");
+    set({ ...target, workspaceCode, workspaceTabs, pendingWorkspacePath: path });
+    return path;
+  },
+  finishWorkspaceSwitch: (path) => {
+    if (get().pendingWorkspacePath === path) set({ pendingWorkspacePath: null });
+  },
+  getAllTabs: () => {
+    const state = get();
+    return [...state.tabs, ...Object.values(state.workspaceTabs).flatMap((workspace) => workspace.tabs)];
+  },
+  getPanelOwnerIds: () => {
+    const state = get();
+    return [
+      ...state.tabs.map((tab) => panelTabId(tab.id, state.workspaceCode)),
+      ...Object.entries(state.workspaceTabs).flatMap(([code, workspace]) => workspace.tabs.map((tab) => panelTabId(tab.id, code))),
+    ];
+  },
+  getWorkspaceForPath: (path) => {
+    const identity = chatIdentity(path);
+    if (!identity) return undefined;
+    const state = get();
+    if (state.tabs.some((tab) => chatIdentity(tab.path) === identity)) return state.workspaceCode ?? undefined;
+    return Object.entries(state.workspaceTabs).find(([, workspace]) => workspace.tabs.some((tab) => chatIdentity(tab.path) === identity))?.[0];
+  },
   tabs: [createDefaultTab()],
   activeTabId: DEFAULT_TAB_ID,
   cachedTabsMap: new Map(),
@@ -112,6 +187,7 @@ export const useTabStore = create<TabState>()((set, get) => ({
       rightPanelOpen: tab.rightPanelOpen ?? false,
       rightPanelSize: tab.rightPanelSize ?? 520,
     };
+    rememberTabWorkspace(newTab, state.workspaceCode);
 
     set({
       tabs: [...state.tabs, newTab],
@@ -190,6 +266,13 @@ export const useTabStore = create<TabState>()((set, get) => ({
       return {
         tabs,
         activeTabId: nextActiveTabId,
+        workspaceTabs: Object.fromEntries(Object.entries(state.workspaceTabs).map(([code, workspace]) => {
+          const remainingTabs = workspace.tabs.filter((tab) => !tabIdSet.has(tab.id));
+          const activeTabId = remainingTabs.some((tab) => tab.id === workspace.activeTabId)
+            ? workspace.activeTabId
+            : remainingTabs.find((tab) => !tab.hide)?.id ?? DEFAULT_TAB_ID;
+          return [code, { tabs: remainingTabs, activeTabId }];
+        })),
         cachedTabsMap: newCachedTabsMap,
         cachedTabsList: newCachedTabsList,
       };
@@ -224,7 +307,7 @@ export const useTabStore = create<TabState>()((set, get) => ({
   updateRightPanelState: (tabId, panelState) => {
     set((state) => {
       let changed = false;
-      const tabs = state.tabs.map((tab) => {
+      const update = (tabs: TabItem[]) => tabs.map((tab) => {
         if (tab.id !== tabId) return tab;
 
         const nextOpen = panelState.open ?? tab.rightPanelOpen;
@@ -243,29 +326,49 @@ export const useTabStore = create<TabState>()((set, get) => ({
           rightPanelSize: nextSize,
         };
       });
-      return changed ? { tabs } : state;
+      const tabs = update(state.tabs);
+      const workspaceTabs = tabId === DEFAULT_TAB_ID ? state.workspaceTabs
+        : Object.fromEntries(Object.entries(state.workspaceTabs).map(([code, workspace]) => [code, { ...workspace, tabs: update(workspace.tabs) }]));
+      return changed ? { tabs, workspaceTabs } : state;
     });
   },
 
   updateTab: (tabId, updates) => {
-    set((state) => ({
-      tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, ...updates } : t)),
-    }));
+    set((state) => {
+      const update = (tabs: TabItem[], workspaceCode: string | null) => tabs.map((tab) => {
+        if (tab.id !== tabId) return tab;
+        const next = { ...tab, ...updates };
+        rememberTabWorkspace(next, workspaceCode);
+        return next;
+      });
+      return {
+        tabs: update(state.tabs, state.workspaceCode),
+        workspaceTabs: Object.fromEntries(Object.entries(state.workspaceTabs).map(([code, workspace]) => [code, {
+          ...workspace, tabs: update(workspace.tabs, code),
+        }])),
+      };
+    });
   },
 
   clearAllTabs: () => {
+    const removed = new Set(get().tabs.map((tab) => tab.id));
+    const cachedTabsList = get().cachedTabsList.filter((tab) => !removed.has(tab.tabId));
     const defaultTab =
       get().tabs.find((tab) => tab.id === DEFAULT_TAB_ID) ?? createDefaultTab();
     set({
       tabs: [defaultTab],
       activeTabId: DEFAULT_TAB_ID,
-      cachedTabsMap: new Map(),
-      cachedTabsList: [],
+      cachedTabsMap: new Map(cachedTabsList.map((tab) => [tab.tabId, tab])),
+      cachedTabsList,
     });
   },
 
   resetAllTabs: () => {
+    clearChatWorkspaces();
     set((state) => ({
+      workspaceCode: null,
+      workspaceTabs: {},
+      pendingWorkspacePath: null,
       tabs: [createDefaultTab()],
       activeTabId: DEFAULT_TAB_ID,
       cachedTabsMap: new Map(),
@@ -339,6 +442,7 @@ export const useTabStore = create<TabState>()((set, get) => ({
       pageId,
       lastAccessTime: Date.now(),
       revision: 0,
+      workspaceCode: state.workspaceCode ?? undefined,
     });
 
     const newCachedTabsList = Array.from(newCachedTabsMap.values());

@@ -324,10 +324,14 @@ pub async fn require_workspace(
         if record.workspace_code != workspace {
             return chat_error_response(ChatError::SessionNotFound);
         }
-        if record.status != ChatSessionStatus::Active {
+        // Deletion has its own inactive-run guard and accepts either lifecycle
+        // state. Keep workspace and special-session ownership checks above it.
+        let deleting_session = request.method() == axum::http::Method::DELETE
+            && path == format!("/api/v1/chats/sessions/{session}");
+        if !deleting_session && record.status != ChatSessionStatus::Active {
             return chat_error_response(ChatError::SessionArchived);
         }
-        if request.method() != axum::http::Method::GET && !path.ends_with("/history/query") && !replay {
+        if !deleting_session && request.method() != axum::http::Method::GET && !path.ends_with("/history/query") && !replay {
             if let Err(error) = state.chats.ensure_session_writable(&session) { return chat_error_response(error); }
         }
     }

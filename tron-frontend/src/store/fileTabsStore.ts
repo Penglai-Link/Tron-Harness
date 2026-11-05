@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { DEFAULT_TAB_ID, useTabStore } from "./tabStore";
+import { panelTabId, useTabStore } from "./tabStore";
+
+function activePanelOwner() {
+  const state = useTabStore.getState();
+  return panelTabId(state.activeTabId, state.workspaceCode);
+}
 
 /** 文件面板 tab key 的固定前缀，用于在右侧面板中识别文件 tab。 */
 export const FILE_TAB_KEY_PREFIX = "page-files:";
@@ -25,7 +30,7 @@ export const useFileTabsStore = create<FileTabsState>((set) => ({
   activeKeysByOwner: {},
   fileTabLabels: {},
 
-  openFileTab: (owner = useTabStore.getState().activeTabId ?? DEFAULT_TAB_ID) => {
+  openFileTab: (owner = activePanelOwner()) => {
     const key = `${FILE_TAB_KEY_PREFIX}${nextFileTabId++}`;
     set((state) => ({
       fileTabKeys: [...state.fileTabKeys, key],
@@ -54,7 +59,7 @@ export const useFileTabsStore = create<FileTabsState>((set) => ({
     });
   },
 
-  setActiveFileTab: (key, owner = useTabStore.getState().activeTabId ?? DEFAULT_TAB_ID) => {
+  setActiveFileTab: (key, owner = activePanelOwner()) => {
     set((state) => ({ activeKeysByOwner: { ...state.activeKeysByOwner, [owner]: key } }));
   },
 
@@ -68,8 +73,8 @@ export const useFileTabsStore = create<FileTabsState>((set) => ({
 
 // Dispose file panels only when their workspace tab closes, never on tab switches.
 useTabStore.subscribe((state, previous) => {
-  if (state.tabs === previous.tabs) return;
-  const owners = new Set(state.tabs.map((tab) => tab.id));
+  if (state.tabs === previous.tabs && state.workspaceTabs === previous.workspaceTabs) return;
+  const owners = new Set(state.getPanelOwnerIds());
   const files = useFileTabsStore.getState();
   for (const key of files.fileTabKeys) {
     if (!owners.has(files.fileTabOwners[key])) files.closeFileTab(key);

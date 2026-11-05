@@ -3,8 +3,11 @@ import { AuthUserMenuPanel } from "@/domain/auth";
 import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
 import { SettingsShell } from "@/shared/layout/SettingsShell";
 import { TronShell } from "@/shared/layout/Shell";
+import { useChatSessionLifecycle } from "@/shared/layout/chat/hooks/useChatSessionLifecycle";
 import { TabPanelRegistryProvider } from "@/shared/layout/content/TabPanelRegistry";
 import { useTabStore } from "@/store/tabStore";
+import { useAppShellStore } from "@/store/appShellStore";
+import { WorkspaceTabScope } from "@/shared/layout/content/WorkspaceTabScope";
 import { MotionReveal } from "@/shared/motion";
 import {
   useMemo,
@@ -19,6 +22,7 @@ import {
   Routes,
   UNSAFE_LocationContext,
   useLocation,
+  useNavigate,
   useNavigationType,
 } from "react-router";
 import ConsoleFallbackPage from "./ConsoleFallbackPage";
@@ -104,7 +108,9 @@ function CachedRouteLocationProvider({
 }
 
 export default function AppRoutePage() {
+  useChatSessionLifecycle();
   const { pathname, search, key: locationKey } = useLocation();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const observabilityWorkspace = pathname.startsWith("/settings/observability/") ? new URLSearchParams(search).get("workspaceCode") : null;
   const scopedSettingsNavigation = useMemo(() => settingsNavigation.map((group) => group.groupKey === "observability" && observabilityWorkspace
@@ -123,6 +129,9 @@ export default function AppRoutePage() {
   const addToCache = useTabStore((state) => state.addToCache);
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
   const activeTabId = useTabStore((state) => state.activeTabId);
+  const workspaceCode = useTabStore((state) => state.workspaceCode);
+  const pendingWorkspacePath = useTabStore((state) => state.pendingWorkspacePath);
+  const selectedWorkspaceCode = useAppShellStore((state) => state.selectedSecondarySpaceId || state.selectedPrimarySpaceId);
   const activeTabPath = useTabStore((state) =>
     state.tabs.find((tab) => tab.id === state.activeTabId)?.path,
   );
@@ -138,7 +147,7 @@ export default function AppRoutePage() {
     return cachedTabsList.map((cachedTab) => {
       // These editors own version selection in the query string. Keep their
       // instance alive while injecting the current query into the active tab.
-      const isCurrentTab = cachedTab.tabId === activeTabId;
+      const isCurrentTab = cachedTab.tabId === activeTabId && cachedTab.workspaceCode === workspaceCode;
       const useCurrentSearch =
         isCurrentTab &&
         usesInPlaceSearch(cachedTab.pageId) &&
@@ -169,24 +178,44 @@ export default function AppRoutePage() {
           replayKey={isCurrentTab ? "active" : "cached"}
           className="h-full"
         >
-          <TabPanelRegistryProvider
-            key={cachedTab.tabId}
-            tabId={cachedTab.tabId}
-          >
-            <CachedRouteLocationProvider path={`${cachedPathname}${searchParam}`}>
-              <Routes>
-                <Route path={new URL(cachedRoute.route, "https://tron.local").pathname} element={<SuspendedRoute><Component /></SuspendedRoute>} />
-              </Routes>
-            </CachedRouteLocationProvider>
-          </TabPanelRegistryProvider>
+          <WorkspaceTabScope workspaceCode={cachedTab.workspaceCode}>
+            <TabPanelRegistryProvider
+              key={cachedTab.tabId}
+              tabId={cachedTab.tabId}
+            >
+              <CachedRouteLocationProvider path={`${cachedPathname}${searchParam}`}>
+                <Routes>
+                  <Route path={new URL(cachedRoute.route, "https://tron.local").pathname} element={<SuspendedRoute><Component /></SuspendedRoute>} />
+                </Routes>
+              </CachedRouteLocationProvider>
+            </TabPanelRegistryProvider>
+          </WorkspaceTabScope>
         </MotionReveal>
       );
     });
-  }, [activeTabId, cachedTabsList, search, useActiveLocationSearch]);
+  }, [activeTabId, cachedTabsList, search, useActiveLocationSearch, workspaceCode]);
 
   useEffect(() => {
+    const currentPath = `${pathname}${search}`;
+    const state = useTabStore.getState();
+    const selection = useAppShellStore.getState();
+    const requestedWorkspace = new URLSearchParams(search).get("workspaceCode");
+    const ownerWorkspace = state.getWorkspaceForPath(currentPath);
+    // The shell resolves workspace navigation first. Never insert the previous
+    // URL into the new space while its router transition is still pending.
+    if (!workspaceCode || state.workspaceCode !== workspaceCode
+      || workspaceCode !== (selection.selectedSecondarySpaceId || selection.selectedPrimarySpaceId)
+      || (state.pendingWorkspacePath && state.pendingWorkspacePath !== currentPath)
+      || (requestedWorkspace && requestedWorkspace !== workspaceCode)
+      || (ownerWorkspace && ownerWorkspace !== workspaceCode)) return;
+    state.finishWorkspaceSwitch(currentPath);
+    if (pathname === "/chats" && (chatSessionCode || chatDraftCode) && !requestedWorkspace) {
+      const params = new URLSearchParams(search);
+      params.set("workspaceCode", workspaceCode);
+      navigate(`${pathname}?${params}`, { replace: true });
+      return;
+    }
     if (!isBareChatsRoute && resolved && resolved.route.layout !== "settings") {
-      const currentPath = `${pathname}${search}`;
       const requestedSessionCode =
         resolved.route.pageId === "chats.index" ? chatSessionCode : "";
       const sessionActiveNav = requestedSessionCode
@@ -239,7 +268,11 @@ export default function AppRoutePage() {
         const pathChanged = tab.path !== lookupPath;
 
         // 如果 path 改变了，需要清除该 tab 的缓存，让组件重新渲染
-        if (pathChanged) {
+        const previousUrl = new URL(tab.path, "https://tron.local");
+        const nextUrl = new URL(lookupPath, "https://tron.local");
+        previousUrl.searchParams.delete("workspaceCode");
+        nextUrl.searchParams.delete("workspaceCode");
+        if (pathChanged && previousUrl.toString() !== nextUrl.toString()) {
           useTabStore.getState().removeFromCache(tabId);
         }
 
@@ -270,6 +303,10 @@ export default function AppRoutePage() {
     // 关闭最后一个标签页会保留 URL；同地址再次导航也需要重建页面缓存。
     locationKey,
     resolved?.route.pageId,
+    workspaceCode,
+    selectedWorkspaceCode,
+    pendingWorkspacePath,
+    navigate,
   ]);
 
   if (isBareChatsRoute) {
@@ -314,7 +351,8 @@ export default function AppRoutePage() {
       }
       userMenuContent={<AuthUserMenuPanel />}
     >
-      {resolved ? cachedRouteContents : <ConsoleFallbackPage />}
+      {cachedRouteContents}
+      {!resolved && pathname !== "/workspace" ? <ConsoleFallbackPage /> : null}
     </TronShell>
   );
 }

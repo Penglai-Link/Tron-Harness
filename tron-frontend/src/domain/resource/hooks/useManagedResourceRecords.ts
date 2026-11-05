@@ -13,6 +13,7 @@ import type { ResourceKind, ResourceSourceKind } from "@/domain/resource/model";
 import { useResourceApiQuery } from "./useResourceApiQuery";
 
 export interface ManagedResourceRecord {
+  workspaceCode: string;
   attributes: Record<string, unknown>;
   description: string;
   kind: ResourceKind;
@@ -31,6 +32,7 @@ interface ManagedResourceQuery {
 
 function toManagedRecord(record: ResourceApiRecord): ManagedResourceRecord {
   return {
+    workspaceCode: record.workspaceCode,
     attributes: record.attributes ?? {},
     description: record.description,
     kind: fromResourceKindCode(record.kind),
@@ -48,7 +50,8 @@ function mockRecords(query: ManagedResourceQuery): ManagedResourceRecord[] {
     .filter((record) => !search || [record.name, record.resourceCode, record.description]
       .some((value) => value.toLowerCase().includes(search)))
     .map((record) => ({
-      attributes: record.attributes ?? {},
+      workspaceCode: record.workspaceCode,
+    attributes: record.attributes ?? {},
       description: record.description,
       kind: record.kind,
       name: record.name,

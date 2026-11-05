@@ -1,0 +1,47 @@
+import "./themeTransition.css";
+
+/** Reveal the new theme from the viewport's bottom centre over the old snapshot. */
+export async function revealTheme(update: () => void): Promise<void> {
+  const root = document.documentElement;
+  const policy = root.dataset.tronMotionPolicy;
+  if (typeof document.startViewTransition !== "function"
+    || document.hidden
+    || policy === "off"
+    || policy === "reduced"
+    || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    update();
+    return;
+  }
+
+  // The furthest points from bottom centre are the viewport's top corners.
+  const radius = Math.ceil(Math.hypot(window.innerWidth / 2, window.innerHeight)) + 1;
+  root.style.setProperty("--tron-theme-reveal-radius", `${radius}px`);
+  root.dataset.tronThemeTransition = "";
+
+  const cleanup = () => {
+    delete root.dataset.tronThemeTransition;
+    root.style.removeProperty("--tron-theme-reveal-radius");
+  };
+  let transition: ViewTransition;
+  try {
+    transition = document.startViewTransition(update);
+  } catch {
+    cleanup();
+    update();
+    return;
+  }
+
+  const skip = () => transition.skipTransition();
+  const onVisibilityChange = () => { if (document.hidden) skip(); };
+  window.addEventListener("resize", skip);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  // A skipped animation rejects ready, but still applies the theme update.
+  void transition.ready.catch(() => {});
+  try {
+    await transition.finished;
+  } finally {
+    window.removeEventListener("resize", skip);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    cleanup();
+  }
+}

@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { applySystemFontSize, defaultSystemFontSize, isSystemFontSize, readStoredSystemFontSize, systemFontSizeStorageKey } from "@/shared/lib/systemFontSize";
 import { useAuthStore } from "@/store/authStore";
 import { skinApi } from "./skinApi";
 import { prepareSkin, type PreparedSkin } from "./skinEngine";
+import { revealTheme } from "./themeTransition";
 import {
   defaultTypingParticleSettings,
   mountTypingEffect,
@@ -237,6 +239,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (mutation.current) return;
     const skin = skins.find((item) => item.id === id);
     if (!skin) return;
+    if (JSON.stringify(skin) === activeSignature.current && !previewSkinId) return;
     mutation.current = true;
     stopPreviewSkin();
     const request = ++generation.current;
@@ -247,8 +250,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (request !== generation.current) return;
       await skinApi.activate(id);
       if (request !== generation.current) return;
-      commit(skin, prepared);
-      prepared = undefined;
+      const next = prepared;
+      await revealTheme(() => {
+        if (request !== generation.current) return;
+        flushSync(() => commit(skin, next));
+        prepared = undefined;
+      });
       setError(null);
     } finally {
       prepared?.dispose();
@@ -281,8 +288,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (request !== generation.current) return;
       await skinApi.activate(skin.id);
       if (request !== generation.current) return;
-      commit(skin, prepared);
-      prepared = undefined;
+      const next = prepared;
+      await revealTheme(() => {
+        if (request !== generation.current) return;
+        flushSync(() => commit(skin, next));
+        prepared = undefined;
+      });
       setError(null);
     } finally {
       prepared?.dispose();
@@ -311,8 +322,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (request !== generation.current) return;
       if (fallback) {
         const nextSkin = persistedActive.id === id ? builtins[0] : persistedActive;
-        commit(nextSkin, fallback);
-        fallback = undefined;
+        const next = fallback;
+        await revealTheme(() => {
+          if (request !== generation.current) return;
+          flushSync(() => commit(nextSkin, next));
+          fallback = undefined;
+        });
       }
       setSkins((current) => current.filter((skin) => skin.id !== id));
       setError(null);

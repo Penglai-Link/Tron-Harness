@@ -3,11 +3,11 @@ use serde_json::Value;
 use crate::{
     application::resource::{
         DataSourceCreateCommand, DataSourceUpdateCommand, ResourceCommitOutcome,
-        ServerAccountCreateCommand, ServerCreateCommand, ServerCreateResult,
+        ServerCreateCommand, ServerCreateResult,
     },
     domain::resource::{
-        DataSourceConnectionRecord, ManagedResource, ResourceError, ServerAccountRecord,
-        ServerRecord, validate_resource_code,
+        DataSourceConnectionRecord, ManagedResource, ResourceError, ServerRecord,
+        validate_resource_code,
     },
     shared::time::current_timestamp,
 };
@@ -153,19 +153,20 @@ impl ResourceService {
                     &workspace_code,
                     &initial_account.account_code,
                 )?;
-                validate_account_credentials(&initial_account)?;
+                super::server_accounts::validate_account_credentials(&initial_account)?;
                 let target = self.ssh_connection_target(
-                    &workspace_code,
                     command.host.clone(),
                     command.port,
                     &initial_account,
                 )?;
                 self.connection_verifier.verify(target).await?;
-                Some(server_account_record(
+                Some(self.server_account_record(
                     &workspace_code,
-                    &server.workspace_code,
-                    &command.server_code,
                     &initial_account,
+                    vec![crate::domain::resource::ServerAccountServer {
+                        workspace_code: server.workspace_code.clone(),
+                        server_code: command.server_code.clone(),
+                    }],
                     &now,
                 )?)
             }
@@ -205,115 +206,6 @@ impl ResourceService {
             connectivity_verified,
         })
     }
-
-    pub fn create_server_account_for_http(
-        &self,
-        actor_user_code: &str,
-        command: ServerAccountCreateCommand,
-    ) -> Result<ResourceCommitOutcome, ResourceError> {
-        validate_resource_code(&command.server_code)?;
-        validate_resource_code(&command.account.account_code)?;
-        if command.account.name.trim().is_empty() {
-            return Err(ResourceError::InvalidInput);
-        }
-        let workspace_code =
-            self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
-        let server = match self
-            .effective_resources(&workspace_code)?
-            .remove(&command.server_code)
-            .map(|effective| effective.resource)
-        {
-            Some(ManagedResource::Server(record)) => record,
-            Some(_) | None => return Err(ResourceError::NotFound),
-        };
-        self.ensure_resource_create_is_available(&workspace_code, &command.account.account_code)?;
-        validate_account_credentials(&command.account)?;
-        self.ssh_connection_target(
-            &workspace_code,
-            server.host.clone(),
-            server.port,
-            &command.account,
-        )?;
-        let now = current_timestamp();
-        let account = server_account_record(
-            &workspace_code,
-            &server.workspace_code,
-            &command.server_code,
-            &command.account,
-            &now,
-        )?;
-        self.repository(|repository| repository.insert_server_account(&account))?;
-        self.publish_resource_audit(
-            actor_user_code,
-            &ManagedResource::ServerAccount(account.clone()),
-            "resource.created",
-        );
-        Ok(commit_outcome(
-            &workspace_code,
-            &account.resource_code,
-            crate::domain::resource::ResourceKind::ServerAccount,
-        ))
-    }
-}
-
-fn server_account_record(
-    workspace_code: &str,
-    server_workspace_code: &str,
-    server_code: &str,
-    input: &crate::application::resource::ServerAccountCreateInput,
-    now: &str,
-) -> Result<ServerAccountRecord, ResourceError> {
-    Ok(ServerAccountRecord {
-        workspace_code: workspace_code.to_string(),
-        resource_code: input.account_code.clone(),
-        server_workspace_code: server_workspace_code.to_string(),
-        server_code: server_code.to_string(),
-        name: input.name.trim().to_string(),
-        description: input.description.trim().to_string(),
-        username: input.username.trim().to_string(),
-        authentication_type: input.authentication_type,
-        password_variable_key: input.password_variable_key.clone(),
-        private_key_variable_key: input.private_key_variable_key.clone(),
-        private_key_passphrase_variable_key: input.private_key_passphrase_variable_key.clone(),
-        allow_inheritance: input.allow_inheritance,
-        revision: 0,
-        created_at: now.to_string(),
-        updated_at: now.to_string(),
-    })
-}
-
-fn validate_account_credentials(
-    input: &crate::application::resource::ServerAccountCreateInput,
-) -> Result<(), ResourceError> {
-    if input.username.trim().is_empty() {
-        return Err(ResourceError::InvalidInput);
-    }
-    match input.authentication_type {
-        crate::domain::resource::ServerAuthenticationType::Password => {
-            if !non_blank_variable_key(input.password_variable_key.as_deref())
-                || input.private_key_variable_key.is_some()
-                || input.private_key_passphrase_variable_key.is_some()
-            {
-                return Err(ResourceError::InvalidInput);
-            }
-        }
-        crate::domain::resource::ServerAuthenticationType::PrivateKey => {
-            if !non_blank_variable_key(input.private_key_variable_key.as_deref())
-                || input.password_variable_key.is_some()
-                || input
-                    .private_key_passphrase_variable_key
-                    .as_deref()
-                    .is_some_and(|key| key.trim().is_empty())
-            {
-                return Err(ResourceError::InvalidInput);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn non_blank_variable_key(value: Option<&str>) -> bool {
-    value.is_some_and(|value| !value.trim().is_empty())
 }
 
 fn merge_redacted_direct_secrets(

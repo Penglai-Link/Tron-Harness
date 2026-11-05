@@ -64,6 +64,8 @@ pub struct BatchDeleteArchivedSessionItem {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateChatSessionCommand {
+    #[serde(default)]
+    pub execution_mode: crate::domain::agent::ToolExecutionMode,
     pub workspace_code: Option<String>,
     pub project_code: Option<String>,
     pub title: Option<String>,
@@ -78,6 +80,7 @@ pub struct CreateChatSessionCommand {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateChatSessionCommand {
     pub title: Option<String>,
+    pub execution_mode: Option<crate::domain::agent::ToolExecutionMode>,
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]

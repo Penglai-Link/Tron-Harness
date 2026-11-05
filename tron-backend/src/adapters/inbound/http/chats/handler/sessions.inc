@@ -111,7 +111,7 @@ pub async fn batch_delete_archived_sessions(
         workers.spawn_blocking(move || {
             chunk
                 .into_iter()
-                .map(|session_code| match chats.delete_session(&session_code) {
+                .map(|session_code| match chats.delete_archived_session(&session_code) {
                     Ok(_) => BatchDeleteArchivedSessionItem {
                         session_code,
                         success: true,
@@ -194,6 +194,23 @@ pub async fn delete_session(
     match tokio::task::spawn_blocking({
         let chats = state.chats.clone();
         move || chats.delete_session(&session_code)
+    })
+    .await
+    {
+        Ok(Ok(_)) => Json(ApiResponse::protocol_success(EmptyData {})).into_response(),
+        Ok(Err(error)) => chat_error_response(error),
+        Err(_) => chat_error_response(ChatError::StorageFailure),
+    }
+}
+
+pub async fn delete_archived_session(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    Path(session_code): Path<String>,
+) -> Response {
+    match tokio::task::spawn_blocking({
+        let chats = state.chats.clone();
+        move || chats.delete_archived_session(&session_code)
     })
     .await
     {

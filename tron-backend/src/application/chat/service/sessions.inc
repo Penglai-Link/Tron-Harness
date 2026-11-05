@@ -5,6 +5,7 @@ impl ChatService {
         if let Ok(existing)=self.repository().get_session(&dude.session_code) { if existing.user_code!=user_code {return Err(ChatError::WorkspaceForbidden);} return Ok(existing); }
         let now=current_timestamp();
         let session=ChatSession {
+            execution_mode: Default::default(),
             id:self.id_provider.next_id().map_err(|_|ChatError::StorageFailure)?.value(),
             session_code:dude.session_code.clone(), workspace_code:dude.workspace_code.clone().unwrap_or_default(),
             project_code:None,user_code,app_code:None,task_code:(dude.purpose == crate::domain::dude::DudeSessionPurpose::Task).then(|| dude.correlation_key.clone()),source_type:ChatSessionSourceType::Manual,
@@ -56,6 +57,7 @@ impl ChatService {
             normalized_optional(command.app_code)
         };
         let session = ChatSession {
+            execution_mode: command.execution_mode,
             id,
             session_code: eliteforge_agent_core::SessionRecord::new("").id,
             workspace_code,
@@ -83,6 +85,7 @@ impl ChatService {
                     && existing.project_code == session.project_code
                     && existing.user_code == session.user_code
                     && existing.source_type == ChatSessionSourceType::Manual
+                    && existing.execution_mode == session.execution_mode
                     && existing.status == ChatSessionStatus::Active
                     && existing.last_run_code.is_none()
             })
@@ -274,21 +277,33 @@ impl ChatService {
     }
 
     pub fn prepare_session_deletion(&self, session_code: &str) -> Result<(), ChatError> {
-        let session = self.repository().get_session(session_code)?;
-        self.ensure_archived_session_inactive(session_code, &session)
+        self.repository().get_session(session_code)?;
+        self.ensure_session_inactive(session_code)
     }
 
     pub fn delete_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
-        self.delete_session_inner(session_code, false)
+        let session = self.repository().get_session(session_code)?;
+        self.delete_session_inner(session, false)
+    }
+
+    pub fn delete_archived_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        if session.status != ChatSessionStatus::Archived {
+            return Err(ChatError::SessionMustBeArchived);
+        }
+        self.delete_session_inner(session, false)
     }
 
     pub(crate) fn delete_expired_heartbeat_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
-        self.delete_session_inner(session_code, true)
+        let session = self.repository().get_session(session_code)?;
+        if session.status != ChatSessionStatus::Archived {
+            return Err(ChatError::SessionMustBeArchived);
+        }
+        self.delete_session_inner(session, true)
     }
 
-    fn delete_session_inner(&self, session_code: &str, heartbeat_retention: bool) -> Result<ChatSession, ChatError> {
-        let session = self.repository().get_session(session_code)?;
-        self.ensure_archived_session_inactive(session_code, &session)?;
+    fn delete_session_inner(&self, session: ChatSession, heartbeat_retention: bool) -> Result<ChatSession, ChatError> {
+        let session_code = session.session_code.as_str();
         let attachments = self
             .resources
             .as_ref()
@@ -296,10 +311,22 @@ impl ChatService {
             .transpose()
             .map_err(chat_error_from_resource)?
             .unwrap_or_default();
-        if heartbeat_retention {
-            self.repository().delete_expired_heartbeat_session(session_code)?;
+        // Block new runs during deletion without changing the persisted status.
+        self.ensure_session_inactive(session_code)?;
+        let deleted = if heartbeat_retention {
+            self.repository().delete_expired_heartbeat_session(session_code)
         } else {
-            self.repository().delete_session(session_code)?;
+            self.repository().delete_session(session_code)
+        };
+        if let Err(error) = deleted {
+            // A failed delete must not leave an active conversation read-only.
+            if session.status == ChatSessionStatus::Active
+                && self.repository().get_session(session_code)
+                    .is_ok_and(|current| current.status == ChatSessionStatus::Active)
+            {
+                let _ = self.active_runs.reactivate_session(session_code);
+            }
+            return Err(error);
         }
         if let Some(resources) = self.resources.as_ref() {
             resources.cleanup_chat_session_attachment_files(&attachments);
@@ -307,14 +334,7 @@ impl ChatService {
         Ok(session)
     }
 
-    fn ensure_archived_session_inactive(
-        &self,
-        session_code: &str,
-        session: &ChatSession,
-    ) -> Result<(), ChatError> {
-        if session.status != ChatSessionStatus::Archived {
-            return Err(ChatError::SessionMustBeArchived);
-        }
+    fn ensure_session_inactive(&self, session_code: &str) -> Result<(), ChatError> {
         if self
             .execution_memory
             .as_ref()
@@ -435,10 +455,15 @@ impl ChatService {
             return Err(ChatError::SessionArchived);
         }
         self.ensure_session_writable(session_code)?;
-        let title = normalized_required(command.title).ok_or(ChatError::SessionTitleRequired)?;
+        let title = command.title.map(|title| {
+            normalized_required(Some(title)).ok_or(ChatError::SessionTitleRequired)
+        }).transpose()?;
+        if title.is_none() && command.execution_mode.is_none() {
+            return Err(ChatError::SessionTitleRequired);
+        }
         let updated_at = current_timestamp();
         self.repository()
-            .update_session_title(session_code, &title, &updated_at)?;
+            .update_session_settings(session_code, title.as_deref(), command.execution_mode, &updated_at)?;
         self.repository().get_session(session_code)
     }
 

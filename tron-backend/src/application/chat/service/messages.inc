@@ -75,6 +75,7 @@ impl ChatService {
         }
         self.repository().validate_annotation_sources(session_code, &annotations).map_err(ChatSendError::Chat)?;
         // Session ownership comes from persisted server state, not the caller's requested agent.
+        let agent = agent.with_tool_execution_mode(session.execution_mode);
         let dude_code = session.source_code.as_deref().and_then(|source| source.strip_prefix("__dude:"));
         let knowledge_context=self.knowledge_quality_context(&session,user_code.as_deref()).map_err(ChatSendError::Chat)?;
         let knowledge_bound=knowledge_context.is_some();

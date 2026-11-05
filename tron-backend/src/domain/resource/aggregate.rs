@@ -70,26 +70,38 @@ pub struct ServerRecord {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ServerAccountServer {
+    pub workspace_code: String,
+    pub server_code: String,
+}
+
+// Credentials are deliberately absent from serialization and Debug output.
+#[derive(Clone, PartialEq)]
 pub struct ServerAccountRecord {
     pub workspace_code: String,
     pub resource_code: String,
-    /// Workspace that owns the server this account is attached to. It can differ
-    /// from `workspace_code` when the account targets an inherited server.
-    pub server_workspace_code: String,
-    pub server_code: String,
+    pub servers: Vec<ServerAccountServer>,
     pub name: String,
     pub description: String,
     pub username: String,
     pub authentication_type: ServerAuthenticationType,
-    pub password_variable_key: Option<String>,
-    pub private_key_variable_key: Option<String>,
-    pub private_key_passphrase_variable_key: Option<String>,
+    pub encrypted_credentials: String,
     pub allow_inheritance: bool,
     pub revision: u64,
     pub created_at: String,
     pub updated_at: String,
+}
+
+impl std::fmt::Debug for ServerAccountRecord {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ServerAccountRecord")
+            .field("workspace_code", &self.workspace_code)
+            .field("resource_code", &self.resource_code)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -3,6 +3,14 @@ use serde_json::Value;
 
 use super::{AgentKind, AgentMessage, AgentModelConfig, ToolObservation};
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ToolExecutionMode {
+    #[default]
+    Controlled,
+    AutoApprove,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectiveVariable {
@@ -134,6 +142,9 @@ pub struct AgentCollaborationOwner {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRunContext {
+    /// Selected by the user on the owning session, never by tool arguments.
+    #[serde(default)]
+    pub tool_execution_mode: ToolExecutionMode,
     #[serde(default)]
     pub collaboration_owner: Option<AgentCollaborationOwner>,
     /// Server-resolved identity; older saved runs omit it and receive no KB context.
