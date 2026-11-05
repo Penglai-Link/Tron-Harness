@@ -6,7 +6,20 @@
   transition: none !important;
 }
 
+/* Theme changes are one full-window reveal. Component snapshots must not
+   escape the root clip and appear above the expanding circle. */
+:root[data-tron-theme-transition] * {
+  view-transition-name: none !important;
+}
+
+:root[data-tron-theme-transition]::view-transition {
+  z-index: 2147483647;
+  isolation: isolate;
+  pointer-events: none;
+}
+
 :root[data-tron-theme-transition]::view-transition-group(root) {
+  z-index: 1;
   animation: none;
 }
 
@@ -27,6 +40,7 @@
 
 :root[data-tron-theme-transition]::view-transition-new(root) {
   z-index: 2;
+  background: var(--color-background);
   animation: tron-theme-reveal 350ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
