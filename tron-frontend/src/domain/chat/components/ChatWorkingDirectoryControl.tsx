@@ -1,15 +1,18 @@
-import { Check, ChevronDown, Folder, FolderX } from "lucide-react";
+import { ChevronDown, Folder, FolderX, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup,
+  DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
 import { setChatWorkingDirectory } from "@/domain/chat/api/sessionLocationApi";
 import type { ChatSession } from "@/domain/chat/model";
 import { useDirectories } from "@/domain/directory/hooks/useDirectories";
+import { useSystemDirectoryPicker } from "@/domain/directory/hooks/useSystemDirectoryPicker";
 import { getTopicMemo } from "@/domain/project/api/topicApi";
 
 export function ChatWorkingDirectoryControl({ session, workspaceCode, draftProjectCode, draftDirectoryCode, draftSelection, onDraftSelection, disabled }: {
@@ -58,6 +61,9 @@ export function ChatWorkingDirectoryControl({ session, workspaceCode, draftProje
     finally { setPending(false); }
   }
 
+  const picker = useSystemDirectoryPicker(workspaceCode, (directory) => select(directory.directoryCode));
+  const busy = pending || picker.saving;
+
   if (fixedDirectoryCode) {
     return <Tooltip>
       <TooltipTrigger render={<span tabIndex={0} className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs text-muted-foreground" aria-label={t("chatSidebar.session.workingDirectory")} />}>
@@ -67,36 +73,42 @@ export function ChatWorkingDirectoryControl({ session, workspaceCode, draftProje
     </Tooltip>;
   }
 
-  return <>
-    <Button type="button" size="sm" variant="ghost" className="h-8 min-w-0 gap-2 rounded-md px-2 text-xs text-muted-foreground hover:text-foreground" disabled={disabled || !workspaceCode} title={current?.path ?? undefined}
-      onClick={() => { refresh(); setOpen(true); }} aria-label={t("chatSidebar.session.workingDirectory")}>
-      <Folder size={14} className="shrink-0" aria-hidden="true" /><span className="max-w-48 truncate">{current?.name ?? (currentCode ? t("chatSidebar.directory.unavailable") : t("chatSidebar.session.noDirectory"))}</span><ChevronDown size={13} className="shrink-0" aria-hidden="true" />
-    </Button>
-    <Dialog open={open} onOpenChange={(value) => { if (!pending) setOpen(value); }}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>{t("chatSidebar.session.workingDirectory")}</DialogTitle></DialogHeader>
-        {loading ? <p className="text-sm text-muted-foreground">{t("chatSidebar.loading")}</p> : null}
-        {error ? <button type="button" className="text-left text-sm text-destructive" onClick={refresh}>{t("chatSidebar.directory.loadFailed")}</button> : null}
-        <div className="max-h-80 space-y-1 overflow-y-auto rounded-lg border border-border p-1">
-          {!(!session && draftProjectCode) ? <Button type="button" variant="ghost"
-            aria-pressed={!currentCode}
-            className={cn("h-11 w-full justify-start gap-3 rounded-md px-3 text-left", !currentCode && "bg-accent text-accent-foreground")}
-            disabled={pending} onClick={() => void select(null)}>
-            <FolderX size={18} className="shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">{t("chatSidebar.session.noDirectory")}</span>
-            {!currentCode && <Check size={16} className="shrink-0" aria-hidden="true" />}
-          </Button> : null}
-          {items.map((directory) => <Button type="button" key={directory.directoryCode} variant="ghost"
-            aria-pressed={currentCode === directory.directoryCode} title={directory.path}
-            className={cn("h-auto min-h-14 w-full justify-start gap-3 rounded-md px-3 py-2.5 text-left", currentCode === directory.directoryCode && "bg-accent text-accent-foreground")}
-            disabled={pending || !directory.available} onClick={() => void select(directory.directoryCode)}>
-            <Folder size={18} className="shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1"><span className="block truncate font-medium">{directory.name}</span><span className="block truncate text-xs font-normal text-muted-foreground">{directory.path}</span>{!directory.available && <span className="block text-xs text-destructive">{t("chatSidebar.directory.unavailable")}</span>}</span>
-            {currentCode === directory.directoryCode && <Check size={16} className="shrink-0" aria-hidden="true" />}
-          </Button>)}
-        </div>
-        <DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>{t("chatSidebar.project.cancel")}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  </>;
+  return <DropdownMenu open={open} onOpenChange={(value) => {
+    if (value) refresh();
+    setOpen(value);
+  }}>
+    <DropdownMenuTrigger render={<Button type="button" size="sm" variant="ghost"
+      className="h-8 min-w-0 gap-2 rounded-md px-2 text-xs text-muted-foreground hover:text-foreground data-popup-open:bg-accent data-popup-open:text-foreground"
+      disabled={disabled || busy || !workspaceCode} title={current?.path ?? undefined}
+      aria-label={t("chatSidebar.session.workingDirectory")} />}>
+      <Folder size={14} className="shrink-0" aria-hidden="true" />
+      <span className="max-w-48 truncate">{current?.name ?? (currentCode ? t("chatSidebar.directory.unavailable") : t("chatSidebar.session.noDirectory"))}</span>
+      <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="start" side="top" sideOffset={6}
+      className="w-64 max-w-[calc(100vw-2rem)] p-1.5" aria-label={t("chatSidebar.session.workingDirectory")}>
+      {loading && !items.length ? <div role="status" className="px-2 py-2 text-xs text-muted-foreground">{t("chatSidebar.loading")}</div> : null}
+      {error ? <DropdownMenuItem closeOnClick={false} className="min-h-9 px-2 text-destructive" onClick={refresh}>{t("chatSidebar.directory.loadFailed")}</DropdownMenuItem> : null}
+      <DropdownMenuRadioGroup value={currentCode ?? ""} onValueChange={(value) => void select(value || null)} className="max-h-72 overflow-y-auto">
+        {items.map((directory) => <Tooltip key={directory.directoryCode}>
+          <TooltipTrigger render={<DropdownMenuRadioItem value={directory.directoryCode} label={directory.name}
+            closeOnClick disabled={busy || !directory.available} className="min-h-9 gap-2 px-2 pr-8 text-xs" />}>
+            <Folder size={14} className="text-muted-foreground" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">{directory.name}</span>
+            {!directory.available && <span className="text-xs text-muted-foreground">{t("chatSidebar.directory.unavailable")}</span>}
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={10} className="max-w-sm break-all">{directory.path}</TooltipContent>
+        </Tooltip>)}
+        {!(!session && draftProjectCode) ? <DropdownMenuRadioItem value="" closeOnClick disabled={busy} className="min-h-9 gap-2 px-2 pr-8 text-xs">
+          <FolderX size={14} className="text-muted-foreground" aria-hidden="true" />
+          <span className="truncate">{t("chatSidebar.session.noDirectory")}</span>
+        </DropdownMenuRadioItem> : null}
+      </DropdownMenuRadioGroup>
+      <DropdownMenuSeparator className="mx-0 my-1" />
+      <DropdownMenuItem disabled={busy || disabled} className="min-h-9 gap-2 px-2 text-xs" onClick={() => { setOpen(false); void picker.choose(); }}>
+        <Plus size={14} className="text-muted-foreground" aria-hidden="true" />
+        {t("chatSidebar.directory.add")}…
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>;
 }
