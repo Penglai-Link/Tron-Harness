@@ -205,6 +205,15 @@ const registeredRoutes: AppRoute[] = [
     },
   },
   {
+    pageId: "topics.detail",
+    route: "/topics/:projectCode",
+    activeNav: "Chats",
+    title: "Topic",
+    titleTranslationKey: "shell:nav.items.projects",
+    archetype: "detail",
+    pageContextTarget: { source: "path", parameter: "projectCode" },
+  },
+  {
     pageId: "chats.reasoning",
     route: "/chats/8842-alpha",
     activeNav: "Chats",

@@ -3,11 +3,11 @@ import { useTranslation } from "react-i18next";
 import { useTabStore } from "@/store/tabStore";
 
 /** A draft is a local tab. Only the first submission creates a server session. */
-export function useCreateChatTab(workspaceCode: string, projectCode?: string) {
+export function useCreateChatTab(workspaceCode: string, projectCode?: string, directoryCode?: string) {
   const navigate = useNavigate();
   const { t } = useTranslation("shell");
 
-  function create() {
+  function create(targetDirectoryCode = directoryCode) {
     if (!workspaceCode) return;
     const tabs = useTabStore.getState();
     const existingDraft = tabs.tabs.find((tab) => {
@@ -16,7 +16,9 @@ export function useCreateChatTab(workspaceCode: string, projectCode?: string) {
       if (pathname !== "/chats") return false;
       const params = new URLSearchParams(search);
       return Boolean(params.get("draftCode"))
-        && (!projectCode || params.get("projectCode") === projectCode);
+        && params.get("workspaceCode") === workspaceCode
+        && (params.get("projectCode") ?? undefined) === projectCode
+        && (params.get("directoryCode") ?? undefined) === targetDirectoryCode;
     });
     if (existingDraft) {
       tabs.setActiveTab(existingDraft.id);
@@ -26,6 +28,7 @@ export function useCreateChatTab(workspaceCode: string, projectCode?: string) {
     const draftCode = crypto.randomUUID();
     const params = new URLSearchParams({ draftCode, workspaceCode });
     if (projectCode) params.set("projectCode", projectCode);
+    if (targetDirectoryCode) params.set("directoryCode", targetDirectoryCode);
     const path = `/chats?${params}`;
     const tabId = useTabStore.getState().addTab({
       title: t("chatSidebar.newChat"),
@@ -37,5 +40,5 @@ export function useCreateChatTab(workspaceCode: string, projectCode?: string) {
     useTabStore.getState().setActiveTab(tabId);
     navigate(path);
   }
-  return { create, creating: false };
+  return { create: () => create(), createForDirectory: (code: string) => create(code), creating: false };
 }

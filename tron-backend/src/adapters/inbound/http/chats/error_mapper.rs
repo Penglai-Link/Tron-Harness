@@ -59,6 +59,11 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_SESSION_RUN_ACTIVE",
             "this operation is unavailable while the chat session is running".to_string(),
         ),
+        ChatError::SessionLocationChanged => (
+            StatusCode::CONFLICT,
+            "CHAT_SESSION_LOCATION_CHANGED",
+            "The chat location changed. Retry the request.".to_string(),
+        ),
         ChatError::SessionTitleRequired => (
             StatusCode::BAD_REQUEST,
             "CHAT_SESSION_TITLE_REQUIRED",
@@ -83,6 +88,15 @@ pub fn chat_error_response(error: ChatError) -> Response {
             StatusCode::UNPROCESSABLE_ENTITY,
             "CHAT_PROJECT_INVALID",
             "chat project is invalid for this workspace".to_string(),
+        ),
+        ChatError::DirectoryFixed => (
+            StatusCode::CONFLICT, "CHAT_DIRECTORY_FIXED",
+            "directory chats must use their own directory".to_string(),
+        ),
+        ChatError::DirectoryInvalid => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "CHAT_DIRECTORY_INVALID",
+            "chat directory is invalid for this workspace".to_string(),
         ),
         ChatError::UserInputAlreadyAnswered => (
             StatusCode::CONFLICT,

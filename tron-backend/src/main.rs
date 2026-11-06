@@ -6,8 +6,26 @@ use tron_backend::{
     config::AppConfig,
 };
 
+fn main() -> Result<(), Box<dyn Error>> {
+    // Native dialogs must run on the process main thread on macOS. A short-lived
+    // helper process keeps the HTTP server responsive without a GUI event loop.
+    if std::env::args().nth(1).as_deref() == Some("--pick-directory") {
+        let title = if std::env::args().nth(2).as_deref() == Some("en-US") {
+            "Choose a working directory"
+        } else {
+            "选择工作目录"
+        };
+        let selected = rfd::FileDialog::new().set_title(title).pick_folder();
+        let path = selected.as_ref().map(|path| path.to_str().ok_or_else(||
+            std::io::Error::other("directory path is not valid UTF-8"))).transpose()?;
+        println!("{}", serde_json::to_string(&path)?);
+        return Ok(());
+    }
+    run_server()
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn run_server() -> Result<(), Box<dyn Error>> {
     let config = AppConfig::from_application_yaml()?;
     tron_backend::adapters::outbound::observability::logs::init_application_logging(&config)
         .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -26,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::select! {
         // Finalize routes once; serving Router directly runs with_state(())
         // and clones every route's middleware state for each new connection.
-        result = axum::serve(listener, router.into_make_service()).into_future() => {
+        result = axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).into_future() => {
             result?;
             Ok(())
         }

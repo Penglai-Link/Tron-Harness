@@ -3,9 +3,17 @@ import { knowledgeQuality } from "./knowledgeQuality";
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
-  automaticRouters: { modelCode: "Model code", dimensions: "{{value}} dimensions", "routeHelp": {"Chat": "Agent conversation models", "TextGeneration": "Select models for text generation that support disabling reasoning.", "Embedding": "Select by input modalities and rotate providers of the same logical model/version. Indexes pin the model, dimensions and preprocessing.", "Rerank": "Check query and document modalities, then rotate providers of the same logical model/version."}, "title": "Automatic Routers", "refresh": "Refresh", "loading": "Loading…", "save": "Save", "saved": "Router sources saved for the next run", "failed": "Could not load or save router settings", "source": "Data sources", "providers": "Providers", "models": "Models", "choose": "Search and select multiple", "unavailable": "Unavailable: {{id}}", "empty": "No available candidate models", "candidates": "Candidate models ({{count}})", "help": "Automatically include enabled provider models by model type, or restrict sources to selected providers or models. An empty selection leaves no candidates. Chat also respects Agent authorization and context limits. Existing runs keep their snapshot. Indexes retain their embedding model and dimensions.", "modes": {"AllProviders": "All providers (automatic)", "SelectedProviders": "Selected providers", "SelectedModels": "Selected models"}, "kinds": {"Chat": "Conversation", "TextGeneration": "Text generation", "Embedding": "Embedding", "Rerank": "Rerank"}},
+  voiceInput: {"start": "Start voice input", "stop": "Stop recording and transcribe", "requesting": "Requesting microphone…", "transcribing": "Transcribing…", "recording": "Recording {{seconds}} s", "cancel": "Cancel voice input (Esc)", "permissionDenied": "Microphone access was denied. Allow microphone access in your browser and try again.", "noMicrophone": "No microphone is available.", "unsupported": "Recording is unavailable. Use a supported browser over HTTPS or localhost.", "failed": "Recording failed. Please try again.", "empty": "No speech was recognized. Please try again.", "tooLarge": "Recording exceeds 8 MB. Please record a shorter clip."},
+  automaticRouters: { modelCode: "Model code", dimensions: "{{value}} dimensions", "routeHelp": {"SpeechRecognition": "Transcribe audio using enabled speech recognition models. Person-AI selects from its active speech models on the server; a model selection must include its entire active speech model pool.", "Realtime": "Select enabled realtime models for live audio sessions.", "ImageGeneration": "Select enabled image models for image generation.", "Chat": "Agent conversation models", "TextGeneration": "Select models for text generation that support disabling reasoning.", "Embedding": "Select by input modalities and rotate providers of the same logical model/version. Indexes pin the model, dimensions and preprocessing.", "Rerank": "Check query and document modalities, then rotate providers of the same logical model/version."}, "title": "Automatic Routers", "refresh": "Refresh", "loading": "Loading…", "save": "Save", "saved": "Router sources saved for the next run", "failed": "Could not load or save router settings", "source": "Data sources", "providers": "Providers", "models": "Models", "choose": "Search and select multiple", "unavailable": "Unavailable: {{id}}", "empty": "No available candidate models", "candidates": "Candidate models ({{count}})", "help": "Automatically include enabled provider models by model type, or restrict sources to selected providers or models. An empty selection leaves no candidates. Chat also respects Agent authorization and context limits. Existing runs keep their snapshot. Indexes retain their embedding model and dimensions.", "modes": {"AllProviders": "All providers (automatic)", "SelectedProviders": "Selected providers", "SelectedModels": "Selected models"}, "kinds": {"SpeechRecognition": "Speech recognition", "Realtime": "Realtime models", "ImageGeneration": "Image generation", "Chat": "Conversation", "TextGeneration": "Text generation", "Embedding": "Embedding", "Rerank": "Rerank"}},
   contextLayout: {
     updateMode: "Updates",
+    compressionColumn: "Compression",
+    compressionHelp: "Declared by the context provider to explain how content is handled when the budget is insufficient. Read-only; changing shares does not change the strategy.",
+    compressionFor: "Compression strategy for {{name}}",
+    compressionUnspecified: "Undeclared",
+    compressionUnspecifiedHelp: "The provider has not declared a compression strategy.",
+    compressionUnavailable: "Unavailable",
+    compressionUnavailableHelp: "This context provider is not loaded, so its current compression strategy is unavailable.",
     updateModes: { Fixed: "Fixed", Append: "Append", Replace: "Replace", Unspecified: "Unspecified" },
     updateModeDescriptions: {
       Fixed: "Fixed: unchanged within a run and reloaded for a new run.",
@@ -1837,6 +1845,7 @@ export const pages = {
       approvalWaiting: "Waiting for batch",
       approvalRetry: "Retry submission",
       approvalChange: "Change decision",
+      responseSubmitted: "Submitted",
       approved: "Approved",
       rejected: "Rejected",
       approve: "Approve",
@@ -1884,7 +1893,6 @@ export const pages = {
       },
       sidebar: {
         sessions: "Sessions",
-        newSession: "New session",
         noSessions: "No sessions in this tab.",
         expandHistory: "Expand session history",
         collapseHistory: "Collapse session history",
@@ -3166,10 +3174,9 @@ export const pages = {
         description: "Switch to the next workspace tab.",
         label: "Next tab",
       },
-      newSession: {
-        description: "Create a new chat session.",
-        label: "New session",
-      },
+      newTopic: { label: "New topic", description: "Open the topic creation dialog." },
+      newDirectory: { label: "Add directory", description: "Choose and add a working directory." },
+      newSession: { label: "New quick chat", description: "Open a quick chat draft in the current workspace." },
       openNotifications: {
         description: "Open the notifications page.",
         label: "Open notifications",
@@ -3182,6 +3189,7 @@ export const pages = {
         description: "Collapse or expand the bottom panel.",
         label: "Toggle bottom panel",
       },
+      toggleVoiceInput: { label: "Start/stop voice input", description: "Record in the active chat, then press again to transcribe. Requires an available speech recognition route." },
       toggleAgentWindow: {
         description: "Open or close the temporary Dude chat window.",
         label: "Toggle temporary Dude chat",
@@ -5161,7 +5169,7 @@ export const pages = {
     motionSave: "Save",
     sidebar: "Sidebar background",
     sidebarDescription: "Adjust the sidebar and its menu popovers. Text and icons stay crisp.",
-    sidebarOpacity: "Background opacity",
+    sidebarOpacity: "Background transparency",
     sidebarBlur: "Background blur",
     onlineSkins: "Online themes",
     marketRefresh: "Refresh",

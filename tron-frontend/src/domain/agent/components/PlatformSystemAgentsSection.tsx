@@ -37,8 +37,8 @@ import { SystemAgentProfileDialog } from "./SystemAgentProfileDialog";
 
 function SystemAgentAvatar({ code, name, avatarId }: { code: string; name: string; avatarId?: string | null }) {
   const id = avatarId || SYSTEM_AGENT_AVATAR_IDS[code];
-  return <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-[var(--color-outline-variant)]">
-    {id ? <AgentAvatar avatarId={id} alt={name} className="size-full" /> : <span className="text-xl font-semibold text-black" aria-hidden="true">{name.slice(0, 2)}</span>}
+  return <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-elevated-surface)] ring-1 ring-[var(--color-outline-variant)]">
+    {id ? <AgentAvatar avatarId={id} alt={name} className="size-full" /> : <span className="text-xl font-semibold text-[var(--color-on-surface)]" aria-hidden="true">{name.slice(0, 2)}</span>}
   </span>;
 }
 

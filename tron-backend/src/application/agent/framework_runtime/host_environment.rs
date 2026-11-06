@@ -418,6 +418,10 @@ impl FrameworkHost {
                 "tron.remote.tools",
                 remote_tools::RemoteTools(Arc::downgrade(&self.0)),
             ))
+            .plugin(fw::ToolProviderPlugin::new(
+                "tron.connector.tools",
+                connector_tools::HostConnectorTools(Arc::downgrade(&self.0)),
+            ))
             .plugin(fw::ToolPolicyPlugin::new(
                 "tron.harness.tool-authority",
                 super::super::tools::ToolCatalogPolicy::shared(
@@ -679,7 +683,7 @@ impl FrameworkHost {
                 super::super::ContextLayoutContributorInfo {
                     provider_id: provider_id.to_owned(),
                     block_id: source.block_id().to_owned(),
-                    metadata: source.layout_metadata(),
+                    metadata: source.resolved_layout_metadata(),
                     kind: source.kind(),
                 }
             })

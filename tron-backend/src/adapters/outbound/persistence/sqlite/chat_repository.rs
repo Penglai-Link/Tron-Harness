@@ -77,6 +77,8 @@ fn chat_session_from_row(row: SessionProjection) -> Result<ChatSession, ChatErro
         session_code: row.session_id,
         workspace_code: link.workspace_code,
         project_code: link.project_code,
+        directory_code: link.directory_code,
+        working_directory_code: link.working_directory_code,
         user_code: link.user_code,
         app_code: link.app_code,
         task_code: link.task_code,
@@ -109,6 +111,10 @@ struct Link {
     id: i64,
     workspace_code: String,
     project_code: Option<String>,
+    #[serde(default)]
+    directory_code: Option<String>,
+    #[serde(default)]
+    working_directory_code: Option<String>,
     user_code: Option<String>,
     app_code: Option<String>,
     task_code: Option<String>,
@@ -123,6 +129,8 @@ impl Link {
             id: s.id,
             workspace_code: s.workspace_code.clone(),
             project_code: s.project_code.clone(),
+            directory_code: s.directory_code.clone(),
+            working_directory_code: s.working_directory_code.clone(),
             user_code: s.user_code.clone(),
             app_code: s.app_code.clone(),
             task_code: s.task_code.clone(),
@@ -251,6 +259,8 @@ impl SqliteChatRepository {
             id: 0,
             workspace_code: context.workspace_code.clone(),
             project_code: None,
+            directory_code: None,
+            working_directory_code: None,
             user_code: context.user_code.clone(),
             app_code: context.execution_scope.app_code.clone(),
             task_code: context.execution_scope.task_code.clone(),
@@ -448,8 +458,26 @@ impl ChatRepository for SqliteChatRepository {
                 .map_err(|_| ChatError::StorageFailure)?;
             db.transaction(async {
                 sessions.create(record).await?;
-                db.call(move|c|c.execute("INSERT INTO workspace_session_links(session_id,workspace_code,business_json) VALUES(?1,?2,?3)",params![id,link.workspace_code,value]))
-                    .await.map_err(|e|fw::StateError::Backend(e.to_string()))?; Ok(())
+                db.call(move |c| -> rusqlite::Result<()> {
+                    if let Some(directory) = link.directory_code.as_deref() {
+                        let exists: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM directories WHERE directory_code=?1 AND workspace_code=?2 AND archived=0)", params![directory, link.workspace_code], |row| row.get(0))?;
+                        if !exists { return Err(rusqlite::Error::InvalidQuery); }
+                    }
+                    if let Some(directory) = link.working_directory_code.as_deref() {
+                        let exists: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM directories WHERE directory_code=?1 AND workspace_code=?2 AND archived=0)", params![directory, link.workspace_code], |row| row.get(0))?;
+                        if !exists { return Err(rusqlite::Error::InvalidQuery); }
+                        if let Some(project) = link.project_code.as_deref() {
+                            let exists: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM projects WHERE project_code=?1 AND workspace_code=?2 AND status='ACTIVE')", params![project, link.workspace_code], |row| row.get(0))?;
+                            if !exists { return Err(rusqlite::Error::InvalidQuery); }
+                            c.execute("INSERT INTO topic_memos(project_code,notes,revision) VALUES (?1,'',0) ON CONFLICT(project_code) DO NOTHING", [project])?;
+                            let reference = format!("TOPIC-REF-{id}");
+                            let inserted = c.execute("INSERT INTO topic_references(reference_code,project_code,kind,target_code,connection_code,label,url) SELECT ?1,?2,'Directory',directory_code,'',display_name,NULL FROM directories WHERE directory_code=?3 ON CONFLICT(project_code,kind,target_code,connection_code) DO NOTHING", params![reference, project, directory])?;
+                            if inserted != 0 { c.execute("UPDATE topic_memos SET revision=revision+1 WHERE project_code=?1", [project])?; }
+                        }
+                    }
+                    c.execute("INSERT INTO workspace_session_links(session_id,workspace_code,business_json) VALUES(?1,?2,?3)", params![id,link.workspace_code,value])?;
+                    Ok(())
+                }).await.map_err(|e|fw::StateError::Backend(e.to_string()))?; Ok(())
             }).await.map_err(chat_error)
         })
     }
@@ -562,7 +590,7 @@ impl ChatRepository for SqliteChatRepository {
         _at: &str,
     ) -> Result<(), ChatError> {
         blocking(async {
-            self.link(id).await?;
+            let link = self.link(id).await?;
             let f = self.framework().await?;
             let s = f.sessions().map_err(|_| ChatError::StorageFailure)?;
             let db = self.host.shared_database().await.map_err(chat_error)?;
@@ -578,6 +606,12 @@ impl ChatRepository for SqliteChatRepository {
                     }
                     s.archive(id).await?;
                 } else {
+                    if let Some(directory_code) = link.directory_code {
+                        let workspace_code = link.workspace_code;
+                        let changed = db.call(move |c| c.execute("UPDATE directories SET archived=0 WHERE directory_code=?1 AND workspace_code=?2", params![directory_code, workspace_code]))
+                            .await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
+                        if changed == 0 { return Err(fw::StateError::NotFound); }
+                    }
                     s.restore(id).await?;
                 }
                 Ok(())
@@ -623,6 +657,83 @@ impl ChatRepository for SqliteChatRepository {
                 }
                 sessions.update(record, expected).await?;
                 Ok(())
+            }).await.map_err(chat_error)
+        })
+    }
+    fn update_session_location(
+        &mut self,
+        id: &str,
+        project_code: Option<&str>,
+        directory_code: Option<&str>,
+        working_directory_code: Option<&str>,
+        reference_code: &str,
+    ) -> Result<(), ChatError> {
+        let id = id.to_owned();
+        let project = project_code.map(str::to_owned);
+        let placement_directory = directory_code.map(str::to_owned);
+        let working = working_directory_code.map(str::to_owned);
+        let reference = reference_code.to_owned();
+        blocking(async {
+            let db = self.host.shared_database().await.map_err(chat_error)?;
+            db.call(move |connection| {
+                let result = (|| -> Result<(), ChatError> {
+                    let tx = super::framework_storage::business_transaction(connection, rusqlite::TransactionBehavior::Immediate)
+                        .map_err(|_| ChatError::StorageFailure)?;
+                    let (link_json, status): (String, String) = tx.query_row(
+                        "SELECT l.business_json,json_extract(s.record,'$.status') FROM workspace_session_links l JOIN ef_sessions s ON s.id=l.session_id WHERE l.session_id=?1",
+                        [&id], |row| Ok((row.get(0)?, row.get(1)?)),
+                    ).optional().map_err(|_| ChatError::StorageFailure)?.ok_or(ChatError::SessionNotFound)?;
+                    if !matches!(status.as_str(), "Active" | "ACTIVE") { return Err(ChatError::SessionArchived); }
+                    let mut link: Link = serde_json::from_str(&link_json).map_err(|_| ChatError::StorageFailure)?;
+                    if let Some(code) = project.as_deref() {
+                        let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM projects WHERE project_code=?1 AND workspace_code=?2 AND status='ACTIVE')", params![code, link.workspace_code], |row| row.get(0)).map_err(|_| ChatError::StorageFailure)?;
+                        if !exists { return Err(ChatError::ProjectInvalid); }
+                    }
+                    for code in [placement_directory.as_deref(), working.as_deref()].into_iter().flatten() {
+                        let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM directories WHERE directory_code=?1 AND workspace_code=?2 AND archived=0)", params![code, link.workspace_code], |row| row.get(0)).map_err(|_| ChatError::StorageFailure)?;
+                        if !exists { return Err(ChatError::DirectoryInvalid); }
+                    }
+                    if let (Some(project), Some(directory)) = (project.as_deref(), working.as_deref()) {
+                        tx.execute("INSERT INTO topic_memos(project_code,notes,revision) VALUES (?1,'',0) ON CONFLICT(project_code) DO NOTHING", [project]).map_err(|_| ChatError::StorageFailure)?;
+                        let inserted = tx.execute("INSERT INTO topic_references(reference_code,project_code,kind,target_code,connection_code,label,url) SELECT ?1,?2,'Directory',directory_code,'',display_name,NULL FROM directories WHERE directory_code=?3 ON CONFLICT(project_code,kind,target_code,connection_code) DO NOTHING", params![reference, project, directory]).map_err(|_| ChatError::StorageFailure)?;
+                        if inserted != 0 { tx.execute("UPDATE topic_memos SET revision=revision+1 WHERE project_code=?1", [project]).map_err(|_| ChatError::StorageFailure)?; }
+                    }
+                    if link.project_code != project { link.app_code = None; }
+                    link.project_code = project;
+                    link.directory_code = placement_directory;
+                    link.working_directory_code = working;
+                    let value = serde_json::to_string(&link).map_err(|_| ChatError::StorageFailure)?;
+                    tx.execute("UPDATE workspace_session_links SET business_json=?2 WHERE session_id=?1", params![id, value]).map_err(|_| ChatError::StorageFailure)?;
+                    tx.commit().map_err(|_| ChatError::StorageFailure)
+                })();
+                Ok::<_, rusqlite::Error>(result)
+            }).await.map_err(|_| ChatError::StorageFailure)?
+        })
+    }
+    fn archive_directory(&mut self, workspace_code: &str, directory_code: &str) -> Result<Vec<String>, ChatError> {
+        let workspace = workspace_code.to_owned();
+        let directory = directory_code.to_owned();
+        blocking(async {
+            let framework = self.framework().await?;
+            let sessions = framework.sessions().map_err(|_| ChatError::StorageFailure)?;
+            let goals = framework.goals().map_err(|_| ChatError::StorageFailure)?;
+            let db = self.host.shared_database().await.map_err(chat_error)?;
+            db.transaction(async {
+                let workspace_query = workspace.clone();
+                let directory_query = directory.clone();
+                let codes = db.call(move |c| -> rusqlite::Result<Vec<String>> {
+                    let exists: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM directories WHERE directory_code=?1 AND workspace_code=?2 AND archived=0)", params![directory_query, workspace_query], |row| row.get(0))?;
+                    if !exists { return Err(rusqlite::Error::QueryReturnedNoRows); }
+                    let mut query = c.prepare("SELECT l.session_id FROM workspace_session_links l JOIN ef_sessions s ON s.id=l.session_id WHERE l.workspace_code=?1 AND json_extract(l.business_json,'$.directory_code')=?2 AND json_extract(s.record,'$.status') IN ('Active','ACTIVE')")?;
+                    query.query_map(params![workspace_query, directory_query], |row| row.get(0))?.collect()
+                }).await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
+                for code in &codes {
+                    if goals.active(code).await?.is_some_and(|goal| goal.status == fw::GoalStatus::Active) { return Err(fw::StateError::Busy); }
+                    sessions.archive(code).await?;
+                }
+                db.call(move |c| c.execute("UPDATE directories SET archived=1 WHERE directory_code=?1 AND workspace_code=?2 AND archived=0", params![directory, workspace]))
+                    .await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
+                Ok(codes)
             }).await.map_err(chat_error)
         })
     }

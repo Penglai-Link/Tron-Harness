@@ -224,6 +224,8 @@ async fn run_automation_with_main_agent(
                 execution_mode: Default::default(),
                 workspace_code: Some(automation.workspace_code.clone()),
                 project_code: None,
+                directory_code: None,
+                working_directory_code: None,
                 title: Some(format!("Automation: {}", automation.name)),
                 app_code: None,
                 task_code: None,

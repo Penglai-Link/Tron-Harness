@@ -73,6 +73,11 @@ export function toUiResult(value: ChatSendResult): Ui.ChatSendResult {
       metadata: { workspaceCode, systemAgentSessionId } },
     userInputRequest: value.userInputRequest ? toUiQuestion(value.userInputRequest) : value.userInputRequest };
 }
+export function toUiHistory(value: Ui.SessionHistory): Ui.SessionHistory {
+  return { ...value, records: { ...value.records, steps: value.records.steps.map((step) => ({
+    ...step, name: step.name === "framework.context.compaction" ? "agent.context.compaction" : step.name,
+  })) } };
+}
 export function toUiInput(input: SendChatMessageInput): MappedInput {
   const model = input.modelSelection;
   return { content: input.content, annotations: input.annotations ?? [], requestedSkills: input.requestedSkills ?? [], modelId: input.modelCode,
@@ -160,7 +165,7 @@ export async function uiRequest<T>(request: Promise<T>): Promise<T> {
         details: error.data, status: error.status,
         // These composer errors are emitted before a user message is persisted.
         // Never infer safe restoration from an arbitrary HTTP 4xx alone.
-        rejectedBeforeAdmission: ["101032001", "101032002", "101032003", "101032004", "101032006"].includes(error.code ?? ""),
+        rejectedBeforeAdmission: ["101032001", "101032002", "101032003", "101032004", "101032006", "CHAT_DIRECTORY_INVALID"].includes(error.code ?? ""),
       });
     }
     throw error;

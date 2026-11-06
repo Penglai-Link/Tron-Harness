@@ -1,6 +1,6 @@
 import type * as Ui from "@eliteforge/agent-ui-chat-core";
 import type { ChatAdapter, ChatClientConfig, ChatStreamHandlers } from "@tron/chat-core";
-import { fromUiAnswer, fromUiAttachment, fromUiInput, fromUiResume, fromUiSession, toUiAttachment, toUiEvent, toUiMessage, toUiQuestion, toUiResult, toUiSession, uiRequest } from "./agentUiMapping";
+import { fromUiAnswer, fromUiAttachment, fromUiInput, fromUiResume, fromUiSession, toUiAttachment, toUiEvent, toUiHistory, toUiMessage, toUiQuestion, toUiResult, toUiSession, uiRequest } from "./agentUiMapping";
 
 /** Transport/auth/locale stay in the existing product adapter. No API is called by UI components. */
 export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig): Ui.ChatAdapter {
@@ -22,7 +22,7 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
     sendA2uiActionStream: host.sendA2uiActionStream ? async (session,input,events,signal) => toUiResult(await uiRequest(host.sendA2uiActionStream!(fromUiSession(session),input,handlers(events),signal))) : undefined,
     loadMessages: async (id) => (await uiRequest(host.loadMessages(id))).map(toUiMessage),
     deleteTurn: host.deleteTurn ? (...args) => uiRequest(host.deleteTurn!(...args)) : undefined,
-    loadHistory: host.loadHistory ? (...args) => uiRequest(host.loadHistory!(...args)) : undefined,
+    loadHistory: host.loadHistory ? async (...args) => toUiHistory(await uiRequest(host.loadHistory!(...args))) : undefined,
     loadAguiEvents: async (id) => (await uiRequest(host.loadAguiEvents(id))).map(({ runCode, ...event }) => ({ ...event, runId: runCode })),
     loadProtocolEvents: host.loadProtocolEvents ? async (id) => (await uiRequest(host.loadProtocolEvents!(id))).map(toUiEvent) : undefined,
     loadUserInputRequests: host.loadUserInputRequests ? async (...args) => (await uiRequest(host.loadUserInputRequests!(...args))).map(toUiQuestion) : undefined,

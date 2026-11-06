@@ -665,6 +665,7 @@ impl AgentRunContextBuilder {
                 task_code: task_code.clone(),
                 allowed_local_directories: Vec::new(),
             }),
+            external_topic_snapshot: None,
             limits,
             messages: messages.into(),
             observations: Vec::new(),
@@ -674,6 +675,18 @@ impl AgentRunContextBuilder {
         if let Some(host) = &self.framework_host {
             host.prepare_working_directory(&mut context)
                 .map_err(AgentInvocationError::RuntimeNotStarted)?;
+            if context.agent_kind == crate::domain::agent::AgentKind::SystemCli {
+                if let (Some(service), Some(project), Some(user)) = (
+                    host.topics(),
+                    context.execution_scope.project_code.as_deref(),
+                    context.user_code.as_deref(),
+                ) {
+                    context.external_topic_snapshot = Some(match service.get(user, project) {
+                        Ok(memo) => crate::application::topic::external_snapshot(&memo),
+                        Err(_) => "[主题信息不可用，请勿假定已读取主题资料。]".into(),
+                    });
+                }
+            }
         }
         let runtime_selection = runtime_selection_for_agent(
             &resolved_agent,

@@ -149,6 +149,7 @@ export function ArchivedChatsPage() {
     setBusy(true);
     try {
       await restoreArchivedChatSession(session.sessionCode);
+      window.dispatchEvent(new Event("tron:directories-changed"));
       window.dispatchEvent(new CustomEvent("tron:chat-session-updated", { detail: { workspaceCode: session.workspaceCode, sessionCode: session.sessionCode } }));
       if (viewing?.sessionCode === session.sessionCode) { ++detailRequest.current; setViewing(null); setDetail(null); }
       toast.success(t("pages:archivedChats.restored"));

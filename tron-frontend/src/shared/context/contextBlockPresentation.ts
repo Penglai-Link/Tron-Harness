@@ -1,5 +1,12 @@
 export type ContextBlockUpdateMode = "Fixed" | "Append" | "Replace" | "Unspecified";
 
+/** Localized by the provider; custom strategy IDs need no client-side mapping. */
+export interface ContextCompressionMetadata {
+  id: string;
+  displayName: string;
+  description: string;
+}
+
 const contextBlockLabelKeys: Record<string, string> = {
   "framework.instructions": "systemPromptName",
   seed_prompt_prefix: "systemPromptName",

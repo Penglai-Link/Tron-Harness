@@ -1,6 +1,9 @@
 export const shellShortcutActions = [
+  "newTopic",
+  "newDirectory",
   "newSession",
   "toggleAgentWindow",
+  "toggleVoiceInput",
   "openNotifications",
   "closeCurrentTab",
   "previousTab",
@@ -26,7 +29,8 @@ export type ShellShortcutBindings = Record<
   ShellShortcutBinding | null
 >;
 
-export const CREATE_CHAT_SESSION_SHORTCUT_EVENT = "tron:create-chat-session";
+export const CREATE_TOPIC_SHORTCUT_EVENT = "tron:create-topic";
+export const ADD_DIRECTORY_SHORTCUT_EVENT = "tron:add-directory";
 
 const modifierKeys = new Set(["Alt", "Control", "Meta", "Shift"]);
 
@@ -111,8 +115,11 @@ export function createDefaultShellShortcutBindings(): ShellShortcutBindings {
     altKey: true, key, modKey: true, shiftKey: false,
   });
   return {
+    newTopic: modAlt("1"),
+    newDirectory: modAlt("2"),
     newSession: { ...modAlt("N"), altKey: false },
     toggleAgentWindow: modAlt("N"),
+    toggleVoiceInput: modAlt("M"),
     openNotifications: null,
     closeCurrentTab: modAlt("W"),
     previousTab: modAlt("H"),

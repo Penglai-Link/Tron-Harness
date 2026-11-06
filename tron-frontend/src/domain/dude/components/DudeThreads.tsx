@@ -51,6 +51,7 @@ function DudeThreadHistory({ dudeCode, thread, active }: { dudeCode: string; thr
     approvalWaiting: t("chat.userInput.approvalWaiting"),
     approvalRetry: t("chat.userInput.approvalRetry"),
     approvalChange: t("chat.userInput.approvalChange"),
+    responseSubmitted: t("chat.userInput.responseSubmitted"),
     approved: t("chat.userInput.approved"),
     rejected: t("chat.userInput.rejected"),
     approve: t("chat.userInput.approve"), reject: t("chat.userInput.reject"), continuing: t("chat.userInput.continuing"),

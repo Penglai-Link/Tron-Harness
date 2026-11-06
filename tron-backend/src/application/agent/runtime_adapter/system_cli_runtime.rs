@@ -248,8 +248,13 @@ fn prompt_from_context(context: &AgentRunContext) -> String {
     if prompt.is_empty() {
         return prompt;
     }
-    match crate::application::agent::execution_context_message(&context.execution_scope) {
-        Some(scope) => format!("{}\n\n{prompt}", scope.text_content()),
-        None => prompt,
+    let mut parts = Vec::new();
+    if let Some(scope) = crate::application::agent::execution_context_message(&context.execution_scope) {
+        parts.push(scope.text_content());
     }
+    if let Some(snapshot) = &context.external_topic_snapshot {
+        parts.push(snapshot.clone());
+    }
+    parts.push(prompt);
+    parts.join("\n\n")
 }

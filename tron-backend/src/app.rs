@@ -30,10 +30,10 @@ use crate::{
             persistence::{
                 GrafeoStoreCore, SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
-                SqliteChatRepository, SqliteMcpRepository, SqliteMemoryWorkDomainRepository,
+                SqliteChatRepository, SqliteConnectionRepository, SqliteDirectoryRepository, SqliteMcpRepository, SqliteMemoryWorkDomainRepository,
                 SqliteModelRepository, SqliteNavigationRepository, SqliteProjectRepository,
                 SqlitePromptRepository, SqliteRagRepository, SqliteResourceRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteVariableRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteTopicRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository,
             },
             resource_connectivity::ProtocolResourceConnectionVerifier,
@@ -48,6 +48,8 @@ use crate::{
     application::app::AppService,
     application::automation::AutomationService,
     application::chat::ChatService,
+    application::connector::IntegrationService,
+    application::directory::DirectoryService,
     application::graph::{GraphExplorerService, GraphService, OntologyService},
     application::llm::LlmRuntimeService,
     application::mcp::McpService,
@@ -65,6 +67,7 @@ use crate::{
     application::skill::SkillRegistryService,
     application::system_config::SystemConfigService,
     application::task::TaskService,
+    application::topic::TopicService,
     application::terminal::TerminalService,
     application::variable::VariableService,
     application::workspace::WorkspaceService,
@@ -121,6 +124,9 @@ pub struct AppStateInner {
     pub active_runs: ActiveRunRegistry,
     pub apps: AppService,
     pub projects: ProjectService,
+    pub directories: DirectoryService,
+    pub integrations: IntegrationService,
+    pub topics: TopicService,
     pub automations: AutomationService,
     pub chats: ChatService,
     pub short_term_memory: ShortTermMemoryService,
@@ -258,6 +264,12 @@ impl AppState {
         let apps = build_app_service(&config.database_url, workspaces.clone());
         let projects =
             build_project_service(&config.database_url, workspaces.clone(), apps.clone());
+        let directories = DirectoryService::new(
+            SqliteDirectoryRepository::connect(&config.database_url)
+                .expect("directory SQLite repository should initialize"),
+            workspaces.clone(),
+            crate::adapters::outbound::native_directory_picker::NativeDirectoryPicker::default(),
+        );
         let tasks = build_task_service(
             &config.database_url,
             workspaces.clone(),
@@ -271,6 +283,17 @@ impl AppState {
         )
         .with_runtime_config(runtime_config.clone());
         let variables = build_variable_service(&config.database_url, workspaces.clone(), &config);
+        let integrations = IntegrationService::new(
+            SqliteConnectionRepository::connect(&config.database_url)
+                .expect("connector SQLite repository should initialize"),
+            variables.cipher(),
+            workspaces.clone(),
+            vec![
+                Arc::new(eliteforge_agent_official_plugin_connector_github::GitHubProvider),
+                Arc::new(eliteforge_agent_official_plugin_connector_gitlab::GitLabProvider),
+                Arc::new(eliteforge_agent_official_plugin_connector_gitee::GiteeProvider),
+            ],
+        ).expect("connector providers should initialize");
         let resources = build_resource_service(
             &config.database_url,
             workspaces.clone(),
@@ -295,6 +318,11 @@ impl AppState {
             .with_connection_verifier(Arc::new(connection_verifier))
             .with_runtime_config(runtime_config.clone())
             .with_privacy_policy(Arc::new(knowledge_base_repository.clone()));
+        let topics = TopicService::new(
+            SqliteTopicRepository::connect(&config.database_url)
+                .expect("topic SQLite repository should initialize"),
+            projects.clone(), directories.clone(), integrations.clone(), resources.clone(), tasks.clone(),
+        );
         let mcp = build_mcp_service(
             &config.database_url,
             workspaces.clone(),
@@ -458,6 +486,8 @@ impl AppState {
         agent_framework
             .bind_knowledge_bases(knowledge_bases.clone())
             .expect("initial knowledge-base binding");
+        agent_framework.bind_topics(topics.clone()).expect("initial topic binding");
+        agent_framework.bind_integrations(integrations.clone()).expect("initial connector binding");
         agent_framework
             .bind_presentation(agent_presentation.clone())
             .expect("initial presentation binding");
@@ -553,6 +583,8 @@ impl AppState {
         )
         .with_active_runs(active_runs.clone())
         .with_projects(projects.clone())
+        .with_directories(directories.clone())
+        .with_topics(topics.clone())
         .with_execution_memory(short_term_memory.clone())
         .with_skill_registry(skills.clone())
         .with_resources(resources.clone())
@@ -668,6 +700,9 @@ impl AppState {
             active_runs,
             apps,
             projects,
+            directories,
+            integrations,
+            topics,
             automations,
             chats,
             short_term_memory,

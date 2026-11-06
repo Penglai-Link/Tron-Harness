@@ -37,7 +37,15 @@ const NATIVE_IDS: &[&str] = &[
 pub(super) struct ContextLayoutBlockVo {
     id: String, display_name: String, description: String,
     update_mode: eliteforge_agent_core::ContextBlockUpdateMode,
+    compression: Option<ContextLayoutCompressionVo>,
     plugin: bool, unavailable: bool, provider_id: Option<String>,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ContextLayoutCompressionVo {
+    id: String,
+    display_name: String,
+    description: String,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -187,7 +195,7 @@ fn build_layout(
     locale: SupportedLocale,
 ) -> ContextLayoutVo {
     let providers = &config.providers;
-    let catalog = crate::application::short_term_memory::context_block_catalog(contributors.clone());
+    let catalog = crate::application::short_term_memory::context_block_catalog(contributors.clone(), providers);
     let contributors = contributors.into_iter().map(|item| (item.block_id.clone(), item)).collect::<HashMap<_, _>>();
     let order = ordered_sources(providers, &contributors);
     let shares = providers.effective_shares(&order);
@@ -204,12 +212,18 @@ fn build_layout(
         let display_name = text.as_ref().map(|text| text.display_name.clone()).unwrap_or_else(|| id.clone());
         let description = text.map(|text| text.description).unwrap_or_default();
         let update_mode = catalog.get(id).map(|entry| entry.metadata.update_mode).unwrap_or_default();
+        let compression = catalog.get(id).map(|entry| &entry.metadata.compression)
+            .filter(|metadata| !metadata.id.is_empty())
+            .map(|metadata| {
+                let text = metadata.resolve(locale.as_str());
+                ContextLayoutCompressionVo { id: metadata.id.clone(), display_name: text.display_name, description: text.description }
+            });
         if let Some(item) = contributors.get(id) {
-            ContextLayoutBlockVo { id: id.clone(), display_name, description, update_mode,
+            ContextLayoutBlockVo { id: id.clone(), display_name, description, update_mode, compression,
                 plugin: true, unavailable: false, provider_id: Some(item.provider_id.clone()) }
         } else {
             let native = NATIVE_IDS.contains(&id.as_str());
-            ContextLayoutBlockVo { id: id.clone(), display_name, description, update_mode,
+            ContextLayoutBlockVo { id: id.clone(), display_name, description, update_mode, compression,
                 plugin: !native, unavailable: !native, provider_id: None }
         }
     }).collect();

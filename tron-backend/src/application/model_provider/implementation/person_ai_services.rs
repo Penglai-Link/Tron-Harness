@@ -9,6 +9,32 @@ use crab_serverapi::{
 };
 
 impl ModelProviderService {
+    pub async fn transcribe_profile_audio(
+        &self, user: &str, _file_name: &str, audio: Vec<u8>,
+        sources: &crate::domain::model::AutoRouteSources,
+    ) -> Result<String, ModelProviderError> {
+        let (context, base) = self.person_ai_profile_session(user).await?;
+        // The upstream WebSocket endpoint chooses from its active STT pool and does
+        // not accept model_id. A restricted selection is valid only when that
+        // entire pool is allowed. Read the live pool before uploading audio.
+        if sources.mode == crate::domain::model::AutoRouteSourceMode::SelectedModels {
+            let catalog = crab_serverapi::multimedia::MultimediaClient::new(base.clone())
+                .map_err(server_api_error)?;
+            let models = self.person_ai_service_result(catalog.list_models(&context, Some(2)).await)?;
+            if models.is_empty() || models.iter().any(|model| {
+                model.media_type != 2
+                    || !sources.allows("PersonAi", &format!("PERSON_AI:SPEECH:{}", model.model_id))
+            }) {
+                return Err(ModelProviderError::InvalidSelection(
+                    "Person-AI transcription cannot restrict its active speech model pool".into(),
+                ));
+            }
+        }
+        super::person_ai_speech::transcribe(&base, &context, &audio)
+            .await
+            .map_err(ModelProviderError::Remote)
+    }
+
     /// The durable knowledge task belongs to one Person-AI account. A profile
     /// switch must pause its remote work instead of submitting under another user.
     pub async fn document_parse_session(

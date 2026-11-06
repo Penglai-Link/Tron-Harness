@@ -1,5 +1,5 @@
 export const CHAT_PANEL_WIDGET_KEYS = {
-  newSession: "chat.newSession",
   projects: "chat.projects",
+  directories: "chat.directories",
   recents: "chat.recents",
 } as const;

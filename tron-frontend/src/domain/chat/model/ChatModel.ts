@@ -24,6 +24,8 @@ export interface ChatSession {
   sessionCode: string;
   workspaceCode: string | null;
   projectCode?: string | null;
+  directoryCode?: string | null;
+  workingDirectoryCode?: string | null;
   userCode?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
@@ -53,6 +55,8 @@ export interface CreateChatSessionInput {
   executionMode?: ToolExecutionMode;
   workspaceCode: string | null;
   projectCode?: string | null;
+  directoryCode?: string | null;
+  workingDirectoryCode?: string | null;
   title?: string | null;
   appCode?: string | null;
   taskCode?: string | null;

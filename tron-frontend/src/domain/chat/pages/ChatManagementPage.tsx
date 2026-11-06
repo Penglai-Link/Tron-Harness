@@ -74,6 +74,7 @@ import { chatApiEndpoints } from "@/domain/chat/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { AgentChatWindow, type AgentChatSubmitter } from "@/domain/chat/components/AgentChatWindow";
+import { ChatWorkingDirectoryControl } from "@/domain/chat/components/ChatWorkingDirectoryControl";
 import { ChatDraftResources } from "../model/chatDraftResources";
 import { ChatExecutionModeSelector } from "../components/ChatExecutionModeSelector";
 import { useChatExecutionMode } from "../hooks/useChatExecutionMode";
@@ -1395,7 +1396,7 @@ export function buildReportedContextMemoryBlocks(
   catalog?: ContextBlockCatalog,
 ): ContextMemoryBlockItem[] {
   const prefix = "chat.shortTermMemory.contextPanel.";
-  const placements = contextBlockPlacements(snapshot.blocks);
+  const placements = contextBlockPlacements(snapshot.blocks, "framework.history");
   const label = (id: string) => catalog?.get(id)?.displayName || contextBlockName(id, translate);
   const detailAliases: Record<string, ContextDetailBlock> = {
     "framework.instructions": "systemPrompt", seed_prompt_prefix: "systemPrompt",
@@ -2598,7 +2599,10 @@ export function ChatManagementPage() {
   const requestedSessionCode = currentSearchParams.get("sessionCode")?.trim() ?? "";
   const requestedDraftCode = currentSearchParams.get("draftCode")?.trim() ?? "";
   const draftProjectCode = currentSearchParams.get("projectCode")?.trim() || undefined;
+  const draftDirectoryCode = currentSearchParams.get("directoryCode")?.trim() || undefined;
   const isDraft = Boolean(requestedDraftCode && !requestedSessionCode);
+  const [draftDirectories, setDraftDirectories] = useState<Record<string, string | null>>({});
+  const draftDirectorySelection = draftDirectories[requestedDraftCode];
   const draftComposerKey = useRef(requestedDraftCode);
   const [draftResources] = useState(() => new ChatDraftResources());
   const requestedSourceTab = parseChatSessionSourceTab(currentSearchParams.get("sourceTab"));
@@ -2630,6 +2634,7 @@ export function ChatManagementPage() {
     approvalWaiting: t("chat.userInput.approvalWaiting"),
     approvalRetry: t("chat.userInput.approvalRetry"),
     approvalChange: t("chat.userInput.approvalChange"),
+    responseSubmitted: t("chat.userInput.responseSubmitted"),
     approved: t("chat.userInput.approved"),
     rejected: t("chat.userInput.rejected"),
     reject: t("chat.userInput.reject"),
@@ -2647,7 +2652,7 @@ export function ChatManagementPage() {
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
-  useCreateChatTab(activeWorkspaceCode,draftProjectCode);
+  useCreateChatTab(activeWorkspaceCode,draftProjectCode,draftDirectoryCode);
   const promoteDraftSession = useStableCallback((session: ChatSession) => {
     setOptimisticActiveSession(session);
     setSessionGroups((current) => insertSession(current, session));
@@ -2668,13 +2673,16 @@ export function ChatManagementPage() {
     setCurrentSearchText(sessionParams.toString());
     if (useTabStore.getState().activeTabId === scopeTabId) navigate(path, { replace: true });
     window.dispatchEvent(new CustomEvent("tron:chat-session-created", { detail: session }));
+    if (session.projectCode) {
+      window.dispatchEvent(new CustomEvent("tron:topic-location-changed", { detail: { oldProjectCode: null, projectCode: session.projectCode } }));
+    }
   });
   const createRuntimeSession = useStableCallback((input: Parameters<typeof createChatSession>[0]) => (
     draftResources.createSession(async () => {
       setCreatingSession(true);
       try {
         // Localized composer labels are not user-assigned session titles.
-        const session = await createChatSession({ ...input, title: undefined, projectCode: draftProjectCode, executionMode });
+        const session = await createChatSession({ ...input, title: undefined, projectCode: draftProjectCode, directoryCode: draftDirectoryCode, workingDirectoryCode: draftDirectoryCode ?? draftDirectorySelection, executionMode });
         promoteDraftSession(session);
         return session;
       } finally {
@@ -2704,6 +2712,17 @@ export function ChatManagementPage() {
   const [activeSessionCode, setActiveSessionCode] = useState("");
   const [composerDraftsBySessionCode, setComposerDraftsBySessionCode] = useState<Record<string, string>>({});
   const [optimisticActiveSession, setOptimisticActiveSession] = useState<ChatSession | null>(null);
+  useEffect(() => {
+    const onUpdated = (event: Event) => {
+      const updated = (event as CustomEvent<{ session?: ChatSession }>).detail?.session;
+      if (!updated || updated.workspaceCode !== activeWorkspaceCode) return;
+      setSessionGroups((current) => replaceSession(current, updated));
+      setOptimisticActiveSession((current) => current?.sessionCode === updated.sessionCode ? updated : current);
+      setActiveChatDataRefreshKey((current) => current + 1);
+    };
+    window.addEventListener("tron:chat-session-updated", onUpdated);
+    return () => window.removeEventListener("tron:chat-session-updated", onUpdated);
+  }, [activeWorkspaceCode]);
   const requestedSession = requestedSessionCode ? findSession(sessionGroups, requestedSessionCode) : undefined;
   const optimisticSession = optimisticActiveSession
     && optimisticActiveSession.sessionCode === (requestedSessionCode || activeSessionCode)
@@ -3464,15 +3483,6 @@ export function ChatManagementPage() {
           disabled={(!activeSession && !isDraft) || activeSession?.status === "ARCHIVED" || creatingSession || savingExecutionMode}
           onChange={(mode) => { void changeExecutionMode(mode); }}
         />
-        <div className="min-w-0 max-w-[9.5rem] shrink">
-          <ChatAgentSelector
-            locked={agentSelectionLocked}
-            loading={agentsLoading}
-            agents={chatAgents}
-            selectedAgentCode={selectedAgentCode}
-            onSelect={handleAgentSelect}
-          />
-        </div>
         <div
           className={cn("min-w-0 max-w-full")}
         >
@@ -3699,6 +3709,7 @@ export function ChatManagementPage() {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {activeSession || isDraft ? (
           <AgentChatWindow
+            speechScope={requestedSessionCode || requestedDraftCode || activeSession?.sessionCode}
             allowDraftSession={isDraft}
             agentReplyEffect={agentReplyEffect}
             agentReplySpeed={agentReplySpeed}
@@ -3735,6 +3746,18 @@ export function ChatManagementPage() {
             pendingAttachments={pendingAttachments}
             showAttachmentControl={false}
             showHeader={false}
+            composerTop={<fieldset disabled={compactingSessionCode === activeSession?.sessionCode}
+              className="m-0 flex min-w-0 flex-wrap items-center gap-1 border-0 px-1 pb-2 pt-0">
+              {(isDraft || activeSession?.sourceType?.toUpperCase() === "MANUAL") ? <ChatWorkingDirectoryControl
+              session={activeSession} workspaceCode={activeWorkspaceCode} draftProjectCode={draftProjectCode} draftDirectoryCode={draftDirectoryCode}
+              draftSelection={draftDirectorySelection} disabled={creatingSession || currentSessionRunActive}
+              onDraftSelection={(value) => setDraftDirectories((current) => ({ ...current, [requestedDraftCode]: value }))}
+              /> : null}
+              <div className="min-w-0 max-w-[12rem]">
+                <ChatAgentSelector locked={agentSelectionLocked} loading={agentsLoading}
+                  agents={chatAgents} selectedAgentCode={selectedAgentCode} onSelect={handleAgentSelect} />
+              </div>
+            </fieldset>}
             footerAddon={transcriptFooterAddon}
             goal={activeGoal && activeGoal.goal.sessionCode === activeSession?.sessionCode && activeGoal.goal.status !== "CLEARED" ? {
               label: t("chat.shortTermMemory.goal"),

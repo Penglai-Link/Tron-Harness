@@ -129,6 +129,17 @@ impl ChatService {
         let runtime_adapter_key = reservation.runtime_adapter_key;
         let active_run_reservation = reservation.guard;
         let _session_run_guard = acquire_session_run(self.coordinator_namespace, session_code)?;
+        // The session was initially read before run admission. A location
+        // change may have completed in that gap; never execute with that stale scope.
+        let admitted = self.repository().get_session(session_code).map_err(ChatSendError::Chat)?;
+        if admitted.status != session.status || admitted.project_code != session.project_code
+            || admitted.directory_code != session.directory_code
+            || admitted.working_directory_code != session.working_directory_code
+            || admitted.app_code != session.app_code
+        {
+            return Err(ChatSendError::Chat(ChatError::SessionLocationChanged));
+        }
+        self.ensure_session_directory_available(session_code).map_err(ChatSendError::Chat)?;
         let mapped_runtime_session_id = self
             .repository()
             .runtime_session_id(session_code, runtime_adapter_key, &effective_agent_code)

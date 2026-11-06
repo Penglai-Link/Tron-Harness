@@ -22,6 +22,10 @@ impl ReactAgent {
             .and_then(|host| host.knowledge_bases())
     }
 
+    pub(crate) fn framework_topics(&self) -> Option<crate::application::topic::TopicService> {
+        self.framework_host.as_ref().and_then(|host| host.topics())
+    }
+
     pub(crate) fn framework_live_memory_source(
         &self,
         context: &AgentRunContext,

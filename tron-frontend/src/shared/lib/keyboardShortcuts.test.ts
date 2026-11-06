@@ -10,6 +10,7 @@ import {
   shellShortcutActions,
   shortcutFromKeyboardEvent,
   shortcutMatchesKeyboardEvent,
+  type ShellShortcutAction,
 } from "./keyboardShortcuts";
 
 function keyboardEvent(overrides: Partial<KeyboardEvent> = {}) {
@@ -48,11 +49,13 @@ describe("keyboard shortcuts", () => {
   it.each(["metaKey", "ctrlKey"] as const)("matches assigned defaults with %s", (modifier) => {
     const bindings = createDefaultShellShortcutBindings();
     const expected = {
-      newSession: "N", toggleAgentWindow: "N", closeCurrentTab: "W",
+      newSession: "N", toggleAgentWindow: "N", toggleVoiceInput: "M", closeCurrentTab: "W",
       previousTab: "H", nextTab: "L", closeAllTabs: "X", closeOtherTabs: "O",
       toggleLeftSidebar: "ArrowLeft", toggleRightSidebar: "ArrowRight", toggleBottomPanel: "ArrowDown",
-    };
-    for (const action of shellShortcutActions.filter((item) => item !== "openNotifications")) {
+    } satisfies Record<Exclude<ShellShortcutAction, "openNotifications">, string>;
+    const assignedActions = shellShortcutActions.filter((item) => item !== "openNotifications");
+    expect(Object.keys(expected).sort()).toEqual([...assignedActions].sort());
+    for (const action of assignedActions) {
       expect(findMatchingShellShortcutAction(bindings, keyboardEvent({
         [modifier]: true, altKey: action !== "newSession", key: expected[action],
       }))).toBe(action);

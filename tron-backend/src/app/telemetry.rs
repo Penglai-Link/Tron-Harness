@@ -95,6 +95,15 @@ impl LocalTelemetry {
             .0
             .clone();
         let query_database = eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(path).await.map_err(|_| ObservabilityError::Storage)?;
+        // These indexes serve Tron-specific observability views. The reusable
+        // telemetry store owns only host-neutral schema and indexes.
+        query_database.call(|connection| connection.execute_batch(
+            "CREATE INDEX IF NOT EXISTS ef_telemetry_traces_workspace_time ON ef_telemetry_traces(json_extract(attributes,'$.\"tron.workspace.code\"'),started_at DESC,trace_id DESC);
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_time ON ef_telemetry_spans(json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.dude.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_workspace ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.workspace.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.dude.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_session ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.session.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.dude.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_page_roots_time ON ef_telemetry_traces(started_at DESC,trace_id) WHERE json_extract(attributes,'$.\"tron.trace.page\"')='true';"
+        )).await.map_err(|_| ObservabilityError::Storage)?;
         Ok(Self {
             query_database,
             store,
@@ -198,6 +207,7 @@ impl LocalTelemetry {
                 context.agent_code.as_deref().unwrap_or("main-agent"),
             ),
             ("agent.operation.outcome", "unknown"),
+            ("agent.telemetry.exclude_self", "true"),
         ] {
             root.span()
                 .set_attribute(KeyValue::new(key, value.to_owned()));
@@ -259,7 +269,11 @@ pub struct TraceGuard(pub(super) Context, Option<Arc<dyn TelemetryStore>>, std::
 impl TraceGuard {
     fn tracked(context: Context, store: Arc<dyn TelemetryStore>, name: &str, parent: &Context, mut attributes: BTreeMap<String, String>) -> Self {
         attributes.insert("agent.operation.outcome".into(), "unknown".into());
+        attributes.insert("agent.operation.active".into(), "true".into());
         attributes.insert("tron.operation.active".into(), "true".into());
+        if name == "tron.session.run" {
+            attributes.insert("agent.telemetry.exclude_self".into(), "true".into());
+        }
         if let Err(error) = crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(store.register_trace(TelemetryTrace {
             trace_id: context.span().span_context().trace_id().to_string(), started_at: now(), attributes: attributes.clone(), ..Default::default()
         })) { tracing::error!(%error, "Trace registration persistence failed"); }
@@ -284,6 +298,7 @@ impl TraceGuard {
             snapshot.ended_at = now();
             snapshot.status_code = if outcome == "error" { 2 } else { 0 };
             snapshot.attributes.insert("agent.operation.outcome".into(), outcome.into());
+            snapshot.attributes.insert("agent.operation.active".into(), "false".into());
             snapshot.attributes.insert("tron.operation.active".into(), "false".into());
             if let Err(error) = crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(store.write_spans(vec![snapshot])) {
                 tracing::error!(%error, "Completed span persistence failed");

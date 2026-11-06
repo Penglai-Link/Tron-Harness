@@ -425,6 +425,22 @@
 :root[data-theme="light"] .awakening-skip { color: #60646b !important; }
 :root[data-theme="light"] .awakening-loading { color: #60646b; }
 
+:root[data-theme="light"][data-skin="brand"] .tron-login-panel {
+  background: linear-gradient(135deg, #faf9f5ed, #f0eee6d9) !important;
+  --color-surface: #faf9f5;
+  --color-background: #faf9f5;
+}
+:root[data-theme="light"][data-skin="brand"] .awakening-world {
+  --color-background: #faf9f5;
+  --color-surface: #faf9f5;
+  --background: #faf9f5;
+}
+:root[data-theme="light"][data-skin="brand"] .awakening-chat {
+  background: #faf9f5b3;
+  --agent-ui-chat-surface-strong-color: #faf9f5b3;
+}
+:root[data-theme="light"][data-skin="brand"] .awakening-manual { background: #faf9f5b3; }
+
 /* Returning users cross the horizon directly into the home page. */
 .awakening-home-veil[data-rain="false"][data-phase="reveal"],
 .awakening-home-veil[data-rain="false"][data-phase="reveal"]::before {

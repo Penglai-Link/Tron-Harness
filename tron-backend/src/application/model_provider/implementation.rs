@@ -27,6 +27,7 @@ use url::Url;
 mod chat_auto_routes;
 mod route_sources;
 mod person_ai_services;
+mod person_ai_speech;
 mod person_ai_tools;
 mod sdk_models;
 

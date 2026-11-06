@@ -1,6 +1,3 @@
-import {
-  buildMockStreamingEvents,
-} from "@eliteforge/agent-ui-chat-core";
 import type {
   ChatAdapter,
   ChatAguiEvent,
@@ -14,6 +11,27 @@ import type {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function buildMockStreamingEvents(sessionId: string, runId: string, messageId: string, content: string): ChatAguiStreamEvent[] {
+  const startedAt = Date.now();
+  const reasoningId = `${runId}-reasoning`;
+  const toolCallId = `${runId}-tool-1`;
+  const chunks = content.match(/.{1,18}/g) ?? [content];
+  return [
+    { type: "RUN_STARTED", threadId: sessionId, runId, timestamp: startedAt },
+    { type: "REASONING_START", threadId: sessionId, runId, messageId: reasoningId, timestamp: startedAt + 1 },
+    { type: "REASONING_MESSAGE_START", threadId: sessionId, runId, messageId: reasoningId, timestamp: startedAt + 2 },
+    { type: "REASONING_MESSAGE_CONTENT", threadId: sessionId, runId, messageId: reasoningId, delta: "Reviewing session context and preparing a response.", timestamp: startedAt + 3 },
+    { type: "REASONING_MESSAGE_END", threadId: sessionId, runId, messageId: reasoningId, timestamp: startedAt + 4 },
+    { type: "REASONING_END", threadId: sessionId, runId, messageId: reasoningId, timestamp: startedAt + 5 },
+    { type: "TOOL_CALL_START", threadId: sessionId, runId, toolCallId, toolCallName: "context.inspect", toolCallArgs: {}, timestamp: startedAt + 6 },
+    { type: "TOOL_CALL_RESULT", threadId: sessionId, runId, toolCallId, toolCallName: "context.inspect", content: "Context loaded.", timestamp: startedAt + 7 },
+    { type: "TOOL_CALL_END", threadId: sessionId, runId, toolCallId, timestamp: startedAt + 8 },
+    { type: "TEXT_MESSAGE_START", threadId: sessionId, runId, messageId, role: "assistant", timestamp: startedAt + 9 },
+    ...chunks.map((delta, index) => ({ type: "TEXT_MESSAGE_CONTENT", threadId: sessionId, runId, messageId, delta, timestamp: startedAt + 10 + index })),
+    { type: "TEXT_MESSAGE_END", threadId: sessionId, runId, messageId, timestamp: startedAt + 11 + chunks.length },
+  ];
 }
 
 export function createMockChatAdapter(): ChatAdapter {

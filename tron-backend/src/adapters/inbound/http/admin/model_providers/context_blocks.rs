@@ -19,7 +19,16 @@ pub(super) struct ContextBlockMetadataVo {
     display_name: String,
     description: String,
     update_mode: eliteforge_agent_core::ContextBlockUpdateMode,
+    compression: Option<ContextBlockCompressionVo>,
     provider_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ContextBlockCompressionVo {
+    id: String,
+    display_name: String,
+    description: String,
 }
 
 pub(super) async fn list(
@@ -49,15 +58,22 @@ pub(super) async fn list(
                 Json(ApiResponse::protocol_error("-1", message)),
             )
         })?;
-    let blocks = crate::application::short_term_memory::context_block_catalog(contributors)
+    let config = state.short_term_memory.framework_context_config();
+    let blocks = crate::application::short_term_memory::context_block_catalog(contributors, &config.context.providers)
         .into_iter()
         .map(|(id, entry)| {
             let text = entry.metadata.resolve(locale.as_str());
+            let compression = &entry.metadata.compression;
+            let compression = (!compression.id.is_empty()).then(|| {
+                let text = compression.resolve(locale.as_str());
+                ContextBlockCompressionVo { id: compression.id.clone(), display_name: text.display_name, description: text.description }
+            });
             ContextBlockMetadataVo {
                 id,
                 display_name: text.display_name,
                 description: text.description,
                 update_mode: entry.metadata.update_mode,
+                compression,
                 provider_id: entry.provider_id,
             }
         })

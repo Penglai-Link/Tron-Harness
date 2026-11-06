@@ -139,10 +139,10 @@ export function TronSidebar({
       <SidebarMenuItem className="space-y-1" data-theme-part="app-sidebar-menu-item" key={itemKey}>
         {hasChildren && (itemCompact || item.childDisplay === "Flyout") ? (
           <SidebarFlyout label={itemLabel} trigger={
-            <SidebarMenuButton isActive={active} tooltip={itemCompact ? itemLabel : undefined} className={cn(itemCompact ? "justify-center px-0" : "gap-[12px] px-3", "mb-0")} aria-label={itemLabel}>
+            <SidebarMenuButton isActive={active} tooltip={itemCompact ? itemLabel : undefined} className={cn(itemCompact ? "justify-center px-0" : "gap-[12px] px-3", "group/nav-trigger mb-0")} aria-label={itemLabel}>
               <Icon className="shrink-0" size={17} aria-hidden="true" />
               <span className={cn("min-w-0 flex-1 truncate text-left", itemCompact ? "sr-only" : "")}>{itemLabel}</span>
-              {itemCompact ? null : <ChevronRight className="shrink-0" size={14} aria-hidden="true" />}
+              {itemCompact ? null : <ChevronRight className="shrink-0 transition-opacity [@media(hover:hover)]:opacity-0 group-hover/nav-trigger:opacity-60 group-focus-visible/nav-trigger:opacity-60 group-aria-expanded/nav-trigger:opacity-60" size={14} aria-hidden="true" />}
             </SidebarMenuButton>
           }>
             {item.children?.length ? <SidebarMenu>{item.children.map((child) => renderNavigationItem(child, `${itemKey}/${child.menuCode ?? child.label}`, 0, true))}</SidebarMenu> : <p className="px-2 py-3 text-sm text-muted-foreground">{translate("shell:navigation.emptyGroup")}</p>}

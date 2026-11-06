@@ -33,7 +33,7 @@ impl AutomaticRouteModel {
                 self.model_type,
                 ModelType::TextRerank | ModelType::MultimodalRerank
             ),
-            _ => self.model_type == ModelType::Text,
+            _ => self.model_type == kind.model_type(),
         };
         family
             && (kind != AutoRouterKind::Chat
@@ -77,6 +77,9 @@ impl ModelService {
                         | ModelType::MultimodalEmbedding
                         | ModelType::TextRerank
                         | ModelType::MultimodalRerank
+                        | ModelType::SpeechRecognition
+                        | ModelType::RealtimeSpeech
+                        | ModelType::Image
                 ) {
                     continue;
                 }
@@ -185,6 +188,26 @@ impl ModelService {
                             } else {
                                 vec![fw::Modality::Text]
                             },
+                        )
+                    }
+                    ProviderCatalogModelType::Image => (
+                        ModelType::Image,
+                        format!(
+                            "PERSON_AI:IMAGE:{}",
+                            model.model_id.as_deref().unwrap_or(&model.model_code)
+                        ),
+                        vec![fw::Modality::Text, fw::Modality::Image],
+                    ),
+                    // Person-AI media_type=2 declares STT, not a realtime
+                    // conversation model. Preserve each actual catalogue identity.
+                    ProviderCatalogModelType::Speech => {
+                        let Some(id) = model.model_id.as_deref().filter(|id| !id.is_empty()) else {
+                            continue;
+                        };
+                        (
+                            ModelType::SpeechRecognition,
+                            format!("PERSON_AI:SPEECH:{id}"),
+                            vec![fw::Modality::Audio],
                         )
                     }
                     _ => continue,
@@ -332,6 +355,17 @@ impl ModelService {
         workspace: &str,
         kind: AutoRouterKind,
     ) -> Result<RuntimeModelConfig, ModelError> {
+        if matches!(
+            kind,
+            AutoRouterKind::SpeechRecognition
+                | AutoRouterKind::Realtime
+                | AutoRouterKind::ImageGeneration
+        ) {
+            let model = self.select_automatic_media_model(kind)?;
+            return self
+                .auxiliary_runtime_model(Some(&model.binding_id), kind.model_type())?
+                .ok_or(ModelError::InvalidProtocolModelType);
+        }
         if matches!(kind, AutoRouterKind::Embedding | AutoRouterKind::Rerank) {
             return self.route_auxiliary_model(workspace, kind, &fw::ModelChoice::default(), None);
         }

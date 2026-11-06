@@ -36,16 +36,16 @@ export function ThemeMenu() {
         <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground" title={label(activeSkin)}>{label(activeSkin)}</span>
         <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent data-tron-theme-menu side="right" align="end" sideOffset={8} className="w-56 max-w-[calc(100vw-2rem)]">
-        <DropdownMenuLabel>{t("shell:theme.mode")}</DropdownMenuLabel>
+      <DropdownMenuContent data-tron-theme-menu data-tron-sidebar-surface side="right" align="end" sideOffset={8} className="w-56 max-w-[calc(100vw-2rem)]">
         <DropdownMenuRadioGroup value={colorMode} onValueChange={(mode) => setColorMode(mode as ColorMode)} aria-label={t("shell:theme.mode")}>
+          <DropdownMenuLabel>{t("shell:theme.mode")}</DropdownMenuLabel>
           {(["light", "dark", "system"] as const).map((mode) => (
             <DropdownMenuRadioItem key={mode} value={mode} closeOnClick={false}>{t(`shell:theme.modes.${mode}`)}</DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>{t("shell:theme.label")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={activeSkin.id} onValueChange={(id) => void select(id)} aria-label={t("shell:theme.label")}>
+          <DropdownMenuLabel>{t("shell:theme.label")}</DropdownMenuLabel>
           {skins.map((skin) => (
             <DropdownMenuRadioItem key={skin.id} value={skin.id} disabled={loading} closeOnClick={false} className="min-h-9 break-words">
               {label(skin)}

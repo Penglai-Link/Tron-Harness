@@ -10,6 +10,9 @@ mod configured_providers;
 pub use configured_providers::*;
 mod automatic_routing;
 mod provider_models;
+mod speech;
+mod speech_sessions;
+pub use speech::SpeechInputError;
 pub use automatic_routing::{AutomaticRouteModel, AutomaticRoutingSettingsError};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,6 +74,7 @@ pub struct ModelService {
     repository: Arc<Mutex<Box<dyn ModelRepository>>>,
     cipher: Arc<dyn VariableCipher>,
     providers: crate::application::model_provider::ModelProviderService,
+    speech_sessions: speech_sessions::SpeechSessions,
 }
 impl ModelService {
     pub fn new(
@@ -82,6 +86,7 @@ impl ModelService {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             cipher,
             providers,
+            speech_sessions: speech_sessions::SpeechSessions::default(),
         }
     }
     fn reveal_api_key(&self, value: &str) -> Result<String, ModelError> {

@@ -181,6 +181,10 @@ pub struct AgentRunContext {
     pub tool_assignment: Option<AgentToolAssignment>,
     #[serde(default)]
     pub execution_scope: AgentExecutionScope,
+    /// Per-invocation, permission-filtered topic data for external CLI agents.
+    /// Recomputed for the caller and never persisted as part of a saved run.
+    #[serde(skip)]
+    pub external_topic_snapshot: Option<String>,
     pub limits: AgentRunLimits,
     /// Shared transcript snapshot. Clones across preparation, turn state and
     /// the model call are pointer copies instead of O(history) deep copies;

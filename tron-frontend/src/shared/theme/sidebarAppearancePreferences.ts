@@ -1,10 +1,11 @@
 export interface SidebarAppearanceSettings {
+  /** Background transparency percentage: 0 is opaque, 100 is transparent. */
   opacity: number;
   blur: number;
 }
 
 export const defaultSidebarAppearanceSettings: SidebarAppearanceSettings = {
-  opacity: 100,
+  opacity: 0,
   blur: 0,
 };
 

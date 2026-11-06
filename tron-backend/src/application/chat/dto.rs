@@ -68,6 +68,8 @@ pub struct CreateChatSessionCommand {
     pub execution_mode: crate::domain::agent::ToolExecutionMode,
     pub workspace_code: Option<String>,
     pub project_code: Option<String>,
+    pub directory_code: Option<String>,
+    pub working_directory_code: Option<String>,
     pub title: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,

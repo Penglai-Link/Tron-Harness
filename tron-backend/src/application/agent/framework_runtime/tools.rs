@@ -531,8 +531,12 @@ impl fw::ToolResultProcessor for ToolAudit {
                 "Tool arguments do not match input schema. Pass object/array parameters as JSON values, not quoted JSON strings. Expected input schema: {}",
                 invocation.descriptor.input_schema
             ));
-        } else if invocation.descriptor.id == "unavailable" {
+        } else if invocation.descriptor.id == "unavailable"
+            && result.content.protocol_text() == "Tool is not exposed for this stage"
+        {
             // The native loop already rejected this call without executing it.
+            // Only refine missing-binding errors. Malformed gateway envelopes,
+            // batch validation and budget errors must retain their real cause.
             // Preserve the product distinction between an absent registration
             // and a registered/native binding which is currently unavailable.
             let diagnostic = if !state.tool_catalog.contains_key(&invocation.call.call_name) {

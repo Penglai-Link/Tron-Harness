@@ -22,13 +22,6 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "CHAT_NEW_SESSION",
-        parent_menu_code: None,
-        position: 1,
-        child_display: NavigationMenuChildDisplay::Inline,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
         menu_code: "EXPLORE_MORE",
         parent_menu_code: None,
         position: 2,
@@ -141,9 +134,16 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "CHAT_RECENTS",
+        menu_code: "CHAT_DIRECTORIES",
         parent_menu_code: None,
         position: 4,
+        child_display: NavigationMenuChildDisplay::Inline,
+    },
+    DefaultNavigationMenuTreeItem {
+        domain_code: "ADVANCED",
+        menu_code: "CHAT_RECENTS",
+        parent_menu_code: None,
+        position: 5,
         child_display: NavigationMenuChildDisplay::Inline,
     },
 ];

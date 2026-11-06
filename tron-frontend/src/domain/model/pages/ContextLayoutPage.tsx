@@ -7,6 +7,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { PageHeader } from "@/shared";
 import { contextBlockName } from "@/shared/context/contextBlockPresentation";
 import { ContextBlockHelp } from "@/shared/context/ContextBlockHelp";
+import { ContextCompressionLabel } from "@/shared/context/ContextCompressionLabel";
 import { fetchContextLayout, updateContextLayout, type ContextLayoutState } from "../api/contextLayoutApi";
 import { contextBlockColor } from "../components/context-layout/contextBlockColors";
 import { BudgetShareControl } from "../components/context-layout/BudgetShareControl";
@@ -79,7 +80,7 @@ export function ContextLayoutPage() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : t("contextLayout.saveFailed")); }
     finally { setSaving(false); }
   }
-  const columns = "grid grid-cols-[minmax(8rem,1fr)_4rem_10rem_6rem] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_4.5rem_16rem_9rem] sm:gap-5";
+  const columns = "grid grid-cols-[minmax(18rem,1fr)_4rem_9rem_10rem_6rem] items-center gap-3 xl:grid-cols-[minmax(18rem,1fr)_4.5rem_10rem_16rem_9rem] xl:gap-5";
   const tokenPreview = allocateContextShares(shares, previewWindow);
   const budgets = order.map(id => ({ id, name: blocksById.get(id)?.displayName || contextBlockName(id, t), share: shares[id] ?? 0, tokens: tokenPreview[id] ?? 0 }));
 
@@ -96,10 +97,11 @@ export function ContextLayoutPage() {
       {!loading && order.length > 0 ? <>
         <ContextBudgetPreview budgets={budgets} windowTokens={previewWindow} onWindowChange={setPreviewWindow} highlightedId={highlightedId} onHighlightChange={setHighlightedId} />
         <div className="overflow-x-auto">
-          <section aria-label={t("contextLayout.title")} className="min-w-[30rem] overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
+          <section aria-label={t("contextLayout.title")} className="min-w-[54rem] overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
             <div className={`${columns} border-b border-[var(--color-outline-variant)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]`}>
               <span className="pl-6">{t("contextLayout.blockColumn")}</span>
               <span className="text-center">{t("contextLayout.updateMode")}</span>
+              <span className="flex items-center justify-center gap-1">{t("contextLayout.compressionColumn")} <InfoTooltip ariaLabel={t("contextLayout.compressionColumn")}>{t("contextLayout.compressionHelp")}</InfoTooltip></span>
               <span className="flex items-center justify-end gap-1">{t("contextLayout.allocationColumn")} <InfoTooltip ariaLabel={t("contextLayout.allocationColumn")}>{t("contextLayout.allocationHelp")}</InfoTooltip></span>
               <span className="text-right">{t("contextLayout.estimatedTokens")}</span>
             </div>
@@ -145,6 +147,7 @@ export function ContextLayoutPage() {
                     {block?.unavailable ? <Button variant="ghost" size="icon-xs" disabled={saving} aria-label={t("contextLayout.removeUnavailable", { name })} onClick={() => removeBlock(id)}><Trash2 /></Button> : null}
                   </div>
                   <span className="text-center text-xs text-[var(--color-on-surface-variant)]">{t(`contextLayout.updateModes.${block?.updateMode ?? "Unspecified"}`)}</span>
+                  <ContextCompressionLabel name={name} compression={block?.compression} unavailable={block?.unavailable} />
                   <BudgetShareControl value={shares[id] ?? null} disabled={saving} label={t("contextLayout.ratioLimitFor", { name })} placeholder="0"
                     onChange={value => { setShares(current => ({ ...current, [id]: value ?? 0 })); setError(""); setNotice(""); }} />
                   <span className="text-right text-sm tabular-nums text-[var(--color-on-surface-variant)]" title={t("contextLayout.estimatedTokensHelp")}>{number.format(tokenPreview[id] ?? 0)}</span>

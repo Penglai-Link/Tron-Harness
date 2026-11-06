@@ -19,6 +19,17 @@ pub struct ContextProviderPolicy {
     pub min_gain_tokens: usize,
 }
 impl ContextProviderPolicy {
+    /// Presentation travels with the configured policy, never with the host UI.
+    pub fn compression_metadata(&self) -> eliteforge_agent_core::ContextCompressionMetadata {
+        use eliteforge_agent_core::ContextCompressionMetadata as Metadata;
+        match self.strategy {
+            ContextReductionStrategy::Keep => Metadata::keep(),
+            ContextReductionStrategy::Bound => Metadata::bound(),
+            ContextReductionStrategy::Semantic => Metadata::semantic(),
+            ContextReductionStrategy::Checkpoint => Metadata::history(),
+        }
+    }
+
     fn new(strategy: ContextReductionStrategy, target: u32) -> Self {
         Self {
             strategy,
@@ -77,6 +88,7 @@ impl Default for ContextProvidersConfig {
                 "skills.catalog",
                 "page_context",
                 "application_context",
+                "topic_memo",
                 "current_session_working_state",
                 "knowledge_base",
                 "dude_environment",
@@ -86,7 +98,7 @@ impl Default for ContextProvidersConfig {
             .to_vec(),
             shares: [
                 ("seed_prompt_prefix", 300),
-                ("current_session_history", 7500),
+                ("current_session_history", 7300),
                 ("conversation_history_summary", 200),
                 ("runtime_identity", 200),
                 ("dude_onboarding", 100),
@@ -95,6 +107,7 @@ impl Default for ContextProvidersConfig {
                 ("skills.catalog", 200),
                 ("page_context", 50),
                 ("application_context", 400),
+                ("topic_memo", 200),
                 ("current_session_working_state", 200),
                 ("knowledge_base", 400),
                 ("dude_environment", 50),

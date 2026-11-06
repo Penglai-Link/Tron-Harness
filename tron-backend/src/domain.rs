@@ -3,6 +3,8 @@ pub mod app;
 pub mod auth;
 pub mod automation;
 pub mod chat;
+pub mod connector;
+pub mod directory;
 pub mod graph;
 pub mod mcp;
 pub mod model;
@@ -16,6 +18,7 @@ pub mod resource;
 pub mod short_term_memory;
 pub mod skill;
 pub mod task;
+pub mod topic;
 pub mod variable;
 pub mod workspace;
 

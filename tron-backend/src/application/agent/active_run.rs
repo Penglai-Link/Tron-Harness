@@ -118,6 +118,36 @@ pub struct ActiveRunGuard {
     session_code: String,
 }
 
+/// Serializes a multi-session mutation with all run admission.
+pub(crate) struct ActiveRunAdmission<'a> {
+    registry: &'a ActiveRunRegistry,
+    _guard: std::sync::MutexGuard<'a, ()>,
+}
+
+impl ActiveRunAdmission<'_> {
+    pub(crate) fn ensure_idle(&self, session_code: &str) -> Result<(), ActiveRunError> {
+        if self.registry.inner.archived_sessions.lock().map_err(|_| ActiveRunError::RegistryUnavailable)?.contains(session_code) {
+            return Err(ActiveRunError::SessionArchived);
+        }
+        if self.registry.inner.entries.lock().map_err(|_| ActiveRunError::RegistryUnavailable)?.contains_key(session_code)
+            || self.registry.group_snapshot(session_code)?.is_some() {
+            return Err(ActiveRunError::AlreadyActive);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn retire(&self, sessions: &[String]) -> Result<(), ActiveRunError> {
+        let mut retired = self.registry.inner.archived_sessions.lock().map_err(|_| ActiveRunError::RegistryUnavailable)?;
+        retired.extend(sessions.iter().cloned());
+        Ok(())
+    }
+
+    pub(crate) fn reactivate(&self, session_code: &str) -> Result<(), ActiveRunError> {
+        self.registry.inner.archived_sessions.lock().map_err(|_| ActiveRunError::RegistryUnavailable)?.remove(session_code);
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct ActiveRunControl {
     entry: Arc<ActiveRunEntry>,
@@ -130,6 +160,26 @@ pub struct ActiveRunCancellation {
 impl ActiveRunRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn lock_admission(&self) -> Result<ActiveRunAdmission<'_>, ActiveRunError> {
+        let guard = self.inner.admission.lock().map_err(|_| ActiveRunError::RegistryUnavailable)?;
+        Ok(ActiveRunAdmission { registry: self, _guard: guard })
+    }
+
+    /// Hold admission while changing session execution scope or placement.
+    /// This closes the gap between checking for a run and persisting a change.
+    pub(crate) fn idle_session_guard(&self, session_code: &str) -> Result<std::sync::MutexGuard<'_, ()>, ActiveRunError> {
+        let guard = self.inner.admission.lock().map_err(|_| ActiveRunError::RegistryUnavailable)?;
+        if self.inner.archived_sessions.lock().map_err(|_| ActiveRunError::RegistryUnavailable)?.contains(session_code) {
+            return Err(ActiveRunError::SessionArchived);
+        }
+        if self.inner.entries.lock().map_err(|_| ActiveRunError::RegistryUnavailable)?.contains_key(session_code)
+            || self.group_snapshot(session_code)?.is_some()
+        {
+            return Err(ActiveRunError::AlreadyActive);
+        }
+        Ok(guard)
     }
 
     pub fn register(

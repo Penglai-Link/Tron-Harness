@@ -3,9 +3,17 @@ import { knowledgeQuality } from "./knowledgeQuality";
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
-  automaticRouters: { modelCode: "模型标识", dimensions: "{{value}} 维", "routeHelp": {"Chat": "智能体对话模型", "TextGeneration": "为文本生成任务选择模型，应选择支持关闭思考的模型。", "Embedding": "按输入模态选择兼容模型，同一逻辑模型和版本的供应商绑定轮询。索引固定模型、维度与预处理约定。", "Rerank": "同时检查查询与候选内容的模态，选择兼容模型，同一逻辑模型的供应商绑定轮询。"}, "title": "自动路由器", "refresh": "刷新", "loading": "加载中…", "save": "保存", "saved": "路由来源已保存，新一轮运行将使用当前配置", "failed": "无法读取或保存路由配置", "source": "数据来源", "providers": "供应商", "models": "模型", "choose": "搜索并选择（可多选）", "unavailable": "已不可用：{{id}}", "empty": "没有可用候选模型", "candidates": "候选模型（{{count}}）", "help": "默认按模型类型纳入所有已启用供应商的可用模型。可限定供应商或模型；空选择会停用该路由的候选。对话还受 Agent 授权和上下文长度约束。运行中的选择保持不变。索引创建后会固定向量模型和维度。", "modes": {"AllProviders": "所有供应商（自动）", "SelectedProviders": "指定供应商", "SelectedModels": "指定模型"}, "kinds": {"Chat": "对话", "TextGeneration": "文本生成", "Embedding": "向量", "Rerank": "重排"}},
+  voiceInput: {"start": "开始语音输入", "stop": "结束录音并转写", "requesting": "正在请求麦克风…", "transcribing": "正在识别…", "recording": "录音 {{seconds}} 秒", "cancel": "取消语音输入（Esc）", "permissionDenied": "无法使用麦克风，请在浏览器中允许麦克风访问后重试。", "noMicrophone": "未找到可用的麦克风。", "unsupported": "当前浏览器无法录音，请使用支持录音的浏览器并通过 HTTPS 或 localhost 访问。", "failed": "录音失败，请重试。", "empty": "未识别到语音，请重试。", "tooLarge": "录音超过 8 MB，请缩短录音。"},
+  automaticRouters: { modelCode: "模型标识", dimensions: "{{value}} 维", "routeHelp": {"SpeechRecognition": "录音转写为文本，候选展示已启用的真实语音识别模型。Person-AI 由服务端从可用语音模型中选取；指定模型时需包含其全部可用语音模型。", "Realtime": "为实时音频会话选择已启用的实时模型。", "ImageGeneration": "为图像生成选择已启用的图像模型。", "Chat": "智能体对话模型", "TextGeneration": "为文本生成任务选择模型，应选择支持关闭思考的模型。", "Embedding": "按输入模态选择兼容模型，同一逻辑模型和版本的供应商绑定轮询。索引固定模型、维度与预处理约定。", "Rerank": "同时检查查询与候选内容的模态，选择兼容模型，同一逻辑模型的供应商绑定轮询。"}, "title": "自动路由器", "refresh": "刷新", "loading": "加载中…", "save": "保存", "saved": "路由来源已保存，新一轮运行将使用当前配置", "failed": "无法读取或保存路由配置", "source": "数据来源", "providers": "供应商", "models": "模型", "choose": "搜索并选择（可多选）", "unavailable": "已不可用：{{id}}", "empty": "没有可用候选模型", "candidates": "候选模型（{{count}}）", "help": "默认按模型类型纳入所有已启用供应商的可用模型。可限定供应商或模型；空选择会停用该路由的候选。对话还受 Agent 授权和上下文长度约束。运行中的选择保持不变。索引创建后会固定向量模型和维度。", "modes": {"AllProviders": "所有供应商（自动）", "SelectedProviders": "指定供应商", "SelectedModels": "指定模型"}, "kinds": {"SpeechRecognition": "语音识别", "Realtime": "实时模型", "ImageGeneration": "图像生成", "Chat": "对话", "TextGeneration": "文本生成", "Embedding": "向量", "Rerank": "重排"}},
   contextLayout: {
     updateMode: "更新方式",
+    compressionColumn: "压缩策略",
+    compressionHelp: "由上下文提供方声明，说明预算不足时如何处理内容。此处只读展示，调整占比不会更改策略。",
+    compressionFor: "{{name}}的压缩策略",
+    compressionUnspecified: "未声明",
+    compressionUnspecifiedHelp: "提供方尚未声明压缩策略。",
+    compressionUnavailable: "不可用",
+    compressionUnavailableHelp: "此上下文提供方尚未加载，无法获取当前压缩策略。",
     updateModes: { Fixed: "固定", Append: "追加", Replace: "替换", Unspecified: "未声明" },
     updateModeDescriptions: {
       Fixed: "固定：一次运行内保持不变，新的运行会重新加载。",
@@ -1768,6 +1776,7 @@ export const pages = {
       approvalWaiting: "等待同批确认",
       approvalRetry: "重试提交",
       approvalChange: "修改决定",
+      responseSubmitted: "已提交",
       approved: "已批准",
       rejected: "已拒绝",
       approve: "批准",
@@ -1814,7 +1823,6 @@ export const pages = {
       },
       sidebar: {
         sessions: "会话",
-        newSession: "新建会话",
         noSessions: "此标签下暂无会话",
         expandHistory: "展开会话历史",
         collapseHistory: "收起会话历史",
@@ -3072,10 +3080,9 @@ export const pages = {
         description: "切换到下一个工作区标签页。",
         label: "切换到右侧标签页",
       },
-      newSession: {
-        description: "新建一个聊天会话。",
-        label: "新建会话",
-      },
+      newTopic: { label: "新建主题", description: "打开主题创建对话框。" },
+      newDirectory: { label: "添加目录", description: "选择并添加工作目录。" },
+      newSession: { label: "新建随聊", description: "打开当前空间的随聊草稿。" },
       openNotifications: {
         description: "打开通知页面。",
         label: "打开通知",
@@ -3088,6 +3095,7 @@ export const pages = {
         description: "收起或展开下方面板。",
         label: "收起/展开下方面板",
       },
+      toggleVoiceInput: { label: "开始/结束语音输入", description: "在当前对话框录音，再次按下结束并转写。需要语音识别路由有可用模型。" },
       toggleAgentWindow: {
         description: "打开或关闭右上角的临时 Dude 对话窗。",
         label: "打开/关闭临时Dude对话",

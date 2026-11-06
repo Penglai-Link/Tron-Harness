@@ -63,6 +63,8 @@ pub struct ChatService {
     pub(super) event_bus: EventBusHandle,
     resources: Option<ResourceService>,
     projects: Option<ProjectService>,
+    directories: Option<crate::application::directory::DirectoryService>,
+    topics: Option<crate::application::topic::TopicService>,
     skills: Option<crate::application::skill::SkillRegistryService>,
     execution_memory: Option<crate::application::short_term_memory::ShortTermMemoryService>,
     id_provider: Arc<dyn SnowflakeIdProvider>,
@@ -115,6 +117,8 @@ impl ChatService {
             event_bus: EventBusHandle::disabled(),
             resources: None,
             projects: None,
+            directories: None,
+            topics: None,
             execution_memory: None,
             skills: None,
             id_provider,
@@ -134,6 +138,8 @@ impl ChatService {
             event_bus: self.event_bus.clone(),
             resources: self.resources.clone(),
             projects: self.projects.clone(),
+            directories: self.directories.clone(),
+            topics: self.topics.clone(),
             execution_memory: self.execution_memory.clone(),
             skills: self.skills.clone(),
             id_provider,
@@ -154,6 +160,16 @@ impl ChatService {
 
     pub fn with_projects(mut self, projects: ProjectService) -> Self {
         self.projects = Some(projects);
+        self
+    }
+
+    pub fn with_directories(mut self, directories: crate::application::directory::DirectoryService) -> Self {
+        self.directories = Some(directories);
+        self
+    }
+
+    pub fn with_topics(mut self, topics: crate::application::topic::TopicService) -> Self {
+        self.topics = Some(topics);
         self
     }
 

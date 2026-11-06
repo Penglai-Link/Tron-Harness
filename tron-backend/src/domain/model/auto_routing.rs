@@ -6,13 +6,19 @@ pub enum AutoRouterKind {
     TextGeneration,
     Embedding,
     Rerank,
+    SpeechRecognition,
+    Realtime,
+    ImageGeneration,
 }
 impl AutoRouterKind {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 7] = [
         Self::Chat,
         Self::TextGeneration,
         Self::Embedding,
         Self::Rerank,
+        Self::SpeechRecognition,
+        Self::Realtime,
+        Self::ImageGeneration,
     ];
     pub fn code(self) -> &'static str {
         match self {
@@ -20,6 +26,9 @@ impl AutoRouterKind {
             Self::TextGeneration => "TextGeneration",
             Self::Embedding => "Embedding",
             Self::Rerank => "Rerank",
+            Self::SpeechRecognition => "SpeechRecognition",
+            Self::Realtime => "Realtime",
+            Self::ImageGeneration => "ImageGeneration",
         }
     }
     pub fn model_type(self) -> ModelType {
@@ -27,6 +36,9 @@ impl AutoRouterKind {
             Self::Chat | Self::TextGeneration => ModelType::Text,
             Self::Embedding => ModelType::TextEmbedding,
             Self::Rerank => ModelType::TextRerank,
+            Self::SpeechRecognition => ModelType::SpeechRecognition,
+            Self::Realtime => ModelType::RealtimeSpeech,
+            Self::ImageGeneration => ModelType::Image,
         }
     }
 }

@@ -19,6 +19,8 @@ import { OPEN_CHAT_CONTEXT_EVENT } from "@/shared/lib/shellEvents";
 import { requestApi } from "@/shared/api/httpClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import "./AgentChatWindow.css";
+import { ChatSpeechButton } from "./ChatSpeechButton";
+import { useTabVisibility } from "@/components/editable-tabs";
 import { ChatAttachmentButton } from "./ChatAttachmentButton";
 
 const ChatContextInspector = lazy(() => import("./ChatContextInspector").then(module => ({ default: module.ChatContextInspector })));
@@ -32,6 +34,7 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
   attachmentDownloader?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   submitterRef?: Ref<AgentChatSubmitter>;
   knowledgeBaseId?: string;
+  speechScope?: string;
   config: ChatClientConfig;
   initialSession?: ChatSession | null;
   pendingAttachments?: ChatMessageAttachment[];
@@ -42,9 +45,30 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
 }
 
 /** Product context adapter only. Rendering, streaming, queues, stop and replay belong to Agent UI. */
-export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, config, knowledgeBaseId, initialSession, pendingAttachments,
-  onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, footerAddon, ...props }: AgentChatWindowProps) {
+export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, config, knowledgeBaseId, speechScope, initialSession, pendingAttachments,
+  onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, footerAddon, draft: controlledDraft, onDraftChange, composerRef: hostComposerRef, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
+  const tabVisible = useTabVisibility();
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const [internalDraft, setInternalDraft] = useState("");
+  const draft = controlledDraft ?? internalDraft;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const changeDraft = useCallback((value: string) => {
+    draftRef.current = value;
+    if (controlledDraft === undefined) setInternalDraft(value);
+    onDraftChange?.(value);
+  }, [controlledDraft, onDraftChange]);
+  const setComposerRef = useCallback((element: HTMLTextAreaElement | null) => {
+    composerRef.current = element;
+    if (typeof hostComposerRef === "function") return hostComposerRef(element);
+    if (hostComposerRef) hostComposerRef.current = element;
+  }, [hostComposerRef]);
+  const appendTranscript = useCallback((text: string) => {
+    const current = draftRef.current;
+    changeDraft(`${current}${current && !/\s$/.test(current) ? "\n" : ""}${text}`);
+    composerRef.current?.focus();
+  }, [changeDraft]);
   const runtimeSubmitterRef = useRef<ChatRuntimeSubmitter | null>(null);
   const [activeSessionCode, setActiveSessionCode] = useState<string | null>(initialSession?.sessionCode ?? null);
   const turnDeletion = useDeleteTurnConfirmation(activeSessionCode);
@@ -113,6 +137,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     approvalWaiting: t("chat.userInput.approvalWaiting"),
     approvalRetry: t("chat.userInput.approvalRetry"),
     approvalChange: t("chat.userInput.approvalChange"),
+    responseSubmitted: t("chat.userInput.responseSubmitted"),
     approved: t("chat.userInput.approved"),
     rejected: t("chat.userInput.rejected"),
     reject: t("chat.userInput.reject"), continuing: t("chat.userInput.continuing"),
@@ -151,16 +176,20 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   }, [activeSession, config.floating]);
   const handleAttachments = useCallback((value: Ui.ChatMessageAttachment[]) =>
     onPendingAttachmentsChange?.(value.map(fromUiAttachment)), [onPendingAttachmentsChange]);
+  // Host callbacks may be inline. Their identity must not trigger another
+  // runtime-state notification and a host refresh/render feedback loop.
+  const runStateCallback = useRef(onRunStateChange);
+  runStateCallback.current = onRunStateChange;
   const handleRun = useCallback((value: Ui.ChatRuntimeRunState) => {
     setMetricsRunSessionCode(value.active ? value.sessionId ?? null : null);
     if (wasRunActiveRef.current && !value.active && value.sessionId) {
       void refreshComposerMetrics(value.sessionId);
     }
     wasRunActiveRef.current = value.active;
-    onRunStateChange?.({
+    runStateCallback.current?.({
       loading: value.loading, active: value.active, runCode: value.runId, sessionCode: value.sessionId, supportsSteer: value.supportsSteer, operationKind: value.operationKind,
     });
-  }, [onRunStateChange, refreshComposerMetrics]);
+  }, [refreshComposerMetrics]);
   const createInput = useCallback((value: Ui.ChatSession, content: string, files: Ui.ChatMessageAttachment[]) => {
     const hostSession = fromUiSession(value);
     const hostFiles = files.map(fromUiAttachment);
@@ -172,8 +201,11 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     return input ? toUiInput(input) : null;
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
   return <>{turnDeletion.dialog}<ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
+    draft={draft} onDraftChange={changeDraft} composerRef={setComposerRef}
     renderAttachmentControl={props.renderAttachmentControl ?? ((control) => <ChatAttachmentButton {...control} />)}
-    footerAddon={<>{footerAddon}<ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /></>}
+    footerAddon={<>{footerAddon}<ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /><ChatSpeechButton composer={composerRef}
+      active={tabVisible && !config.disabledInput && (!config.floating || !props.windowState || (props.windowState.open && !props.windowState.collapsed))}
+      scope={`${config.workspaceCode ?? ""}:${speechScope ?? initialSession?.sessionCode ?? activeSessionCode ?? "draft"}`} floating={Boolean(config.floating)} onTranscript={appendTranscript} /></>}
     confirmDeleteTurn={props.confirmDeleteTurn ?? turnDeletion.confirm}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,

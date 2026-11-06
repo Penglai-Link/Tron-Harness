@@ -1,11 +1,13 @@
-import { ChevronDown, Plus } from "lucide-react";
+import { CREATE_TOPIC_SHORTCUT_EVENT, ADD_DIRECTORY_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
+import { useCreateChatTab } from "./hooks/useCreateChatTab";
+import { useDirectoryPicker } from "./hooks/useDirectoryPicker";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
-import { Create } from "./components/Create";
 import SessionGroup from "./components/SessionGroup";
 import RecentSessionGroup from "./components/RecentSessionGroup";
+import { DirectorySection } from "./components/DirectorySection";
 import { ProjectCreateDialog } from "./components/ProjectCreateDialog";
 import { useChatSidebarData } from "./hooks/useChatSidebarData";
 import { usePinnedProjectCodes } from "./hooks/usePinnedProjectCodes";
@@ -14,8 +16,7 @@ import type { ProjectRecord } from "@/domain/project";
 import { CHAT_PANEL_WIDGET_KEYS } from "@/shared/constants/chatPanelMenu";
 
 import { Button } from "@/components/ui/button";
-import ActionButton from "./components/ActionButton";
-import Item from "./components/Item";
+import { SectionHeader } from "./components/SectionHeader";
 
 const sidebarListPageSize = 5;
 
@@ -45,7 +46,9 @@ export function ChatNavigationProvider({
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const workspaceCode =
     (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
-  const { projects, loading, recentSessions, sessionsByProject } =
+  const { create: createQuickChat } = useCreateChatTab(workspaceCode);
+  const directoryPicker = useDirectoryPicker(workspaceCode);
+  const { projects, loading, recentSessions, sessionsByProject, sessionsByDirectory } =
     useChatSidebarData(workspaceCode);
   const [runningSessionCode, setRunningSessionCode] = useState("");
   const [projectListExpanded, setProjectListExpanded] = useState(true);
@@ -84,50 +87,28 @@ export function ChatNavigationProvider({
         handleRunStateChange
       );
   }, []);
-  const selectedProject = orderedProjects.find(
-    (project) => project.projectCode === selectedProjectCode
-  );
-  const createTargetProject = selectedProject;
-
+  useEffect(() => {
+    const createTopic = () => { if (workspaceCode) setProjectCreateOpen(true); };
+    const addDirectory = () => { void directoryPicker.choose(); };
+    window.addEventListener(CREATE_TOPIC_SHORTCUT_EVENT, createTopic);
+    window.addEventListener(ADD_DIRECTORY_SHORTCUT_EVENT, addDirectory);
+    return () => {
+      window.removeEventListener(CREATE_TOPIC_SHORTCUT_EVENT, createTopic);
+      window.removeEventListener(ADD_DIRECTORY_SHORTCUT_EVENT, addDirectory);
+    };
+  }, [workspaceCode, directoryPicker.choose]);
   function renderMenuItem(menu: ChatWidgetMenu) {
-    if (menu.pageCode === CHAT_PANEL_WIDGET_KEYS.newSession) {
-      return (
-        <Item
-          key={menu.menuCode}
-          left={
-            <Create
-              label={menu.label}
-              project={createTargetProject}
-              workspaceCode={workspaceCode}
-            />
-          }
-        />
-      );
-    }
     if (menu.pageCode === CHAT_PANEL_WIDGET_KEYS.projects) {
       return (
         <div key={menu.menuCode} className="flex flex-col gap-1">
-          <Item
-            onClick={() => setProjectListExpanded((value) => !value)}
-            className="group/projects flex items-center gap-1 rounded px-2 hover:bg-sidebar-accent"
-            left={<span className="opacity-50">{menu.label}</span>}
-            right={
-              <div className="flex items-center gap-2">
-                <ActionButton
-                  className="opacity-0 transition-opacity group-hover/projects:opacity-100"
-                  onClick={() => setProjectCreateOpen(true)}
-                  aria-label={t("common:actions.create", "Create")}
-                ><Plus size={16} aria-hidden="true" /></ActionButton>
-                <ActionButton
-                  className={
-                    projectListExpanded
-                      ? "transition-transform"
-                      : "-rotate-90 transition-transform"
-                  }
-                  aria-label={t(projectListExpanded ? "common:actions.collapse" : "common:actions.expand", projectListExpanded ? "Collapse" : "Expand")}
-                ><ChevronDown size={16} aria-hidden="true" /></ActionButton>
-              </div>
-            }
+          <SectionHeader
+            label={menu.label}
+            open={projectListExpanded}
+            onToggle={() => setProjectListExpanded((value) => !value)}
+            onCreate={() => setProjectCreateOpen(true)}
+            createDisabled={!workspaceCode}
+            createLabel={t("pages:settingsShortcuts.shortcuts.newTopic.label")}
+            shortcutAction="newTopic"
           />
           {projectListExpanded && orderedProjects.length > 0 ? (
             <div className="space-y-0.5" aria-busy={loading}>
@@ -176,10 +157,19 @@ export function ChatNavigationProvider({
         </div>
       );
     }
+    if (menu.pageCode === CHAT_PANEL_WIDGET_KEYS.directories) {
+      return <DirectorySection key={menu.menuCode} label={menu.label} workspaceCode={workspaceCode}
+        onAdd={() => void directoryPicker.choose()} adding={directoryPicker.saving}
+        sessions={sessionsByDirectory} runningSessionCode={runningSessionCode} activeSessionCode={activeSessionCode}
+        onNavigate={navigateToPath} pinnedSessionCodes={pinnedSessionCodes}
+        onToggleSessionPin={togglePinnedSession} onRemoveSessionPin={removePinnedSession} />;
+    }
     if (menu.pageCode === CHAT_PANEL_WIDGET_KEYS.recents) {
       return (
         <RecentSessionGroup
           label={menu.label}
+          onCreate={createQuickChat}
+          canCreate={Boolean(workspaceCode)}
           key={menu.menuCode}
           runningSessionCode={runningSessionCode}
           activeSessionCode={activeSessionCode}
@@ -209,6 +199,7 @@ export function ChatNavigationProvider({
         }}
         onSaved={(project) => {
           setSelectedProjectCode(project.projectCode);
+          setProjectListExpanded(true);
           window.dispatchEvent(new Event("tron:project-created"));
         }}
       />

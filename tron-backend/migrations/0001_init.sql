@@ -372,6 +372,44 @@ CREATE TABLE projects (
     UNIQUE (workspace_code, name)
 );
 
+CREATE TABLE directories (
+    directory_code TEXT PRIMARY KEY,
+    workspace_code TEXT NOT NULL,
+    execution_host TEXT NOT NULL,
+    canonical_path TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+    UNIQUE (workspace_code, execution_host, canonical_path)
+);
+
+CREATE TABLE connector_connections (
+    connection_code TEXT PRIMARY KEY,
+    workspace_code TEXT NOT NULL,
+    owner_user_code TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    encrypted_credential TEXT NOT NULL,
+    UNIQUE (workspace_code, owner_user_code, name)
+);
+
+CREATE TABLE topic_memos (
+    project_code TEXT PRIMARY KEY REFERENCES projects(project_code) ON DELETE CASCADE,
+    notes TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0)
+);
+
+CREATE TABLE topic_references (
+    reference_code TEXT PRIMARY KEY,
+    project_code TEXT NOT NULL REFERENCES projects(project_code) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('Directory', 'Repository', 'Resource', 'Task', 'Link')),
+    target_code TEXT NOT NULL,
+    connection_code TEXT NOT NULL DEFAULT '',
+    label TEXT NOT NULL,
+    url TEXT,
+    UNIQUE (project_code, kind, target_code, connection_code)
+);
+
 CREATE TABLE prompt_parameters (
     prompt_code TEXT NOT NULL REFERENCES prompts(prompt_code) ON DELETE CASCADE,
     parameter_name TEXT NOT NULL,
@@ -1335,10 +1373,10 @@ INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, 
     (734510000000000020, 'SERVER_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.servers', NULL, 'Server', '管理外部服务器连接及其配置。', 'Manage external server connections and their configuration.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000021, 'SERVER_ACCOUNT_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.serverAccounts', NULL, 'UserRound', '维护服务器连接可复用的账号和凭据。', 'Maintain reusable accounts and credentials for server connections.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', '管理平台或工作区可复用的变量。', 'Manage reusable platform or workspace variables.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', '会话区域的分组入口，包含新会话、主题和随聊。', 'The chat section, containing new chat, topics, and quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
-    (734550000000000002, 'CHAT_NEW_SESSION', 'BuiltIn', 'Widget', 'chat.newSession', NULL, 'SquarePen', '开始一个新的会话。', 'Start a new conversation.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
+    (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', '会话区域的分组入口，包含主题、目录和随聊。', 'The chat section, containing topics, directories, and quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000003, 'CHAT_PROJECTS', 'BuiltIn', 'Widget', 'chat.projects', NULL, 'FolderKanban', '查看主题及其关联的会话。', 'Browse topics and their associated conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000004, 'CHAT_RECENTS', 'BuiltIn', 'Widget', 'chat.recents', NULL, 'History', '查看并继续随聊。', 'View and continue quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
+    (734550000000000005, 'CHAT_DIRECTORIES', 'BuiltIn', 'Widget', 'chat.directories', NULL, 'Folder', '查看目录及其会话。', 'Browse directories and their conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734560000000000001, 'DUDES', 'BuiltIn', 'Internal', 'dudes.index', NULL, 'Bot', '与 Dude 助手交互，并查看其工作和历史记录。', 'Interact with Dude assistants and review their work and history.', 1, '2026-10-11T00:00:00Z', '2026-10-11T00:00:00Z'),
     (734560000000000002, 'NOTIFICATIONS', 'BuiltIn', 'Internal', 'notifications.index', NULL, 'Bell', '查看消息通知并处理需要关注的事项。', 'Review notifications and handle items that need attention.', 1, '2026-10-11T00:00:00Z', '2026-10-11T00:00:00Z'),
     (734570000000000001, 'EXPLORE_MORE', 'BuiltIn', 'Group', NULL, NULL, 'Ellipsis', '收纳不常用或可选的菜单入口。', 'Collect optional or less frequently used menu entries.', 1, '2026-10-13T00:00:00Z', '2026-10-13T00:00:00Z');
@@ -1372,12 +1410,12 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734530000000000044, 734510000000000022, 'en-US', 'Variables'),
     (734550100000000001, 734550000000000001, 'zh-CN', '会话'),
     (734550100000000002, 734550000000000001, 'en-US', 'Chats'),
-    (734550100000000003, 734550000000000002, 'zh-CN', '新会话'),
-    (734550100000000004, 734550000000000002, 'en-US', 'New Chat'),
     (734550100000000005, 734550000000000003, 'zh-CN', '主题'),
     (734550100000000006, 734550000000000003, 'en-US', 'Topics'),
     (734550100000000007, 734550000000000004, 'zh-CN', '随聊'),
     (734550100000000008, 734550000000000004, 'en-US', 'Quick Chats'),
+    (734550100000000009, 734550000000000005, 'zh-CN', '目录'),
+    (734550100000000010, 734550000000000005, 'en-US', 'Directories'),
     (734560100000000001, 734560000000000001, 'zh-CN', '好兄弟'),
     (734560100000000002, 734560000000000001, 'en-US', 'Dude'),
     (734560100000000003, 734560000000000002, 'zh-CN', '通知'),
@@ -1390,7 +1428,6 @@ INSERT INTO navigation_menu_trees (id, tree_code, tree_type, domain_id, built_in
 
 INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) VALUES
     (734560200000000001, 734500000000000001, 734560000000000001, NULL, 0, 'Inline'),
-    (734550200000000002, 734500000000000001, 734550000000000002, NULL, 1, 'Inline'),
     (734570200000000001, 734500000000000001, 734570000000000001, NULL, 2, 'Flyout'),
     (734560200000000002, 734500000000000001, 734560000000000002, 734570200000000001, 0, 'Inline'),
     (734520000000000001, 734500000000000001, 734510000000000001, 734570200000000001, 1, 'Inline'),
@@ -1407,7 +1444,8 @@ INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, po
     (734520000000000020, 734500000000000001, 734510000000000020, 734520000000000017, 2, 'Inline'),
     (734520000000000021, 734500000000000001, 734510000000000021, 734520000000000017, 3, 'Inline'),
     (734550200000000003, 734500000000000001, 734550000000000003, NULL, 3, 'Inline'),
-    (734550200000000004, 734500000000000001, 734550000000000004, NULL, 4, 'Inline');
+    (734550200000000005, 734500000000000001, 734550000000000005, NULL, 4, 'Inline'),
+    (734550200000000004, 734500000000000001, 734550000000000004, NULL, 5, 'Inline');
 
 -- task_flows
 INSERT INTO task_flows (flow_code, name, created_at, updated_at) VALUES

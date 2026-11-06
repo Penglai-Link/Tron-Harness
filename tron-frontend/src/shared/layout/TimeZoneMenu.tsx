@@ -53,6 +53,7 @@ export function TimeZoneMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         data-tron-timezone-menu
+        data-tron-sidebar-surface
         side="right"
         align="end"
         sideOffset={8}

@@ -479,6 +479,11 @@ impl ShortTermMemoryService {
                 .unwrap_or(self.framework_context_config().goal_loop.max_runs);
             let goal = db
                 .transaction(async {
+                    let session = framework.sessions().map_err(|e| fw::StateError::Backend(e.to_string()))?
+                        .get(&command.session_code).await?;
+                    if session.status != fw::SessionStatus::Active {
+                        return Err(fw::StateError::Conflict);
+                    }
                     let goal = goals.set(goal).await?;
                     let mut event = fw::SessionEvent::new(
                         &command.session_code,
@@ -530,14 +535,16 @@ impl ShortTermMemoryService {
     ) -> Result<ShortTermMemoryGoalView, ShortTermMemoryError> {
         blocking(async {
             let goal = self.resolve_goal(&command).await?;
-            let result = self
-                .framework()
-                .await?
-                .goals()
-                .map_err(|_| ShortTermMemoryError::StorageFailure)?
-                .transition(&goal.id, goal.revision, status, None)
-                .await
-                .map_err(error)?;
+            let framework = self.framework().await?;
+            let goals = framework.goals().map_err(|_| ShortTermMemoryError::StorageFailure)?;
+            let sessions = framework.sessions().map_err(|_| ShortTermMemoryError::StorageFailure)?;
+            let db = self.host.shared_database().await.map_err(error)?;
+            let result = db.transaction(async {
+                if sessions.get(&command.session_code).await?.status != fw::SessionStatus::Active {
+                    return Err(fw::StateError::Conflict);
+                }
+                goals.transition(&goal.id, goal.revision, status, None).await
+            }).await.map_err(error)?;
             self.view(result).await
         })
     }

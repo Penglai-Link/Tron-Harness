@@ -15,6 +15,8 @@ pub use sqlite::SqliteAgentRunRepository;
 pub use sqlite::SqliteAppRepository;
 pub use sqlite::SqliteAutomationRepository;
 pub use sqlite::SqliteChatRepository;
+pub use sqlite::SqliteConnectionRepository;
+pub use sqlite::SqliteDirectoryRepository;
 pub use sqlite::SqliteMcpRepository;
 pub use sqlite::SqliteMemoryWorkDomainRepository;
 pub use sqlite::SqliteModelRepository;
@@ -25,6 +27,7 @@ pub use sqlite::SqliteRagRepository;
 pub use sqlite::SqliteResourceRepository;
 pub use sqlite::SqliteSkillRegistryRepository;
 pub use sqlite::SqliteTaskRepository;
+pub use sqlite::SqliteTopicRepository;
 pub use sqlite::SqliteVariableRepository;
 pub use sqlite::SqliteWorkspaceRepository;
 

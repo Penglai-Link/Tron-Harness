@@ -1,4 +1,4 @@
-import type { ChatAnnotation, ToolActionSummary } from "@eliteforge/agent-ui-chat-core";
+import type { A2uiActionInput, A2uiActionMetadata, A2uiState, ChatAnnotation, ChatHistoryLabels, HistoryQuery, MessageProvenance, SessionHistory, ToolActionSummary } from "./transportTypes";
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
 export type ToolExecutionMode = "CONTROLLED" | "AUTO_APPROVE";
 export type ChatSessionSourceType = "MANUAL" | "TASK" | "AUTOMATION" | "TERMINAL";
@@ -79,7 +79,7 @@ export interface ChatMessage {
   role: ChatMessageRole;
   channel: ChatMessageChannel;
   actor: string;
-  provenance?: import("@eliteforge/agent-ui-chat-core").MessageProvenance;
+  provenance?: MessageProvenance;
   content: string;
   attachments?: ChatMessageAttachment[];
   inputTokens?: number | null;
@@ -284,7 +284,7 @@ export interface SendChatMessageInput {
   systemModelId?: string | null;
   reasoningEffort?: ReasoningEffort | null;
   attachments?: ChatMessageAttachment[];
-  a2uiMetadata?: import("@eliteforge/agent-ui-chat-core").SendChatMessageInput["a2uiMetadata"];
+  a2uiMetadata?: A2uiActionMetadata;
   clientCapabilities?: {
     userInputRequests?: boolean;
     a2ui?: { version: "v0.9.1"; catalogIds: string[] };
@@ -424,8 +424,8 @@ export interface ChatAdapterCapabilities {
 }
 
 export interface ChatAdapter {
-  loadA2uiState?: (id: string, signal?: AbortSignal) => Promise<import("@eliteforge/agent-ui-chat-core").ChatA2uiState>;
-  sendA2uiActionStream?: (session: ChatSession, input: import("@eliteforge/agent-ui-chat-core").ChatA2uiActionInput, handlers?: ChatStreamHandlers, signal?: AbortSignal) => Promise<ChatSendResult>;
+  loadA2uiState?: (id: string, signal?: AbortSignal) => Promise<A2uiState>;
+  sendA2uiActionStream?: (session: ChatSession, input: A2uiActionInput, handlers?: ChatStreamHandlers, signal?: AbortSignal) => Promise<ChatSendResult>;
   capabilities: ChatAdapterCapabilities;
   createSession: (input: CreateChatSessionInput) => Promise<ChatSession>;
   deleteSession: (sessionCode: string, signal?: AbortSignal) => Promise<ChatSession>;
@@ -441,7 +441,7 @@ export interface ChatAdapter {
   loadAguiEvents: (sessionCode: string) => Promise<ChatAguiEvent[]>;
   loadMessages: (sessionCode: string) => Promise<ChatMessage[]>;
   deleteTurn?: (sessionCode: string, input: { rootRunId: string; expectedVersion: string }, signal?: AbortSignal) => Promise<void>;
-  loadHistory?: (sessionCode: string, query: import("@eliteforge/agent-ui-chat-core").HistoryQuery, signal?: AbortSignal) => Promise<import("@eliteforge/agent-ui-chat-core").SessionHistory>;
+  loadHistory?: (sessionCode: string, query: HistoryQuery, signal?: AbortSignal) => Promise<SessionHistory>;
   loadUserInputRequests?: (
     sessionCode: string,
     signal?: AbortSignal,
@@ -527,7 +527,7 @@ export interface ChatClientConfig {
   userId?: string;
   variables?: unknown;
   workRailLabels?: ChatWorkRailLabels;
-  historyLabels?: import("@eliteforge/agent-ui-chat-core").ChatHistoryLabels;
+  historyLabels?: ChatHistoryLabels;
   workspaceCode?: string;
 }
 

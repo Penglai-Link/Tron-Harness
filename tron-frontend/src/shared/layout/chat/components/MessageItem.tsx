@@ -1,9 +1,12 @@
-import { Archive, Copy, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
-import { memo, useState } from "react";
+import { Archive, Copy, Folder, FolderInput, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
+import { memo, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { archiveChatSession, deleteChatSession, updateChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
+import { moveChatSession, setChatWorkingDirectory } from "@/domain/chat/api/sessionLocationApi";
+import { listDirectories, type DirectoryRecord } from "@/domain/directory/api/directoryApi";
+import { fetchProjects, type ProjectRecord } from "@/domain/project";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,9 +36,45 @@ const MessageItem = ({
   const [renameTitle, setRenameTitle] = useState(session.title);
   const [renaming, setRenaming] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [locationDialog, setLocationDialog] = useState<"move" | "directory" | null>(null);
+  const [locationPending, setLocationPending] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const [topics, setTopics] = useState<ProjectRecord[]>([]);
+  const [directories, setDirectories] = useState<DirectoryRecord[]>([]);
   const sessionParams = new URLSearchParams({ sessionCode: session.sessionCode });
   if (session.workspaceCode) sessionParams.set("workspaceCode", session.workspaceCode);
   const sessionPath = `/chats?${sessionParams}`;
+
+  useEffect(() => {
+    if (!locationDialog || !session.workspaceCode) return;
+    let live = true;
+    setLocationLoading(true); setLocationError("");
+    const request = locationDialog === "move" ? fetchProjects(session.workspaceCode) : listDirectories(session.workspaceCode);
+    request.then((items) => {
+      if (!live) return;
+      if (locationDialog === "move") setTopics(items as ProjectRecord[]);
+      else setDirectories(items as DirectoryRecord[]);
+    }).catch((reason: unknown) => { if (live) setLocationError(reason instanceof Error ? reason.message : t("shell:chatSidebar.session.locationFailed")); })
+      .finally(() => { if (live) setLocationLoading(false); });
+    return () => { live = false; };
+  }, [locationDialog, session.workspaceCode, t]);
+
+  async function changeLocation(value: string | null) {
+    if (!locationDialog || !session.workspaceCode || locationPending || running) return;
+    setLocationPending(true);
+    try {
+      const updated = locationDialog === "move"
+        ? await moveChatSession(session.sessionCode, session.workspaceCode, value)
+        : await setChatWorkingDirectory(session.sessionCode, session.workspaceCode, value);
+      window.dispatchEvent(new CustomEvent("tron:chat-session-updated", { detail: { session: updated } }));
+      window.dispatchEvent(new CustomEvent("tron:topic-location-changed", { detail: { oldProjectCode: session.projectCode, projectCode: updated.projectCode } }));
+      window.dispatchEvent(new Event("tron:project-created"));
+      setLocationDialog(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.session.locationFailed"));
+    } finally { setLocationPending(false); }
+  }
 
   async function archive() {
     if (pendingAction || running) return;
@@ -149,6 +188,12 @@ const MessageItem = ({
                 <DropdownMenuItem onClick={() => { setRenameTitle(session.title); setRenameOpen(true); }}>
                   <Pencil aria-hidden="true" />{t("shell:chatSidebar.session.rename")}
                 </DropdownMenuItem>
+                <DropdownMenuItem disabled={running || !session.workspaceCode} onClick={() => setLocationDialog("move")}>
+                  <FolderInput aria-hidden="true" />{t("shell:chatSidebar.session.move")}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={running || !session.workspaceCode} onClick={() => setLocationDialog("directory")}>
+                  <Folder aria-hidden="true" />{t("shell:chatSidebar.session.workingDirectory")}
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void copySessionId()}>
                   <Copy aria-hidden="true" />{t("shell:chatSidebar.session.copyId")}
                 </DropdownMenuItem>
@@ -175,6 +220,24 @@ const MessageItem = ({
               <Button type="submit" disabled={!renameTitle.trim() || renaming}>{t("shell:chatSidebar.session.save")}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(locationDialog)} onOpenChange={(open) => { if (!open && !locationPending) setLocationDialog(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{t(locationDialog === "move" ? "shell:chatSidebar.session.move" : "shell:chatSidebar.session.workingDirectory")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t(locationDialog === "move" ? "shell:chatSidebar.session.moveDescription" : "shell:chatSidebar.session.directoryDescription")}</p>
+          {locationLoading ? <p className="text-sm text-muted-foreground">{t("shell:chatSidebar.loading")}</p> : null}
+          {locationError ? <p role="alert" className="text-sm text-destructive">{locationError}</p> : null}
+          {!locationLoading && !locationError ? <div className="max-h-72 space-y-1 overflow-y-auto">
+            {locationDialog === "move" ? <>
+              <Button variant="ghost" className="w-full justify-start" disabled={locationPending || (!session.projectCode && !session.directoryCode)} onClick={() => void changeLocation(null)}>{t("shell:chatSidebar.session.quickChats")}</Button>
+              {topics.map((topic) => <Button key={topic.projectCode} variant="ghost" className="w-full justify-start" disabled={locationPending || session.projectCode === topic.projectCode} onClick={() => void changeLocation(topic.projectCode)}>{topic.name}</Button>)}
+            </> : <>
+              {!session.directoryCode ? <Button variant="ghost" className="w-full justify-start" disabled={locationPending || !session.workingDirectoryCode} onClick={() => void changeLocation(null)}>{t("shell:chatSidebar.session.noDirectory")}</Button> : null}
+              {directories.map((directory) => <Button key={directory.directoryCode} variant="ghost" className="h-auto w-full justify-start py-2 text-left" disabled={locationPending || !directory.available || (session.workingDirectoryCode ?? session.directoryCode) === directory.directoryCode} onClick={() => void changeLocation(directory.directoryCode)}><span className="min-w-0"><span className="block truncate">{directory.name}</span><span className="block truncate text-xs text-muted-foreground">{directory.path}</span></span></Button>)}
+            </>}
+          </div> : null}
+          <DialogFooter><Button variant="outline" disabled={locationPending} onClick={() => setLocationDialog(null)}>{t("shell:chatSidebar.project.cancel")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <ConfirmDialog

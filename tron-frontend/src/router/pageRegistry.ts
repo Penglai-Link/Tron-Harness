@@ -108,6 +108,7 @@ export const routePages: Record<string, RoutePageComponent> = {
     }))
   ),
   "chats.index": lazy(() => import("@/domain/chat/pages/Index")),
+  "topics.detail": lazy(() => import("@/domain/project/pages/TopicPage").then((module) => ({ default: module.TopicPage }))),
   "chats.execution": lazy(() =>
     import("@/domain/chat/pages/ChatSessionExecutionPage").then((module) => ({
       default: module.ChatSessionExecutionPage,

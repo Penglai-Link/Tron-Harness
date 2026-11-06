@@ -223,6 +223,8 @@ pub async fn execute_task(
             execution_mode: Default::default(),
             workspace_code: task.workspace_code.clone(),
             project_code: None,
+            directory_code: None,
+            working_directory_code: None,
             title: Some(format!("Task: {}", task.title)),
             app_code: None,
             task_code: Some(task.task_code.clone()),

@@ -1,3 +1,4 @@
+import { CREATE_TOPIC_SHORTCUT_EVENT, ADD_DIRECTORY_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import {
   Settings,
   Bot,
@@ -842,6 +843,12 @@ export function TronShell({
     return;
   }
 
+  function canStartSidebarCreation() {
+    return Boolean(activeWorkspaceCode) && !Array.from(
+      document.querySelectorAll<HTMLElement>('[role="dialog"]'),
+    ).some((dialog) => dialog.offsetWidth > 0 || dialog.offsetHeight > 0);
+  }
+
   useShellShortcuts({
     closeAllTabs: () => closeVisibleTabs(false),
     closeCurrentTab: () => {
@@ -851,7 +858,16 @@ export function TronShell({
     },
     closeOtherTabs: () => closeVisibleTabs(true),
     nextTab: () => activateAdjacentTab(1),
+    newTopic: () => {
+      if (!canStartSidebarCreation()) return false;
+      window.dispatchEvent(new Event(CREATE_TOPIC_SHORTCUT_EVENT));
+    },
+    newDirectory: () => {
+      if (!canStartSidebarCreation()) return false;
+      window.dispatchEvent(new Event(ADD_DIRECTORY_SHORTCUT_EVENT));
+    },
     newSession: () => {
+      if (!canStartSidebarCreation()) return false;
       void createChatTab();
     },
     openNotifications: () => { void navigate("/notifications"); },
@@ -1157,7 +1173,7 @@ export function TronShell({
         <button
           ref={domainTriggerRef}
           className={cn(
-            "flex h-10 w-full min-w-0 items-center rounded-lg text-left text-sm font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            "group/domain-trigger flex h-10 w-full min-w-0 items-center rounded-lg text-left text-sm font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
             compact ? "justify-center px-1.5" : "justify-between gap-2 px-2.5",
           )}
           type="button"
@@ -1176,7 +1192,7 @@ export function TronShell({
           ) : (
             <span className="min-w-0 truncate">{domainName}</span>
           )}
-          <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)]", compact ? "hidden" : "")} size={16} aria-hidden="true" />
+          <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)] transition-opacity [@media(hover:hover)]:opacity-0 group-hover/domain-trigger:opacity-60 group-focus-visible/domain-trigger:opacity-60 group-aria-expanded/domain-trigger:opacity-60", compact ? "hidden" : "")} size={16} aria-hidden="true" />
         </button>
         {utilityPanel === "domain" ? (
           <div

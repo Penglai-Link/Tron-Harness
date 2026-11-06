@@ -8,7 +8,7 @@ impl ChatService {
             execution_mode: Default::default(),
             id:self.id_provider.next_id().map_err(|_|ChatError::StorageFailure)?.value(),
             session_code:dude.session_code.clone(), workspace_code:dude.workspace_code.clone().unwrap_or_default(),
-            project_code:None,user_code,app_code:None,task_code:(dude.purpose == crate::domain::dude::DudeSessionPurpose::Task).then(|| dude.correlation_key.clone()),source_type:ChatSessionSourceType::Manual,
+            project_code:None,directory_code:None,working_directory_code:None,user_code,app_code:None,task_code:(dude.purpose == crate::domain::dude::DudeSessionPurpose::Task).then(|| dude.correlation_key.clone()),source_type:ChatSessionSourceType::Manual,
             source_code:Some(format!("__dude:{}",dude.dude_code)),agent_code:Some(dude.dude_code.clone()),
             system_agent_session_id:None,title:dude.title.clone(),status:ChatSessionStatus::Active,
             last_run_code:None,last_run_status:None,created_at:now.clone(),updated_at:now,
@@ -41,6 +41,37 @@ impl ChatService {
             ChatSessionSourceType::Manual
         });
         let project_code = normalized_optional(command.project_code);
+        let directory_code = normalized_optional(command.directory_code);
+        if directory_code.is_some() && (project_code.is_some() || source_type != ChatSessionSourceType::Manual) {
+            return Err(ChatError::DirectoryInvalid);
+        }
+        if let Some(code) = directory_code.as_deref() {
+            self.directories.as_ref().ok_or(ChatError::DirectoryInvalid)?
+                .resolve(&workspace_code, code).map_err(|_| ChatError::DirectoryInvalid)?;
+        }
+        let requested_working = normalized_optional(command.working_directory_code);
+        if directory_code.as_ref().zip(requested_working.as_ref()).is_some_and(|(directory, working)| directory != working) {
+            return Err(ChatError::DirectoryFixed);
+        }
+        if let Some(code) = requested_working.as_deref() {
+            self.directories.as_ref().ok_or(ChatError::DirectoryInvalid)?
+                .resolve(&workspace_code, code).map_err(|_| ChatError::DirectoryInvalid)?;
+        }
+        let working_directory_code = if let Some(project) = project_code.as_deref() {
+            if let Some(topics) = self.topics.as_ref() {
+                let memo = topics.get(user_code.as_deref().unwrap_or(""), project).map_err(|_| ChatError::ProjectInvalid)?;
+                let directories = memo.references.iter().filter(|reference| reference.kind == crate::domain::topic::TopicReferenceKind::Directory).collect::<Vec<_>>();
+                requested_working.or_else(|| directories.first().map(|reference| reference.target_code.clone()))
+            } else if requested_working.is_some() {
+                return Err(ChatError::DirectoryInvalid);
+            } else {
+                None
+            }
+        } else if let Some(code) = directory_code.as_ref() {
+            requested_working.or_else(|| Some(code.clone()))
+        } else {
+            requested_working
+        };
         let app_code = if source_type == ChatSessionSourceType::Manual
             && self.projects.is_some()
             && project_code.is_some()
@@ -62,6 +93,8 @@ impl ChatService {
             session_code: eliteforge_agent_core::SessionRecord::new("").id,
             workspace_code,
             project_code,
+            directory_code,
+            working_directory_code,
             user_code,
             app_code,
             task_code,
@@ -83,6 +116,7 @@ impl ChatService {
             && let Some(existing) = repository.list_sessions()?.into_iter().find(|existing| {
                 existing.workspace_code == session.workspace_code
                     && existing.project_code == session.project_code
+                    && existing.working_directory_code == session.working_directory_code
                     && existing.user_code == session.user_code
                     && existing.source_type == ChatSessionSourceType::Manual
                     && existing.execution_mode == session.execution_mode
@@ -204,7 +238,12 @@ impl ChatService {
     }
 
     pub fn archive_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
+        let admission = self.active_runs.lock_admission().map_err(|_| ChatError::StorageFailure)?;
         let session = self.repository().get_session(session_code)?;
+        if session.status == ChatSessionStatus::Archived {
+            admission.retire(&[session_code.to_owned()]).map_err(|_| ChatError::StorageFailure)?;
+            return Ok(session);
+        }
         if self
             .execution_memory
             .as_ref()
@@ -216,38 +255,56 @@ impl ChatService {
         {
             return Err(ChatError::SessionRunActive);
         }
-        self.active_runs
-            .retire_session(session_code)
+        admission
+            .ensure_idle(session_code)
             .map_err(|error| {
                 if matches!(
                     error,
                     crate::application::agent::ActiveRunError::AlreadyActive
+                        | crate::application::agent::ActiveRunError::SessionArchived
                 ) {
                     ChatError::SessionRunActive
                 } else {
                     ChatError::StorageFailure
                 }
             })?;
-        if session.status == ChatSessionStatus::Archived {
-            return Ok(session);
-        }
         let updated_at = current_timestamp();
-        if let Err(error) = self.repository().update_session_status(
+        self.repository().update_session_status(
             session_code,
             ChatSessionStatus::Archived,
             &updated_at,
-        ) {
-            let _ = self.active_runs.reactivate_session(session_code);
-            return Err(error);
-        }
+        )?;
+        admission.retire(&[session_code.to_owned()]).map_err(|_| ChatError::StorageFailure)?;
         self.repository().get_session(session_code)
     }
 
+    /// Archive all chats placed directly under a directory in one transaction.
+    /// The admission guard prevents new runs from entering while we preflight
+    /// existing chats and persist the batch.
+    pub fn archive_directory(&self, workspace_code: &str, directory_code: &str) -> Result<Vec<String>, ChatError> {
+        let admission = self.active_runs.lock_admission().map_err(|_| ChatError::StorageFailure)?;
+        let sessions = self.repository().list_sessions()?;
+        for session in sessions.iter().filter(|session| session.workspace_code == workspace_code
+            && session.directory_code.as_deref() == Some(directory_code)
+            && session.status == ChatSessionStatus::Active)
+        {
+            admission.ensure_idle(&session.session_code).map_err(|error| match error {
+                crate::application::agent::ActiveRunError::AlreadyActive
+                | crate::application::agent::ActiveRunError::SessionArchived => ChatError::SessionRunActive,
+                _ => ChatError::StorageFailure,
+            })?;
+        }
+        let archived = self.repository().archive_directory(workspace_code, directory_code)?;
+        admission.retire(&archived).map_err(|_| ChatError::StorageFailure)?;
+        Ok(archived)
+    }
+
     pub fn restore_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
+        let admission = self.active_runs.lock_admission().map_err(|_| ChatError::StorageFailure)?;
         let session = self.repository().get_session(session_code)?;
         if session.status == ChatSessionStatus::Active {
-            self.active_runs
-                .reactivate_session(session_code)
+            admission
+                .reactivate(session_code)
                 .map_err(|_| ChatError::StorageFailure)?;
             return Ok(session);
         }
@@ -257,8 +314,8 @@ impl ChatService {
             ChatSessionStatus::Active,
             &updated_at,
         )?;
-        self.active_runs
-            .reactivate_session(session_code)
+        admission
+            .reactivate(session_code)
             .map_err(|_| ChatError::StorageFailure)?;
         self.repository().get_session(session_code)
     }
@@ -464,6 +521,55 @@ impl ChatService {
         let updated_at = current_timestamp();
         self.repository()
             .update_session_settings(session_code, title.as_deref(), command.execution_mode, &updated_at)?;
+        self.repository().get_session(session_code)
+    }
+
+    /// Move a manual chat to a topic or quick chats without changing its cwd.
+    pub fn move_session(&self, session_code: &str, project_code: Option<String>) -> Result<ChatSession, ChatError> {
+        self.change_session_location(session_code, Some(normalized_optional(project_code)), None)
+    }
+
+    /// Set the cwd independently of the chat's placement.
+    pub fn change_session_directory(&self, session_code: &str, directory_code: Option<String>) -> Result<ChatSession, ChatError> {
+        self.change_session_location(session_code, None, Some(normalized_optional(directory_code)))
+    }
+
+    fn change_session_location(
+        &self,
+        session_code: &str,
+        placement: Option<Option<String>>,
+        working: Option<Option<String>>,
+    ) -> Result<ChatSession, ChatError> {
+        let _guard = self.active_runs.idle_session_guard(session_code).map_err(|error| match error {
+            crate::application::agent::ActiveRunError::AlreadyActive => ChatError::SessionRunActive,
+            crate::application::agent::ActiveRunError::SessionArchived => ChatError::SessionArchived,
+            _ => ChatError::StorageFailure,
+        })?;
+        if self.execution_memory.as_ref().map(|memory| memory.get_active_goal(session_code)).transpose()
+            .map_err(|_| ChatError::StorageFailure)?.flatten().is_some_and(|goal| goal.goal.status == "ACTIVE") {
+            return Err(ChatError::SessionRunActive);
+        }
+        let session = self.repository().get_session(session_code)?;
+        if session.status != ChatSessionStatus::Active { return Err(ChatError::SessionArchived); }
+        if session.source_type != ChatSessionSourceType::Manual
+            || session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:")) {
+            return Err(ChatError::WorkspaceForbidden);
+        }
+        if session.directory_code.is_some() && working.as_ref().is_some_and(|value| value != &session.directory_code) {
+            return Err(ChatError::DirectoryFixed);
+        }
+        let project = placement.clone().unwrap_or_else(|| session.project_code.clone());
+        let directory = if placement.is_some() { None } else { session.directory_code.clone() };
+        let mut working_directory = working.unwrap_or_else(|| session.working_directory_code.clone().or(session.directory_code.clone()));
+        if working_directory.is_none() && directory.is_some() { working_directory = directory.clone(); }
+        if let Some(code) = project.as_deref() {
+            self.projects.as_ref().ok_or(ChatError::ProjectInvalid)?.resolve_execution_context(&session.workspace_code, code).map_err(|_| ChatError::ProjectInvalid)?;
+        }
+        if let Some(code) = working_directory.as_deref() {
+            self.directories.as_ref().ok_or(ChatError::DirectoryInvalid)?.resolve(&session.workspace_code, code).map_err(|_| ChatError::DirectoryInvalid)?;
+        }
+        let reference = format!("TOPIC-REF-{}", self.id_provider.next_id().map_err(|_| ChatError::StorageFailure)?.value());
+        self.repository().update_session_location(session_code, project.as_deref(), directory.as_deref(), working_directory.as_deref(), &reference)?;
         self.repository().get_session(session_code)
     }
 

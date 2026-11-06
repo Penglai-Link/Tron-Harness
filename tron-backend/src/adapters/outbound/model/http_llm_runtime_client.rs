@@ -94,7 +94,15 @@ mod in_run;
 mod observed;
 #[path = "http_llm_routing.rs"]
 mod routing;
+#[path = "speech_recognition.rs"]
+mod speech_recognition;
 impl LlmRuntimeClient for HttpLlmRuntimeClient {
+    fn transcribe<'a>(
+        &'a self, config: &'a RuntimeModelConfig, audio: Vec<u8>, mime: &'a str, file_name: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(speech_recognition::transcribe(config, audio, mime, file_name))
+    }
+
     fn rerank_content_with_model<'a>(
         &'a self,
         config: &'a RuntimeModelConfig,

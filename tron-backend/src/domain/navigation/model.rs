@@ -7,8 +7,8 @@ pub const ZH_CN: &str = "zh-CN";
 pub const EN_US: &str = "en-US";
 
 /// Widget menu codes are stored in the `page_code` column of a `Widget` menu.
-pub const WIDGET_CHAT_NEW_SESSION: &str = "chat.newSession";
 pub const WIDGET_CHAT_PROJECTS: &str = "chat.projects";
+pub const WIDGET_CHAT_DIRECTORIES: &str = "chat.directories";
 pub const WIDGET_CHAT_RECENTS: &str = "chat.recents";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -308,7 +308,7 @@ pub fn validate_menu_target(
         MenuType::ExternalLink if page_code.is_none() && url.is_some_and(is_http_url) => Ok(()),
         MenuType::ExternalLink => Err(NavigationError::InvalidExternalUrl),
         MenuType::Widget
-            if page_code.is_some_and(|value| matches!(value, WIDGET_CHAT_NEW_SESSION | WIDGET_CHAT_PROJECTS | WIDGET_CHAT_RECENTS)) && url.is_none() =>
+            if page_code.is_some_and(|value| matches!(value, WIDGET_CHAT_PROJECTS | WIDGET_CHAT_DIRECTORIES | WIDGET_CHAT_RECENTS)) && url.is_none() =>
         {
             Ok(())
         }

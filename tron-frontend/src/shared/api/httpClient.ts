@@ -13,6 +13,7 @@ export interface ApiRequestOptions {
   queryParams?: EndpointParams;
   retryOnUnauthorized?: boolean;
   signal?: AbortSignal;
+  keepalive?: boolean;
 }
 
 export class ApiError extends Error {
@@ -193,6 +194,7 @@ async function executeApiRequest<T>(endpoint: string, options: ApiRequestOptions
     headers,
     method,
     signal: options.signal,
+    keepalive: options.keepalive,
   });
   const payload = await response.json().catch(() => null);
 

@@ -45,6 +45,10 @@ pub struct ChatSession {
     pub session_code: String,
     pub workspace_code: String,
     pub project_code: Option<String>,
+    #[serde(default)]
+    pub directory_code: Option<String>,
+    #[serde(default)]
+    pub working_directory_code: Option<String>,
     pub user_code: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
@@ -205,12 +209,15 @@ pub enum ChatError {
     SessionMustBeArchived,
     SessionArchived,
     SessionRunActive,
+    SessionLocationChanged,
     SessionTitleRequired,
     StorageFailure,
     WorkspaceForbidden,
     WorkspaceRequired,
     ProjectRequired,
     ProjectInvalid,
+    DirectoryInvalid,
+    DirectoryFixed,
     UserInputAlreadyAnswered,
     UserInputAnswerInvalid(String),
     UserInputPending,
@@ -237,6 +244,7 @@ impl Display for ChatError {
                 f.write_str("archived chat sessions cannot be changed or resumed")
             }
             Self::SessionRunActive => f.write_str("running chat sessions cannot be archived"),
+            Self::SessionLocationChanged => f.write_str("chat location changed; retry the request"),
             Self::SessionTitleRequired => f.write_str("chat session title is required"),
             Self::StorageFailure => f.write_str("chat storage failure"),
             Self::WorkspaceForbidden => f.write_str("workspace access is forbidden"),
@@ -245,6 +253,8 @@ impl Display for ChatError {
                 f.write_str("projectCode is required for a manual chat session")
             }
             Self::ProjectInvalid => f.write_str("chat project is invalid for this workspace"),
+            Self::DirectoryFixed => f.write_str("directory chats must use their own directory"),
+            Self::DirectoryInvalid => f.write_str("chat directory is invalid for this workspace"),
             Self::UserInputAlreadyAnswered => {
                 f.write_str("chat user input request is already answered")
             }

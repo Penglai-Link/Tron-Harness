@@ -20,6 +20,11 @@ export function rememberCreatedChatSession(session: ChatSession) {
   recentlyCreatedSessions.set(session.sessionCode, session);
 }
 
+export function notifyArchivedChatSessions(sessionCodes: string[]) {
+  sessionCodes.forEach((sessionCode) => recentlyCreatedSessions.delete(sessionCode));
+  notifyChatSessionsRemoved(sessionCodes);
+}
+
 function mergeRecentlyCreatedSessions(
   groups: ChatSessionGroup[],
   workspaceCode: string,
@@ -107,16 +112,14 @@ export async function createChatSession(input: CreateChatSessionInput): Promise<
 export async function archiveChatSession(sessionCode: string): Promise<ChatSession> {
   if (getServiceDataSource("chat") === "mock") {
     const archived = archiveMockChatSession(sessionCode);
-    recentlyCreatedSessions.delete(sessionCode);
-    notifyChatSessionsRemoved([sessionCode]);
+    notifyArchivedChatSessions([sessionCode]);
     return archived;
   }
 
   const archived = await requestApi<ChatSession>(chatApiEndpoints.archiveChatSession, {
     pathParams: { sessionCode },
   });
-  recentlyCreatedSessions.delete(sessionCode);
-  notifyChatSessionsRemoved([sessionCode]);
+  notifyArchivedChatSessions([sessionCode]);
   return archived;
 }
 

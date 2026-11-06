@@ -40,6 +40,7 @@ export function useChatSidebarData(workspaceCode: string) {
       const session = (event as CustomEvent<{ session?: ChatSession }>).detail?.session;
       if (session) {
         setSessionOverrides((current) => ({ ...current, [session.sessionCode]: session }));
+        setCreatedSessions((current) => current.map((item) => item.sessionCode === session.sessionCode ? session : item));
         return;
       }
       refreshSessions();
@@ -81,7 +82,10 @@ export function useChatSidebarData(workspaceCode: string) {
       let changed = false;
       const next = { ...current };
       Object.entries(current).forEach(([sessionCode, override]) => {
-        if (listedByCode.get(sessionCode)?.agentCode === override.agentCode) {
+        const listed = listedByCode.get(sessionCode);
+        if (listed && listed.agentCode === override.agentCode && listed.projectCode === override.projectCode
+          && listed.directoryCode === override.directoryCode && listed.workingDirectoryCode === override.workingDirectoryCode
+          && listed.title === override.title && listed.executionMode === override.executionMode) {
           delete next[sessionCode];
           changed = true;
         }
@@ -116,12 +120,22 @@ export function useChatSidebarData(workspaceCode: string) {
       .filter(
         (session) =>
           session.sourceType?.toUpperCase() === "MANUAL" &&
-          !session.projectCode,
+          !session.projectCode && !session.directoryCode,
       );
     return [...entries].sort(
       (left, right) =>
         new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
     );
   }, [sessions]);
-  return { ...projects, recentSessions, sessionsByProject };
+  const sessionsByDirectory = useMemo(() => {
+    const result = new Map<string, ChatSession[]>();
+    sessions.forEach((session) => {
+      if (session.sourceType?.toUpperCase() !== "MANUAL" || !session.directoryCode) return;
+      const entries = result.get(session.directoryCode) ?? [];
+      entries.push(session);
+      result.set(session.directoryCode, entries);
+    });
+    return result;
+  }, [sessions]);
+  return { ...projects, recentSessions, sessionsByProject, sessionsByDirectory };
 }

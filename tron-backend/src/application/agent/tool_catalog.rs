@@ -68,6 +68,8 @@ pub(crate) fn builtin_category(code: &str) -> eliteforge_agent_core::ToolCategor
         "agent.collaboration" => ("协作工具", "Collaboration tools"),
         "interaction" => ("交互工具", "Interaction tools"),
         "execution" => ("执行工具", "Execution tools"),
+        "tron.connector.tools.platform" => ("外部平台", "External platforms"),
+        "tron.connector.tools.topic" => ("主题", "Topics"),
         _ => (code, code),
     };
     eliteforge_agent_core::ToolCategory::new(
@@ -188,6 +190,8 @@ pub(crate) fn official_remote_descriptors() -> Vec<eliteforge_agent_core::ToolDe
     let mut tools = eliteforge_agent_capability_personai::personai_tool_catalog();
     tools.extend(eliteforge_agent_official_plugin_tools_media::media_tool_catalog());
     tools.push(eliteforge_agent_official_plugin_tools_web::web_read_descriptor());
+    tools.extend(eliteforge_agent_connector::connector_tool_catalog().into_iter().map(|entry| entry.descriptor));
+    tools.push(crate::application::topic::topic_read_tool_descriptor());
     tools
 }
 fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
@@ -232,11 +236,30 @@ fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
         eliteforge_agent_official_plugin_tools_web::web_tool_category(),
         source("WebToolsPlugin", "framework.web.tools", "framework.web"),
     ));
+    entries.extend(eliteforge_agent_connector::connector_tool_catalog().into_iter().map(|entry| (
+        entry.descriptor,
+        builtin_category("tron.connector.tools.platform"),
+        eliteforge_agent_core::ToolSource {
+            provider_id: Some("ConnectorTools".into()),
+            plugin_id: Some("tron.connector.tools".into()),
+            pack_id: Some("framework.connector".into()),
+            adapter_id: Some("tron.connector.tools".into()),
+        },
+    )));
+    entries.push((
+        crate::application::topic::topic_read_tool_descriptor(),
+        builtin_category("tron.connector.tools.topic"),
+        eliteforge_agent_core::ToolSource { provider_id: Some("TopicTools".into()), plugin_id: Some("tron.connector.tools".into()), pack_id: None, adapter_id: Some("tron.connector.tools".into()) },
+    ));
     entries
         .into_iter()
         .map(|(tool, category, source)| {
             let resolved = tool.resolve_display(match locale { SupportedLocale::ZhCn => "zh-CN", SupportedLocale::EnUs => "en-US" });
-            let domain = if ["web_search", "web_read"].contains(&tool.call_name.as_str()) {
+            let domain = if tool.call_name == "topic_read" {
+                "topic"
+            } else if tool.call_name.starts_with("connector_") {
+                "connectors"
+            } else if ["web_search", "web_read"].contains(&tool.call_name.as_str()) {
                 "web_search"
             } else {
                 "media"
@@ -256,7 +279,7 @@ fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
                     eliteforge_agent_core::ToolOperationKind::Unknown => ToolOperationKind::Unknown,
                 },
                 input_schema: resolved.input_schema,
-                module_owner: "Framework".into(),
+                module_owner: if tool.call_name == "topic_read" { "Tron" } else { "Framework" }.into(),
                 availability_state: ToolAvailabilityState::Available,
                 sample_result_summary: String::new(),
             }

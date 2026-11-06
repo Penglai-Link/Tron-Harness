@@ -15,3 +15,5 @@ pub mod skin;
 pub mod office_visuals;
 
 pub mod observability;
+
+pub mod native_directory_picker;

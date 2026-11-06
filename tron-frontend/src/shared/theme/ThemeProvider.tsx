@@ -78,6 +78,7 @@ function readTypingParticleSettings(): TypingParticleSettings {
   }
 }
 const builtins = [defaultSkin, brandSkin] as Skin[];
+const currentBrand = (skin: Skin): Skin => skin.id === brandSkin.id ? brandSkin as Skin : skin;
 const colorModeStorageKey = "tron.color-mode";
 function readColorMode(): ColorMode {
   const stored = localStorage.getItem(colorModeStorageKey);
@@ -170,7 +171,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
-    document.documentElement.style.setProperty("--tron-sidebar-bg-opacity", `${sidebarAppearanceSettings.opacity}%`);
+    document.documentElement.style.setProperty("--tron-sidebar-bg-opacity", `${100 - sidebarAppearanceSettings.opacity}%`);
     document.documentElement.style.setProperty("--tron-sidebar-bg-blur", `${sidebarAppearanceSettings.blur}px`);
   }, [sidebarAppearanceSettings]);
 
@@ -250,12 +251,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (!active.variants?.light || !active.variants?.dark) {
         throw new Error("Theme package must include light and dark palettes");
       }
-      setSkins(list.filter((skin) => skin.variants?.light && skin.variants?.dark));
+      setSkins(list.filter((skin) => skin.variants?.light && skin.variants?.dark).map(currentBrand));
       // Activation, SSE and focus refreshes can return the same theme while
       // its reveal is waiting for a frame. Preserve identity so that refresh
       // does not cancel/restart the in-flight transition. Failed loads may retry.
-      setActiveSkin((current) => !applicationFailed.current && JSON.stringify(current) === JSON.stringify(active)
-        ? current : active);
+      const resolvedActive = currentBrand(active);
+      setActiveSkin((current) => !applicationFailed.current && JSON.stringify(current) === JSON.stringify(resolvedActive)
+        ? current : resolvedActive);
       setError(null);
     } catch (reason) {
       if (request === generation.current) setError(reason instanceof Error ? reason.message : String(reason));
@@ -285,7 +287,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try {
       const { skin } = await skinApi.activate(id);
       if (request !== generation.current) return;
-      setActiveSkin(skin);
+      setActiveSkin(currentBrand(skin));
       setError(null);
     } finally {
       mutation.current = false;

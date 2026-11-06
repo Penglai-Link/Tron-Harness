@@ -36,6 +36,10 @@ pub(super) fn message(code: &str, detail: &str) -> String {
             "会话正在运行，请停止或等待结束后再操作。",
             "Stop the active run or wait for it to finish before continuing.",
         ),
+        "CHAT_SESSION_LOCATION_CHANGED" => (
+            "会话位置刚刚发生更改，请重试。",
+            "The chat location just changed. Please retry.",
+        ),
         "CHAT_SESSION_TITLE_REQUIRED" => ("请输入会话名称。", "Enter a conversation name."),
         "CHAT_WORKSPACE_REQUIRED" | "AGENT_WORKSPACE_REQUIRED" => {
             ("请先选择工作空间。", "Select a workspace first.")
@@ -52,6 +56,11 @@ pub(super) fn message(code: &str, detail: &str) -> String {
         "CHAT_PROJECT_INVALID" => (
             "主题不属于当前工作空间或已不可用，请重新选择。",
             "The topic is unavailable in this workspace. Select another topic.",
+        ),
+        "CHAT_DIRECTORY_FIXED" => ("目录会话的工作目录不可更改。", "Directory chats must use their own directory."),
+        "CHAT_DIRECTORY_INVALID" => (
+            "目录不属于当前空间或已不可用，请重新选择。",
+            "The directory is unavailable in this space. Select another directory.",
         ),
         "CHAT_USER_INPUT_ALREADY_ANSWERED" => (
             "此请求已回答，无需重复提交。请刷新会话查看结果。",

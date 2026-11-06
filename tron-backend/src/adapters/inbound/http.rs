@@ -5,6 +5,8 @@ pub mod auth;
 pub mod automations;
 pub mod capabilities;
 pub mod chats;
+pub mod connectors;
+pub mod directories;
 pub mod frontend;
 pub mod knowledge_graph;
 pub mod mcp;
@@ -20,6 +22,7 @@ pub mod resources;
 pub mod skills;
 pub mod system_config;
 pub mod tasks;
+pub mod topics;
 pub mod terminals;
 pub mod variables;
 

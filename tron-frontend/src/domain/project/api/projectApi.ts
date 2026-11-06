@@ -6,9 +6,14 @@ import type {
 
 export const projectApiEndpoints = {
   list: "POST /api/v1/projects/list",
+  get: "POST /api/v1/projects/get",
   save: "POST /api/v1/projects/save",
   archive: "POST /api/v1/projects/archive",
 } as const;
+
+export function getProject(projectCode: string, signal?: AbortSignal) {
+  return requestApi<ProjectRecord>(projectApiEndpoints.get, { body: { projectCode }, signal });
+}
 
 export function fetchProjects(workspaceCode: string) {
   return requestApi<ProjectRecord[]>(projectApiEndpoints.list, {

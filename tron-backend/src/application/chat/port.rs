@@ -53,6 +53,18 @@ pub trait ChatRepository: Send {
         execution_mode: Option<crate::domain::agent::ToolExecutionMode>,
         updated_at: &str,
     ) -> Result<(), ChatError>;
+    /// Atomically change placement and execution directory, adding the
+    /// directory to a topic when needed.
+    fn update_session_location(
+        &mut self,
+        session_code: &str,
+        project_code: Option<&str>,
+        directory_code: Option<&str>,
+        working_directory_code: Option<&str>,
+        reference_code: &str,
+    ) -> Result<(), ChatError>;
+    /// Atomically archive a directory and its directly placed chats.
+    fn archive_directory(&mut self, workspace_code: &str, directory_code: &str) -> Result<Vec<String>, ChatError>;
     fn update_session_run(
         &mut self,
         session_code: &str,

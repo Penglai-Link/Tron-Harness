@@ -62,6 +62,8 @@ mod host_working_directory;
 mod host_summary;
 #[path = "host_remote_tools.rs"]
 pub(super) mod remote_tools;
+#[path = "host_connector_tools.rs"]
+mod connector_tools;
 use capability_state::{load_capability_state, persist_capability_state};
 
 #[derive(Clone)]
@@ -104,6 +106,8 @@ struct Host {
     agent_management: OnceCell<crate::application::agent::AgentManagementService>,
     dudes: OnceCell<crate::application::dude::DudeService>,
     knowledge_bases: OnceCell<crate::application::knowledge_base::KnowledgeBaseService>,
+    topics: OnceCell<crate::application::topic::TopicService>,
+    integrations: OnceCell<crate::application::connector::IntegrationService>,
     collaboration_builder:
         OnceCell<std::sync::Weak<crate::application::agent::AgentRunContextBuilder>>,
     collaboration_threads: collaboration::Threads,
@@ -246,6 +250,17 @@ impl FrameworkHost {
         &self,
     ) -> Option<crate::application::knowledge_base::KnowledgeBaseService> {
         self.0.knowledge_bases.get().cloned()
+    }
+
+    pub fn bind_topics(&self, service: crate::application::topic::TopicService) -> Result<(), AgentError> {
+        self.0.topics.set(service).map_err(|_| AgentError::InvalidConfiguration("topic service is already bound".into()))
+    }
+    pub fn bind_integrations(&self, service: crate::application::connector::IntegrationService) -> Result<(), AgentError> {
+        self.0.integrations.set(service).map_err(|_| AgentError::InvalidConfiguration("connector service is already bound".into()))
+    }
+
+    pub(crate) fn topics(&self) -> Option<crate::application::topic::TopicService> {
+        self.0.topics.get().cloned()
     }
 
     pub(crate) fn gateway_enabled(&self) -> bool {
@@ -747,6 +762,8 @@ impl FrameworkHost {
             resources,
             dudes: OnceCell::new(),
             knowledge_bases: OnceCell::new(),
+            topics: OnceCell::new(),
+            integrations: OnceCell::new(),
             agent_management: OnceCell::new(),
             collaboration_builder: OnceCell::new(),
             collaboration_threads: Default::default(),
@@ -796,6 +813,8 @@ impl FrameworkHost {
             resources,
             dudes: OnceCell::new(),
             knowledge_bases: OnceCell::new(),
+            topics: OnceCell::new(),
+            integrations: OnceCell::new(),
             agent_management: OnceCell::new(),
             collaboration_builder: OnceCell::new(),
             collaboration_threads: Default::default(),

@@ -39,7 +39,11 @@
     "mac": {
       "target": ["dmg"],
       "identity": "-",
-      "icon": "assets/tron.icns"
+      "icon": "assets/tron.icns",
+      "entitlements": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Tron 使用麦克风录制语音，并通过已配置的语音识别模型转写为对话草稿。"
+      }
     },
     "win": {
       "target": ["nsis"],

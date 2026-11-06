@@ -5,6 +5,7 @@ export * from "./normalize";
 export * from "./openapi-signing";
 export * from "./terminal";
 export * from "./transport";
+export * from "./transportTypes";
 export * from "./types";
 export * from "./window-state";
 export * from "./tracing";

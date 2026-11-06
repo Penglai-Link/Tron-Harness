@@ -39,6 +39,8 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/archived-sessions/{session_code}", get(archived_session_detail).delete(delete_archived_session))
         .route("/api/v1/admin/archived-sessions/{session_code}/attachments/{attachment_code}", get(download_archived_session_attachment))
         .route("/api/v1/chats/sessions", post(create_session))
+        .route("/api/v1/chats/sessions/{session_code}/placement", axum::routing::put(super::location::move_session))
+        .route("/api/v1/chats/sessions/{session_code}/working-directory", axum::routing::put(super::location::change_directory))
         .route("/api/v1/chats/sessions/get-active-run", get(get_active_run))
         .route("/api/v1/chats/sessions/steer-message", post(steer_message))
         .route("/api/v1/chats/sessions/stop-run", post(stop_run))

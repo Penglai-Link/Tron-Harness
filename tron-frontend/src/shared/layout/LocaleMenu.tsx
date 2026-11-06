@@ -23,7 +23,7 @@ export function LocaleMenu() {
         <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">{selected ? t(selected.labelKey) : currentLocale}</span>
         <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent data-tron-locale-menu side="right" align="end" sideOffset={8} className="w-56 max-w-[calc(100vw-2rem)]">
+      <DropdownMenuContent data-tron-locale-menu data-tron-sidebar-surface side="right" align="end" sideOffset={8} className="w-56 max-w-[calc(100vw-2rem)]">
         <DropdownMenuRadioGroup value={currentLocale} onValueChange={(value) => {
           const locale = supportedLocales.find((item) => item.code === value);
           if (locale) void changeLocale(locale.code);

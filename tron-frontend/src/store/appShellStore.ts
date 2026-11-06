@@ -10,6 +10,7 @@ import {
 import {
   createDefaultShellShortcutBindings,
   migrateDefaultShellShortcutBindings,
+  normalizeShellShortcutBindings,
   type ShellShortcutAction,
   type ShellShortcutBinding,
   type ShellShortcutBindings,
@@ -130,6 +131,11 @@ export const useAppShellStore = create<AppShellState>()(
       version: 9,
       name: "tron-app-shell",
       migrate: migrateAppShellState,
+      merge: (persisted, current) => {
+        const saved = persisted && typeof persisted === "object"
+          ? persisted as Partial<AppShellState> : {};
+        return { ...current, ...saved, shortcutBindings: normalizeShellShortcutBindings(saved.shortcutBindings) };
+      },
       partialize: (state) => ({
         openSections: state.openSections,
         selectedPrimarySpaceId: state.selectedPrimarySpaceId,

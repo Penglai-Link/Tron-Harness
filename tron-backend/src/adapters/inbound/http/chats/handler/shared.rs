@@ -133,11 +133,14 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
         ChatSendError::Chat(ChatError::SessionMustBeArchived) => "CHAT_SESSION_MUST_BE_ARCHIVED",
         ChatSendError::Chat(ChatError::SessionArchived) => "CHAT_SESSION_ARCHIVED",
         ChatSendError::Chat(ChatError::SessionRunActive) => "CHAT_SESSION_RUN_ACTIVE",
+        ChatSendError::Chat(ChatError::SessionLocationChanged) => "CHAT_SESSION_LOCATION_CHANGED",
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "CHAT_SESSION_TITLE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "CHAT_WORKSPACE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => "CHAT_WORKSPACE_FORBIDDEN",
         ChatSendError::Chat(ChatError::ProjectRequired) => "CHAT_PROJECT_REQUIRED",
         ChatSendError::Chat(ChatError::ProjectInvalid) => "CHAT_PROJECT_INVALID",
+        ChatSendError::Chat(ChatError::DirectoryFixed) => "CHAT_DIRECTORY_FIXED",
+        ChatSendError::Chat(ChatError::DirectoryInvalid) => "CHAT_DIRECTORY_INVALID",
         ChatSendError::Chat(ChatError::UserInputAlreadyAnswered) => {
             "CHAT_USER_INPUT_ALREADY_ANSWERED"
         }

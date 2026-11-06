@@ -1,11 +1,12 @@
 import { requestApi } from "@/shared/api/httpClient";
-import type { ContextBlockUpdateMode } from "@/shared/context/contextBlockPresentation";
+import type { ContextBlockUpdateMode, ContextCompressionMetadata } from "@/shared/context/contextBlockPresentation";
 
 export interface ContextLayoutBlock {
   id: string;
   displayName: string;
   description: string;
   updateMode: ContextBlockUpdateMode;
+  compression?: ContextCompressionMetadata | null;
   plugin: boolean;
   unavailable: boolean;
   providerId: string | null;

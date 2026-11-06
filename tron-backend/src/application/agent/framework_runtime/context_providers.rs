@@ -19,6 +19,8 @@ mod agent_directory_context;
 mod knowledge_base_context;
 #[path = "page_context.rs"]
 mod page_context;
+#[path = "topic_context.rs"]
+mod topic_context;
 
 pub(super) async fn assemble(
     input: &fw::ContextAssemblyInput<'_>,
@@ -137,17 +139,31 @@ pub(super) async fn assemble(
         ..budget
     };
     let mut source_order = config.context.providers.order.clone();
+    if !source_order.iter().any(|id| id == "topic_memo") {
+        source_order.push("topic_memo".into());
+    }
     if let Some(services) = input.run.extensions.get::<fw::ScopedAgentServices>() {
         for source in services.0.context_sources.iter().filter(|source| source.kind() == fw::ContextSourceKind::Data) {
             let id = source.block_id().to_owned();
             if !source_order.contains(&id) { source_order.push(id); }
         }
     }
-    let quotas = memory::ContextShareAllocation::new(config.context.providers.effective_shares(&source_order))?.allocate(available.max_tokens);
+    let mut shares = config.context.providers.effective_shares(&source_order);
+    if !config.context.providers.shares.contains_key("topic_memo") {
+        let extra = shares.get("current_session_history").copied().unwrap_or(0).min(199);
+        if let Some(history) = shares.get_mut("current_session_history") { *history -= extra; }
+        if let Some(topic) = shares.get_mut("topic_memo") { *topic += extra; }
+    }
+    let quotas = memory::ContextShareAllocation::new(shares)?.allocate(available.max_tokens);
     let quota = |id: &str| quotas.get(id).copied().unwrap_or(0);
     let seed = fw::ContextBlockConfig::new(fw::INSTRUCTIONS_BLOCK, fw::BlockBudget::tokens(quota("seed_prompt_prefix")));
     let knowledge_cap = quota("knowledge_base");
     let mut contributors: Vec<Arc<dyn fw::ContextContributor>> = Vec::new();
+    contributors.push(Arc::new(topic_context::TopicContributor {
+        service: host.harness.framework_topics(),
+        project_code: context.execution_scope.project_code.clone(),
+        user_code: context.user_code.clone(),
+    }));
     contributors.push(Arc::new(knowledge_base_context::KnowledgeBaseContributor {
         service: (!onboarding)
             .then(|| host.harness.framework_knowledge_bases())
@@ -292,6 +308,7 @@ pub(super) async fn assemble(
     let knowledge =
         fw::ContextBlockConfig::new("knowledge_base", fw::BlockBudget::tokens(knowledge_cap));
     configs.insert("knowledge_base".into(), knowledge);
+    configs.insert("topic_memo".into(), fw::ContextBlockConfig::new("topic_memo", fw::BlockBudget::tokens(quota("topic_memo"))));
     let mut block = fw::ContextBlockConfig::new(
         fw::HISTORY_BLOCK,
         fw::BlockBudget::tokens(plan.effective_input_budget as usize),
@@ -397,6 +414,7 @@ pub(super) async fn assemble(
     }
     plugin_order.sort();
     let mut order = config.context.providers.order.clone();
+    if !order.iter().any(|id| id == "topic_memo") { order.push("topic_memo".into()); }
     for (_, id) in plugin_order {
         if !order.contains(&id) {
             order.push(id);

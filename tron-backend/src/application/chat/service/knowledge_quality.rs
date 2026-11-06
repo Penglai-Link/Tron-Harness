@@ -36,6 +36,8 @@ impl ChatService {
             session_code: eliteforge_agent_core::SessionRecord::new("").id,
             workspace_code: "PLATFORM".into(),
             project_code: None,
+            directory_code: None,
+            working_directory_code: None,
             user_code: Some(user.into()),
             app_code: None,
             task_code: None,
