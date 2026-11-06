@@ -376,3 +376,15 @@ body[data-background-effects] [data-theme-part="app-page"] {
   -webkit-backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
   backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
 }
+
+/* Keep numeric validation while presenting a plain text-style field. */
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
