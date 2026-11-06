@@ -88,7 +88,7 @@ export function DudeEditorDialog({
     Boolean(draft.name.trim()) &&
     [...draft.name].length <= 100 &&
     Boolean(draft.rolePrompt.trim()) &&
-    draft.heartbeatMinutes >= 1;
+    Number.isInteger(draft.heartbeatMinutes) && draft.heartbeatMinutes >= 1 && draft.heartbeatMinutes <= 10080;
   async function save() {
     if (
       !valid ||
@@ -262,14 +262,15 @@ export function DudeEditorDialog({
                 </div>
                 <Field label={t("dude.heartbeatMinutes")}>
                   <TextInput
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     min={1}
                     max={10080}
                     aria-label={t("dude.heartbeatMinutes")}
-                    value={draft.heartbeatMinutes}
+                    value={Number.isFinite(draft.heartbeatMinutes) ? draft.heartbeatMinutes : ""}
                     disabled={saving}
                     onChange={(event) =>
-                      field("heartbeatMinutes", Number(event.target.value))
+                      /^\d*$/.test(event.target.value) && field("heartbeatMinutes", event.target.value === "" ? NaN : Number(event.target.value))
                     }
                   />
                 </Field>

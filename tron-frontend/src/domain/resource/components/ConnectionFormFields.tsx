@@ -35,12 +35,20 @@ export function ConnectionTextField({
   id,
   label,
   onChange,
+  type,
+  min,
   ...props
 }: TextFieldProps) {
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}{props.required ? <span aria-hidden="true" className="text-destructive"> *</span> : null}</FieldLabel>
-      <Input id={id} onChange={(event) => onChange(event.target.value)} {...props} />
+      <Input id={id} type={type === "number" ? "text" : type} inputMode={type === "number" ? "numeric" : undefined}
+        pattern={type === "number" ? "[0-9]*" : undefined} onChange={(event) => {
+          const raw = event.target.value;
+          if (type === "number" && !/^\d*$/.test(raw)) return;
+          event.currentTarget.setCustomValidity(type === "number" && raw !== "" && min !== undefined && Number(raw) < min ? `Minimum: ${min}` : "");
+          onChange(raw);
+        }} {...props} />
       {description ? <FieldDescription>{description}</FieldDescription> : null}
     </Field>
   );

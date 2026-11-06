@@ -7,7 +7,7 @@ import {
   AlertCircle,
   Regex,
 } from "lucide-react";
-import { type ComponentProps, useState } from "react";
+import { type ComponentProps, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -120,8 +120,28 @@ function SchemaTypeSelect({
   );
 }
 
+function DenseNumberInput({ value, onChange, ...props }: ComponentProps<typeof TextInput>) {
+  const [draft, setDraft] = useState(value == null ? "" : String(value));
+  useEffect(() => {
+    const next = value == null ? "" : String(value);
+    setDraft((current) => next === "" && ["-", ".", "-."].includes(current) ? current : current && next !== "" && Number(current) === Number(next) ? current : next);
+  }, [value]);
+  return <TextInput {...props} type="text" inputMode={props.step === "any" ? "decimal" : "numeric"} value={draft} onChange={(event) => {
+    const raw = event.currentTarget.value;
+    const pattern = props.step === "any" ? /^-?\d*(?:\.\d*)?$/ : /^\d*$/;
+    if (!pattern.test(raw)) return;
+    setDraft(raw);
+    if (raw === "-" || raw === "." || raw === "-.") {
+      event.currentTarget.value = "";
+      onChange?.(event);
+      event.currentTarget.value = raw;
+    } else onChange?.(event);
+  }} />;
+}
+
 function DenseTextInput(props: ComponentProps<typeof TextInput>) {
-  return <TextInput {...props} className={cn("h-9 text-[13px]", props.className)} />;
+  const className = cn("h-9 text-[13px]", props.className);
+  return props.type === "number" ? <DenseNumberInput {...props} className={className} /> : <TextInput {...props} className={className} />;
 }
 
 function StringConstraints({ formatOptions, onChange, readOnly, schema }: PrimitiveConstraintsProps & { formatOptions: JsonSchemaDraft7FormatOption[] }) {

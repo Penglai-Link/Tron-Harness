@@ -45,7 +45,7 @@ export function RagSettingsFields({ settings, setSettings, disabled = false, idP
               <SelectItem value="disabled">{t("ragUnified.disabled")}</SelectItem>
             </SelectInput>
           </Field>)}
-          <Field>{fieldLabel("embeddingDimension", "dimensionHelp", `${idPrefix}-dimension`)}<Input id={`${idPrefix}-dimension`} type="number" value={1024} disabled /></Field>
+          <Field>{fieldLabel("embeddingDimension", "dimensionHelp", `${idPrefix}-dimension`)}<Input id={`${idPrefix}-dimension`} type="text" inputMode="numeric" value={1024} disabled /></Field>
           {(["embeddingModelCode", "graphModelCode", "rerankModelCode"] as const).map((key) => <Field key={key}>{fieldLabel(key, `${key}Help`, `${idPrefix}-${key}`)}<SelectInput disabled={disabled} id={`${idPrefix}-${key}`} aria-label={t(`ragUnified.${key}`)} value={settings[key] ?? "__none__"} onValueChange={(value) => setSettings({ ...settings, [key]: value === "__none__" ? null : String(value) })}>
             <SelectItem value="__none__">{t(key === "rerankModelCode" ? "ragUnified.rerankOff" : "ragUnified.chooseModel")}</SelectItem>
             <SelectItem value={autoModelRouteCode(key === "embeddingModelCode" ? "EMBEDDING" : key === "graphModelCode" ? "TEXT" : "RERANK")}>

@@ -21,13 +21,14 @@ export function BudgetShareControl({ value, label, placeholder, disabled, onChan
         style={{ background: `linear-gradient(to right, var(--color-accent) ${effective / 100}%, var(--color-outline-variant) ${effective / 100}%)` }}
         onChange={event => onChange(Number(event.currentTarget.value))} />
       <div className="relative w-[4.75rem] shrink-0">
-        <TextInput type="number" min={0.01} max={100} step={0.01} value={editing ? draft : value == null ? "" : value / 100}
+        <TextInput type="text" inputMode="decimal" value={editing ? draft : value == null ? "" : value / 100}
           disabled={disabled} aria-invalid={value != null && (!Number.isSafeInteger(value) || value < 1 || value > 10_000)} aria-label={label} placeholder={placeholder}
           className="h-8 border-transparent bg-transparent px-1 pr-5 text-right text-sm tabular-nums shadow-none hover:border-[var(--color-outline-variant)] focus:border-[var(--color-focus-ring)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           onFocus={() => { setDraft(value == null ? "" : String(value / 100)); setEditing(true); }}
           onBlur={() => { setEditing(false); if (draft === "") onChange(null); }}
           onChange={event => {
             const raw = event.currentTarget.value;
+            if (!/^\d*(?:\.\d*)?$/.test(raw)) return;
             setDraft(raw);
             const scaled = Number(raw) * 100;
             const parsed = Math.abs(scaled - Math.round(scaled)) < 1e-6 ? Math.round(scaled) : scaled;

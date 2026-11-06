@@ -529,7 +529,9 @@ export function TaskDetailsPage() {
   }
 
   function handleProgressBlur() {
-    void saveUpdateFields({ progress: progressValue(progressRef.current) });
+    const raw = progressRef.current;
+    if (raw === "" || !/^\d+$/.test(raw) || Number(raw) > 100) return;
+    void saveUpdateFields({ progress: progressValue(raw) });
   }
 
   function handleProgressChange(nextProgress: string) {
@@ -668,9 +670,10 @@ export function TaskDetailsPage() {
                     disabled={progressManagedBySubtasks}
                     max="100"
                     min="0"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={progressManagedBySubtasks ? String(task.progress) : progress}
-                    onChange={(event) => handleProgressChange(event.target.value)}
+                    onChange={(event) => { if (/^\d*$/.test(event.target.value)) handleProgressChange(event.target.value); }}
                     onBlur={handleProgressBlur}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") event.currentTarget.blur();

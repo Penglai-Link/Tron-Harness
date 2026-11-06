@@ -78,8 +78,8 @@ export function DocumentSettingsDialog({ libraryId, document, defaults, onClose,
 
 
   const parameters = <div className="grid gap-4 sm:grid-cols-2">
-    <Field label={text("maxChars")} hintAriaLabel={text("maxCharsHelpLabel")} hint={text("maxCharsHelp")}><TextInput disabled={inherit || save.isPending} type="number" min={200} max={8000} step={1} value={config.maxChars} onChange={(event) => change({ maxChars: Number(event.target.value) })} /></Field>
-    <Field label={text("overlapChars")} hintAriaLabel={text("overlapCharsHelpLabel")} hint={text("overlapCharsHelp")}><TextInput disabled={inherit || save.isPending} type="number" min={0} max={Math.floor(config.maxChars / 4)} step={1} value={config.overlapChars} onChange={(event) => change({ overlapChars: Number(event.target.value) })} /></Field>
+    <Field label={text("maxChars")} hintAriaLabel={text("maxCharsHelpLabel")} hint={text("maxCharsHelp")}><TextInput disabled={inherit || save.isPending} type="text" inputMode="numeric" value={Number.isFinite(config.maxChars) ? config.maxChars : ""} onChange={(event) => { const raw = event.target.value; if (/^\d*$/.test(raw)) change({ maxChars: raw === "" ? NaN : Number(raw) }); }} /></Field>
+    <Field label={text("overlapChars")} hintAriaLabel={text("overlapCharsHelpLabel")} hint={text("overlapCharsHelp")}><TextInput disabled={inherit || save.isPending} type="text" inputMode="numeric" value={Number.isFinite(config.overlapChars) ? config.overlapChars : ""} onChange={(event) => { const raw = event.target.value; if (/^\d*$/.test(raw)) change({ overlapChars: raw === "" ? NaN : Number(raw) }); }} /></Field>
   </div>;
 
   return <Dialog open onOpenChange={(open) => { if (!open && !save.isPending) onClose(); }}>
@@ -101,7 +101,7 @@ export function DocumentSettingsDialog({ libraryId, document, defaults, onClose,
           <summary className="cursor-pointer text-[var(--color-on-surface-variant)]">{text("chunkParameters")}</summary>
           <div className="mt-4">{parameters}</div>
         </details> : parameters}
-        {config.mode === "HEADING" ? <Field label={text("headingDepth")}><TextInput disabled={inherit || save.isPending} type="number" min={1} max={6} step={1} value={config.headingDepth} onChange={(event) => change({ headingDepth: Number(event.target.value) })} /></Field> : null}
+        {config.mode === "HEADING" ? <Field label={text("headingDepth")}><TextInput disabled={inherit || save.isPending} type="text" inputMode="numeric" value={Number.isFinite(config.headingDepth) ? config.headingDepth : ""} onChange={(event) => { const raw = event.target.value; if (/^\d*$/.test(raw)) change({ headingDepth: raw === "" ? NaN : Number(raw) }); }} /></Field> : null}
       </fieldset>
       {inherit ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("knowledgeLibrary.defaults", { max: defaults.maxChars, overlap: defaults.overlapChars })}</p> : null}
       {!inherit && !valid ? <p role="alert" className="text-[var(--color-error)]">{text("invalidConfig")}</p> : null}

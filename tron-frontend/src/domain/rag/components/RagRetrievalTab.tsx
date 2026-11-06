@@ -29,7 +29,7 @@ export function RagRetrievalTab({ corpora, selected, onSelect }: { corpora: RagC
   const { t } = useTranslation("pages"); const navigate = useNavigate();
   const toast = useToast();
   const channelText = (channel: string) => t(`ragUnified.channels.${channel.replace(/\./g, "_")}`, { defaultValue: channel });
-  const [query, setQuery] = useState(""); const [limit, setLimit] = useState(8);
+  const [query, setQuery] = useState(""); const [limitDraft, setLimitDraft] = useState("8"); const limit = limitDraft === "" ? NaN : Number(limitDraft);
   const [result, setResult] = useState<RagSearchResult | null>(null); const [pending, setPending] = useState(false);
   const clearResult = () => setResult(null);
   const search = async () => {
@@ -50,7 +50,7 @@ export function RagRetrievalTab({ corpora, selected, onSelect }: { corpora: RagC
     <Card><CardContent className="grid gap-4 pt-6">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
         <Field><FieldLabel>{t("ragUnified.corpus")}</FieldLabel><SelectInput aria-label={t("ragUnified.corpus")} disabled={pending} value={selected || "__all__"} onValueChange={(value) => { onSelect(value === "__all__" ? "" : String(value)); clearResult(); }}><SelectItem value="__all__">{t("ragUnified.allAuthorized")}</SelectItem>{corpora.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectInput></Field>
-        <Field><FieldLabel htmlFor="rag-limit">{t("ragUnified.limit")}</FieldLabel><Input id="rag-limit" type="number" min={1} max={100} value={limit} onChange={(event) => setLimit(Number(event.target.value))} /></Field>
+        <Field><FieldLabel htmlFor="rag-limit">{t("ragUnified.limit")}</FieldLabel><Input id="rag-limit" type="text" inputMode="numeric" value={limitDraft} onChange={(event) => { if (/^\d*$/.test(event.target.value)) setLimitDraft(event.target.value); }} /></Field>
       </div>
       <Field><FieldLabel htmlFor="rag-question">{t("ragUnified.question")}</FieldLabel><Textarea id="rag-question" value={query} onChange={(event) => setQuery(event.target.value)} /></Field>
       <div className="flex justify-end"><Button disabled={pending || !query.trim() || !Number.isInteger(limit) || limit < 1 || limit > 100} onClick={() => void search()}>{t(pending ? "ragUnified.searching" : "ragUnified.search")}</Button></div>

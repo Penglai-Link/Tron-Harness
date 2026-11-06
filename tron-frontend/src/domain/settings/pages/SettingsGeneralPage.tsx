@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field, TextInput } from "@/components/forms";
@@ -30,6 +30,9 @@ export function SettingsGeneralPage() {
     setRunningEnterSubmitMode,
   } = useAguiWorkReplayPreferences();
 
+  const [turnLimitDraft, setTurnLimitDraft] = useState(String(aguiWorkReplayPreferences.recentTurnLimit));
+  useEffect(() => setTurnLimitDraft(String(aguiWorkReplayPreferences.recentTurnLimit)), [aguiWorkReplayPreferences.recentTurnLimit]);
+
   return (
     <>
       <PageHeader title={shellT("settings.items.general")} />
@@ -59,9 +62,15 @@ export function SettingsGeneralPage() {
               inputMode="numeric"
               max={maximumAguiWorkReplayTurnLimit}
               min={minimumAguiWorkReplayTurnLimit}
-              type="number"
-              value={aguiWorkReplayPreferences.recentTurnLimit}
-              onChange={(event) => setRecentTurnLimit(Number(event.target.value))}
+              type="text"
+              value={turnLimitDraft}
+              onChange={(event) => {
+                const raw = event.target.value;
+                if (!/^\d*$/.test(raw)) return;
+                setTurnLimitDraft(raw);
+                const number = Number(raw);
+                if (raw && number >= minimumAguiWorkReplayTurnLimit && number <= maximumAguiWorkReplayTurnLimit) setRecentTurnLimit(number);
+              }}
             />
           </Field>
 

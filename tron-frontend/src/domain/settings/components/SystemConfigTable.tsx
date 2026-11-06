@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SelectInput, TextArea, TextInput } from "@/components/forms";
@@ -14,6 +14,20 @@ import type { MineruNodeConfig, SystemConfigItem, SystemConfigValue } from "@/do
 import { MineruNodeEditor } from "./MineruNodeEditor";
 import { validateMineruNodes } from "../model/mineruNodeValidation";
 import { systemConfigHelp } from "../model/systemConfigHelp";
+
+function NumericConfigInput({ label, value, onChange }: { label: string; value: SystemConfigValue; onChange: (value: number | null) => void }) {
+  const [draft, setDraft] = useState(value == null ? "" : String(value));
+  useEffect(() => {
+    const next = value == null ? "" : String(value);
+    setDraft((current) => next === "" && (current === "-" || current.endsWith(".")) ? current : current && next !== "" && Number(current) === Number(next) ? current : next);
+  }, [value]);
+  return <TextInput aria-label={label} type="text" inputMode="decimal" value={draft} onChange={(event) => {
+    const raw = event.target.value;
+    if (!/^-?\d*(?:\.\d*)?$/.test(raw)) return;
+    setDraft(raw);
+    onChange(raw && /\d$/.test(raw) && Number.isFinite(Number(raw)) ? Number(raw) : null);
+  }} />;
+}
 
 function displayGroup(path: string) {
   return path.includes(".") ? path.slice(0, path.indexOf(".")) : "server";
@@ -156,11 +170,13 @@ export function SystemConfigTable() {
                           <SelectItem value="true">{t("settingsGeneral.systemConfig.values.true")}</SelectItem>
                           <SelectItem value="false">{t("settingsGeneral.systemConfig.values.false")}</SelectItem>
                         </SelectInput>
+                      ) : item.valueType === "number" && !item.sensitive ? (
+                        <NumericConfigInput label={item.path} value={value} onChange={(next) => update(item.path, next)} />
                       ) : (
                         <TextInput
                           aria-label={item.path}
                           placeholder={item.sensitive ? t("settingsGeneral.systemConfig.sensitivePlaceholder") : undefined}
-                          type={item.sensitive ? "password" : item.valueType === "number" ? "number" : "text"}
+                          type={item.sensitive ? "password" : "text"}
                           value={value === null ? "" : String(value)}
                           onChange={(event) => update(item.path, item.valueType === "number" ? (event.target.value === "" ? null : Number(event.target.value)) : (item.path.includes(".prices.") && event.target.value === "" ? null : event.target.value))}
                         />

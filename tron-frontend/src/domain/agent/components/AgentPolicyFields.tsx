@@ -25,12 +25,14 @@ export function AgentPolicyFields({ panel, draft, disabled, onChange, onAssignme
       const allowsUnlimited = key !== "maxParallelToolCalls";
       return <Field key={key} label={label(key)}><TextInput
         aria-label={text(`labels.${key}`, labels[key])}
-        disabled={disabled} min={allowsUnlimited ? 0 : 1} max={4294967295} step={1} type="number"
+        disabled={disabled} type="text" inputMode="numeric"
         placeholder={allowsUnlimited ? text("unlimited", "Unlimited") : undefined}
         value={Number.isFinite(draft[key]) && !(allowsUnlimited && draft[key] === 0) ? draft[key] : ""}
         onChange={(event) => {
-          const value = event.currentTarget.valueAsNumber;
-          onChange({ [key]: Number.isFinite(value) ? Math.min(4294967295, Math.max(allowsUnlimited ? 0 : 1, Math.trunc(value))) : allowsUnlimited ? 0 : draft[key] });
+          const raw = event.currentTarget.value;
+          if (!/^\d*$/.test(raw)) return;
+          const value = raw === "" ? (allowsUnlimited ? 0 : NaN) : Number(raw);
+          onChange({ [key]: value });
         }}
       /></Field>;
     })}

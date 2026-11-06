@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
@@ -40,6 +41,8 @@ export function TablePagination({
 }: TablePaginationProps) {
   const { t } = useTranslation("common");
   const { formatNumber } = useLocaleFormatters();
+  const [pageDraft, setPageDraft] = useState(String(page));
+  useEffect(() => setPageDraft(String(page)), [page]);
   const canGoPrevious = Boolean(onPageChange) && page > 1;
   const canGoNext = Boolean(onPageChange) && page < pageCount;
   const startLabel = formatNumber(startItem);
@@ -86,9 +89,16 @@ export function TablePagination({
             disabled={!onPageChange}
             max={pageCount}
             min={1}
-            type="number"
-            value={page}
-            onChange={(event) => onPageChange?.(Number(event.target.value) || 1)}
+            type="text"
+            inputMode="numeric"
+            value={pageDraft}
+            onChange={(event) => {
+              const raw = event.target.value;
+              if (!/^\d*$/.test(raw)) return;
+              setPageDraft(raw);
+              const next = Number(raw);
+              if (raw && next >= 1 && next <= pageCount) onPageChange?.(next);
+            }}
           />
           <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.of")} {pageCountLabel}</span>
         </label>

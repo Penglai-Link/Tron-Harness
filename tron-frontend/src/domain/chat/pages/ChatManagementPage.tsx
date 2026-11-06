@@ -1974,16 +1974,16 @@ function RightWorkspaceSidebar({
           <input
             className="block h-8 w-24 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)]"
             disabled={goalBusy}
-            min={1}
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={goalMaxRunsDraft}
-            onChange={(event) => setGoalMaxRunsDraft(event.target.value)}
+            onChange={(event) => { if (/^\d*$/.test(event.target.value)) setGoalMaxRunsDraft(event.target.value); }}
           />
         </label>
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             className={smallActionButtonClass()}
-            disabled={goalBusy || !goalDraft.trim()}
+            disabled={goalBusy || !goalDraft.trim() || !goalMaxRunsDraft || Number(goalMaxRunsDraft) < 1}
             type="button"
             onClick={() => void onSave()}
           >

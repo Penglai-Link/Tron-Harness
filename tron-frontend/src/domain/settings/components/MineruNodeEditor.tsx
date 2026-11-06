@@ -34,7 +34,7 @@ export function MineruNodeEditor({ value, disabled, onChange }: {
         </label>)}
         {(["capacity", "weight", "resourceGroupCapacity"] as const).map((field) => <label className="space-y-1 text-xs" key={field}>
           <span>{text(field)}</span>
-          <TextInput aria-label={`${text(field)} ${index + 1}`} min={1} step={1} type="number" value={node[field]} onChange={(event) => update(index, { [field]: Number(event.target.value) })} />
+          <TextInput aria-label={`${text(field)} ${index + 1}`} type="text" inputMode="numeric" value={Number.isFinite(node[field]) ? node[field] : ""} onChange={(event) => { const raw = event.target.value; if (/^\d*$/.test(raw)) update(index, { [field]: raw === "" ? NaN : Number(raw) }); }} />
         </label>)}
       </div>
       <div className="flex flex-wrap items-center gap-4 text-xs">

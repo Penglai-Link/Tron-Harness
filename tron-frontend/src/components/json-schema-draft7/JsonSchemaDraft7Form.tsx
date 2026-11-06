@@ -1,5 +1,5 @@
 import { Trash2, Braces, KeyRound } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -135,6 +135,27 @@ function fieldLabel(label: string, required: boolean) {
   );
 }
 
+function NumericValueInput({ value, onChange, integer, label, readOnly, placeholder }: {
+  value: unknown; onChange: (value: unknown) => void; integer: boolean; label: string; readOnly: boolean; placeholder?: string;
+}) {
+  const [draft, setDraft] = useState(typeof value === "number" ? String(value) : "");
+  useEffect(() => {
+    if (typeof value === "number") {
+      setDraft((current) => current && Number(current) === value ? current : String(value));
+    } else if (value == null) {
+      setDraft((current) => current === "-" || current.endsWith(".") ? current : "");
+    }
+  }, [value]);
+  return <TextInput aria-label={label} disabled={readOnly} inputMode={integer ? "numeric" : "decimal"}
+    placeholder={placeholder} type="text" value={draft} onChange={(event) => {
+      const next = event.target.value;
+      if (!(integer ? /^-?\d*$/ : /^-?\d*(?:\.\d*)?$/).test(next)) return;
+      setDraft(next);
+      const complete = /\d$/.test(next) && Number.isFinite(Number(next));
+      onChange(complete ? Number(next) : null);
+    }} />;
+}
+
 function PrimitiveValueEditor({
   errors,
   label,
@@ -220,17 +241,8 @@ function PrimitiveValueEditor({
   if (type === "number" || type === "integer") {
     return (
       <Field error={error} hint={hint} label={fieldLabel(label, required)}>
-        <TextInput
-          aria-label={label}
-          disabled={readOnly}
-          max={schema.maximum}
-          min={schema.minimum}
-          placeholder={schema.default === undefined ? undefined : String(schema.default)}
-          step={type === "integer" ? 1 : "any"}
-          type="number"
-          value={typeof value === "number" ? value : ""}
-          onChange={(event) => onChange(event.target.value === "" ? 0 : Number(event.target.value))}
-        />
+        <NumericValueInput value={value} onChange={onChange} integer={type === "integer"}
+          label={label} readOnly={readOnly} placeholder={schema.default === undefined ? undefined : String(schema.default)} />
       </Field>
     );
   }
@@ -412,7 +424,7 @@ function ObjectValueEditor({
               readOnly={readOnly}
               required={(schema.required ?? []).includes(name)}
               schemaValue={propertySchema}
-              value={objectValue[name] ?? neutralValue(propertySchema)}
+              value={Object.hasOwn(objectValue, name) ? objectValue[name] : neutralValue(propertySchema)}
               variableOptions={variableOptions}
               onChange={(nextValue) => onChange({ ...objectValue, [name]: nextValue })}
             />

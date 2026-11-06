@@ -46,12 +46,13 @@ export function RagGraphPanel() {
   const validDepth = [options.incomingDepth, options.outgoingDepth].every((depth) => Number.isInteger(depth) && depth >= 0 && depth <= 6);
   function configured(): RagGraphOptions { return { ...options, relationshipTypes: Array.from(new Set(relations.split(/[,，]/).map((value) => value.trim()).filter(Boolean))) }; }
   function search(nextCorpus = corpus) {
+    if (!validDepth) return;
     setSelected("");
     const body = { ...configured(), corpusIds: nextCorpus ? [nextCorpus] : [], filters: {} };
     void request(query.trim() ? { ...body, query } : body, false);
   }
   function expand(direction: RagGraphDirection) {
-    if (!node) return;
+    if (!node || !validDepth) return;
     void request({ ...configured(), incomingDepth: direction === "Incoming" ? options.incomingDepth : 0,
       outgoingDepth: direction === "Outgoing" ? options.outgoingDepth : 0, nodeIds: [node.id], corpusIds: corpus ? [corpus] : [], filters: {} }, true);
   }
@@ -62,7 +63,7 @@ export function RagGraphPanel() {
       <Button className="self-end" type="submit" disabled={graph.loading || !validDepth}>{t(graph.loading ? "ragUnified.searching" : query.trim() ? "ragUnified.search" : "knowledgeGraph.ragBrowse")}</Button>
     </form>
     <details><summary className="cursor-pointer text-sm">{t("knowledgeGraph.ragOptions")}</summary><div className="mt-3 grid gap-3 sm:grid-cols-3">
-      {(["incomingDepth", "outgoingDepth"] as const).map((key) => <Field key={key}><FieldLabel htmlFor={`rag-graph-${key}`}>{t(`knowledgeGraph.ragDepth.${key}`)}</FieldLabel><Input id={`rag-graph-${key}`} type="number" min={0} max={6} value={options[key]} onChange={(event) => { setOptions((old) => ({ ...old, [key]: Number(event.target.value) })); reset(); setSelected(""); }} /></Field>)}
+      {(["incomingDepth", "outgoingDepth"] as const).map((key) => <Field key={key}><FieldLabel htmlFor={`rag-graph-${key}`}>{t(`knowledgeGraph.ragDepth.${key}`)}</FieldLabel><Input id={`rag-graph-${key}`} type="text" inputMode="numeric" value={Number.isFinite(options[key]) ? options[key] : ""} onChange={(event) => { const raw = event.target.value; if (!/^\d*$/.test(raw)) return; setOptions((old) => ({ ...old, [key]: raw === "" ? NaN : Number(raw) })); reset(); setSelected(""); }} /></Field>)}
       <Field><FieldLabel htmlFor="rag-graph-relations">{t("knowledgeGraph.ragRelationFilter")}</FieldLabel><Input id="rag-graph-relations" value={relations} onChange={(event) => { setRelations(event.target.value); reset(); setSelected(""); }} /></Field>
     </div></details>
     {catalogError || graph.error ? <p role="alert" className="text-sm text-destructive">{(catalogError ?? graph.error)?.message}</p> : null}

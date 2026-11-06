@@ -76,15 +76,15 @@ export function ConfiguredProviderModels({ presetId, models, protocol, disabled,
                 onChange={(event) => update(model.rowId, { name: event.currentTarget.value })} />
             </Field>
             {!isMediaModel(model.modelType) && <Field label={text("models.contextWindowTokens")}>
-              <TextInput aria-label={t("configuredProviders.models.contextNumber", { number: index + 1 })} type="number" min={1} step={1}
+              <TextInput aria-label={t("configuredProviders.models.contextNumber", { number: index + 1 })} type="text" inputMode="numeric" pattern="[0-9]*"
                 value={model.contextWindowTokens} placeholder={text("models.unspecified")}
-                onChange={(event) => update(model.rowId, { contextWindowTokens: event.currentTarget.value })} />
+                onChange={(event) => { if (/^\d*$/.test(event.currentTarget.value)) update(model.rowId, { contextWindowTokens: event.currentTarget.value }); }} />
             </Field>}
-            {(model.modelType === "TextEmbedding" || model.modelType === "MultimodalEmbedding") && <Field label={text("models.dimension")} required><TextInput type="number" min={1} step={1} value={model.dimension} onChange={(event) => update(model.rowId, { dimension: event.currentTarget.value })} /></Field>}
+            {(model.modelType === "TextEmbedding" || model.modelType === "MultimodalEmbedding") && <Field label={text("models.dimension")} required><TextInput type="text" inputMode="numeric" pattern="[0-9]*" value={model.dimension} onChange={(event) => { if (/^\d*$/.test(event.currentTarget.value)) update(model.rowId, { dimension: event.currentTarget.value }); }} /></Field>}
             {model.modelType === "Text" && <Field label={text("models.maxOutputTokens")}>
-              <TextInput aria-label={t("configuredProviders.models.outputNumber", { number: index + 1 })} type="number" min={1} step={1}
+              <TextInput aria-label={t("configuredProviders.models.outputNumber", { number: index + 1 })} type="text" inputMode="numeric" pattern="[0-9]*"
                 value={model.maxOutputTokens} placeholder={text("models.unspecified")}
-                onChange={(event) => update(model.rowId, { maxOutputTokens: event.currentTarget.value })} />
+                onChange={(event) => { if (/^\d*$/.test(event.currentTarget.value)) update(model.rowId, { maxOutputTokens: event.currentTarget.value }); }} />
             </Field>}
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-3">

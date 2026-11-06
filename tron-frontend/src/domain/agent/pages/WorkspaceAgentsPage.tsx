@@ -817,6 +817,13 @@ export function WorkspaceAgentsPage({
       return;
     }
 
+    for (const key of ["maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const) {
+      if (!Number.isSafeInteger(draft[key]) || draft[key] < (key === "maxParallelToolCalls" ? 1 : 0) || draft[key] > 4294967295) {
+        toast.error(t(`workspaceAgents.internal.labels.${key}`, { defaultValue: key }));
+        return;
+      }
+    }
+
     const payload: WorkspaceInternalAgentPolicyPayload = {};
     if (JSON.stringify(row.selectedCategoryCodes ?? []) !== JSON.stringify(draft.selectedCategoryCodes ?? [])) payload.selectedCategoryCodes = draft.selectedCategoryCodes ?? [];
     if (row.toolAssignmentMode !== draft.toolAssignmentMode) {

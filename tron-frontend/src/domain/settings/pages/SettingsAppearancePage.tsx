@@ -87,10 +87,11 @@ export function SettingsAppearancePage() {
               max={maximumSystemFontSize}
               min={minimumSystemFontSize}
               step={1}
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={draftFontSize}
               onBlur={restoreCurrentFontSize}
-              onChange={(event) => handleFontSizeChange(event.target.value)}
+              onChange={(event) => { if (/^\d*$/.test(event.target.value)) handleFontSizeChange(event.target.value); }}
             />
             <ItemDescription className="flex-shrink-0">px</ItemDescription>
           </ItemActions>
