@@ -59,6 +59,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_SESSION_RUN_ACTIVE",
             "this operation is unavailable while the chat session is running".to_string(),
         ),
+        ChatError::ContainerDeleteRejected => (StatusCode::CONFLICT, "CHAT_CONTAINER_DELETE_REJECTED", "Disk directories are shared or unsafe to delete.".into()),
         ChatError::SessionLocationChanged => (
             StatusCode::CONFLICT,
             "CHAT_SESSION_LOCATION_CHANGED",

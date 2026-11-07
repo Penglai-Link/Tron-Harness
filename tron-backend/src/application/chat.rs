@@ -18,7 +18,7 @@ pub use dto::{
     CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
     UpdateChatSessionCommand,
 };
-pub use port::{ChatRepository, ChatSessionTitle};
+pub use port::{ChatContainer, ChatContainerSnapshot, ChatRepository, ChatSessionTitle};
 pub use run_control::{
     ActiveChatRunSnapshot, ChatActiveRunState, ChatRunControlError, GetActiveChatRunResult,
     StopChatRunCommand, StopChatRunResult,

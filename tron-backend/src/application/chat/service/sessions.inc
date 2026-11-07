@@ -278,25 +278,51 @@ impl ChatService {
         self.repository().get_session(session_code)
     }
 
-    /// Archive all chats placed directly under a directory in one transaction.
-    /// The admission guard prevents new runs from entering while we preflight
-    /// existing chats and persist the batch.
     pub fn archive_directory(&self, workspace_code: &str, directory_code: &str) -> Result<Vec<String>, ChatError> {
+        self.mutate_container(crate::application::chat::ChatContainer::Directory {
+            workspace_code: workspace_code.into(), directory_code: directory_code.into(),
+        }, false)
+    }
+
+    pub fn delete_directory(&self, workspace_code: &str, directory_code: &str) -> Result<Vec<String>, ChatError> {
+        self.mutate_container(crate::application::chat::ChatContainer::Directory {
+            workspace_code: workspace_code.into(), directory_code: directory_code.into(),
+        }, true)
+    }
+
+    pub fn mutate_project(&self, workspace_code: &str, project_code: &str, delete: bool) -> Result<Vec<String>, ChatError> {
+        self.mutate_container(crate::application::chat::ChatContainer::Project {
+            workspace_code: workspace_code.into(), project_code: project_code.into(),
+        }, delete)
+    }
+
+    fn mutate_container(&self, container: crate::application::chat::ChatContainer, delete: bool) -> Result<Vec<String>, ChatError> {
+        // Keep run admission and chat placement locked until the entire batch is committed.
         let admission = self.active_runs.lock_admission().map_err(|_| ChatError::StorageFailure)?;
-        let sessions = self.repository().list_sessions()?;
-        for session in sessions.iter().filter(|session| session.workspace_code == workspace_code
-            && session.directory_code.as_deref() == Some(directory_code)
-            && session.status == ChatSessionStatus::Active)
-        {
-            admission.ensure_idle(&session.session_code).map_err(|error| match error {
-                crate::application::agent::ActiveRunError::AlreadyActive
-                | crate::application::agent::ActiveRunError::SessionArchived => ChatError::SessionRunActive,
-                _ => ChatError::StorageFailure,
-            })?;
+        let mut repository = self.repository();
+        let snapshot = repository.container_snapshot(&container)?;
+        let mut attachments = Vec::new();
+        for code in &snapshot.session_codes {
+            let session = repository.get_session(code)?;
+            if session.status == ChatSessionStatus::Active {
+                admission.ensure_idle(code).map_err(|error| match error {
+                    crate::application::agent::ActiveRunError::AlreadyActive
+                    | crate::application::agent::ActiveRunError::SessionArchived => ChatError::SessionRunActive,
+                    _ => ChatError::StorageFailure,
+                })?;
+            }
+            if delete && let Some(resources) = self.resources.as_ref() {
+                attachments.extend(resources.chat_session_attachment_records(code).map_err(chat_error_from_resource)?);
+            }
         }
-        let archived = self.repository().archive_directory(workspace_code, directory_code)?;
-        admission.retire(&archived).map_err(|_| ChatError::StorageFailure)?;
-        Ok(archived)
+        repository.mutate_container(&container, &snapshot, delete)?;
+        admission.retire(&snapshot.session_codes).map_err(|_| ChatError::StorageFailure)?;
+        drop(repository);
+        drop(admission);
+        if delete && let Some(resources) = self.resources.as_ref() {
+            resources.cleanup_chat_session_attachment_files(&attachments);
+        }
+        Ok(snapshot.session_codes)
     }
 
     pub fn restore_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {

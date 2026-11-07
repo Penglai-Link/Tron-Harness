@@ -76,7 +76,6 @@ const SessionGroup = ({
             <ActionsMenu
               pinned={pinned}
               project={project}
-              sessions={sessions}
               onEdit={onEdit}
               onPinnedChange={onPinnedChange}
               onRefresh={onRefresh}

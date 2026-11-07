@@ -224,20 +224,10 @@ impl ProjectService {
         self.view(project)
     }
 
-    pub fn archive(&self, project_code: &str) -> Result<(), ProjectError> {
-        let project = {
-            let mut repository = self
-                .repository
-                .lock()
-                .expect("project repository mutex poisoned");
-            repository.get_project(project_code)?
-        };
-        self.active_workspace(&project.workspace_code)?;
-        let mut repository = self
-            .repository
-            .lock()
-            .expect("project repository mutex poisoned");
-        repository.archive_project(project_code, &current_timestamp())
+    pub fn mutate_container(&self, project_code: &str, chats: &crate::application::chat::ChatService, delete: bool) -> Result<Vec<String>, ProjectContainerError> {
+        let project = self.repository.lock().expect("project repository mutex poisoned").get_project(project_code).map_err(ProjectContainerError::Project)?;
+        self.active_workspace(&project.workspace_code).map_err(ProjectContainerError::Project)?;
+        chats.mutate_project(&project.workspace_code, project_code, delete).map_err(ProjectContainerError::Chat)
     }
 
     /// Resolve linked apps at invocation time so project edits affect future runs.
@@ -308,4 +298,9 @@ impl ProjectService {
             archived_at: project.archived_at,
         }
     }
+}
+
+pub enum ProjectContainerError {
+    Project(ProjectError),
+    Chat(crate::domain::chat::ChatError),
 }

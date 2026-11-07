@@ -37,11 +37,15 @@ export function renameDirectory(directoryCode: string, name: string): Promise<vo
 }
 
 export function archiveDirectory(directoryCode: string): Promise<{ sessionCodes: string[] }> {
-  return requestApi("DELETE /api/v1/directories/{directoryCode}", { pathParams: { directoryCode } });
+  return requestApi("POST /api/v1/directories/{directoryCode}/archive", { pathParams: { directoryCode } });
 }
 
 export function pickDirectory(workspaceCode: string): Promise<DirectoryRecord | null> {
   return requestApi("POST /api/v1/directories/pick", {
     body: { workspaceCode }, headers: { "X-Tron-Native-Picker": "1" }, retryOnUnauthorized: false,
   });
+}
+
+export function deleteDirectory(directoryCode: string): Promise<{ sessionCodes: string[] }> {
+  return requestApi("DELETE /api/v1/directories/{directoryCode}", { pathParams: { directoryCode } });
 }

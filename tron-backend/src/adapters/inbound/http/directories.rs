@@ -18,10 +18,11 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/directories", get(list).post(register))
         .route("/api/v1/directories/pick", post(pick))
+        .route("/api/v1/directories/{directory_code}/archive", post(archive))
         .route("/api/v1/directories/browse", get(browse))
         .route(
             "/api/v1/directories/{directory_code}",
-            patch(rename).delete(archive),
+            patch(rename).delete(delete),
         )
 }
 
@@ -221,14 +222,28 @@ async fn archive(
     Path(code): Path<String>,
     headers: HeaderMap,
 ) -> Response {
-    match state.directories.archive(&code, &state.chats) {
-        Ok(session_codes) => Json(ApiResponse::protocol_success(ArchiveDirectoryResponse { session_codes })).into_response(),
-        Err(crate::application::directory::DirectoryArchiveError::Directory(error)) => {
+    match tokio::task::spawn_blocking(move || state.directories.archive(&code, &state.chats)).await {
+        Ok(Ok(session_codes)) => Json(ApiResponse::protocol_success(ArchiveDirectoryResponse { session_codes })).into_response(),
+        Ok(Err(crate::application::directory::DirectoryArchiveError::Directory(error))) => {
             error_response(error, &headers)
         }
-        Err(crate::application::directory::DirectoryArchiveError::Chat(error)) => {
+        Ok(Err(crate::application::directory::DirectoryArchiveError::Chat(error))) => {
             crate::adapters::inbound::http::chats::error_mapper::chat_error_response(error)
         }
+        Err(_) => error_response(DirectoryError::StorageFailure, &headers),
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteDirectoryResponse { session_codes: Vec<String> }
+
+async fn delete(State(state): State<AppState>, Path(code): Path<String>, headers: HeaderMap) -> Response {
+    match tokio::task::spawn_blocking(move || state.directories.delete(&code, &state.chats)).await {
+        Ok(Ok(session_codes)) => Json(ApiResponse::protocol_success(DeleteDirectoryResponse { session_codes })).into_response(),
+        Ok(Err(crate::application::directory::DirectoryArchiveError::Directory(error))) => error_response(error, &headers),
+        Ok(Err(crate::application::directory::DirectoryArchiveError::Chat(error))) => crate::adapters::inbound::http::chats::error_mapper::chat_error_response(error),
+        Err(_) => error_response(DirectoryError::StorageFailure, &headers),
     }
 }
 

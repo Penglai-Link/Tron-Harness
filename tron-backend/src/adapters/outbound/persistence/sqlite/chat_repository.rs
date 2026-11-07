@@ -2,13 +2,16 @@
 //! history are stored through Framework services on the injected connection.
 use super::framework_storage::{blocking, chat_error};
 use crate::{
-    application::{agent::FrameworkHost, chat::ChatRepository},
+    application::{agent::FrameworkHost, chat::{ChatContainer, ChatContainerSnapshot, ChatRepository}},
     domain::chat::*,
 };
 use eliteforge_agent_core as fw;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+mod container;
+mod container_disk;
 
 pub struct SqliteChatRepository {
     host: FrameworkHost,
@@ -165,7 +168,9 @@ impl SqliteChatRepository {
         })
     }
     fn delete_session_internal(&mut self, id: &str, heartbeat_retention: bool) -> Result<(), ChatError> {
-        blocking(async {
+        blocking(self.delete_session_records(id, heartbeat_retention))
+    }
+    async fn delete_session_records(&self, id: &str, heartbeat_retention: bool) -> Result<(), ChatError> {
             let link = self.link(id).await?;
             let db = self.host.shared_database().await.map_err(chat_error)?;
             let sessions = self
@@ -219,7 +224,6 @@ impl SqliteChatRepository {
                     .await.map_err(fw::StateError::Backend)?;
                 Ok(())
             }).await.map_err(chat_error)
-        })
     }
     pub(crate) async fn ensure_run_session(
         host: &FrameworkHost,
@@ -606,6 +610,12 @@ impl ChatRepository for SqliteChatRepository {
                     }
                     s.archive(id).await?;
                 } else {
+                    if let Some(project_code) = link.project_code {
+                        let workspace_code = link.workspace_code.clone();
+                        let changed = db.call(move |c| c.execute("UPDATE projects SET status='ACTIVE',archived_at=NULL WHERE project_code=?1 AND workspace_code=?2", params![project_code, workspace_code]))
+                            .await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
+                        if changed == 0 { return Err(fw::StateError::NotFound); }
+                    }
                     if let Some(directory_code) = link.directory_code {
                         let workspace_code = link.workspace_code;
                         let changed = db.call(move |c| c.execute("UPDATE directories SET archived=0 WHERE directory_code=?1 AND workspace_code=?2", params![directory_code, workspace_code]))
@@ -710,32 +720,11 @@ impl ChatRepository for SqliteChatRepository {
             }).await.map_err(|_| ChatError::StorageFailure)?
         })
     }
-    fn archive_directory(&mut self, workspace_code: &str, directory_code: &str) -> Result<Vec<String>, ChatError> {
-        let workspace = workspace_code.to_owned();
-        let directory = directory_code.to_owned();
-        blocking(async {
-            let framework = self.framework().await?;
-            let sessions = framework.sessions().map_err(|_| ChatError::StorageFailure)?;
-            let goals = framework.goals().map_err(|_| ChatError::StorageFailure)?;
-            let db = self.host.shared_database().await.map_err(chat_error)?;
-            db.transaction(async {
-                let workspace_query = workspace.clone();
-                let directory_query = directory.clone();
-                let codes = db.call(move |c| -> rusqlite::Result<Vec<String>> {
-                    let exists: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM directories WHERE directory_code=?1 AND workspace_code=?2 AND archived=0)", params![directory_query, workspace_query], |row| row.get(0))?;
-                    if !exists { return Err(rusqlite::Error::QueryReturnedNoRows); }
-                    let mut query = c.prepare("SELECT l.session_id FROM workspace_session_links l JOIN ef_sessions s ON s.id=l.session_id WHERE l.workspace_code=?1 AND json_extract(l.business_json,'$.directory_code')=?2 AND json_extract(s.record,'$.status') IN ('Active','ACTIVE')")?;
-                    query.query_map(params![workspace_query, directory_query], |row| row.get(0))?.collect()
-                }).await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
-                for code in &codes {
-                    if goals.active(code).await?.is_some_and(|goal| goal.status == fw::GoalStatus::Active) { return Err(fw::StateError::Busy); }
-                    sessions.archive(code).await?;
-                }
-                db.call(move |c| c.execute("UPDATE directories SET archived=1 WHERE directory_code=?1 AND workspace_code=?2 AND archived=0", params![directory, workspace]))
-                    .await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
-                Ok(codes)
-            }).await.map_err(chat_error)
-        })
+    fn container_snapshot(&mut self, container: &ChatContainer) -> Result<ChatContainerSnapshot, ChatError> {
+        blocking(self.read_container_snapshot(container))
+    }
+    fn mutate_container(&mut self, container: &ChatContainer, expected: &ChatContainerSnapshot, delete: bool) -> Result<(), ChatError> {
+        blocking(self.apply_container_mutation(container, expected, delete))
     }
     fn update_session_run(
         &mut self,

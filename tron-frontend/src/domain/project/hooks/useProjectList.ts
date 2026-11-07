@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { archiveProject, fetchProjects, saveProject } from "@/domain/project/api/projectApi";
-import { archiveMockProject, listMockProjects, saveMockProject } from "@/domain/project/mock/data";
+import { fetchProjects, saveProject } from "@/domain/project/api/projectApi";
+import { listMockProjects, saveMockProject } from "@/domain/project/mock/data";
 import type {
   ProjectRecord,
   SaveProjectInput,
@@ -41,12 +41,4 @@ export function createProject(input: SaveProjectInput): Promise<ProjectRecord> {
   return getServiceDataSource("project") === "mock"
     ? Promise.resolve(saveMockProject(input))
     : saveProject(input);
-}
-
-export function removeProject(projectCode: string): Promise<void> {
-  if (getServiceDataSource("project") === "mock") {
-    archiveMockProject(projectCode);
-    return Promise.resolve();
-  }
-  return archiveProject(projectCode).then(() => undefined);
 }

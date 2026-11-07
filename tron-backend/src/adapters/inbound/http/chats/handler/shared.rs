@@ -133,6 +133,7 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
         ChatSendError::Chat(ChatError::SessionMustBeArchived) => "CHAT_SESSION_MUST_BE_ARCHIVED",
         ChatSendError::Chat(ChatError::SessionArchived) => "CHAT_SESSION_ARCHIVED",
         ChatSendError::Chat(ChatError::SessionRunActive) => "CHAT_SESSION_RUN_ACTIVE",
+        ChatSendError::Chat(ChatError::ContainerDeleteRejected) => "CHAT_CONTAINER_DELETE_REJECTED",
         ChatSendError::Chat(ChatError::SessionLocationChanged) => "CHAT_SESSION_LOCATION_CHANGED",
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "CHAT_SESSION_TITLE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "CHAT_WORKSPACE_REQUIRED",

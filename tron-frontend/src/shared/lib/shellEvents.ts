@@ -7,9 +7,11 @@ export const OPEN_CHAT_CONTEXT_EVENT = "tron:open-chat-context";
 
 export const CHAT_SESSIONS_REMOVED_EVENT = "tron:chat-sessions-removed";
 
-export function notifyChatSessionsRemoved(sessionCodes: string[]) {
-  if (!sessionCodes.length) return;
+export interface RemovedChatScope { projectCodes?: string[]; directoryCodes?: string[] }
+
+export function notifyChatSessionsRemoved(sessionCodes: string[], scope: RemovedChatScope = {}) {
+  if (!sessionCodes.length && !scope.projectCodes?.length && !scope.directoryCodes?.length) return;
   window.dispatchEvent(new CustomEvent(CHAT_SESSIONS_REMOVED_EVENT, {
-    detail: { sessionCodes },
+    detail: { sessionCodes, ...scope },
   }));
 }

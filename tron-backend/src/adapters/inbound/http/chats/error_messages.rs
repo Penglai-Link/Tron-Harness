@@ -36,6 +36,10 @@ pub(super) fn message(code: &str, detail: &str) -> String {
             "会话正在运行，请停止或等待结束后再操作。",
             "Stop the active run or wait for it to finish before continuing.",
         ),
+        "CHAT_CONTAINER_DELETE_REJECTED" => (
+            "磁盘目录仍被其他主题或会话使用，或路径不适合整目录删除。请解除共享引用或检查目录后重试。",
+            "Disk directories are shared with another topic or chat, or are unsafe to delete. Remove shared references or check the paths and retry.",
+        ),
         "CHAT_SESSION_LOCATION_CHANGED" => (
             "会话位置刚刚发生更改，请重试。",
             "The chat location just changed. Please retry.",

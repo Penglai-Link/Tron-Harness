@@ -2,9 +2,8 @@ import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 
 import { useTranslation } from "react-i18next";
-import { archiveChatSession } from "@/domain/chat/hooks";
-import type { ChatSession } from "@/domain/chat/model";
-import { removeProject, type ProjectRecord } from "@/domain/project";
+import { notifyArchivedChatSessions } from "@/domain/chat/hooks/useChatSessionGroupList";
+import { archiveProject, deleteProject, type ProjectRecord } from "@/domain/project";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   DropdownMenu,
@@ -22,14 +21,12 @@ const ActionsMenu = ({
   onRefresh,
   pinned,
   project,
-  sessions,
 }: {
   onEdit: () => void;
   onPinnedChange: () => void;
   onRefresh: () => void;
   pinned: boolean;
   project: ProjectRecord;
-  sessions: ChatSession[];
 }) => {
   const toast = useToast();
   const { t } = useTranslation("shell");
@@ -37,40 +34,20 @@ const ActionsMenu = ({
   const [removalOpen, setRemovalOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
-  async function archiveChats() {
+  async function mutate(remove: boolean) {
+    if (pending) return;
     setPending(true);
     try {
-      const outcomes = await Promise.allSettled(
-        sessions.map((session) => archiveChatSession(session.sessionCode)),
-      );
+      const result = await (remove ? deleteProject(project.projectCode) : archiveProject(project.projectCode));
+      notifyArchivedChatSessions(result.sessionCodes, { projectCodes: [project.projectCode] });
+      window.dispatchEvent(new Event("tron:project-created"));
       onRefresh();
       setArchiveChatsOpen(false);
-      const failed = outcomes.filter((outcome) => outcome.status === "rejected").length;
-      const succeeded = outcomes.length - failed;
-      if (failed > 0) {
-        toast.error(t("shell:chatSidebar.project.archivePartial", { succeeded, failed }));
-      } else {
-        toast.success(t("shell:chatSidebar.project.archived"));
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.project.archiveFailed"));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function remove() {
-    setPending(true);
-    try {
-      await removeProject(project.projectCode);
-      onRefresh();
       setRemovalOpen(false);
-      toast.success(t("shell:chatSidebar.project.removed"));
+      toast.success(t(remove ? "chatSidebar.project.removed" : "chatSidebar.project.archived"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.project.removeFailed"));
-    } finally {
-      setPending(false);
-    }
+      toast.error(error instanceof Error ? error.message : t(remove ? "chatSidebar.project.removeFailed" : "chatSidebar.project.archiveFailed"));
+    } finally { setPending(false); }
   }
 
   return (
@@ -98,7 +75,7 @@ const ActionsMenu = ({
           <DropdownMenuItem onClick={onEdit}>{t("shell:chatSidebar.project.edit")}</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            disabled={sessions.length === 0}
+            disabled={pending}
             onClick={() => setArchiveChatsOpen(true)}
           >
             {t("shell:chatSidebar.project.archiveChats")}
@@ -106,6 +83,7 @@ const ActionsMenu = ({
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
+            disabled={pending}
             onClick={() => setRemovalOpen(true)}
           >
             {t("shell:chatSidebar.project.removeProject")}
@@ -116,7 +94,6 @@ const ActionsMenu = ({
         cancelText={t("shell:chatSidebar.project.cancel")}
         confirmText={t("shell:chatSidebar.project.archiveChats")}
         description={t("shell:chatSidebar.confirmations.archiveDescription", {
-          count: sessions.length,
           name: project.name,
         })}
         open={archiveChatsOpen}
@@ -124,7 +101,7 @@ const ActionsMenu = ({
         title={t("shell:chatSidebar.confirmations.archiveTitle")}
         tone="default"
         onCancel={() => setArchiveChatsOpen(false)}
-        onConfirm={() => void archiveChats()}
+        onConfirm={() => void mutate(false)}
       />
       <ConfirmDialog
         cancelText={t("shell:chatSidebar.project.cancel")}
@@ -136,7 +113,7 @@ const ActionsMenu = ({
         pending={pending}
         title={t("shell:chatSidebar.confirmations.removeTitle")}
         onCancel={() => setRemovalOpen(false)}
-        onConfirm={() => void remove()}
+        onConfirm={() => void mutate(true)}
       />
     </>
   );

@@ -6,13 +6,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import type { ChatSession } from "@/domain/chat/model";
 import { notifyArchivedChatSessions } from "@/domain/chat/hooks/useChatSessionGroupList";
-import { archiveDirectory, renameDirectory, type DirectoryRecord } from "@/domain/directory/api/directoryApi";
+import { archiveDirectory, deleteDirectory, renameDirectory, type DirectoryRecord } from "@/domain/directory/api/directoryApi";
 import { useDirectories } from "@/domain/directory/hooks/useDirectories";
 import { useCreateChatTab } from "../hooks/useCreateChatTab";
 import { sortPinnedSessions } from "../hooks/usePinnedSessionCodes";
@@ -36,6 +36,10 @@ interface DirectorySectionProps {
 }
 
 type TreeNode = { directory: DirectoryRecord; children: TreeNode[] };
+
+function subtreeCodes(node: TreeNode): string[] {
+  return [node.directory.directoryCode, ...node.children.flatMap(subtreeCodes)];
+}
 
 function makeTree(items: DirectoryRecord[]): TreeNode[] {
   const nodes = new Map(items.map((directory) => [directory.directoryCode, { directory, children: [] as TreeNode[] }]));
@@ -81,6 +85,7 @@ function DirectoryNode({ node, refresh, ...props }: DirectorySectionProps & { no
   const [open, setOpen] = useState(true);
   const [renameOpen, setRenameOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [name, setName] = useState(directory.name);
   const [pending, setPending] = useState(false);
   const { create } = useCreateChatTab(directory.workspaceCode, undefined, directory.directoryCode);
@@ -102,17 +107,18 @@ function DirectoryNode({ node, refresh, ...props }: DirectorySectionProps & { no
     finally { setPending(false); }
   }
 
-  async function archive() {
+  async function mutate(remove: boolean) {
     if (pending) return;
     setPending(true);
     try {
-      const archived = await archiveDirectory(directory.directoryCode);
-      notifyArchivedChatSessions(archived.sessionCodes);
+      const archived = await (remove ? deleteDirectory(directory.directoryCode) : archiveDirectory(directory.directoryCode));
+      notifyArchivedChatSessions(archived.sessionCodes, { directoryCodes: subtreeCodes(node) });
       setArchiveOpen(false);
+      setDeleteOpen(false);
       window.dispatchEvent(new Event("tron:directories-changed"));
       window.dispatchEvent(new Event("tron:project-created"));
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : t("chatSidebar.directory.archiveFailed"));
+      toast.error(reason instanceof Error ? reason.message : t(remove ? "chatSidebar.directory.deleteFailed" : "chatSidebar.directory.archiveFailed"));
       window.dispatchEvent(new Event("tron:project-created"));
     } finally { setPending(false); }
   }
@@ -127,7 +133,7 @@ function DirectoryNode({ node, refresh, ...props }: DirectorySectionProps & { no
         <div className="flex shrink-0 items-center gap-2">
           <ActionButton aria-label={t("chatSidebar.directory.newChat", { name: directory.name })} onClick={() => create()}><Plus size={15} aria-hidden="true" /></ActionButton>
           <DropdownMenu><DropdownMenuTrigger render={<ActionButton aria-label={t("common:actions.more")}><MoreHorizontal size={16} aria-hidden="true" /></ActionButton>} />
-            <DropdownMenuContent align="start"><DropdownMenuItem onClick={() => void copyPath()}>{t("chatSidebar.directory.copyPath")}</DropdownMenuItem><DropdownMenuItem onClick={() => { setName(directory.name); setRenameOpen(true); }}>{t("chatSidebar.directory.rename")}</DropdownMenuItem><DropdownMenuItem onClick={() => setArchiveOpen(true)}>{t("chatSidebar.directory.archive")}</DropdownMenuItem></DropdownMenuContent>
+            <DropdownMenuContent align="start"><DropdownMenuItem onClick={() => void copyPath()}>{t("chatSidebar.directory.copyPath")}</DropdownMenuItem><DropdownMenuItem onClick={() => { setName(directory.name); setRenameOpen(true); }}>{t("chatSidebar.directory.rename")}</DropdownMenuItem><DropdownMenuItem disabled={pending} onClick={() => setArchiveOpen(true)}>{t("chatSidebar.directory.archive")}</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" disabled={pending} onClick={() => setDeleteOpen(true)}>{t("chatSidebar.directory.delete")}</DropdownMenuItem></DropdownMenuContent>
           </DropdownMenu>
         </div>
       } />
@@ -136,7 +142,8 @@ function DirectoryNode({ node, refresh, ...props }: DirectorySectionProps & { no
         {sortPinnedSessions(sessions, props.pinnedSessionCodes).map((session) => <MessageItem key={session.sessionCode} session={session} running={props.runningSessionCode === session.sessionCode} active={props.activeSessionCode === session.sessionCode} onNavigate={props.onNavigate} pinned={props.pinnedSessionCodes.includes(session.sessionCode)} onTogglePin={() => props.onToggleSessionPin(session.sessionCode)} onRemovePin={() => props.onRemoveSessionPin(session.sessionCode)} />)}
       </div> : null}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}><DialogContent><DialogHeader><DialogTitle>{t("chatSidebar.directory.rename")}</DialogTitle></DialogHeader><Field><FieldLabel htmlFor={`directory-name-${directory.directoryCode}`}>{t("chatSidebar.directory.name")}</FieldLabel><Input id={`directory-name-${directory.directoryCode}`} value={name} onChange={(event) => setName(event.target.value)} /></Field><DialogFooter><Button variant="outline" onClick={() => setRenameOpen(false)}>{t("chatSidebar.directory.cancel")}</Button><Button disabled={!name.trim() || pending} onClick={() => void rename()}>{t("chatSidebar.directory.save")}</Button></DialogFooter></DialogContent></Dialog>
-      <ConfirmDialog open={archiveOpen} pending={pending} title={t("chatSidebar.directory.archiveTitle")} description={t("chatSidebar.directory.archiveDescription", { name: directory.name })} cancelText={t("chatSidebar.directory.cancel")} confirmText={t("chatSidebar.directory.archive")} onCancel={() => setArchiveOpen(false)} onConfirm={() => void archive()} />
+      <ConfirmDialog open={archiveOpen} pending={pending} title={t("chatSidebar.directory.archiveTitle")} description={t("chatSidebar.directory.archiveDescription", { name: directory.name })} cancelText={t("chatSidebar.directory.cancel")} confirmText={t("chatSidebar.directory.archive")} onCancel={() => setArchiveOpen(false)} tone="default" onConfirm={() => void mutate(false)} />
+      <ConfirmDialog open={deleteOpen} pending={pending} title={t("chatSidebar.directory.deleteTitle")} description={t("chatSidebar.directory.deleteDescription", { name: directory.name })} cancelText={t("chatSidebar.directory.cancel")} confirmText={t("chatSidebar.directory.delete")} onCancel={() => setDeleteOpen(false)} onConfirm={() => void mutate(true)} />
     </section>
   );
 }

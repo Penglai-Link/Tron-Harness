@@ -21,3 +21,11 @@ pub struct SaveProjectRequest {
     pub app_codes: Vec<String>,
     pub primary_app_code: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArchiveProjectRequest { pub project_code: String }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DeleteProjectRequest { pub project_code: String }

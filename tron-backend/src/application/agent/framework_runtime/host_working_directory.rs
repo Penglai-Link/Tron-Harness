@@ -18,6 +18,35 @@ fn component(value: &str) -> String {
     }
 }
 
+/// Roll back staged filesystem changes when a container transaction fails.
+pub(crate) struct StagedSessionDirectories {
+    paths: Vec<(PathBuf, PathBuf)>,
+}
+
+impl StagedSessionDirectories {
+    pub(crate) fn commit(mut self) -> Result<(), String> {
+        let mut failure = None;
+        for (_, staged) in self.paths.drain(..) {
+            let result = if staged.is_symlink() { fs::remove_file(&staged) } else { fs::remove_dir_all(&staged) };
+            if let Err(error) = result {
+                tracing::error!(path = %staged.display(), %error, "could not remove staged directory after committed deletion");
+                failure = Some(format!("{}: {error}", staged.display()));
+            }
+        }
+        failure.map_or(Ok(()), Err)
+    }
+}
+
+impl Drop for StagedSessionDirectories {
+    fn drop(&mut self) {
+        for (original, staged) in self.paths.iter().rev() {
+            if let Err(error) = fs::rename(staged, original) {
+                tracing::error!(path = %original.display(), staged = %staged.display(), %error, "could not restore session directory after rolled back deletion");
+            }
+        }
+    }
+}
+
 impl FrameworkHost {
     /// dsh's immutable session cwd identifies the shared UI group. The CLI
     /// adapter sets effective cwd and standing write root to the actual task.
@@ -82,6 +111,69 @@ impl FrameworkHost {
         })
         .await
         .map_err(|error| format!("session working directory cleanup failed: {error}"))?
+    }
+
+    pub(crate) async fn stage_session_working_directories(
+        &self,
+        sessions: Vec<(String, Option<String>)>,
+        disk_paths: Vec<String>,
+    ) -> Result<StagedSessionDirectories, String> {
+        let root = self.0.path.with_extension("workspaces");
+        let directories = sessions.into_iter().map(|(session, user)| self.managed_working_directory("sessions", user.as_deref(), &session)).collect::<Vec<_>>();
+        tokio::task::spawn_blocking(move || {
+            let mut staged = StagedSessionDirectories { paths: Vec::new() };
+            'directory: for directory in directories {
+                for parent in [root.clone(), root.join("sessions"), directory.parent().unwrap().to_owned()] {
+                    match fs::symlink_metadata(&parent) {
+                        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+                        Ok(_) => return Err(format!("session working directory parent is not managed: {}", parent.display())),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue 'directory,
+                        Err(error) => return Err(format!("could not inspect session working directory: {error}")),
+                    }
+                }
+                match fs::symlink_metadata(&directory) {
+                    Ok(metadata) if metadata.is_dir() || metadata.file_type().is_symlink() => {}
+                    Ok(_) => return Err(format!("session working path is not a directory: {}", directory.display())),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(error) => return Err(format!("could not inspect session working directory: {error}")),
+                }
+                let target = directory.with_file_name(format!(".deleting-{:032x}", rand::random::<u128>()));
+                match fs::rename(&directory, &target) {
+                    Ok(()) => staged.paths.push((directory, target)),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(format!("could not stage session working directory: {error}")),
+                }
+            }
+            let mut roots = disk_paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
+            roots.sort();
+            roots.dedup();
+            let mut selected: Vec<PathBuf> = Vec::new();
+            for path in roots {
+                if selected.iter().any(|root| path.starts_with(root)) { continue; }
+                if !path.is_absolute() { return Err(format!("non-absolute deletion path: {}", path.display())); }
+                let home = std::env::var_os("HOME").map(PathBuf::from);
+                let protected = [home, root.parent().map(PathBuf::from), std::env::current_dir().ok()];
+                let system_root = ["/System", "/Library", "/Applications", "/usr", "/bin", "/sbin", "/etc", "/private", "/private/var", "/private/tmp", "/var", "/tmp", "/Users", "/Volumes", "/home"].iter().any(|p| PathBuf::from(p) == path);
+                let data_root = root.parent().is_some_and(|p| path.starts_with(p));
+                if system_root || data_root || path.parent().is_none() || protected.iter().flatten().any(|p| p.starts_with(&path)) {
+                    return Err(format!("protected deletion path: {}", path.display()));
+                }
+                match fs::symlink_metadata(&path) {
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(e) => return Err(e.to_string()),
+                    Ok(m) if m.is_dir() && !m.file_type().is_symlink() => {},
+                    Ok(_) => return Err(format!("deletion path was replaced: {}", path.display())),
+                }
+                if fs::canonicalize(&path).map_err(|e| e.to_string())? != path {
+                    return Err(format!("deletion path resolution changed: {}", path.display()));
+                }
+                let target = path.with_file_name(format!(".deleting-{:032x}", rand::random::<u128>()));
+                fs::rename(&path, &target).map_err(|e| format!("could not stage {}: {e}", path.display()))?;
+                selected.push(path.clone());
+                staged.paths.push((path, target));
+            }
+            Ok(staged)
+        }).await.map_err(|error| error.to_string())?
     }
 
     pub(super) fn delegated_execution_scope(

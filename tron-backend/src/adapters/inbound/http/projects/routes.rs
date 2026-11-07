@@ -1,4 +1,4 @@
-use super::handler::{archive_project, get_project, list_projects, save_project};
+use super::handler::{archive_project, delete_project, get_project, list_projects, save_project};
 use crate::app::AppState;
 use axum::{Router, routing::post};
 pub fn routes() -> Router<AppState> {
@@ -7,4 +7,5 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/projects/get", post(get_project))
         .route("/api/v1/projects/save", post(save_project))
         .route("/api/v1/projects/archive", post(archive_project))
+        .route("/api/v1/projects/delete", post(delete_project))
 }

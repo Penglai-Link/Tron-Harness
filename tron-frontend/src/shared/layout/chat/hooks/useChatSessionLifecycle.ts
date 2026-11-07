@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { CHAT_SESSIONS_REMOVED_EVENT } from "@/shared/lib/shellEvents";
+import { CHAT_SESSIONS_REMOVED_EVENT, type RemovedChatScope } from "@/shared/lib/shellEvents";
 import { useTabStore } from "@/store/tabStore";
 
 function sessionCodeFromPath(path: string) {
@@ -17,17 +17,25 @@ export function useChatSessionLifecycle() {
 
   useEffect(() => {
     const removeSessions = (event: Event) => {
-      const sessionCodes = (event as CustomEvent<{ sessionCodes: string[] }>).detail?.sessionCodes;
-      if (!sessionCodes?.length) return;
-      const removed = new Set(sessionCodes);
+      const detail = (event as CustomEvent<RemovedChatScope & { sessionCodes: string[] }>).detail;
+      if (!detail) return;
+      const removed = new Set(detail.sessionCodes);
+      const removedPath = (path: string) => {
+        if (removed.has(sessionCodeFromPath(path) ?? "")) return true;
+        const url = new URL(path, "https://tron.local");
+        return url.pathname === "/chats" && Boolean(url.searchParams.get("draftCode")) && (
+          detail.projectCodes?.includes(url.searchParams.get("projectCode") ?? "")
+          || detail.directoryCodes?.includes(url.searchParams.get("directoryCode") ?? "")
+        );
+      };
       const state = useTabStore.getState();
       const tabIds = state.getAllTabs().filter((tab) => (
-        removed.has(sessionCodeFromPath(tab.path) ?? "")
+        removedPath(tab.path)
         || (tab.activeNav?.startsWith("chat-session:")
           && removed.has(tab.activeNav.slice("chat-session:".length)))
       )).map((tab) => tab.id);
       const current = locationRef.current;
-      const removedLocation = removed.has(sessionCodeFromPath(`${current.pathname}${current.search}`) ?? "");
+      const removedLocation = removedPath(`${current.pathname}${current.search}`);
       state.removeTabs(tabIds);
       if (removedLocation) {
         const updated = useTabStore.getState();

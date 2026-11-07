@@ -6,6 +6,21 @@ pub struct ChatSessionTitle {
     pub title: String,
 }
 
+/// A sidebar container; directory scope includes registered descendants.
+#[derive(Clone, Debug)]
+pub enum ChatContainer {
+    Project { workspace_code: String, project_code: String },
+    Directory { workspace_code: String, directory_code: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChatContainerSnapshot {
+    pub directory_codes: Vec<String>,
+    pub session_codes: Vec<String>,
+    pub attachment_codes: Vec<String>,
+    pub disk_paths: Vec<String>,
+}
+
 pub trait ChatRepository: Send {
     fn validate_annotation_sources(&mut self, session: &str, annotations: &[eliteforge_agent_core::MessageAnnotation]) -> Result<(), ChatError>;
     fn session_titles(&mut self, codes: &[String]) -> Result<Vec<ChatSessionTitle>, ChatError>;
@@ -63,8 +78,9 @@ pub trait ChatRepository: Send {
         working_directory_code: Option<&str>,
         reference_code: &str,
     ) -> Result<(), ChatError>;
-    /// Atomically archive a directory and its directly placed chats.
-    fn archive_directory(&mut self, workspace_code: &str, directory_code: &str) -> Result<Vec<String>, ChatError>;
+    fn container_snapshot(&mut self, container: &ChatContainer) -> Result<ChatContainerSnapshot, ChatError>;
+    /// Recheck the snapshot in the write transaction before changing any rows.
+    fn mutate_container(&mut self, container: &ChatContainer, expected: &ChatContainerSnapshot, delete: bool) -> Result<(), ChatError>;
     fn update_session_run(
         &mut self,
         session_code: &str,

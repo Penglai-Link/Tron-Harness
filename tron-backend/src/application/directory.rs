@@ -189,6 +189,12 @@ impl DirectoryService {
         self.check_workspace(&directory.workspace_code)?;
         chats.archive_directory(&directory.workspace_code, code).map_err(DirectoryArchiveError::Chat)
     }
+    pub fn delete(&self, code: &str, chats: &crate::application::chat::ChatService) -> Result<Vec<String>, DirectoryArchiveError> {
+        let directory = self.repository.get(code)?;
+        self.check_workspace(&directory.workspace_code)?;
+        chats.delete_directory(&directory.workspace_code, code).map_err(DirectoryArchiveError::Chat)
+    }
+
 }
 
 pub enum DirectoryArchiveError {

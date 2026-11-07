@@ -210,6 +210,7 @@ pub enum ChatError {
     SessionArchived,
     SessionRunActive,
     SessionLocationChanged,
+    ContainerDeleteRejected,
     SessionTitleRequired,
     StorageFailure,
     WorkspaceForbidden,
@@ -244,6 +245,7 @@ impl Display for ChatError {
                 f.write_str("archived chat sessions cannot be changed or resumed")
             }
             Self::SessionRunActive => f.write_str("running chat sessions cannot be archived"),
+            Self::ContainerDeleteRejected => f.write_str("container disk deletion is unsafe or shared"),
             Self::SessionLocationChanged => f.write_str("chat location changed; retry the request"),
             Self::SessionTitleRequired => f.write_str("chat session title is required"),
             Self::StorageFailure => f.write_str("chat storage failure"),

@@ -10,7 +10,7 @@ import { chatApiEndpoints } from "@/domain/chat/api";
 import type { ChatSession, ChatSessionGroup, CreateChatSessionInput, UpdateChatSessionInput } from "@/domain/chat/model";
 import { requestApi } from "@/shared/api/httpClient";
 import { rememberChatWorkspace } from "@/shared/api/chatWorkspaceScope";
-import { notifyChatSessionsRemoved } from "@/shared/lib/shellEvents";
+import { notifyChatSessionsRemoved, type RemovedChatScope } from "@/shared/lib/shellEvents";
 import { getServiceDataSource, useServiceQuery } from "@/shared/api/serviceConfig";
 
 const recentlyCreatedSessions = new Map<string, ChatSession>();
@@ -20,9 +20,9 @@ export function rememberCreatedChatSession(session: ChatSession) {
   recentlyCreatedSessions.set(session.sessionCode, session);
 }
 
-export function notifyArchivedChatSessions(sessionCodes: string[]) {
+export function notifyArchivedChatSessions(sessionCodes: string[], scope?: RemovedChatScope) {
   sessionCodes.forEach((sessionCode) => recentlyCreatedSessions.delete(sessionCode));
-  notifyChatSessionsRemoved(sessionCodes);
+  notifyChatSessionsRemoved(sessionCodes, scope);
 }
 
 function mergeRecentlyCreatedSessions(

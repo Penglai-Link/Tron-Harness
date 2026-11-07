@@ -9,6 +9,7 @@ export const projectApiEndpoints = {
   get: "POST /api/v1/projects/get",
   save: "POST /api/v1/projects/save",
   archive: "POST /api/v1/projects/archive",
+  delete: "POST /api/v1/projects/delete",
 } as const;
 
 export function getProject(projectCode: string, signal?: AbortSignal) {
@@ -26,7 +27,11 @@ export function saveProject(input: SaveProjectInput) {
 }
 
 export function archiveProject(projectCode: string) {
-  return requestApi<Record<string, never>>(projectApiEndpoints.archive, {
+  return requestApi<{ sessionCodes: string[] }>(projectApiEndpoints.archive, {
     body: { projectCode },
   });
+}
+
+export function deleteProject(projectCode: string) {
+  return requestApi<{ sessionCodes: string[] }>(projectApiEndpoints.delete, { body: { projectCode } });
 }
