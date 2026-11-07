@@ -1,3 +1,4 @@
+import { useComposerDisabled } from "@eliteforge/agent-ui-composer-react";
 import { defaultChatAnnotationLabels, zhChatAnnotationLabels } from "@eliteforge/agent-ui-chat-core";
 import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
@@ -44,6 +45,11 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
   createSendInput?: (session: ChatSession, content: string, attachments: ChatMessageAttachment[]) => SendChatMessageInput | null;
 }
 
+function ComposerControls({ children }: { children: React.ReactNode }) {
+  const disabled = useComposerDisabled();
+  return <fieldset disabled={disabled} inert={disabled} className="m-0 flex min-w-0 max-w-full flex-wrap items-center gap-1 border-0 p-0">{children}</fieldset>;
+}
+
 /** Product context adapter only. Rendering, streaming, queues, stop and replay belong to Agent UI. */
 export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, config, knowledgeBaseId, speechScope, initialSession, pendingAttachments,
   onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, footerAddon, draft: controlledDraft, onDraftChange, composerRef: hostComposerRef, ...props }: AgentChatWindowProps) {
@@ -65,6 +71,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     if (hostComposerRef) hostComposerRef.current = element;
   }, [hostComposerRef]);
   const appendTranscript = useCallback((text: string) => {
+    if (!composerRef.current || composerRef.current.disabled) return;
     const current = draftRef.current;
     changeDraft(`${current}${current && !/\s$/.test(current) ? "\n" : ""}${text}`);
     composerRef.current?.focus();
@@ -203,7 +210,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   return <>{turnDeletion.dialog}<ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
     draft={draft} onDraftChange={changeDraft} composerRef={setComposerRef}
     renderAttachmentControl={props.renderAttachmentControl ?? ((control) => <ChatAttachmentButton {...control} />)}
-    footerAddon={<>{footerAddon}<ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /><ChatSpeechButton composer={composerRef}
+    footerAddon={<><ComposerControls>{footerAddon}</ComposerControls><ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /><ChatSpeechButton composer={composerRef}
       active={tabVisible && !config.disabledInput && (!config.floating || !props.windowState || (props.windowState.open && !props.windowState.collapsed))}
       scope={`${config.workspaceCode ?? ""}:${speechScope ?? initialSession?.sessionCode ?? activeSessionCode ?? "draft"}`} floating={Boolean(config.floating)} onTranscript={appendTranscript} /></>}
     confirmDeleteTurn={props.confirmDeleteTurn ?? turnDeletion.confirm}

@@ -1,3 +1,4 @@
+import { useComposerDisabled } from "@eliteforge/agent-ui-composer-react";
 import { useEffect, useRef, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -17,6 +18,7 @@ export function ChatSpeechButton({ composer, active, scope, floating, onTranscri
   composer: RefObject<HTMLTextAreaElement | null>; active: boolean; scope: string;
   floating: boolean; onTranscript: (text: string) => void;
 }) {
+  const disabled = useComposerDisabled();
   const { t } = useTranslation("pages");
   const user = useAuthStore(state => state.session?.user.userCode);
   const binding = useAppShellStore(state => state.shortcutBindings.toggleVoiceInput);
@@ -31,10 +33,10 @@ export function ChatSpeechButton({ composer, active, scope, floating, onTranscri
     return () => window.removeEventListener(AUTOMATIC_ROUTERS_CHANGED, refresh);
   }, [active, refetch]);
   const available = !routes.isError && (routes.data?.some(route => route.kind === "SpeechRecognition" && routeHasCandidates(route)) ?? false);
-  const speech = useSpeechInput({ active: active && available, scope: `${user ?? ""}:${scope}`, onTranscript });
+  const speech = useSpeechInput({ active: active && available && !disabled, scope: `${user ?? ""}:${scope}`, onTranscript });
   const button = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (!active || !available || !button.current) return;
+    if (!active || !available || disabled || !button.current) return;
     const target: SpeechTarget = { button: button.current, composer, floating };
     targets.add(target);
     const keydown = (event: KeyboardEvent) => {
@@ -53,7 +55,7 @@ export function ChatSpeechButton({ composer, active, scope, floating, onTranscri
     };
     window.addEventListener("keydown", keydown);
     return () => { targets.delete(target); window.removeEventListener("keydown", keydown); };
-  }, [active, available, binding, composer, floating, speech.state, speech.toggle, speech.cancel]);
+  }, [active, available, disabled, binding, composer, floating, speech.state, speech.toggle, speech.cancel]);
   if (!available) return null;
   const busy = speech.state === "requesting" || speech.state === "transcribing";
   const recording = speech.state === "recording";
@@ -61,7 +63,7 @@ export function ChatSpeechButton({ composer, active, scope, floating, onTranscri
   const shortcut = formatShortcut(binding, /Mac|iPhone|iPad/i.test(navigator.userAgent));
   return <div className="flex shrink-0 items-center gap-1">
     <Tooltip>
-      <TooltipTrigger render={<Button ref={button} type="button" variant="ghost" size="icon-sm" disabled={!active || busy}
+      <TooltipTrigger render={<Button ref={button} type="button" variant="ghost" size="icon-sm" disabled={!active || disabled || busy}
         aria-label={label} aria-pressed={recording} onClick={() => { if (!composer.current?.disabled) void speech.toggle(); }}
         className={recording ? "text-[var(--color-error)]" : undefined} />}>
         {busy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : recording ? <Square aria-hidden="true" className="size-4" /> : <Mic aria-hidden="true" className="size-4" />}

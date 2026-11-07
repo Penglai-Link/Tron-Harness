@@ -30,9 +30,34 @@ impl ModelProviderService {
                 ));
             }
         }
-        super::person_ai_speech::transcribe(&base, &context, &audio)
-            .await
-            .map_err(ModelProviderError::Remote)
+        use base64::Engine;
+        use eliteforge_agent_core as fw;
+        use fw::ModelOperations;
+        let model = fw::ModelRef::new("PersonAi", "speech-auto");
+        let adapter = eliteforge_agent_capability_personai::PersonAiSpeechRecognitionModel {
+            client: std::sync::Arc::new(crab_serverapi::audio::AudioTranscriptionsClient::new(base)
+                .map_err(server_api_error)?),
+            authorization: context,
+        };
+        let mut update = eliteforge_agent_framework::ModelRuntimeUpdate::new(user, 0, vec![]);
+        update.recognition.push(fw::SpeechRecognitionModelService::new(model.clone(), std::sync::Arc::new(adapter)));
+        let client = eliteforge_agent_framework::ModelClient::new(update)
+            .map_err(|e| ModelProviderError::Remote(e.to_string()))?
+            .with_options(fw::ModelInvocationOptions {
+                timeout: std::time::Duration::from_secs(120),
+                max_input_bytes: 12 * 1024 * 1024,
+                ..Default::default()
+            });
+        client.transcribe(fw::SpeechRecognitionRequest {
+            choice: fw::ModelChoice::model(model),
+            audio: fw::MediaContent {
+                mime_type: "audio/wav".into(),
+                name: Some(_file_name.into()),
+                source: fw::MediaSource::Base64(base64::engine::general_purpose::STANDARD.encode(audio)),
+                estimated_tokens: None,
+            },
+            language: None,
+        }).await.map(|response| response.text).map_err(|e| ModelProviderError::Remote(e.to_string()))
     }
 
     /// The durable knowledge task belongs to one Person-AI account. A profile

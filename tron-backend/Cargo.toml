@@ -46,14 +46,11 @@ eliteforge-agent-official-plugin-storage-local = { path = "../.agent-deps/agent-
 aes-gcm-siv = "0.11"
 axum = { version = "0.8", features = ["multipart"] }
 async-stream = "0.3"
-futures-util = "0.3"
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
-rustls-native-certs = "0.8"
 base64 = "0.22"
 bcrypt = "0.17"
 flate2 = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "3baeeaaa69f04d883ada509c391dbd474d205429" }
+crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "85a70d4573813596739ec0a9a6c1ce33946f1e98" }
 cron = "0.12"
 gmcrypto-core = { version = "1.0.0", features = ["sm4-aead"] }
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }

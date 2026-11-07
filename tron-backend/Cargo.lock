@@ -1006,16 +1006,19 @@ dependencies = [
 
 [[package]]
 name = "crab-serverapi"
-version = "0.3.0"
-source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=3baeeaaa69f04d883ada509c391dbd474d205429#3baeeaaa69f04d883ada509c391dbd474d205429"
+version = "0.4.0"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=85a70d4573813596739ec0a9a6c1ce33946f1e98#85a70d4573813596739ec0a9a6c1ce33946f1e98"
 dependencies = [
  "aes-gcm 0.10.3",
  "async-trait",
  "base64 0.22.1",
  "futures-util",
  "rand 0.8.7",
+ "regex",
  "reqwest 0.12.28",
  "rsa 0.9.10",
+ "rustls",
+ "rustls-native-certs",
  "serde",
  "serde_json",
  "sha1 0.10.7",
@@ -7806,7 +7809,6 @@ dependencies = [
  "eliteforge-agent-plugin-core",
  "flate2",
  "fs2",
- "futures-util",
  "gmcrypto-core",
  "grafeo",
  "hex",
@@ -7830,7 +7832,6 @@ dependencies = [
  "rusqlite",
  "russh",
  "rustls",
- "rustls-native-certs",
  "rustls-pemfile",
  "semver",
  "serde",
@@ -7847,7 +7848,6 @@ dependencies = [
  "tokio",
  "tokio-cron",
  "tokio-rusqlite",
- "tokio-tungstenite 0.24.0",
  "tokio-util",
  "tower-http",
  "tracing",
@@ -8540,7 +8540,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

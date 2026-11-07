@@ -42,6 +42,7 @@
     "@eliteforge/agent-ui-chat-core": "file:../.agent-deps/agent-ui/packages/chat-core",
     "@eliteforge/agent-ui-chat-react": "file:../.agent-deps/agent-ui/packages/chat-react",
     "@eliteforge/agent-ui-chat-theme": "file:../.agent-deps/agent-ui/packages/chat-theme",
+    "@eliteforge/agent-ui-composer-react": "file:../../eliteforge-agent-ui/packages/composer-react",
     "@eliteforge/agent-ui-motion-react": "file:../.agent-deps/agent-ui/packages/motion-react",
     "@eliteforge/agent-ui-terminal": "file:../.agent-deps/agent-ui/packages/terminal",
     "@fontsource-variable/geist": "^5.2.9",

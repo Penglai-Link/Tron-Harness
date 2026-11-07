@@ -49,6 +49,7 @@ describe("keyboard shortcuts", () => {
   it.each(["metaKey", "ctrlKey"] as const)("matches assigned defaults with %s", (modifier) => {
     const bindings = createDefaultShellShortcutBindings();
     const expected = {
+      newTopic: "1", newDirectory: "2",
       newSession: "N", toggleAgentWindow: "N", toggleVoiceInput: "M", closeCurrentTab: "W",
       previousTab: "H", nextTab: "L", closeAllTabs: "X", closeOtherTabs: "O",
       toggleLeftSidebar: "ArrowLeft", toggleRightSidebar: "ArrowRight", toggleBottomPanel: "ArrowDown",
