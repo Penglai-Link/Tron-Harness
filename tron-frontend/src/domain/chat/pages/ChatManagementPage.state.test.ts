@@ -1,4 +1,3 @@
-import contextCacheFixture from "../../../../../.agent-deps/agent-ui/contracts/context-cache-order.json";
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from "vitest";
@@ -216,20 +215,6 @@ describe("plugin assembly report", () => {
   });
 });
 
-
-it("keeps the Framework history prefix and dynamic suffix identical in live and saved UI reports", () => {
-  const snapshot=contextAssemblySnapshot(contextCacheFixture)!;
-  const live=buildReportedContextMemoryBlocks(snapshot,key=>key);
-  const saved=buildReportedContextMemoryBlocks(contextAssemblySnapshot(JSON.parse(JSON.stringify(contextCacheFixture)))!,key=>key);
-  expect(saved).toEqual(live);
-  expect(live.map(row=>[row.code,row.placement])).toEqual([
-    ["framework.instructions","prefix"],["framework.history","history"],["dynamic","dynamic"],["protocol","protocol"],
-  ]);
-  const history=live[1]!.detailValue as {messages:unknown[]};
-  expect(JSON.stringify(history.messages)).toContain("prior evidence");
-  expect(JSON.stringify(history.messages)).not.toContain("working revision A");
-  expect(JSON.stringify(live[2]!.detailValue)).toContain("working revision A");
-});
 
 it("preserves uncapped stable blocks before history in live and saved reports", () => {
   const snapshot=contextAssemblySnapshot({contextReport:{input_capacity:100000,protocol_tokens:0,blocks:[

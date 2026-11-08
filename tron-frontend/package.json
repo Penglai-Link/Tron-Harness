@@ -39,12 +39,12 @@
     "@codemirror/search": "^6.5.6",
     "@codemirror/state": "^6.4.1",
     "@codemirror/view": "^6.34.0",
-    "@personai/agent-ui-chat-core": "file:../.agent-deps/agent-ui/packages/chat-core",
-    "@personai/agent-ui-chat-react": "file:../.agent-deps/agent-ui/packages/chat-react",
-    "@personai/agent-ui-chat-theme": "file:../.agent-deps/agent-ui/packages/chat-theme",
-    "@personai/agent-ui-composer-react": "file:../../eliteforge-agent-ui/packages/composer-react",
-    "@personai/agent-ui-motion-react": "file:../.agent-deps/agent-ui/packages/motion-react",
-    "@personai/agent-ui-terminal": "file:../.agent-deps/agent-ui/packages/terminal",
+    "@personai/agent-ui-chat-core": "1.0.0-preview.2",
+    "@personai/agent-ui-chat-react": "1.0.0-preview.2",
+    "@personai/agent-ui-chat-theme": "1.0.0-preview.2",
+    "@personai/agent-ui-composer-react": "1.0.0-preview.2",
+    "@personai/agent-ui-motion-react": "1.0.0-preview.2",
+    "@personai/agent-ui-terminal": "1.0.0-preview.2",
     "@fontsource-variable/geist": "^5.2.9",
     "@fontsource-variable/inter": "^5.2.8",
     "@lezer/highlight": "^1.2.0",
@@ -104,5 +104,8 @@
     "vite": "^8.0.10",
     "vite-plugin-dts": "^4.5.4",
     "vitest": "^4.0.8"
+  },
+  "allowScripts": {
+    "@personai/agent-ui-terminal@1.0.0-preview.2": true
   }
 }

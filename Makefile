@@ -212,9 +212,7 @@ help:
 	@echo "  make fe-clean     Remove frontend build artifacts"
 	@echo ""
 	@echo "Shared Agent projects (explicit local paths required):"
-	@echo "  make agent-deps          Link TRON_AGENT_FRAMEWORK_DIR and TRON_AGENT_UI_DIR"
-	@echo "  make agent-ui-install    Install shared UI dependencies"
-	@echo "  make agent-ui-build      Build shared UI packages"
+	@echo "  make agent-deps          Link TRON_AGENT_FRAMEWORK_DIR"
 	@echo "  make harness-capability-check Compile the Tron capability package"
 	@echo ""
 	@echo "Backend commands:"
@@ -324,15 +322,9 @@ fe-clean:
 be-install:
 	$(CARGO) fetch --manifest-path "$(BACKEND_MANIFEST)"
 
-.PHONY: agent-deps agent-ui-install agent-ui-build harness-capability-check agent-capability-check agent-harness-check
+.PHONY: agent-deps harness-capability-check agent-capability-check agent-harness-check
 agent-deps:
 	$(NODE) scripts/prepare-agent-dependencies.mjs
-
-agent-ui-install:
-	$(call RUN_IN_DIR,.agent-deps/agent-ui,$(NPM) ci)
-
-agent-ui-build:
-	$(call RUN_IN_DIR,.agent-deps/agent-ui,$(NPM) run build)
 
 harness-capability-check:
 	$(CARGO) check --manifest-path "$(BACKEND_DIR)/crates/tron-harness-capability/Cargo.toml"

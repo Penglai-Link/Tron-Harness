@@ -7,16 +7,12 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dependencies = [
   ["agent-framework", process.env.TRON_AGENT_FRAMEWORK_DIR, "Cargo.toml"],
-  ["agent-ui", process.env.TRON_AGENT_UI_DIR, "package.json"],
 ];
 const links = [];
 for (const [name, configured, manifest] of dependencies) {
-  if (!configured) throw new Error(`Set TRON_AGENT_${name === "agent-ui" ? "UI" : "FRAMEWORK"}_DIR to the intended public-project checkout`);
+  if (!configured) throw new Error(`Set TRON_AGENT_FRAMEWORK_DIR to the intended public-project checkout`);
   const source = await realpath(resolve(configured));
   await access(join(source, manifest));
-  if (name === "agent-ui" && JSON.parse(await readFile(join(source, manifest), "utf8")).name !== "eliteforge-agent-ui") {
-    throw new Error(`Not an Agent UI checkout: ${source}`);
-  }
   if (name === "agent-framework") {
     const frameworkManifest = await readFile(join(source, "crates/framework/eliteforge-agent-framework/Cargo.toml"), "utf8");
     if (!/^name\s*=\s*"eliteforge-agent-framework"\s*$/m.test(frameworkManifest)) {
@@ -33,7 +29,7 @@ for (const [name, configured, manifest] of dependencies) {
   }
   links.push({ name, source, target, current });
 }
-// Validate both repositories before modifying either link.
+// Validate the repository before modifying its link.
 await mkdir(join(root, ".agent-deps"), { recursive: true });
 for (const { name, source, target, current } of links) {
   if (current && await realpath(target).catch(() => null) === source) {
