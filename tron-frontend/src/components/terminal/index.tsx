@@ -3,7 +3,7 @@ import { applyCurrentLocaleHeader } from "@/i18n";
 import { type AITransport, createTerminalTransport, initTerminal } from "@personai/agent-ui-terminal";
 import type { ChatAguiStreamEvent, ChatUserInputAnswer } from "@tron/chat-core";
 import { fromUiResume, toUiEvent } from "@tron/chat-agent-ui-adapter";
-import { useCallback, useEffect, useRef } from "react";
+import { type Ref, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 
 import { useLocale } from "@/i18n";
 import { archiveChatSession } from "@/domain/chat/hooks";
@@ -35,16 +35,30 @@ type TerminalChatContextLease = {
   release: () => void;
 };
 
+export type TerminalHandle = Pick<ReturnType<typeof initTerminal>, "clear" | "getSelection" | "focus">;
+
 interface TerminalProps {
   onExit?: () => void;
+  ref?: Ref<TerminalHandle>;
 }
 
-const Terminal = ({ onExit }: TerminalProps) => {
+const Terminal = ({ onExit, ref }: TerminalProps) => {
   const { theme, activeSkin } = useTheme();
   const { currentLocale } = useLocale();
   const { selectedPrimarySpaceId, selectedSecondarySpaceId } = useWorkspaceSpaces();
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstanceRef = useRef<ReturnType<typeof initTerminal> | null>(null);
+  useImperativeHandle(ref, () => ({
+    clear() {
+      terminalInstanceRef.current?.clear();
+    },
+    getSelection() {
+      return terminalInstanceRef.current?.getSelection() ?? "";
+    },
+    focus() {
+      terminalInstanceRef.current?.focus();
+    },
+  }), []);
   const terminalChatContextRef = useRef<TerminalChatContextCache | null>(null);
   const currentLocaleRef = useRef(currentLocale);
   const currentThemeRef = useRef(theme);
