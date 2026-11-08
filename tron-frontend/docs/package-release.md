@@ -24,12 +24,9 @@ http://nexus.cisdigital.cn/repository/npm-internal/
 
 ### 1. 安装依赖
 
-先按 [接入文档](../../docs/agent-framework-ui-integration.md) 配置两个公共项目路径，再在仓库根目录执行：
+Agent UI 从公共 npm 安装。在仓库根目录执行：
 
 ```bash
-make agent-deps
-make agent-ui-install
-make agent-ui-build
 make fe-install
 ```
 
@@ -40,6 +37,7 @@ make fe-install
 ```ini
 registry=http://nexus.cisdigital.cn/repository/npm/
 @tron:registry=http://nexus.cisdigital.cn/repository/npm-internal/
+@personai:registry=https://registry.npmjs.org/
 //nexus.cisdigital.cn/repository/npm-internal/:_auth=${NPM_AUTH_TOKEN}
 ```
 
