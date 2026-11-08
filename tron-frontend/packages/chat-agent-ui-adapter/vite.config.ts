@@ -21,7 +21,7 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
-      external: ["@tron/chat-core", "@eliteforge/agent-ui-chat-core"],
+      external: ["@tron/chat-core", "@personai/agent-ui-chat-core"],
     },
   },
 });

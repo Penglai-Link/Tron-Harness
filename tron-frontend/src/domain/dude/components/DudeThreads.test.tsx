@@ -3,14 +3,14 @@ import { MemoryRouter } from "react-router";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { SessionHistory } from "@eliteforge/agent-ui-chat-core";
+import type { SessionHistory } from "@personai/agent-ui-chat-core";
 import { DudeThreads } from "./DudeThreads";
 const api = vi.hoisted(() => ({ list: vi.fn(), history: vi.fn(), send: vi.fn(), answer: vi.fn() }));
 vi.mock("../api/dudeApi", () => ({ listDudeThreads: api.list, getDudeThreadHistory: api.history, sendDudeThreadMessage: api.send, answerDudeThreadInteraction: api.answer }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/domain/auth", () => ({ useAuthSession: () => ({ session: { user: { displayName: "Human" } } }) }));
 vi.mock("@/domain/chat", () => ({ useChatHistoryLabels: () => undefined, useChatWorkRailLabels: () => undefined }));
-vi.mock("@eliteforge/agent-ui-chat-react", () => ({ ChatPanel: (props: any) => <div>
+vi.mock("@personai/agent-ui-chat-react", () => ({ ChatPanel: (props: any) => <div>
   {props.messages.map((message: any) => <p key={message.id}>{message.provenance?.sender.displayName}: {message.content}</p>)}
   <input aria-label="Follow-up" value={props.draft} onChange={event => props.onDraftChange(event.target.value)} />
   <button onClick={props.onSend}>Send</button>

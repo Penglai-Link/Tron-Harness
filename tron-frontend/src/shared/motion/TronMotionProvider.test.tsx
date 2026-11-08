@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createPortal } from "react-dom";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { AgentMotion } from "@eliteforge/agent-ui-motion-react";
+import { AgentMotion } from "@personai/agent-ui-motion-react";
 import { TronMotionProvider } from "./TronMotionProvider";
 import { ShinyText } from "./ShinyText";
 import { setMotionPreference, useMotionPreference } from "./motionPreferences";

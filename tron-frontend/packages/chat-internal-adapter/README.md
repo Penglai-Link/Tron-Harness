@@ -14,7 +14,7 @@
 
 ```typescript
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
-import { ChatRuntimeWindow } from "@eliteforge/agent-ui-chat-react";
+import { ChatRuntimeWindow } from "@personai/agent-ui-chat-react";
 import { createAgentUiAdapter, toUiInput } from "@tron/chat-agent-ui-adapter";
 
 // 1. 创建适配器实例

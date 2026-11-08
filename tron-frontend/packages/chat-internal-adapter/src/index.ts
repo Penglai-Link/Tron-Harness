@@ -170,7 +170,7 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
       });
     },
     loadHistory(sessionCode, query, signal) {
-      return transport.requestJson<import("@eliteforge/agent-ui-chat-core").SessionHistory>({
+      return transport.requestJson<import("@personai/agent-ui-chat-core").SessionHistory>({
         method: "POST", path: "/api/v1/chats/sessions/{sessionCode}/history/query", pathParams: { sessionCode },
         body: { size: query.limit, cursor: query.cursor }, signal,
       });
@@ -241,7 +241,7 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
       });
     },
     loadA2uiState(sessionCode, signal) {
-      return transport.requestJson<import("@eliteforge/agent-ui-chat-core").ChatA2uiState>({path:"/api/v1/chats/sessions/{sessionCode}/a2ui-state",pathParams:{sessionCode},signal});
+      return transport.requestJson<import("@personai/agent-ui-chat-core").ChatA2uiState>({path:"/api/v1/chats/sessions/{sessionCode}/a2ui-state",pathParams:{sessionCode},signal});
     },
     sendA2uiActionStream(session, input, handlers, signal) {
       return transport.streamSse<ChatSendResult>({

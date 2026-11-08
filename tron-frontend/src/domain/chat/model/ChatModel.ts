@@ -76,7 +76,7 @@ export interface ChatMessage {
   role: ChatMessageRole;
   channel: ChatMessageChannel;
   actor: string;
-  provenance?: import("@eliteforge/agent-ui-chat-core").MessageProvenance;
+  provenance?: import("@personai/agent-ui-chat-core").MessageProvenance;
   content: string;
   attachments?: ChatMessageAttachment[];
   inputTokens?: number | null;

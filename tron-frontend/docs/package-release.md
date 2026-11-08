@@ -10,7 +10,7 @@
 - `@tron/chat-openapi-adapter`
 - `@tron/chat-agent-ui-adapter`
 
-React、Vue、theme 和 terminal 渲染包已迁到 `eliteforge-agent-ui`，从公共项目发布 `@eliteforge/agent-ui-*`。Tron 不再发布这四个旧渲染包。
+React、Vue、theme 和 terminal 渲染包已迁到 `eliteforge-agent-ui`，从公共项目发布 `@personai/agent-ui-*`。Tron 不再发布这四个旧渲染包。
 
 `@tron/chat-internal-adapter` 设置了 `private: true`，不会发布。
 

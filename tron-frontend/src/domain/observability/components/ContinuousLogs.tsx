@@ -3,7 +3,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useLocaleFormatters } from "@/shared";
-import { useMotion } from "@eliteforge/agent-ui-motion-react";
+import { useMotion } from "@personai/agent-ui-motion-react";
 import "./continuousLogs.css";
 import { useContinuousLogs } from "../hooks/useObservability";
 import type { LogQuery } from "../model/ApplicationLog";

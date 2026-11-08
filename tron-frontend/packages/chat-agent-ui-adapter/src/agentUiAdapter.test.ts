@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ChatAdapterError } from "@eliteforge/agent-ui-chat-core";
+import { ChatAdapterError } from "@personai/agent-ui-chat-core";
 import { createMockChatAdapter, FetchTransportError, type ChatSession, type SendChatMessageInput } from "@tron/chat-core";
 import { createAgentUiAdapter } from "./agentUiAdapter";
 import { createInternalChatAdapter } from "../../chat-internal-adapter/src/index";
-import type { ChatAguiStreamEvent as UiProtocolEvent } from "@eliteforge/agent-ui-chat-core";
+import type { ChatAguiStreamEvent as UiProtocolEvent } from "@personai/agent-ui-chat-core";
 import { fromUiInput, fromUiResume, fromUiSession, toUiAttachment, fromUiAttachment, toUiEvent, toUiInput, toUiSession } from "./agentUiMapping";
 
 const session = {

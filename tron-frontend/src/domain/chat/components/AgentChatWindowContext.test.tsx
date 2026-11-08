@@ -3,14 +3,14 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { ChatAdapter, ChatSession } from "@tron/chat-core";
-import type { ChatSession as UiSession } from "@eliteforge/agent-ui-chat-core";
+import type { ChatSession as UiSession } from "@personai/agent-ui-chat-core";
 import { toUiSession } from "@tron/chat-agent-ui-adapter";
 import { i18n } from "@/i18n";
 import { OPEN_CHAT_CONTEXT_EVENT } from "@/shared/lib/shellEvents";
 import { AgentChatWindow } from "./AgentChatWindow";
 
 const captured = vi.hoisted(() => ({ change: null as ((session: UiSession | null) => void) | null }));
-vi.mock("@eliteforge/agent-ui-chat-react", () => ({
+vi.mock("@personai/agent-ui-chat-react", () => ({
   ChatRuntimeWindow: (props: { footerAddon: ReactNode; onSessionChange: (session: UiSession | null) => void }) => {
     captured.change = props.onSessionChange;
     return <div>{props.footerAddon}</div>;

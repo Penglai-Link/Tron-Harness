@@ -6,7 +6,7 @@ import "@/i18n";
 import { AgentChatWindow } from "./AgentChatWindow";
 
 const captured = vi.hoisted(() => ({ config: null as { showReasoningCards?: boolean; runningEnterSubmitMode?: "steer" | "queue"; inputPlaceholder?: string; queuedInputPlaceholder?: string; steeringInputPlaceholder?: string } | null }));
-vi.mock("@eliteforge/agent-ui-chat-react", () => ({
+vi.mock("@personai/agent-ui-chat-react", () => ({
   ChatRuntimeWindow: (props: { config: { showReasoningCards?: boolean; runningEnterSubmitMode?: "steer" | "queue"; inputPlaceholder?: string; queuedInputPlaceholder?: string; steeringInputPlaceholder?: string } }) => {
     captured.config = props.config;
     return <div data-testid="chat-runtime" />;

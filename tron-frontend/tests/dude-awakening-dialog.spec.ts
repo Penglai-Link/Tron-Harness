@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { SessionHistory } from "@eliteforge/agent-ui-chat-core";
+import type { SessionHistory } from "@personai/agent-ui-chat-core";
 import { routeResourceUiShellApi, seedResourceUiShell, startResourceUiFrontend, stopResourceUiFrontend, type ResourceUiFrontend } from "./support/resource-ui-harness";
 
 let frontend: ResourceUiFrontend | undefined;

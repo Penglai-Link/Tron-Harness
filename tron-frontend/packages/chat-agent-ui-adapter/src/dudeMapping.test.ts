@@ -1,4 +1,4 @@
-import { ChatAdapterError } from "@eliteforge/agent-ui-chat-core";
+import { ChatAdapterError } from "@personai/agent-ui-chat-core";
 import { FetchTransportError } from "@tron/chat-core";
 import { expect, it } from "vitest";
 import { fromUiInput, fromUiSession, toUiEvent, toUiInput, toUiMessage, toUiSession, uiRequest } from "./agentUiMapping";

@@ -1,4 +1,4 @@
-import * as Ui from "@eliteforge/agent-ui-chat-core";
+import * as Ui from "@personai/agent-ui-chat-core";
 import { FetchTransportError, isChatSendResult, sessionAgentTagLabel, type ChatSession, type ChatMessage, type ChatMessageAttachment, type ChatSendResult, type ChatUserInputRequest, type ChatUserInputAnswer, type ChatAguiStreamEvent, type SendChatMessageInput } from "@tron/chat-core";
 
 /** Product fields remain host-owned; the public UI only reads its neutral contract. */

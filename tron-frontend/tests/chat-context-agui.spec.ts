@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import type { SessionHistory } from "@eliteforge/agent-ui-chat-core";
+import type { SessionHistory } from "@personai/agent-ui-chat-core";
 import type { ChatAguiStreamEvent, ChatMessage, ChatSession } from "@tron/chat-core";
 import {
   routeResourceUiShellApi,

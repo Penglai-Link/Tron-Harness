@@ -1,6 +1,6 @@
 import { createInternalChatAdapter, createInternalTerminalAdapter } from "@tron/chat-internal-adapter";
 import { applyCurrentLocaleHeader } from "@/i18n";
-import { type AITransport, createTerminalTransport, initTerminal } from "@eliteforge/agent-ui-terminal";
+import { type AITransport, createTerminalTransport, initTerminal } from "@personai/agent-ui-terminal";
 import type { ChatAguiStreamEvent, ChatUserInputAnswer } from "@tron/chat-core";
 import { fromUiResume, toUiEvent } from "@tron/chat-agent-ui-adapter";
 import { useCallback, useEffect, useRef } from "react";
@@ -14,7 +14,7 @@ import { explainResultMessage, generateAiChatMessage, generateCommandMessage } f
 import { createTerminalChatInput } from "./terminalChatInput";
 import { getTerminalAnsiTheme } from "./terminalTheme";
 
-import "@eliteforge/agent-ui-terminal/styles.css";
+import "@personai/agent-ui-terminal/styles.css";
 import "@xterm/xterm/css/xterm.css";
 
 const CONFIGURED_TERMINAL_WORKSPACE_CODE = import.meta.env.VITE_TRON_TERMINAL_WORKSPACE_CODE?.trim() || null;

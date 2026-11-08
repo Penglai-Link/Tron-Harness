@@ -69,7 +69,7 @@ export default defineConfig(({ mode }) => {
           },
     },
     resolve: {
-      dedupe: ["react", "react-dom", "@eliteforge/agent-ui-chat-core", "@eliteforge/agent-ui-motion-react", "@eliteforge/agent-ui-motion-core"],
+      dedupe: ["react", "react-dom", "@personai/agent-ui-chat-core", "@personai/agent-ui-motion-react", "@personai/agent-ui-motion-core"],
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
       },

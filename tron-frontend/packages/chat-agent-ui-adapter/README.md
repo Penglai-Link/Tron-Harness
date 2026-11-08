@@ -4,7 +4,7 @@
 适用于 `@tron/chat-internal-adapter` 和 `@tron/chat-openapi-adapter`；认证与 API 请求仍由原传输 adapter 负责。
 
 ```tsx
-import { ChatRuntimeWindow } from "@eliteforge/agent-ui-chat-react";
+import { ChatRuntimeWindow } from "@personai/agent-ui-chat-react";
 import { createAgentUiAdapter, toUiInput } from "@tron/chat-agent-ui-adapter";
 import { createOpenApiChatAdapter } from "@tron/chat-openapi-adapter";
 

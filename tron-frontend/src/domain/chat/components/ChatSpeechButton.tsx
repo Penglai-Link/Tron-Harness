@@ -1,4 +1,4 @@
-import { useComposerDisabled } from "@eliteforge/agent-ui-composer-react";
+import { useComposerDisabled } from "@personai/agent-ui-composer-react";
 import { useEffect, useRef, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";

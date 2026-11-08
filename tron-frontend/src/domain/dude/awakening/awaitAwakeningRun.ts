@@ -1,4 +1,4 @@
-import type { SessionHistory } from "@eliteforge/agent-ui-chat-core";
+import type { SessionHistory } from "@personai/agent-ui-chat-core";
 import type { DudeEvent } from "../api/dudeApi";
 
 /** Bridge the queued event to Agent UI's native run observer. An empty session

@@ -91,7 +91,7 @@ import {
   type ChatRuntimeRunState,
   type ChatSession as RuntimeChatSession,
 } from "@tron/chat-core";
-import { contextBlockPlacements, truncateLabel, type ContextBlockPlacement } from "@eliteforge/agent-ui-chat-core";
+import { contextBlockPlacements, truncateLabel, type ContextBlockPlacement } from "@personai/agent-ui-chat-core";
 import { inferChatAgentCodeFromModel } from "../model/chatAgentCode";
 import {
   canClearGoalStatus,

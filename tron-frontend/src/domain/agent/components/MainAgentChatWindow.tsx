@@ -15,7 +15,7 @@ import {
 } from "@tron/chat-core";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
-import "@eliteforge/agent-ui-chat-react/styles.css";
+import "@personai/agent-ui-chat-react/styles.css";
 import {
   useCallback,
   useEffect,

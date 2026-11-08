@@ -15,7 +15,7 @@ export default defineConfig({
     }),
   ],
   build: {
-    rollupOptions: { external: ["@eliteforge/agent-ui-chat-core"] },
+    rollupOptions: { external: ["@personai/agent-ui-chat-core"] },
     lib: {
       entry: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
       fileName: "index",

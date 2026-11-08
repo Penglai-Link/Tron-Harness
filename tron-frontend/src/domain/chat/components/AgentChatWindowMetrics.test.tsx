@@ -3,13 +3,13 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { ChatAdapter, ChatSession } from "@tron/chat-core";
-import type { ChatRuntimeRunState } from "@eliteforge/agent-ui-chat-core";
+import type { ChatRuntimeRunState } from "@personai/agent-ui-chat-core";
 import { i18n } from "@/i18n";
 import { requestApi } from "@/shared/api/httpClient";
 import { AgentChatWindow } from "./AgentChatWindow";
 
 const captured = vi.hoisted(() => ({ run: null as ((state: ChatRuntimeRunState) => void) | null }));
-vi.mock("@eliteforge/agent-ui-chat-react", () => ({
+vi.mock("@personai/agent-ui-chat-react", () => ({
   ChatRuntimeWindow: (props: { footerAddon: ReactNode; onRunStateChange: (state: ChatRuntimeRunState) => void }) => {
     captured.run = props.onRunStateChange;
     return <div>{props.footerAddon}</div>;

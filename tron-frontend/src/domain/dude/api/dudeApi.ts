@@ -43,7 +43,7 @@ export const listDudeEvents = (dudeCode: string, signal?: AbortSignal) => reques
 
 export interface DudeThread { sessionCode: string; title: string | null; status: string; latestRunCode: string | null; }
 export const listDudeThreads = (dudeCode: string, signal?: AbortSignal) => requestApi<DudeThread[]>("GET /api/v1/dudes/{dudeCode}/threads", { pathParams: { dudeCode }, signal });
-export const getDudeThreadHistory = (dudeCode: string, sessionCode: string, query: import("@eliteforge/agent-ui-chat-core").HistoryQuery, signal?: AbortSignal) => requestApi<import("@eliteforge/agent-ui-chat-core").SessionHistory>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/history/query", { pathParams: { dudeCode, sessionCode }, body: { size: query.limit, cursor: query.cursor }, signal });
+export const getDudeThreadHistory = (dudeCode: string, sessionCode: string, query: import("@personai/agent-ui-chat-core").HistoryQuery, signal?: AbortSignal) => requestApi<import("@personai/agent-ui-chat-core").SessionHistory>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/history/query", { pathParams: { dudeCode, sessionCode }, body: { size: query.limit, cursor: query.cursor }, signal });
 
 /** Dude definitions are independent and intentionally absent from ordinary Agent lists. */
 export const getDudeResources = (dudeCode: string, signal?: AbortSignal) => requestApi<WorkspaceInternalAgentRecordApi>("GET /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode }, signal }).then(record => normalizeWorkspaceInternalAgentRecord({ ...record, description: record.description ?? "", platformDefined: true }));

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ChatWindow } from "@eliteforge/agent-ui-chat-react";
+import { ChatWindow } from "@personai/agent-ui-chat-react";
 import { readFileSync } from "node:fs";
 const componentsCss = readFileSync("src/shared/theme/components.css", "utf8");
 afterEach(cleanup);

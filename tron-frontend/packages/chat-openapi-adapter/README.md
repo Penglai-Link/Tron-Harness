@@ -14,7 +14,7 @@
 
 ```typescript
 import { createOpenApiChatAdapter } from "@tron/chat-openapi-adapter";
-import { ChatRuntimeWindow } from "@eliteforge/agent-ui-chat-react";
+import { ChatRuntimeWindow } from "@personai/agent-ui-chat-react";
 import { createAgentUiAdapter, toUiInput } from "@tron/chat-agent-ui-adapter";
 
 // 1. 创建 Open API 适配器实例

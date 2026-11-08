@@ -1,4 +1,4 @@
-import type * as Ui from "@eliteforge/agent-ui-chat-core";
+import type * as Ui from "@personai/agent-ui-chat-core";
 import type { ChatAdapter, ChatClientConfig, ChatStreamHandlers } from "@tron/chat-core";
 import { fromUiAnswer, fromUiAttachment, fromUiInput, fromUiResume, fromUiSession, toUiAttachment, toUiEvent, toUiHistory, toUiMessage, toUiQuestion, toUiResult, toUiSession, uiRequest } from "./agentUiMapping";
 

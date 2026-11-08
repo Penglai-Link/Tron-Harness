@@ -1,4 +1,4 @@
-import type { ChatAguiStreamEvent, HistoryStatus, SessionHistory } from "@eliteforge/agent-ui-chat-core";
+import type { ChatAguiStreamEvent, HistoryStatus, SessionHistory } from "@personai/agent-ui-chat-core";
 
 export interface ChatSubagent {
   runId: string;

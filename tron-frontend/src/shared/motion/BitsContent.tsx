@@ -1,7 +1,7 @@
 // Adapted from React Bits AnimatedContent / FadeContent. See NOTICE.md.
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { gsap } from "gsap";
-import type { ResolvedMotion } from "@eliteforge/agent-ui-motion-react";
+import type { ResolvedMotion } from "@personai/agent-ui-motion-react";
 
 interface BitsContentProps {
   children?: ReactNode;

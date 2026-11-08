@@ -2,8 +2,8 @@ import { Eye, RefreshCcw, RotateCcw, Trash2 } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChatA2uiSession } from "@eliteforge/agent-ui-chat-core";
-import { ChatA2UI } from "@eliteforge/agent-ui-chat-react";
+import { ChatA2uiSession } from "@personai/agent-ui-chat-core";
+import { ChatA2UI } from "@personai/agent-ui-chat-react";
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/shared";

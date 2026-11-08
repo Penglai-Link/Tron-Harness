@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SessionHistory } from "@eliteforge/agent-ui-chat-core";
+import type { SessionHistory } from "@personai/agent-ui-chat-core";
 import { awaitAwakeningRun } from "./awaitAwakeningRun";
 
 const empty = (): SessionHistory => ({

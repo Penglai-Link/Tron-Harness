@@ -3,8 +3,8 @@ import { ShinyText } from "@/shared/motion";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { historyMessages, type ChatWorkRailLabels, type ChatHistoryLabels, type SessionHistory } from "@eliteforge/agent-ui-chat-core";
-import { ChatPanel } from "@eliteforge/agent-ui-chat-react";
+import { historyMessages, type ChatWorkRailLabels, type ChatHistoryLabels, type SessionHistory } from "@personai/agent-ui-chat-core";
+import { ChatPanel } from "@personai/agent-ui-chat-react";
 import { useChatHistoryLabels } from "../hooks/useChatWorkRailLabels";
 import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/components/markdown-content";

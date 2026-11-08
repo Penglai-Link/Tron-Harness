@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { StrictMode, useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { ResolvedMotion } from "@eliteforge/agent-ui-motion-react";
+import type { ResolvedMotion } from "@personai/agent-ui-motion-react";
 import { AnimatedContent, FadeContent } from "./BitsContent";
 
 const driver = vi.hoisted(() => ({ fromTo: vi.fn(), reverts: [] as ReturnType<typeof vi.fn>[] }));

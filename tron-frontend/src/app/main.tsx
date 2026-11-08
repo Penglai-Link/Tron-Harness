@@ -8,7 +8,7 @@ import { QueryProvider } from "./providers/QueryProvider";
 import { App } from "./App";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import "@/i18n";
-import "@eliteforge/agent-ui-chat-theme";
+import "@personai/agent-ui-chat-theme";
 import "./styles/globals.css";
 
 installBrowserTracing(buildApiUrl("/api/v1/observability/browser-spans"));

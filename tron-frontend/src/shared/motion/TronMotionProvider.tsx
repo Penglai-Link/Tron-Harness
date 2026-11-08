@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, type ReactNode } from "react";
-import { MotionProvider, useMotion, type MotionEffectProps } from "@eliteforge/agent-ui-motion-react";
+import { MotionProvider, useMotion, type MotionEffectProps } from "@personai/agent-ui-motion-react";
 import { AnimatedContent, FadeContent } from "./BitsContent";
 import { useMotionPreference } from "./motionPreferences";
 import "./motion.css";

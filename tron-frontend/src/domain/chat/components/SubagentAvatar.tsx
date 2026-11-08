@@ -1,6 +1,6 @@
 import { Check, CircleHelp, Pause, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { HistoryStatus } from "@eliteforge/agent-ui-chat-core";
+import type { HistoryStatus } from "@personai/agent-ui-chat-core";
 import { AgentAvatar } from "@/domain/agent/components/AgentAvatarPicker";
 import "./SubagentAvatar.css";
 

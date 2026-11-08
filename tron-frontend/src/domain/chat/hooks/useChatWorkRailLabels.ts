@@ -1,4 +1,4 @@
-import { isRawToolNameOverride, toolCommandLinePreview, toolDisplayName, type ToolActionSummary } from "@eliteforge/agent-ui-chat-core";
+import { isRawToolNameOverride, toolCommandLinePreview, toolDisplayName, type ToolActionSummary } from "@personai/agent-ui-chat-core";
 import type { ChatWorkRailLabels } from "@tron/chat-core";
 import { fetchToolDomains, listTools } from "@/domain/agent/api";
 import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";

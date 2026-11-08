@@ -1,4 +1,4 @@
-import { chatErrorPresentation } from "@eliteforge/agent-ui-chat-core";
+import { chatErrorPresentation } from "@personai/agent-ui-chat-core";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/ui/toast";
