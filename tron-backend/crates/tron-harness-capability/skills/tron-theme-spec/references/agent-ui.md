@@ -1,6 +1,6 @@
 # 共享聊天、A2UI 与动效
 
-Tron 使用本地链接的 `eliteforge-agent-ui` 公共包。颜色与控件变量可以进入 `skin.json` 的 `colors` / `layout`；需要局部外观时使用版本 2 的包内 CSS。公共包只渲染组件，皮肤安装、资源加载、CSS 作用域和清理由 Tron 管理。
+Tron 从 npm 安装 `@personai/agent-ui-*` 公共包。颜色与控件变量可以进入 `skin.json` 的 `colors` / `layout`；需要局部外观时使用版本 2 的包内 CSS。公共包只渲染组件，皮肤安装、资源加载、CSS 作用域和清理由 Tron 管理。
 
 ## 变量归属和优先级
 
