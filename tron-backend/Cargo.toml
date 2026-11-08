@@ -5,28 +5,28 @@ edition = "2024"
 publish = false
 
 [dependencies]
-eliteforge-agent-connector = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-connector" }
-eliteforge-agent-official-plugin-connector-github = { path = "../.agent-deps/agent-framework/crates/plugin/connector/eliteforge-agent-official-plugin-connector-github" }
-eliteforge-agent-official-plugin-connector-gitlab = { path = "../.agent-deps/agent-framework/crates/plugin/connector/eliteforge-agent-official-plugin-connector-gitlab" }
-eliteforge-agent-official-plugin-connector-gitee = { path = "../.agent-deps/agent-framework/crates/plugin/connector/eliteforge-agent-official-plugin-connector-gitee" }
-eliteforge-agent-capability-chunking = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-chunking" }
-eliteforge-agent-capability-auto-routing = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-auto-routing" }
-eliteforge-agent-capability-personai = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-personai" }
-eliteforge-agent-official-plugin-tools-web = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-web" }
-eliteforge-agent-official-plugin-tools-media = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-media" }
-eliteforge-agent-official-plugin-tools-discovery = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-discovery" }
+eliteforge-agent-connector = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-connector-github = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-connector-gitlab = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-connector-gitee = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-capability-chunking = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-capability-auto-routing = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-capability-personai = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-tools-web = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-tools-media = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-tools-discovery = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
 
-eliteforge-agent-official-plugin-otel = { path = "../.agent-deps/agent-framework/crates/plugin/observe/eliteforge-agent-official-plugin-otel", features = ["runtime"] }
-eliteforge-agent-official-plugin-otel-collector = { path = "../.agent-deps/agent-framework/crates/plugin/observe/eliteforge-agent-official-plugin-otel-collector" }
+eliteforge-agent-official-plugin-otel = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0", features = ["runtime"] }
+eliteforge-agent-official-plugin-otel-collector = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
 opentelemetry = { version = "=0.32.0", default-features = false, features = ["trace", "metrics"] }
-eliteforge-agent-official-plugin-a2ui = { path = "../.agent-deps/agent-framework/crates/plugin/protocol/eliteforge-agent-official-plugin-a2ui" }
-eliteforge-agent-official-plugin-skills = { path = "../.agent-deps/agent-framework/crates/plugin/skill/eliteforge-agent-official-plugin-skills" }
-eliteforge-agent-plugin-core = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-plugin-core" }
-eliteforge-agent-official-plugin-agui = { path = "../.agent-deps/agent-framework/crates/plugin/protocol/eliteforge-agent-official-plugin-agui" }
-eliteforge-agent-memory = { path = "../.agent-deps/agent-framework/crates/plugin/memory/eliteforge-agent-memory" }
-eliteforge-agent-official-plugin-model-http = { path = "../.agent-deps/agent-framework/crates/plugin/model/eliteforge-agent-official-plugin-model-http" }
-eliteforge-agent-official-plugin-tools-human = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-human" }
-eliteforge-agent-capability-external = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-external" }
+eliteforge-agent-official-plugin-a2ui = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-skills = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-plugin-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-agui = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-memory = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-model-http = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-tools-human = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-capability-external = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
@@ -34,15 +34,15 @@ chrono-tz = "0.10"
 sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
 async-trait = "0.1"
 tokio-util = "0.7"
-eliteforge-agent-official-plugin-tools-mcp = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-mcp" }
-eliteforge-agent-capability-tools = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-tools" }
-eliteforge-agent-official-plugin-tools-agents = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-agents" }
+eliteforge-agent-official-plugin-tools-mcp = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-capability-tools = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-tools-agents = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
 tron-harness-capability = { path = "crates/tron-harness-capability" }
-eliteforge-agent-core = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-core" }
-eliteforge-agent-framework = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-framework", default-features = false }
-eliteforge-agent-capability-runtime = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-capability-runtime" }
-eliteforge-agent-official-plugin-tools-local = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-local" }
-eliteforge-agent-official-plugin-storage-local = { path = "../.agent-deps/agent-framework/crates/plugin/storage/eliteforge-agent-official-plugin-storage-local", features = ["bundled-native"] }
+eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-framework = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0", default-features = false }
+eliteforge-agent-capability-runtime = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-tools-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-official-plugin-storage-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0", features = ["bundled-native"] }
 aes-gcm-siv = "0.11"
 axum = { version = "0.8", features = ["multipart"] }
 async-stream = "0.3"

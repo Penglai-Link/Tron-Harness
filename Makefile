@@ -211,8 +211,7 @@ help:
 	@echo "  make packages-build Build publishable frontend workspace packages"
 	@echo "  make fe-clean     Remove frontend build artifacts"
 	@echo ""
-	@echo "Shared Agent projects (explicit local paths required):"
-	@echo "  make agent-deps          Link TRON_AGENT_FRAMEWORK_DIR"
+	@echo "Tron 能力包（Framework 依赖来自公开 Git 仓库）:"
 	@echo "  make harness-capability-check Compile the Tron capability package"
 	@echo ""
 	@echo "Backend commands:"
@@ -322,9 +321,7 @@ fe-clean:
 be-install:
 	$(CARGO) fetch --manifest-path "$(BACKEND_MANIFEST)"
 
-.PHONY: agent-deps harness-capability-check agent-capability-check agent-harness-check
-agent-deps:
-	$(NODE) scripts/prepare-agent-dependencies.mjs
+.PHONY: harness-capability-check agent-capability-check agent-harness-check
 
 harness-capability-check:
 	$(CARGO) check --manifest-path "$(BACKEND_DIR)/crates/tron-harness-capability/Cargo.toml"
