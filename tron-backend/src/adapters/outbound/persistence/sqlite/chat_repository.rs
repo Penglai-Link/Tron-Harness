@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 mod container;
-mod container_disk;
 
 pub struct SqliteChatRepository {
     host: FrameworkHost,

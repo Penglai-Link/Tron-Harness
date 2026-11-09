@@ -38,8 +38,7 @@ impl SqliteChatRepository {
             let mut query = c.prepare("SELECT session_code,attachment_code FROM resource_chat_session_attachments WHERE workspace_code=?1 ORDER BY session_code,attachment_code")?;
             let attachments = query.query_map([workspace], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?.collect::<Result<Vec<_>, _>>()?;
             let attachment_codes = attachments.into_iter().filter(|(session, _)| session_codes.binary_search(session).is_ok()).map(|(_, code)| code).collect();
-            let disk_paths = super::container_disk::paths(c, &container, &session_codes)?;
-            Ok(ChatContainerSnapshot { directory_codes, session_codes, attachment_codes, disk_paths })
+            Ok(ChatContainerSnapshot { directory_codes, session_codes, attachment_codes })
         }).await.map_err(|_| ChatError::StorageFailure)
     }
 
@@ -55,8 +54,7 @@ impl SqliteChatRepository {
             .map_err(|_| ChatError::StorageFailure)?;
         let goals = framework.goals().map_err(|_| ChatError::StorageFailure)?;
         let db = self.host.shared_database().await.map_err(chat_error)?;
-        // Stage original project roots and managed session directories. Restore all
-        // renamed directories if any database operation fails.
+        // Stage only session-owned directories. User project directories are preserved.
         let mut staged = None;
         let result = db.transaction(async {
             let actual = self.read_container_snapshot(container).await.map_err(|e| fw::StateError::Backend(e.to_string()))?;
@@ -70,14 +68,9 @@ impl SqliteChatRepository {
                     let link = self.link(code).await.map_err(|e| fw::StateError::Backend(e.to_string()))?;
                     owners.push((code.clone(), link.user_code));
                 }
-                let container = container.clone();
-                let snapshot = actual.clone();
-                let safe = db.call(move |c| super::container_disk::exclusive(c, &container, &snapshot)).await
-                    .map_err(|e| fw::StateError::Backend(e.to_string()))?;
-                if !safe { return Err(fw::StateError::Backend("container_disk_rejected".into())); }
-                staged = Some(self.host.stage_session_working_directories(owners, actual.disk_paths.clone()).await.map_err(|error| {
-                    tracing::error!(%error, "container disk deletion staging failed");
-                    fw::StateError::Backend("container_disk_rejected".into())
+                staged = Some(self.host.stage_session_working_directories(owners).await.map_err(|error| {
+                    tracing::error!(%error, "session directory cleanup staging failed");
+                    fw::StateError::Backend("session_directory_cleanup_failed".into())
                 })?);
             }
             for code in &actual.session_codes {
@@ -89,16 +82,6 @@ impl SqliteChatRepository {
             }
             let container = container.clone();
             db.call(move |c| -> rusqlite::Result<()> {
-                if delete {
-                    let mut q = c.prepare("SELECT directory_code,canonical_path FROM directories")?;
-                    let rows = q.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<Result<Vec<_>, _>>()?;
-                    for (code, path) in rows {
-                        if actual.disk_paths.iter().any(|root| std::path::Path::new(&path).starts_with(root)) {
-                            c.execute("DELETE FROM topic_references WHERE kind='Directory' AND target_code=?1", [&code])?;
-                            c.execute("DELETE FROM directories WHERE directory_code=?1", [&code])?;
-                        }
-                    }
-                }
                 match container {
                     ChatContainer::Project { workspace_code, project_code } => {
                         if delete {
@@ -127,7 +110,7 @@ impl SqliteChatRepository {
             Ok(())
         }).await.map_err(|error| match error {
             fw::StateError::Conflict => ChatError::SessionLocationChanged,
-            fw::StateError::Backend(ref message) if message == "container_disk_rejected" => ChatError::ContainerDeleteRejected,
+            fw::StateError::Backend(ref message) if message == "session_directory_cleanup_failed" => ChatError::StorageFailure,
             other => chat_error(other),
         });
         if result.is_ok()

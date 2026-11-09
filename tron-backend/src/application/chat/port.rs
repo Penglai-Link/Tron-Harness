@@ -18,7 +18,6 @@ pub struct ChatContainerSnapshot {
     pub directory_codes: Vec<String>,
     pub session_codes: Vec<String>,
     pub attachment_codes: Vec<String>,
-    pub disk_paths: Vec<String>,
 }
 
 pub trait ChatRepository: Send {

@@ -116,7 +116,6 @@ impl FrameworkHost {
     pub(crate) async fn stage_session_working_directories(
         &self,
         sessions: Vec<(String, Option<String>)>,
-        disk_paths: Vec<String>,
     ) -> Result<StagedSessionDirectories, String> {
         let root = self.0.path.with_extension("workspaces");
         let directories = sessions.into_iter().map(|(session, user)| self.managed_working_directory("sessions", user.as_deref(), &session)).collect::<Vec<_>>();
@@ -143,34 +142,6 @@ impl FrameworkHost {
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                     Err(error) => return Err(format!("could not stage session working directory: {error}")),
                 }
-            }
-            let mut roots = disk_paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
-            roots.sort();
-            roots.dedup();
-            let mut selected: Vec<PathBuf> = Vec::new();
-            for path in roots {
-                if selected.iter().any(|root| path.starts_with(root)) { continue; }
-                if !path.is_absolute() { return Err(format!("non-absolute deletion path: {}", path.display())); }
-                let home = std::env::var_os("HOME").map(PathBuf::from);
-                let protected = [home, root.parent().map(PathBuf::from), std::env::current_dir().ok()];
-                let system_root = ["/System", "/Library", "/Applications", "/usr", "/bin", "/sbin", "/etc", "/private", "/private/var", "/private/tmp", "/var", "/tmp", "/Users", "/Volumes", "/home"].iter().any(|p| PathBuf::from(p) == path);
-                let data_root = root.parent().is_some_and(|p| path.starts_with(p));
-                if system_root || data_root || path.parent().is_none() || protected.iter().flatten().any(|p| p.starts_with(&path)) {
-                    return Err(format!("protected deletion path: {}", path.display()));
-                }
-                match fs::symlink_metadata(&path) {
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-                    Err(e) => return Err(e.to_string()),
-                    Ok(m) if m.is_dir() && !m.file_type().is_symlink() => {},
-                    Ok(_) => return Err(format!("deletion path was replaced: {}", path.display())),
-                }
-                if fs::canonicalize(&path).map_err(|e| e.to_string())? != path {
-                    return Err(format!("deletion path resolution changed: {}", path.display()));
-                }
-                let target = path.with_file_name(format!(".deleting-{:032x}", rand::random::<u128>()));
-                fs::rename(&path, &target).map_err(|e| format!("could not stage {}: {e}", path.display()))?;
-                selected.push(path.clone());
-                staged.paths.push((path, target));
             }
             Ok(staged)
         }).await.map_err(|error| error.to_string())?
