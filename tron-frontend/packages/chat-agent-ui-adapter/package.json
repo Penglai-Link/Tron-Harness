@@ -24,7 +24,7 @@
     "@tron/chat-core": "^0.1.1"
   },
   "peerDependencies": {
-    "@personai/agent-ui-chat-core": "1.0.0-preview.3"
+    "@personai/agent-ui-chat-core": "1.0.0-preview.4"
   },
   "publishConfig": {
     "registry": "http://nexus.cisdigital.cn/repository/npm-internal/",
