@@ -320,7 +320,7 @@ impl GoalHarness {
         let mut runtime_session_id = self.state.lock().await.runtime_session_id.clone();
         let project_scope = self
             .chat
-            .project_execution_scope(&self.session)
+            .invocation_execution_scope(&self.session, None, true)
             .map_err(ChatSendError::Chat)?;
         let invocation_app_code = match project_scope.as_ref() {
             Some(scope) => scope.app_code.clone(),

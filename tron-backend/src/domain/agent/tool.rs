@@ -220,7 +220,7 @@ pub(crate) fn validate_workspace_request(mut request: ToolRequest, context: &Age
     if let Some(tool) = context.authorized_tools().iter().find(|tool| tool.tool_name == request.tool_name) {
         if tool.input_schema.pointer("/properties/workspaceCode").is_some() {
             let workspace = request.input.get("workspaceCode").and_then(serde_json::Value::as_str).map(str::trim).filter(|value| !value.is_empty());
-            if context.is_owning_dude() || workspace.is_none() || workspace != Some(context.workspace_code.trim()) {
+            if context.is_owning_dude() || workspace.is_none() || workspace != Some(context.execution_workspace_code().trim()) {
                 return Err(ToolError::ExecutionFailed("workspaceCode is required and must match the current authorized workspace".into()));
             }
             if tool.domain_code.as_deref() == Some("harness_rag") {

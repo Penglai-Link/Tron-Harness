@@ -1,7 +1,14 @@
 import { matchRoutes } from "react-router";
+import { createContext, useContext } from "react";
 import type { ChatPageContext } from "@tron/chat-core";
 import { appRoutes } from "@/router/routes";
 import type { TabItem } from "@/store/tabStore";
+
+export const DudePageContext = createContext<() => ChatPageContext | null>(() => null);
+
+export function useDudePageContext() {
+  return useContext(DudePageContext);
+}
 
 const routes = appRoutes.map((route) => ({
   path: route.route.split("?")[0],

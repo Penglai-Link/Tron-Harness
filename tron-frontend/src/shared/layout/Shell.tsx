@@ -52,7 +52,7 @@ import { fetchNavigationDomains, fetchNavigationMenuTree } from "@/domain/naviga
 import { useAuthSession } from "@/domain/auth";
 import { NotificationLauncher } from "@/domain/notification/components/NotificationLauncher";
 import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
-import { captureDudePageContext } from "./dudePageContext";
+import { captureDudePageContext, DudePageContext } from "./dudePageContext";
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { tronNavigation } from "@/shared/constants/shellNavigation";
@@ -1285,6 +1285,7 @@ export function TronShell({
 
   return (
     <TronShellFrameContext.Provider value={true}>
+      <DudePageContext.Provider value={getMainAgentPageContext}>
       <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
         <SidebarProvider
           className="tron-skin-canvas tron-shell-frame"
@@ -1447,6 +1448,7 @@ export function TronShell({
 
         </SidebarProvider>
       </WorkspaceSpacesContext.Provider>
+      </DudePageContext.Provider>
     </TronShellFrameContext.Provider>
   );
 }

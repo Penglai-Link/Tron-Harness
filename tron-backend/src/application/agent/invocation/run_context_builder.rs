@@ -379,6 +379,27 @@ impl AgentRunContextBuilder {
             .as_ref()
             .map(|workspace| workspace.workspace_code.as_str())
             .unwrap_or("");
+        let execution_workspace_code = execution_scope_override
+            .as_ref()
+            .and_then(|scope| scope.workspace_code.as_deref())
+            .map(str::trim)
+            .filter(|code| !code.is_empty())
+            .unwrap_or(workspace_code);
+        if !self.platform_scope && execution_workspace_code != workspace_code {
+            return Err(AgentInvocationError::WorkspaceInvalid);
+        }
+        let execution_workspace = if execution_workspace_code.is_empty() {
+            None
+        } else {
+            let value = self
+                .workspaces
+                .get_workspace(execution_workspace_code)
+                .map_err(|_| AgentInvocationError::WorkspaceInvalid)?;
+            if value.status != WorkspaceStatus::Active {
+                return Err(AgentInvocationError::WorkspaceInvalid);
+            }
+            Some(value)
+        };
         let app = requested_app_code
             .as_deref()
             .map(|code| self.apps.get_app(code))
@@ -386,7 +407,7 @@ impl AgentRunContextBuilder {
             .map_err(|_| AgentInvocationError::WorkspaceInvalid)?;
         if app
             .as_ref()
-            .is_some_and(|app| app.workspace_code != workspace_code)
+            .is_some_and(|app| app.workspace_code != execution_workspace_code)
         {
             return Err(AgentInvocationError::WorkspaceInvalid);
         }
@@ -426,8 +447,8 @@ impl AgentRunContextBuilder {
                 })
                 .unwrap_or_default()
         });
-        let variables = if workspace.is_some() {
-            self.variables.runtime_variables(workspace_code)
+        let variables = if execution_workspace.is_some() {
+            self.variables.runtime_variables(execution_workspace_code)
         } else {
             self.variables.platform_runtime_variables()
         }
@@ -664,6 +685,7 @@ impl AgentRunContextBuilder {
                 branch_name,
                 task_code: task_code.clone(),
                 allowed_local_directories: Vec::new(),
+                ..Default::default()
             }),
             external_topic_snapshot: None,
             limits,
@@ -672,6 +694,18 @@ impl AgentRunContextBuilder {
             short_term_memory: None,
             started_at: chrono::Utc::now().to_rfc3339(),
         };
+        // Revalidate inherited snapshots as well as fresh user submissions. Names
+        // come from the workspace service, never from the browser or agent config.
+        context.execution_scope.workspace_code = execution_workspace
+            .as_ref()
+            .map(|value| value.workspace_code.clone());
+        context.execution_scope.workspace_name = execution_workspace
+            .as_ref()
+            .map(|value| value.name.clone());
+        if page_context.is_some() {
+            context.execution_scope.page_context =
+                crate::application::agent::page_context::normalized(page_context.as_ref());
+        }
         if let Some(host) = &self.framework_host {
             host.prepare_working_directory(&mut context)
                 .map_err(AgentInvocationError::RuntimeNotStarted)?;

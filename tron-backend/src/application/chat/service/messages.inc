@@ -186,7 +186,7 @@ impl ChatService {
             });
         }
         let project_scope = self
-            .project_execution_scope(&session)
+            .invocation_execution_scope(&session, command.workspace_code.as_deref(), !command.resume.is_empty())
             .map_err(ChatSendError::Chat)?;
         let app_code_for_invocation = match project_scope.as_ref() {
             Some(scope) => scope.app_code.clone(),

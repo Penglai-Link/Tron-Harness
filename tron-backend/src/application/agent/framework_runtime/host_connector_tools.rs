@@ -105,7 +105,7 @@ impl ConnectorToolAuthority for Authority {
             return Ok(false);
         };
         let state = execution.state.lock().await;
-        Ok(!state.context.workspace_code.is_empty()
+        Ok(!state.context.execution_workspace_code().is_empty()
             && state
                 .context
                 .user_code
@@ -135,7 +135,7 @@ impl ConnectorToolAuthority for Authority {
             if !context.is_tool_authorized(capability.call_name()) {
                 return Err(ConnectorError::Forbidden);
             }
-            (user.to_owned(), context.workspace_code.clone())
+            (user.to_owned(), context.execution_workspace_code().to_owned())
         };
         if !host
             .integrations

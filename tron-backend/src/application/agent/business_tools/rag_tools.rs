@@ -73,7 +73,7 @@ fn search_input(
             .user_code
             .clone()
             .ok_or_else(|| ToolError::ExecutionFailed("检索运行上下文缺少用户身份".into()))?,
-        workspace_code: context.workspace_code.clone(),
+        workspace_code: context.execution_workspace_code().to_owned(),
         agent_code: context
             .agent_code
             .clone()

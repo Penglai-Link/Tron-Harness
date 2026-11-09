@@ -95,6 +95,7 @@ impl ProjectService {
                 })
                 .collect(),
             applications,
+            ..Default::default()
         })
     }
 }

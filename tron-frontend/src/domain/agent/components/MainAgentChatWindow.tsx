@@ -61,7 +61,7 @@ export function MainAgentChatWindow({
   floatingTitle,
   footerAddon,
   getPageContext,
-  workspaceCode: _workspaceCode,
+  workspaceCode,
   windowState,
   onWindowStateChange,
 }: MainAgentChatWindowProps) {
@@ -193,18 +193,21 @@ export function MainAgentChatWindow({
       session: ChatSession,
       content: string,
       attachments: NonNullable<SendChatMessageInput["attachments"]>
-    ): SendChatMessageInput => ({
-      agentCode: session.agentCode,
-      appCode: session.appCode,
-      attachments: attachments.length ? attachments : undefined,
-      clientCapabilities: { userInputRequests: true },
-      content,
-      modelSelection: { kind: "Auto" },
-      pageContext: getPageContext?.() ?? null,
-      taskCode: session.taskCode,
-      workspaceCode: null,
-    }),
-    [getPageContext]
+    ): SendChatMessageInput => {
+      const pageContext = getPageContext?.() ?? null;
+      return {
+        agentCode: session.agentCode,
+        appCode: session.appCode,
+        attachments: attachments.length ? attachments : undefined,
+        clientCapabilities: { userInputRequests: true },
+        content,
+        modelSelection: { kind: "Auto" },
+        pageContext,
+        taskCode: session.taskCode,
+        workspaceCode: pageContext?.workspaceCode ?? workspaceCode ?? null,
+      };
+    },
+    [getPageContext, workspaceCode]
   );
 
   const handleError = useCallback(

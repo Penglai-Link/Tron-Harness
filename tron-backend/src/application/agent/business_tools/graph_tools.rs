@@ -99,7 +99,7 @@ impl GraphTool {
                         "缺少可信用户身份"
                     })
                 })?,
-            workspace_code: context.workspace_code.clone(),
+            workspace_code: context.execution_workspace_code().to_owned(),
             agent_code: context
                 .agent_code
                 .clone()

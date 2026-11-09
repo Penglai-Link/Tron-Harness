@@ -30,8 +30,8 @@ pub async fn require_workspace(
     if let Some(kb) = request.headers().get("x-knowledge-base-code").and_then(|v|v.to_str().ok()).map(str::to_owned) {
         return knowledge::require(state,request,next,kb).await;
     }
-    // Dude namespace is explicit and verified against durable ownership. A page
-    // workspace selection never changes a platform conversation's execution scope.
+    // Dude namespace is explicit and verified against durable ownership. The
+    // submitted workspace is validated separately for execution, not ownership.
     if let Some(dude_code) = request
         .headers()
         .get("x-dude-code")

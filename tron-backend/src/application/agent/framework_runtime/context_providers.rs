@@ -188,7 +188,7 @@ pub(super) async fn assemble(
             .then(|| host.harness.framework_knowledge_bases())
             .flatten(),
         user: context.user_code.clone(),
-        workspace: context.workspace_code.clone(),
+        workspace: context.execution_workspace_code().to_owned(),
         agent: context.agent_code.clone(),
         allowance: crate::application::llm::ContextQueryAllowance {
             calls: calls.clone(),

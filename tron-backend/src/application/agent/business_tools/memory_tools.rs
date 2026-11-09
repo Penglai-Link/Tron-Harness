@@ -290,13 +290,13 @@ fn memory_run_context(context: &AgentRunContext, dude_only: bool, requested_work
     if !dude_only && context.is_owning_dude() {
         return Err(ToolError::ExecutionFailed("Dude must use dude_memory tools".into()));
     }
-    if !dude_only && context.workspace_code.trim().is_empty() {
+    if !dude_only && context.execution_workspace_code().trim().is_empty() {
         return Err(ToolError::ExecutionFailed("workspaceCode is required for memory tools".into()));
     }
     if dude_only && requested_workspace.is_some() {
         return Err(ToolError::ExecutionFailed("Dude memory tools do not accept workspaceCode".into()));
     }
-    if !dude_only && requested_workspace.map(str::trim).filter(|s| !s.is_empty()) != Some(context.workspace_code.trim()) {
+    if !dude_only && requested_workspace.map(str::trim).filter(|s| !s.is_empty()) != Some(context.execution_workspace_code().trim()) {
         return Err(ToolError::ExecutionFailed("workspaceCode is required and must match the current workspace".into()));
     }
     let user_code = context
@@ -307,7 +307,7 @@ fn memory_run_context(context: &AgentRunContext, dude_only: bool, requested_work
         .ok_or_else(|| {
             ToolError::ExecutionFailed("userCode is required for memory tools".into())
         })?;
-    let workspace_code = if dude_only { "" } else { context.workspace_code.trim() };
+    let workspace_code = if dude_only { "" } else { context.execution_workspace_code().trim() };
     Ok(MemoryRunContext::new(user_code, workspace_code))
 }
 

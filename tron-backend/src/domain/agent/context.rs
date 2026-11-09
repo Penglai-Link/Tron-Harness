@@ -46,6 +46,13 @@ pub struct EffectiveTool {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentExecutionScope {
+    /// Validated execution workspace; independent of platform session ownership.
+    #[serde(default)]
+    pub workspace_code: Option<String>,
+    #[serde(default)]
+    pub workspace_name: Option<String>,
+    #[serde(default)]
+    pub page_context: Option<AgentPageContext>,
     #[serde(default)]
     pub applications: Vec<super::ApplicationDirectoryContext>,
     #[serde(default)]
@@ -57,6 +64,24 @@ pub struct AgentExecutionScope {
     pub task_code: Option<String>,
     #[serde(default)]
     pub allowed_local_directories: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPageContext {
+    pub title: Option<String>,
+    pub path: Option<String>,
+    pub tab_title: Option<String>,
+    pub workspace_code: Option<String>,
+    pub workspace_name: Option<String>,
+    pub target: Option<AgentPageTarget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPageTarget {
+    pub key: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -219,6 +244,13 @@ impl AgentToolAssignment {
 }
 
 impl AgentRunContext {
+    pub(crate) fn execution_workspace_code(&self) -> &str {
+        self.execution_scope
+            .workspace_code
+            .as_deref()
+            .unwrap_or(&self.workspace_code)
+    }
+
     pub(crate) fn is_owning_dude(&self) -> bool {
         self.collaboration_owner.as_ref().is_some_and(|owner| {
             owner.kind == "DUDE"

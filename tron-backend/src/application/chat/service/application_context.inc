@@ -25,7 +25,37 @@ impl ChatService {
         session_code: &str,
     ) -> Result<AgentExecutionScope, ChatError> {
         let session = self.repository().get_session(session_code)?;
-        Ok(self.project_execution_scope(&session)?.unwrap_or_default())
+        Ok(self.invocation_execution_scope(&session, None, true)?.unwrap_or_default())
+    }
+
+    pub(super) fn invocation_execution_scope(
+        &self,
+        session: &ChatSession,
+        requested_workspace: Option<&str>,
+        continuation: bool,
+    ) -> Result<Option<AgentExecutionScope>, ChatError> {
+        if !session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:")) {
+            return self.project_execution_scope(session);
+        }
+        // User submissions always capture a fresh workspace. Only continuation
+        // of an existing run may recover its persisted execution context.
+        let scope = if continuation {
+            self.execution_memory.as_ref()
+                .map(|memory| memory.context_detail(&session.session_code, "applicationContext"))
+                .transpose().map_err(|_| ChatError::StorageFailure)?
+                .flatten()
+                .and_then(|detail| detail.get("executionScope").cloned())
+                .map(serde_json::from_value::<AgentExecutionScope>)
+                .transpose().map_err(|_| ChatError::StorageFailure)?
+                .unwrap_or_default()
+        } else {
+            AgentExecutionScope {
+                workspace_code: requested_workspace.map(str::trim).filter(|code| !code.is_empty()).map(str::to_owned),
+                task_code: session.task_code.clone(),
+                ..Default::default()
+            }
+        };
+        Ok(Some(scope))
     }
 
     pub(super) fn project_execution_scope(

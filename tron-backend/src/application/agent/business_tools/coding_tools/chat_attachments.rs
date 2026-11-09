@@ -220,7 +220,7 @@ impl Tool for ChatAttachmentParseJsonTool {
             context,
             &self
                 .resources
-                .for_agent_in_workspace(context.agent_code.as_deref(), &context.workspace_code),
+                .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code()),
         )?;
         let record = source.attachment_record.as_ref();
         let document = serde_json::from_slice::<Value>(&source.bytes).map_err(|error| {

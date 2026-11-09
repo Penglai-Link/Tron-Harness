@@ -17,6 +17,7 @@ import type { ChatSession, SendChatMessageInput } from "@tron/chat-core";
 import { getApiAccessToken } from "@/shared/api/httpClient";
 import { applyCurrentLocaleHeader } from "@/i18n";
 import { useAuthSession } from "@/domain/auth";
+import { useDudePageContext } from "@/shared/layout/dudePageContext";
 import { useDudes } from "../hooks/useDudes";
 import {
   dudeQueryKeys,
@@ -43,6 +44,7 @@ function SessionChat({
 }) {
   const { t } = useTranslation("pages");
   const auth = useAuthSession();
+  const getPageContext = useDudePageContext();
   const workRailLabels = useChatWorkRailLabels();
   const historyLabels = useChatHistoryLabels();
   const adapter = useMemo(
@@ -77,14 +79,18 @@ function SessionChat({
     current: ChatSession,
     content: string,
     attachments: NonNullable<SendChatMessageInput["attachments"]>
-  ): SendChatMessageInput => ({
-    content,
-    workspaceCode: current.workspaceCode,
-    agentCode: current.agentCode,
-    attachments,
-    clientCapabilities: { userInputRequests: true },
-    modelSelection: { kind: "Auto" },
-  });
+  ): SendChatMessageInput => {
+    const pageContext = getPageContext();
+    return {
+      content,
+      workspaceCode: pageContext?.workspaceCode ?? null,
+      pageContext,
+      agentCode: current.agentCode,
+      attachments,
+      clientCapabilities: { userInputRequests: true },
+      modelSelection: { kind: "Auto" },
+    };
+  };
   return (
     <div className="dude-session-chat flex h-full min-h-0 min-w-0 flex-col">
       <AgentChatWindow

@@ -98,7 +98,8 @@ impl fw::ContextContributor for DudeContributor {
                 .unwrap_or_default(),
             "dude_environment" if own => json!({
                 "userCode": ctx.user_code,
-                "workspaceCode": ctx.workspace_code,
+                "workspaceCode": ctx.execution_workspace_code(),
+                "workspaceName": ctx.execution_scope.workspace_name,
                 "scope": ctx.execution_scope,
             })
             .to_string(),
