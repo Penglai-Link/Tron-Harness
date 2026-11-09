@@ -15,7 +15,6 @@
     "postinstall": "patch-package && node scripts/patch-xterm-ime.mjs",
     "predev": "npm run packages:build",
     "preview": "vite preview",
-    "test:unit": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run packages src",
     "typecheck": "tsc -b --pretty false",
     "version-packages": "changeset version",
     "packages:build": "turbo run build --filter=./packages/*",
@@ -85,26 +84,21 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
-    "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.2.4",
-    "@testing-library/react": "^16.3.0",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^5.1.1",
-    "cross-env": "^10.1.0",
     "esbuild": "^0.28.2",
-    "jsdom": "^26.1.0",
     "patch-package": "8.0.1",
     "sass": "^1.100.0",
     "tailwindcss": "^4.2.4",
     "turbo": "^2.10.5",
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
-    "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.0.8"
+    "vite-plugin-dts": "^4.5.4"
   },
   "allowScripts": {
     "@personai/agent-ui-terminal@1.0.0-preview.4": true

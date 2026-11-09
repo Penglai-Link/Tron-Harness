@@ -134,10 +134,9 @@ button {
 ```sh
 make be-check
 make fe-check
-make fe-unit-test TEST=src/shared/theme
 ```
 
-浏览器验证覆盖中英文外观页、内置切换、JSON 导入、刷新恢复、自定义变量清理和 390px 窄屏。浏览器使用接口桩隔离账户及已有实例。
+在浏览器中核对中英文外观页、内置切换、JSON 导入、刷新恢复、自定义变量清理和 390px 窄屏，并记录实际使用的数据源。
 
 ## 主题作者 Skill
 

@@ -2,8 +2,7 @@ import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
-import { loadEnv } from "vite";
-import { defineConfig } from "vitest/config";
+import { defineConfig, loadEnv } from "vite";
 
 const DEFAULT_BACKEND_PROXY_TARGET = "http://127.0.0.1:8080";
 
@@ -26,14 +25,6 @@ export default defineConfig(({ mode }) => {
       __TRON_APP_VERSION__: JSON.stringify(readProductVersion()),
     },
     plugins: [react(), tailwindcss()],
-    test: {
-      server: {
-        deps: {
-          // Published Agent UI packages import CSS that needs Vite transformation.
-          inline: [/@personai\/agent-ui-/],
-        },
-      },
-    },
     build: {
       // Desktop packages are distributed to end users.  Keep source maps out
       // of every production build, and state the minifier explicitly so a

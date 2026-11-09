@@ -10,7 +10,6 @@ export default defineConfig({
     dts({
       entryRoot: fileURLToPath(new URL("./src", import.meta.url)),
       include: ["src/**/*.ts"],
-      exclude: ["src/**/*.test.ts"],
       tsconfigPath: fileURLToPath(new URL("./tsconfig.build.json", import.meta.url)),
     }),
   ],

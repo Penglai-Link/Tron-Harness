@@ -212,8 +212,6 @@ help:
 	@echo "  make fe-dev       Start the Vite dev server"
 	@echo "  make fe-dev-api   Start Vite in API mode through same-origin /api proxy"
 	@echo "  make fe-check     Run frontend typecheck and build"
-	@echo "  make fe-unit-test Run frontend unit tests"
-	@echo "  make fe-test      Run frontend Playwright browser tests"
 	@echo "  make fe-build     Build the frontend"
 	@echo "  make packages-build Build publishable frontend workspace packages"
 	@echo "  make fe-clean     Remove frontend build artifacts"
@@ -314,14 +312,6 @@ packages-build:
 .PHONY: fe-check
 fe-check:
 	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run build)
-
-.PHONY: fe-test
-fe-test:
-	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) exec playwright test -- $(TEST))
-
-.PHONY: fe-unit-test
-fe-unit-test:
-	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(if $(strip $(TEST)),$(NPM) exec -- cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run $(TEST),$(NPM) run test:unit))
 
 .PHONY: fe-clean
 fe-clean:
