@@ -41,7 +41,7 @@ export const shell = {
     confirmations: {
       archiveDescription: "将归档“{{name}}”及其全部会话。若有会话正在运行，请先停止后重试。",
       archiveTitle: "归档主题？",
-      removeDescription: "将永久删除“{{name}}”、主题关联及其全部会话（包括已归档会话）、消息和附件，无法恢复。关联目录、应用及其本地项目文件会保留；仅清理被删除会话在 .tron 中自己的目录。若有会话正在运行，请先停止。",
+      removeDescription: "将删除主题“{{name}}”及其中的所有会话（含已归档会话）。聊天记录、附件和会话文件将一并删除，无法恢复。关联的目录、应用和项目文件会保留。请先停止正在运行的会话。",
       removeTitle: "永久删除主题？",
     },
     loading: "加载中",
@@ -70,7 +70,7 @@ export const shell = {
       archiveFailed: "归档目录失败",
       delete: "删除目录",
       deleteTitle: "永久删除目录？",
-      deleteDescription: "将永久删除“{{name}}”、已登记的子目录及其中全部会话（包括已归档会话）、消息和附件，无法恢复。电脑上的原目录、子目录和项目文件会保留；仅清理被删除会话在 .tron 中自己的目录。若有会话正在运行，请先停止。",
+      deleteDescription: "将从 Tron 中移除“{{name}}”及已添加的子目录。其中的所有会话（含已归档会话）、聊天记录、附件和会话文件将被删除，无法恢复。电脑上的原文件夹和项目文件会保留。请先停止正在运行的会话。",
       deleteFailed: "删除目录失败",
       saveFailed: "保存目录失败",
       loadFailed: "目录加载失败，点击重试",

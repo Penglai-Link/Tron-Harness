@@ -41,7 +41,7 @@ export const shell = {
     confirmations: {
       archiveDescription: "Archive topic {{name}} and all its chats. Stop running chats before retrying.",
       archiveTitle: "Archive topic?",
-      removeDescription: "Permanently delete {{name}}, its topic associations and all chats (including archived chats), messages and attachments. This cannot be undone. Linked directories, applications and their local project files are preserved. Only the deleted chats’ own directories in .tron are removed. Stop running chats first.",
+      removeDescription: "Delete topic “{{name}}” and all its chats, including archived chats. Messages, attachments and chat files will also be deleted. This cannot be undone. Linked directories, applications and project files will be kept. Stop any running chats first.",
       removeTitle: "Permanently delete topic?",
     },
     loading: "Loading",
@@ -70,7 +70,7 @@ export const shell = {
       archiveFailed: "Could not archive the directory",
       delete: "Delete directory",
       deleteTitle: "Permanently delete directory?",
-      deleteDescription: "Permanently delete this directory registration, registered subdirectories and all their chats (including archived chats), messages and attachments. This cannot be undone. The original folder, subfolders and project files are preserved. Only the deleted chats’ own directories in .tron are removed. Stop running chats first.",
+      deleteDescription: "Remove “{{name}}” and its added subdirectories from Tron. All their chats, including archived chats, messages, attachments and chat files will be deleted. This cannot be undone. The original folders and project files on your computer will be kept. Stop any running chats first.",
       deleteFailed: "Could not delete the directory",
       saveFailed: "Could not save the directory",
       loadFailed: "Could not load directories. Click to retry",
