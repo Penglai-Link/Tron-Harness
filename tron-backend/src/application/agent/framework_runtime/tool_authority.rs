@@ -314,6 +314,10 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 )
             })
             .collect();
+        if state.onboarding {
+            state.onboarding_tools =
+                super::super::onboarding::tool_definitions(bindings, &state.context);
+        }
         // A new invocation or resume has a fresh saved-policy snapshot. Tell
         // the model exactly what changed instead of leaving stale tool names in
         // prior conversation turns as its only evidence. In-flight tools keep

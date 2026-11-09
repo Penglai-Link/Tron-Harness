@@ -10,6 +10,7 @@ pub(super) struct DudeContributor {
     pub service: Option<DudeService>,
     pub context: AgentRunContext,
     pub id: &'static str,
+    pub onboarding: bool,
 }
 
 #[async_trait::async_trait]
@@ -74,9 +75,12 @@ impl fw::ContextContributor for DudeContributor {
 
         let text = match self.id {
             "dude_onboarding" => soul
-                .filter(|value| value.state != SoulState::Ready)
+                .filter(|value| self.onboarding || value.state != SoulState::Ready)
                 .map(|value| {
-                    json!({
+                    let next_action = self
+                        .onboarding
+                        .then(|| super::onboarding::next_action(ctx, &value));
+                    let mut data = json!({
                         "state": value.state,
                         "nameConfirmed": value.name_confirmed,
                         "inOnboardingSession": value.session_code == ctx.conversation_code,
@@ -85,8 +89,11 @@ impl fw::ContextContributor for DudeContributor {
                         } else {
                             None
                         },
-                    })
-                    .to_string()
+                    });
+                    if let Some(action) = next_action {
+                        data["nextAction"] = action.into();
+                    }
+                    data.to_string()
                 })
                 .unwrap_or_default(),
             "dude_environment" if own => json!({

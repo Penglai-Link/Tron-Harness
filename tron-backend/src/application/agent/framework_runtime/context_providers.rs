@@ -91,16 +91,28 @@ pub(super) async fn assemble(
     let is_tool_domains = |message: &crate::domain::agent::AgentMessage| {
         message.parts.iter().any(|part| matches!(part, crate::domain::agent::AgentMessagePart::Context { kind, .. } if kind == "tool_domains"))
     };
-    let tool_domains = source
-        .prefix
-        .iter()
-        .filter(|m| !onboarding && is_tool_domains(m))
-        .cloned()
-        .collect::<Vec<_>>();
+    let tool_domains = if onboarding {
+        let state = host.state.lock().await;
+        vec![super::onboarding::tool_context(
+            &state.onboarding_tools,
+            input.run,
+        )]
+    } else {
+        source
+            .prefix
+            .iter()
+            .filter(|m| is_tool_domains(m))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
     let mut application = source
         .prefix
         .iter()
-        .filter(|m| !is_tool_domains(m) && (m.role != "system" || contains_context_data(m)))
+        .filter(|m| {
+            !onboarding
+                && !is_tool_domains(m)
+                && (m.role != "system" || contains_context_data(m))
+        })
         .map(|message| {
             let mut message = message.clone();
             message.role = "user".into();
@@ -112,14 +124,19 @@ pub(super) async fn assemble(
     application.retain(|message| !message.parts.iter().any(|part| matches!(part,
         crate::domain::agent::AgentMessagePart::Context { kind, .. } if kind == "application_execution_context"
     )));
-    if let Some(mut scope) =
-        crate::application::agent::execution_context_message(&context.execution_scope)
-    {
-        scope.role = "user".into();
-        application.push(scope);
+    if !onboarding {
+        if let Some(mut scope) =
+            crate::application::agent::execution_context_message(&context.execution_scope)
+        {
+            scope.role = "user".into();
+            application.push(scope);
+        }
     }
     let mut history = input.history.clone();
-    let page = page_context::project(&mut history)?;
+    let mut page = page_context::project(&mut history)?;
+    if onboarding {
+        page.clear();
+    }
     let budget = fw::ContextBudget {
         max_tokens: input
             .budget
@@ -160,7 +177,9 @@ pub(super) async fn assemble(
     let knowledge_cap = quota("knowledge_base");
     let mut contributors: Vec<Arc<dyn fw::ContextContributor>> = Vec::new();
     contributors.push(Arc::new(topic_context::TopicContributor {
-        service: host.harness.framework_topics(),
+        service: (!onboarding)
+            .then(|| host.harness.framework_topics())
+            .flatten(),
         project_code: context.execution_scope.project_code.clone(),
         user_code: context.user_code.clone(),
     }));
@@ -345,11 +364,15 @@ pub(super) async fn assemble(
             "dude_environment",
             "dude_wakeup",
         ] {
+            if onboarding && matches!(id, "dude_environment" | "dude_wakeup") {
+                continue;
+            }
             let cap = quota(id);
             contributors.push(Arc::new(super::dude_context::DudeContributor {
                 service: host.harness.framework_dudes(),
                 context: context.clone(),
                 id,
+                onboarding,
             }));
             let block = fw::ContextBlockConfig::new(id, fw::BlockBudget::tokens(cap));
             configs.insert(id.into(), block);
@@ -411,6 +434,16 @@ pub(super) async fn assemble(
     for (id, block) in &mut configs {
         block.budget.max_tokens = Some(quota(id));
         block.budget.max_ratio_bps = None;
+    }
+    if onboarding {
+        // Complete schemas are an execution contract, not reducible summaries.
+        // Let the global input budget account for them without the general
+        // domain-summary quota clipping their fields on smaller models.
+        if let Some(block) = configs.get_mut("tool_domains") {
+            block.budget = fw::BlockBudget::tokens(available.max_tokens);
+            block.reducer = Arc::new(fw::KeepContext);
+            block.compression = None;
+        }
     }
     plugin_order.sort();
     let mut order = config.context.providers.order.clone();

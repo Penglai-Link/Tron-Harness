@@ -9,6 +9,8 @@ use tokio::sync::Mutex;
 
 pub(super) struct HostRunState {
     pub onboarding: bool,
+    /// Admitted onboarding schemas, captured once per run and reused at every step.
+    pub onboarding_tools: Vec<fw::ToolDescriptor>,
     pub context: AgentRunContext,
     /// Product ACL captured before model exposure rewrites `context.tools`.
     pub product_tool_authority: std::collections::BTreeSet<String>,
@@ -51,6 +53,7 @@ impl HostRunState {
             .collect();
         Self {
             onboarding: false,
+            onboarding_tools: Vec::new(),
             context,
             product_tool_authority,
             trusted_prefix,
