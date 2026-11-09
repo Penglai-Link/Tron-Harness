@@ -21,9 +21,6 @@ export const tronNavigation: TronNavSection[] = [
 { menuCode: "DATA", label: "Data", translationKey: "shell:nav.sections.data", href: "", icon: getNavigationIcon("Database") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
 { menuCode: "RESOURCE_MANAGEMENT", label: "Resource Management", translationKey: "shell:nav.items.resourceManagement", href: "", icon: getNavigationIcon("Archive") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
 { menuCode: "FILE_MANAGEMENT", label: "File Management", translationKey: "shell:nav.items.fileManagement", href: "/resource-management/files", icon: getNavigationIcon("Folder") ?? Folder, childDisplay: "Inline" },
-{ menuCode: "DATA_SOURCE_MANAGEMENT", label: "Data Source Management", translationKey: "shell:nav.items.dataSourceManagement", href: "/resource-management/data-sources", icon: getNavigationIcon("DatabaseZap") ?? Folder, childDisplay: "Inline" },
-{ menuCode: "SERVER_MANAGEMENT", label: "Server Management", translationKey: "shell:nav.items.serverManagement", href: "/resource-management/servers", icon: getNavigationIcon("Server") ?? Folder, childDisplay: "Inline" },
-{ menuCode: "SERVER_ACCOUNT_MANAGEMENT", label: "Server Account Management", translationKey: "shell:nav.items.serverAccountManagement", href: "/resource-management/server-accounts", icon: getNavigationIcon("UserRound") ?? Folder, childDisplay: "Inline" }
 ] }
 ] }
 ] },

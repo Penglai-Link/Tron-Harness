@@ -6,7 +6,6 @@ frontendDistDir: tron-backend/resources/frontend
 terminalWorkingDirectory: .
 
 resource:
-  connectionVerificationTimeoutMs: 5000
   storage:
     defaultProfile: local-default
     profiles:

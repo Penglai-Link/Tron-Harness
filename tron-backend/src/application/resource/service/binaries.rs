@@ -65,7 +65,7 @@ impl ResourceService {
         self.authorize_resource_mutation(actor_user_code, &workspace_code, &command.resource_code)?;
         match self.managed_resource(&workspace_code, &command.resource_code)? {
             Some(ManagedResource::File(_)) => Ok(()),
-            Some(_) | None => Err(ResourceError::NotFound),
+            None => Err(ResourceError::NotFound),
         }
     }
 
@@ -80,7 +80,7 @@ impl ResourceService {
             self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
         let record = match self.managed_resource(&workspace_code, &command.resource_code)? {
             Some(ManagedResource::File(record)) => record,
-            Some(_) | None => return Err(ResourceError::NotFound),
+            None => return Err(ResourceError::NotFound),
         };
         self.authorize_resource_mutation(actor_user_code, &workspace_code, &command.resource_code)?;
         let updated = self.replace_file_contents(actor_user_code, &record, file_name, source)?;
@@ -134,7 +134,7 @@ impl ResourceService {
             .map(|code| {
                 let record = match effective.get(code).map(|entry| &entry.resource) {
                     Some(ManagedResource::File(record)) => record,
-                    Some(_) | None => return Err(ResourceError::NotFound),
+                    None => return Err(ResourceError::NotFound),
                 };
                 self.authorize_resource_read(
                     actor_user_code,
@@ -174,7 +174,7 @@ impl ResourceService {
             self.resolve_agent_file_path(source_path, command.agent_local_directory.as_deref())?;
         let record = match self.managed_resource(&workspace_code, &command.resource_code)? {
             Some(ManagedResource::File(record)) => record,
-            Some(_) | None => return Err(ResourceError::NotFound),
+            None => return Err(ResourceError::NotFound),
         };
         let file_name = source
             .file_name()
@@ -217,7 +217,7 @@ impl ResourceService {
             .map(|effective| effective.resource)
         {
             Some(ManagedResource::File(record)) => record,
-            Some(_) | None => return Err(ResourceError::NotFound),
+            None => return Err(ResourceError::NotFound),
         };
         self.authorize_resource_read(
             actor_user_code,

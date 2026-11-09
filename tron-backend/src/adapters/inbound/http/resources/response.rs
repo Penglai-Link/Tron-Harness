@@ -3,7 +3,7 @@ use serde::Serialize;
 use crate::{
     application::resource::{
         ResourceBinaryResult, ResourceCommitResult, ResourceDeleteResult, ResourcePage,
-        ResourceRecord, ServerCreateResult,
+        ResourceRecord,
     },
     domain::resource::{ResourceKind, ResourceSourceKind},
     shared::time::timestamp_to_millis,
@@ -67,26 +67,6 @@ impl From<ResourcePage> for ResourcePageResponse {
 /// when the generic resource API evolves.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConnectionPageResponse {
-    pub current: usize,
-    pub size: usize,
-    pub total: usize,
-    pub records: Vec<ConnectionResponse>,
-}
-
-impl From<ResourcePage> for ConnectionPageResponse {
-    fn from(value: ResourcePage) -> Self {
-        Self {
-            current: value.current,
-            size: value.size,
-            total: value.total,
-            records: value.records.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ResourceFileSummaryResponse {
     pub file_name: String,
     pub file_extension: String,
@@ -110,44 +90,6 @@ pub struct ResourceResponse {
 }
 
 impl From<ResourceRecord> for ResourceResponse {
-    fn from(value: ResourceRecord) -> Self {
-        Self {
-            workspace_code: value.workspace_code,
-            source_kind: value.source_kind,
-            resource_code: value.resource_code,
-            kind: value.kind,
-            name: value.name,
-            description: value.description,
-            allow_inheritance: value.allow_inheritance,
-            file: value.file.map(|file| ResourceFileSummaryResponse {
-                file_name: file.file_name,
-                file_extension: file.file_extension,
-                byte_size: file.byte_size,
-            }),
-            attributes: value.attributes,
-            created_at: timestamp_to_millis(&value.created_at),
-            updated_at: timestamp_to_millis(&value.updated_at),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectionResponse {
-    pub workspace_code: String,
-    pub source_kind: ResourceSourceKind,
-    pub resource_code: String,
-    pub kind: ResourceKind,
-    pub name: String,
-    pub description: String,
-    pub allow_inheritance: bool,
-    pub file: Option<ResourceFileSummaryResponse>,
-    pub attributes: Option<serde_json::Value>,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-impl From<ResourceRecord> for ConnectionResponse {
     fn from(value: ResourceRecord) -> Self {
         Self {
             workspace_code: value.workspace_code,
@@ -203,22 +145,6 @@ impl From<ResourceDeleteResult> for ResourceDeleteResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConnectionDeleteResponse {
-    pub resource_code: String,
-    pub deleted: bool,
-}
-
-impl From<ResourceDeleteResult> for ConnectionDeleteResponse {
-    fn from(value: ResourceDeleteResult) -> Self {
-        Self {
-            resource_code: value.resource_code,
-            deleted: value.deleted,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ResourceBinaryActionResponse {
     pub action: String,
     pub resource_code: String,
@@ -235,42 +161,6 @@ impl From<ResourceBinaryResult> for ResourceBinaryActionResponse {
             file_name: value.file_name,
             byte_size: value.byte_size,
             target_path: value.target_path,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceCommitOutcomeResponse {
-    pub workspace_code: String,
-    pub resource_code: String,
-    pub kind: ResourceKind,
-}
-
-impl From<crate::application::resource::ResourceCommitOutcome> for ResourceCommitOutcomeResponse {
-    fn from(value: crate::application::resource::ResourceCommitOutcome) -> Self {
-        Self {
-            workspace_code: value.workspace_code,
-            resource_code: value.resource_code,
-            kind: value.kind,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServerCreateResponse {
-    pub server: ResourceCommitOutcomeResponse,
-    pub initial_account: Option<ResourceCommitOutcomeResponse>,
-    pub connectivity_verified: bool,
-}
-
-impl From<ServerCreateResult> for ServerCreateResponse {
-    fn from(value: ServerCreateResult) -> Self {
-        Self {
-            server: value.server.into(),
-            initial_account: value.initial_account.map(Into::into),
-            connectivity_verified: value.connectivity_verified,
         }
     }
 }

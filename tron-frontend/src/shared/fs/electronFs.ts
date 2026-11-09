@@ -90,6 +90,7 @@ const KNOWN_FS_ERROR_CODES = [
   "editor-not-found",
   "invalid-editor",
   "unknown-fs-command",
+  "wsl-linux-path-required",
 ] as const;
 
 export function fsErrorCode(error: unknown): string {

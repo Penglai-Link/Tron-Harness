@@ -11,13 +11,11 @@ pub const DEFAULT_RESOURCE_MAX_BINARIES: usize = 500;
 pub const DEFAULT_RESOURCE_MAX_BINARY_BYTES: u64 = 1_073_741_824;
 pub const DEFAULT_RESOURCE_MAX_COMMIT_BYTES: u64 = 1_073_741_824;
 pub const DEFAULT_RESOURCE_MAX_BINARY_NAME_LENGTH: usize = 255;
-pub const DEFAULT_RESOURCE_CONNECTION_VERIFICATION_TIMEOUT_MS: u64 = 5_000;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResourceConfig {
     pub storage: ResourceStorageConfig,
     pub limits: ResourceLimits,
-    pub connection_verification_timeout_ms: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -74,7 +72,6 @@ impl ResourceConfig {
                 profiles,
             },
             limits: ResourceLimits::default(),
-            connection_verification_timeout_ms: DEFAULT_RESOURCE_CONNECTION_VERIFICATION_TIMEOUT_MS,
         }
     }
 
@@ -96,9 +93,6 @@ impl ResourceConfig {
         }
         if let Some(limits) = overrides.limits {
             self.limits.apply_overrides(limits)?;
-        }
-        if let Some(timeout) = overrides.connection_verification_timeout_ms {
-            self.connection_verification_timeout_ms = timeout;
         }
         self.validate()
     }
@@ -139,11 +133,6 @@ impl ResourceConfig {
             || self.limits.max_binary_name_length == 0
         {
             return Err(invalid_config("resource limits must be greater than zero"));
-        }
-        if self.connection_verification_timeout_ms == 0 {
-            return Err(invalid_config(
-                "resource.connectionVerificationTimeoutMs must be greater than zero",
-            ));
         }
         Ok(())
     }
@@ -293,7 +282,6 @@ fn invalid_config(message: impl Into<String>) -> ConfigError {
 pub(crate) struct ResourceFileConfig {
     storage: Option<ResourceStorageFileConfig>,
     limits: Option<ResourceLimitsFileConfig>,
-    connection_verification_timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, serde::Deserialize, Default)]

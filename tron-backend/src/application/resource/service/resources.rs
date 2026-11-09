@@ -1,5 +1,3 @@
-use serde_json::Value;
-
 use crate::{
     application::resource::{
         ResourceCommitBinary, ResourceCommitResult, ResourceCreateCommand, ResourceDeleteCommand,
@@ -7,7 +5,7 @@ use crate::{
         ResourcePageQuery, ResourceRecord, ResourceUpdateCommand,
     },
     domain::resource::{
-        ManagedResource, ResourceError, ResourceKind, ResourceSourceKind, validate_resource_code,
+        ManagedResource, ResourceError, ResourceSourceKind, validate_resource_code,
     },
     shared::{
         event_bus::{BusActorRef, BusEventDraft},
@@ -23,22 +21,13 @@ impl ResourceService {
         actor_user_code: &str,
         query: ResourcePageQuery,
     ) -> Result<ResourcePage, ResourceError> {
-        self.query_resource_records(actor_user_code, query, false)
-    }
-
-    pub fn query_connections(
-        &self,
-        actor_user_code: &str,
-        query: ResourcePageQuery,
-    ) -> Result<ResourcePage, ResourceError> {
-        self.query_resource_records(actor_user_code, query, true)
+        self.query_resource_records(actor_user_code, query)
     }
 
     fn query_resource_records(
         &self,
         actor_user_code: &str,
         query: ResourcePageQuery,
-        connections_only: bool,
     ) -> Result<ResourcePage, ResourceError> {
         let workspace_code = self.workspace_scope(actor_user_code, &query.workspace_code, false)?;
         let mut records = self
@@ -52,9 +41,8 @@ impl ResourceService {
                 )
             })
             .map(|effective| {
-                self.resource_record(&effective.resource, effective.source_kind, connections_only)
+                self.resource_record(&effective.resource, effective.source_kind, false)
             })
-            .filter(|record| !connections_only || record.kind.is_connection_kind())
             .filter(|record| query.kinds.is_empty() || query.kinds.contains(&record.kind))
             .filter(|record| {
                 query
@@ -170,53 +158,6 @@ impl ResourceService {
                 );
                 record.kind
             }
-            Some(ManagedResource::DataSourceConnection(mut record)) => {
-                apply_name(&mut record.name, command.name.as_deref())?;
-                apply_description(&mut record.description, command.description.as_deref());
-                apply_inheritance(&mut record.allow_inheritance, command.allow_inheritance);
-                record.updated_at = current_timestamp();
-                if !self
-                    .repository(|repository| repository.update_data_source_connection(&record))?
-                {
-                    return Err(ResourceError::Conflict);
-                }
-                self.publish_resource_audit(
-                    actor_user_code,
-                    &ManagedResource::DataSourceConnection(record.clone()),
-                    "resource.updated",
-                );
-                record.kind
-            }
-            Some(ManagedResource::Server(mut record)) => {
-                apply_name(&mut record.name, command.name.as_deref())?;
-                apply_description(&mut record.description, command.description.as_deref());
-                apply_inheritance(&mut record.allow_inheritance, command.allow_inheritance);
-                record.updated_at = current_timestamp();
-                if !self.repository(|repository| repository.update_server(&record))? {
-                    return Err(ResourceError::Conflict);
-                }
-                self.publish_resource_audit(
-                    actor_user_code,
-                    &ManagedResource::Server(record.clone()),
-                    "resource.updated",
-                );
-                ResourceKind::ServerConnection
-            }
-            Some(ManagedResource::ServerAccount(mut record)) => {
-                apply_name(&mut record.name, command.name.as_deref())?;
-                apply_description(&mut record.description, command.description.as_deref());
-                apply_inheritance(&mut record.allow_inheritance, command.allow_inheritance);
-                record.updated_at = current_timestamp();
-                if !self.repository(|repository| repository.update_server_account(&record))? {
-                    return Err(ResourceError::Conflict);
-                }
-                self.publish_resource_audit(
-                    actor_user_code,
-                    &ManagedResource::ServerAccount(record.clone()),
-                    "resource.updated",
-                );
-                ResourceKind::ServerAccount
-            }
             None => return Err(ResourceError::NotFound),
         };
         Ok(ResourceCommitResult {
@@ -230,22 +171,13 @@ impl ResourceService {
         actor_user_code: &str,
         command: ResourceDeleteCommand,
     ) -> Result<ResourceDeleteResult, ResourceError> {
-        self.delete_owned_resource(actor_user_code, command, false)
-    }
-
-    pub fn delete_connection(
-        &self,
-        actor_user_code: &str,
-        command: ResourceDeleteCommand,
-    ) -> Result<ResourceDeleteResult, ResourceError> {
-        self.delete_owned_resource(actor_user_code, command, true)
+        self.delete_owned_resource(actor_user_code, command)
     }
 
     fn delete_owned_resource(
         &self,
         actor_user_code: &str,
         command: ResourceDeleteCommand,
-        connections_only: bool,
     ) -> Result<ResourceDeleteResult, ResourceError> {
         validate_resource_code(&command.resource_code)?;
         let workspace_code =
@@ -253,9 +185,6 @@ impl ResourceService {
         let resource = self
             .managed_resource(&workspace_code, &command.resource_code)?
             .ok_or(ResourceError::NotFound)?;
-        if connections_only && !resource.kind().is_connection_kind() {
-            return Err(ResourceError::InvalidInput);
-        }
         self.authorize_resource_mutation(actor_user_code, &workspace_code, &command.resource_code)?;
         let deleted = match resource {
             ManagedResource::File(record) => {
@@ -266,42 +195,6 @@ impl ResourceService {
                     return Err(ResourceError::Conflict);
                 }
                 self.delete_unreferenced_locator(&record.storage_locator);
-                true
-            }
-            ManagedResource::DataSourceConnection(record) => {
-                if !self.repository(|repository| {
-                    repository.delete_data_source_connection(
-                        &workspace_code,
-                        &command.resource_code,
-                        record.revision,
-                    )
-                })? {
-                    return Err(ResourceError::Conflict);
-                }
-                true
-            }
-            ManagedResource::Server(record) => {
-                if !self.repository(|repository| {
-                    repository.delete_server_if_no_accounts(
-                        &workspace_code,
-                        &command.resource_code,
-                        record.revision,
-                    )
-                })? {
-                    return Err(ResourceError::Conflict);
-                }
-                true
-            }
-            ManagedResource::ServerAccount(record) => {
-                if !self.repository(|repository| {
-                    repository.delete_server_account(
-                        &workspace_code,
-                        &command.resource_code,
-                        record.revision,
-                    )
-                })? {
-                    return Err(ResourceError::Conflict);
-                }
                 true
             }
         };
@@ -321,7 +214,7 @@ impl ResourceService {
         &self,
         resource: &ManagedResource,
         source_kind: ResourceSourceKind,
-        include_attributes: bool,
+        _include_attributes: bool,
     ) -> ResourceRecord {
         match resource {
             ManagedResource::File(record) => ResourceRecord {
@@ -338,58 +231,6 @@ impl ResourceService {
                     byte_size: record.byte_size,
                 }),
                 attributes: None,
-                created_at: record.created_at.clone(),
-                updated_at: record.updated_at.clone(),
-            },
-            ManagedResource::DataSourceConnection(record) => ResourceRecord {
-                workspace_code: record.workspace_code.clone(),
-                source_kind,
-                resource_code: record.resource_code.clone(),
-                kind: record.kind,
-                name: record.name.clone(),
-                description: record.description.clone(),
-                allow_inheritance: record.allow_inheritance,
-                file: None,
-                attributes: include_attributes.then(|| redact_direct_secrets(&record.attributes)),
-                created_at: record.created_at.clone(),
-                updated_at: record.updated_at.clone(),
-            },
-            ManagedResource::Server(record) => ResourceRecord {
-                workspace_code: record.workspace_code.clone(),
-                source_kind,
-                resource_code: record.resource_code.clone(),
-                kind: ResourceKind::ServerConnection,
-                name: record.name.clone(),
-                description: record.description.clone(),
-                allow_inheritance: record.allow_inheritance,
-                file: None,
-                attributes: include_attributes.then(|| {
-                    serde_json::json!({
-                        "host": record.host,
-                        "port": record.port,
-                        "protocol": "Ssh",
-                    })
-                }),
-                created_at: record.created_at.clone(),
-                updated_at: record.updated_at.clone(),
-            },
-            ManagedResource::ServerAccount(record) => ResourceRecord {
-                workspace_code: record.workspace_code.clone(),
-                source_kind,
-                resource_code: record.resource_code.clone(),
-                kind: ResourceKind::ServerAccount,
-                name: record.name.clone(),
-                description: record.description.clone(),
-                allow_inheritance: record.allow_inheritance,
-                file: None,
-                attributes: include_attributes.then(|| {
-                    serde_json::json!({
-                        "servers": record.servers,
-                        "credentialConfigured": !record.encrypted_credentials.is_empty(),
-                        "username": record.username,
-                        "authenticationType": record.authentication_type,
-                    })
-                }),
                 created_at: record.created_at.clone(),
                 updated_at: record.updated_at.clone(),
             },
@@ -427,35 +268,6 @@ impl ResourceService {
                 .summary("Resource changed")
                 .attr("workspaceCode", workspace_code.to_string()),
         );
-    }
-}
-
-fn redact_direct_secrets(attributes: &Value) -> Value {
-    let mut redacted = attributes.clone();
-    redact_direct_secrets_in_place(&mut redacted);
-    redacted
-}
-
-fn redact_direct_secrets_in_place(value: &mut Value) {
-    match value {
-        Value::Array(values) => {
-            for value in values {
-                redact_direct_secrets_in_place(value);
-            }
-        }
-        Value::Object(values) => {
-            let is_direct = values
-                .get("source")
-                .and_then(Value::as_str)
-                .is_some_and(|source| source == "DIRECT");
-            if is_direct && values.contains_key("value") {
-                values.insert("value".to_string(), Value::Null);
-            }
-            for value in values.values_mut() {
-                redact_direct_secrets_in_place(value);
-            }
-        }
-        _ => {}
     }
 }
 

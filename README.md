@@ -32,6 +32,31 @@
 
 Makefile中集成了前端、后端、WEB继承模式、桌面APP模式的相关构建和运行命令，使用 `make help` 查看使用说明。
 
+### Windows 桌面连接 WSL 后端
+
+先安装并初始化 WSL2 发行版，支持 Ubuntu 24.04+、Debian 13+，以及 x86_64、ARM64。打开 Windows 桌面菜单「Tron → 后端环境…」（快捷键 `Ctrl+Shift+E`），或进入「设置 → 通用 → 后端环境」，选择发行版后连接。首次连接会安装 Linux 运行依赖、下载后端并重启桌面；后续启动复用已安装的同版本后端。
+
+```text
+Windows：Electron 窗口、环境选择和界面偏好
+    │ HTTP / WebSocket（localhost）
+    ▼
+WSL：tron-backend → Framework、Agent、命令、终端、MCP、后台任务
+    └─ ~/.tron：数据库、聊天、附件、日志、托管工作目录和后端版本
+```
+
+文件面板选择和操作所连接发行版内的 Linux 目录。切换环境会停止当前后端及其任务；已有数据保留在原环境，不会自动迁移。Windows 桌面退出后，所启动的 WSL 后端也会停止。
+
+发布前执行 `make be-build-wsl WSL_ARCH=all`，产物位于 `output/wsl2/<版本>/<Rust target>/`。将其中的 `tron-backend` 二进制上传到 Person-AI 的 Tron 产品版本，按下表登记安装包类型。同架构的二进制可分别登记到 Ubuntu、Debian 类型；桌面会根据实际发行版和架构选择下载接口的 `os_type`。
+
+| 发行版 | x86_64 | ARM64 |
+| --- | --- | --- |
+| Ubuntu | `WSL_UBUNTU_X64` | `WSL_UBUNTU_ARM64` |
+| Debian | `WSL_DEBIAN_X64` | `WSL_DEBIAN_ARM64` |
+
+平台编码由 PersonAI Rust SDK 的 `version::os_type` 常量定义。桌面通过自带后端的 `--wsl-platforms` 命令读取，不在 Electron 中维护数值副本；该命令不启动服务或打开数据库。
+
+下载源使用桌面配置的 Person-AI 版本服务。当前接口只提供最新版本查询，因此首次安装要求服务返回的最新版本与桌面版本一致，且已上传对应 WSL 包；缺少包或版本不一致时会提示原因。已安装的同版本后端可以离线启动。
+
 ### GitHub Actions 构建和发布
 
 提交 PR 或推送到 `main`、`master` 时，CI 检查版本、构建前端并检查后端。在 Actions 页面手动运行 `Build packages` 可以下载各平台安装包和 x86_64 WSL 后端。推送与 `version.properties` 中版本一致的标签（例如 `v1.2.3`）也会触发构建，并在全部任务成功后创建 Release 草稿；包含后缀的标签会标记为预发布。检查产物和 SHA-256 后，再手动发布草稿。已有同名 Release 时，创建草稿的任务会失败，不会覆盖已有文件。

@@ -1,5 +1,5 @@
 
-use serde_json::{Map, Value, json};
+use serde_json::json;
 
 use crate::domain::agent::ToolOperationKind;
 
@@ -69,9 +69,5 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         resource_update_definition(),
         resource_delete_definition(),
         resource_binary_definition(),
-        resource_data_source_create_definition(),
-        resource_data_source_update_definition(),
-        resource_server_create_definition(),
-        resource_server_account_create_definition(),
     ]
 }

@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
+const crypto = require("node:crypto");
 const { spawn, exec } = require("node:child_process");
 
 const applyUpdateArgIndex = process.argv.indexOf("--_tron-apply-update");
@@ -9,7 +10,7 @@ if (applyUpdateArgIndex >= 0) {
   const installerPath = process.argv[applyUpdateArgIndex + 1] || "";
   void runApplyUpdate(installerPath, { logPath: process.argv[applyUpdateArgIndex + 2] }).then((code) => process.exit(code));
 } else {
-const { app, BrowserWindow, WebContentsView, clipboard, ipcMain, Menu, shell, Tray } = require("electron");
+const { app, BrowserWindow, WebContentsView, clipboard, dialog, ipcMain, Menu, net, shell, Tray } = require("electron");
 const { STARTUP_ARG, ICON_PATH } = require("./desktop-constants.cjs");
 const { createWindowsDesktop } = require("./windows-desktop.cjs");
 const { createLinuxDesktop } = require("./linux-desktop.cjs");
@@ -128,7 +129,10 @@ const state = {
   profileId: "",
   injectionEnabled: false,
   mainWindow: null,
-  updater: null
+  updater: null,
+  environment: { mode: "local" },
+  wsl: null,
+  switchingEnvironment: false
 };
 
 function sendUpdaterStatus(status) {
@@ -162,7 +166,10 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.resolve(__dirname, "..", "preload", "app-preload.cjs"),
-      sandbox: false
+      sandbox: false,
+      ...(state.environment.mode === "wsl" ? {
+        partition: `persist:tron-wsl-${crypto.createHash("sha256").update(state.environment.distribution).digest("hex").slice(0, 16)}`
+      } : {})
     }
   });
 
@@ -344,6 +351,7 @@ function startBackend(resourcesDir) {
 }
 
 function stopBackend() {
+  state.wsl?.stop();
   if (!state.backendProcess) {
     return;
   }
@@ -360,7 +368,7 @@ function shouldOpenMainDevTools() {
   return process.env.TRON_ELECTRON_DEVTOOLS === "1";
 }
 
-async function bootstrap() {
+async function bootstrapRuntime() {
   const resourcesDir = resolveResourcesDir(app);
   const appDataDir = desktopDataDir;
   state.appDataDir = appDataDir;
@@ -378,6 +386,36 @@ async function bootstrap() {
   state.backendLogPath = resolveBackendLogPath(appDataDir);
   state.graphPath = resolveSharedGraphStoragePath(appDataDir);
   state.frontendDistDir = resolveFrontendDistDir(resourcesDir);
+  if (process.platform === "win32") {
+    const { WslBackend } = require("./wsl-backend.cjs");
+    state.wsl = new WslBackend({
+      dataDir: appDataDir,
+      getVersion: () => app.getVersion(),
+      getVersionServerUrl: () => resolveUpdateServerUrl(resourcesDir),
+      frontendDir: state.frontendDistDir,
+      sidecarPath: resolveSidecarPath(resourcesDir),
+      fetchImpl: (url, options) => net.fetch(url, options),
+      onStatus: (status) => {
+        state.mainWindow?.webContents.send("backend-environment:status", status);
+        if (status.backendExited && state.backendReady && state.environment.mode === "wsl") {
+          state.backendReady = false;
+          void handleBackendFailure(new Error(status.message)).catch(console.error);
+        }
+      }
+    });
+    const zh = app.getLocale().startsWith("zh");
+    Menu.setApplicationMenu?.(Menu.buildFromTemplate([
+      { label: "Tron", submenu: [
+        { label: zh ? "后端环境…" : "Backend environment…", accelerator: "Ctrl+Shift+E", click: () => {
+          void chooseBackendEnvironment().catch((error) => dialog.showErrorBox("Tron", describeError(error)));
+        } },
+        { type: "separator" }, { role: "quit" }
+      ] },
+      { role: "editMenu" }, { role: "viewMenu" }, { role: "windowMenu" }
+    ]));
+    try { state.environment = state.wsl.selection(); }
+    catch (error) { await handleBackendFailure(error); return; }
+  }
   state.updater = createUpdater({
     dataDir: appDataDir,
     getVersion: () => app.getVersion(),
@@ -408,16 +446,31 @@ async function bootstrap() {
   const startupScreenStartedAt = Date.now();
 
   try {
-    startBackend(resourcesDir);
+    if (state.environment.mode === "wsl") {
+      state.backendLogPath = `${state.environment.distribution}:~/.tron/logs/tron-backend.log`;
+      await showStartupMessage(app.getLocale().startsWith("zh") ? `正在连接 WSL：${state.environment.distribution}` : `Connecting to WSL: ${state.environment.distribution}`);
+      const session = await state.wsl.start(state.environment.distribution, state.backendPort);
+      state.backendPort = session.port;
+      state.backendUrl = session.backendUrl;
+      state.appDataDir = session.dataDir;
+      state.profileDataDir = session.dataDir;
+      state.databasePath = `${session.dataDir}/tron.sqlite3`;
+      state.controlDatabasePath = `${session.dataDir}/control/profiles.sqlite`;
+      state.graphPath = `${session.dataDir}/tron.graph.grafeo`;
+      state.backendLogPath = `${session.dataDir}/logs/tron-backend.log`;
+      state.frontendDistDir = `${session.releaseDir}/frontend`;
+    } else {
+      startBackend(resourcesDir);
+    }
   } catch (error) {
-    await showStartupMessage(`Backend failed to start. ${describeError(error)}\nLogs: ${state.backendLogPath}`);
+    await handleBackendFailure(error);
     return;
   }
 
   state.backendReady = await waitBackendReady(state.backendUrl);
   if (!state.backendReady) {
     stopBackend();
-    await showStartupMessage(`Backend failed to start in time. Check logs at ${state.backendLogPath} and retry.`);
+    await handleBackendFailure(new Error("Backend readiness timeout"));
     return;
   }
 
@@ -428,6 +481,63 @@ async function bootstrap() {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
   if (mainWindow.isVisible()) mainWindow.focus();
+}
+
+async function bootstrap() {
+  try { await bootstrapRuntime(); }
+  catch (error) { await handleBackendFailure(error); }
+}
+
+async function selectBackendEnvironment(selection) {
+  if (!state.wsl) throw new Error("wsl-windows-only");
+  if (state.switchingEnvironment) throw new Error("wsl-operation-in-progress");
+  if (!["local", "wsl"].includes(selection.mode)) throw new Error("invalid-backend-environment");
+  state.switchingEnvironment = true;
+  try {
+    if (selection.mode === "wsl") await state.wsl.prepare(selection.distribution);
+    state.wsl.saveSelection(selection);
+    // A new renderer partition clears in-memory tabs, queries, credentials and
+    // file-root grants together. Each environment keeps its own persisted UI.
+    app.relaunch();
+    setTimeout(quitDesktop, 150);
+    return true;
+  } catch (error) { state.switchingEnvironment = false; throw error; }
+}
+
+async function chooseBackendEnvironment() {
+  const zh = app.getLocale().startsWith("zh");
+  let distributions = [], detail = "";
+  try { distributions = (await state.wsl.list()).filter((item) => item.wslVersion === 2); }
+  catch (error) { detail = describeError(error); }
+  const result = await dialog.showMessageBox({
+    type: "info", title: "Tron",
+    message: zh ? "选择后端环境" : "Choose backend environment",
+    detail: detail || (zh ? "WSL 模式会下载 Linux 后端，安装运行依赖，并将数据保存在所选发行版内。支持 Ubuntu 24.04+、Debian 13+。切换会重启 Tron，正在运行的任务会停止，已有数据保留在原环境。" : "WSL mode downloads the Linux backend, installs runtime dependencies and stores data in the selected distribution. Requires Ubuntu 24.04+ or Debian 13+. Switching restarts Tron and stops active tasks. Existing data stays in its original environment."),
+    buttons: [zh ? "本机" : "Local", ...distributions.map((item) => `WSL: ${item.name}`), zh ? "取消" : "Cancel"],
+    cancelId: distributions.length + 1
+  });
+  if (result.response === distributions.length + 1) return false;
+  await selectBackendEnvironment(result.response === 0 ? { mode: "local" } : { mode: "wsl", distribution: distributions[result.response - 1].name });
+  return true;
+}
+
+async function handleBackendFailure(error) {
+  state.backendReady = false;
+  stopBackend();
+  await showStartupMessage(`Backend failed to start. ${describeError(error)}\nLogs: ${state.backendLogPath}`);
+  if (!state.wsl) return;
+  const zh = app.getLocale().startsWith("zh");
+  const result = await dialog.showMessageBox({
+    type: "error", title: "Tron",
+    message: zh ? "无法连接后端" : "Could not connect to backend",
+    detail: `${describeError(error)}\n${state.backendLogPath}`,
+    buttons: [zh ? "选择后端环境" : "Choose environment", zh ? "重试" : "Retry", zh ? "退出" : "Quit"], cancelId: 2
+  });
+  if (result.response === 0) {
+    try { if (!await chooseBackendEnvironment()) await handleBackendFailure(error); }
+    catch (reason) { await handleBackendFailure(reason); }
+  } else if (result.response === 1) { app.relaunch(); quitDesktop(); }
+  else quitDesktop();
 }
 
 function describeError(error) {
@@ -747,12 +857,26 @@ function forwardTargetEvent(event) {
 
 function registerIpcHandlers() {
   ipcMain.handle("tron-desktop:invoke", async (_event, command, payload = {}) => {
+    if (_event.sender !== state.mainWindow?.webContents || _event.senderFrame !== _event.sender.mainFrame
+      || new URL(_event.senderFrame.url).origin !== new URL(state.backendUrl).origin) {
+      throw new Error("untrusted-desktop-frame");
+    }
     const request = normalizeRequest(payload);
 
     if (typeof command === "string" && command.startsWith("fs:")) {
       const browserWindow = BrowserWindow.fromWebContents(_event.sender) || undefined;
+      if (state.environment.mode === "wsl") return state.wsl.fileCommand(command, request, browserWindow);
       return handleFsCommand(command, request, browserWindow);
     }
+
+    if (command === "getBackendEnvironment") {
+      return { supported: process.platform === "win32", selection: state.environment, status: state.wsl?.status ?? { phase: "idle" } };
+    }
+    if (command === "listWslDistributions") {
+      if (!state.wsl) throw new Error("wsl-windows-only");
+      return state.wsl.list();
+    }
+    if (command === "selectBackendEnvironment") return selectBackendEnvironment(request);
 
     if (command === "desktopProcessMetrics") {
       return require("./process-metrics.cjs").collectProcessMetrics(app);
@@ -768,7 +892,8 @@ function registerIpcHandlers() {
         profileDataDir: state.profileDataDir,
         controlDatabasePath: state.controlDatabasePath,
         databasePath: state.databasePath,
-        graphPath: state.graphPath
+        graphPath: state.graphPath,
+        environment: state.environment
       };
     }
 

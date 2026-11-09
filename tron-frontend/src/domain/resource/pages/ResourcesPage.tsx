@@ -59,12 +59,6 @@ const allResourceKinds: ResourceKind[] = [
   "FILE",
   "IMAGE",
   "PDF",
-  "MYSQL_CONNECTION",
-  "POSTGRESQL_CONNECTION",
-  "REDIS_CONNECTION",
-  "KAFKA_CONNECTION",
-  "SERVER_CONNECTION",
-  "SERVER_ACCOUNT",
 ];
 
 function formatByteSize(byteSize: number) {

@@ -1,27 +1,12 @@
 import type { ResourceKind, ResourceSourceKind } from "@/domain/resource/model";
 
 export type ResourceSourceCode = "Local" | "Inherited" | "Override";
-export type ResourceKindCode =
-  | "File"
-  | "Image"
-  | "Pdf"
-  | "MysqlConnection"
-  | "PostgresqlConnection"
-  | "RedisConnection"
-  | "KafkaConnection"
-  | "ServerConnection"
-  | "ServerAccount";
+export type ResourceKindCode = "File" | "Image" | "Pdf";
 
 const resourceKindCodes: Record<ResourceKind, ResourceKindCode> = {
   FILE: "File",
   IMAGE: "Image",
   PDF: "Pdf",
-  MYSQL_CONNECTION: "MysqlConnection",
-  POSTGRESQL_CONNECTION: "PostgresqlConnection",
-  REDIS_CONNECTION: "RedisConnection",
-  KAFKA_CONNECTION: "KafkaConnection",
-  SERVER_CONNECTION: "ServerConnection",
-  SERVER_ACCOUNT: "ServerAccount",
 };
 
 const resourceSourceCodes: Record<ResourceSourceKind, ResourceSourceCode> = {
@@ -39,12 +24,6 @@ export function fromResourceKindCode(value: ResourceKindCode): ResourceKind {
     case "File": return "FILE";
     case "Image": return "IMAGE";
     case "Pdf": return "PDF";
-    case "MysqlConnection": return "MYSQL_CONNECTION";
-    case "PostgresqlConnection": return "POSTGRESQL_CONNECTION";
-    case "RedisConnection": return "REDIS_CONNECTION";
-    case "KafkaConnection": return "KAFKA_CONNECTION";
-    case "ServerConnection": return "SERVER_CONNECTION";
-    case "ServerAccount": return "SERVER_ACCOUNT";
   }
 }
 

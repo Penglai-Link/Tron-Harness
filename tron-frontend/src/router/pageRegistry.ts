@@ -189,36 +189,6 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.ResourceEditorPage,
     }))
   ),
-  "resourceManagement.dataSources": lazy(() =>
-    import("@/domain/resource/pages/ResourceConnectionManagementPage").then(
-      (module) => ({ default: module.DataSourceManagementPage })
-    )
-  ),
-  "resourceManagement.dataSourcesDetail": lazy(() =>
-    import("@/domain/resource/pages/ResourceEditorPage").then((module) => ({
-      default: module.ResourceEditorPage,
-    }))
-  ),
-  "resourceManagement.servers": lazy(() =>
-    import("@/domain/resource/pages/ResourceConnectionManagementPage").then(
-      (module) => ({ default: module.ServerManagementPage })
-    )
-  ),
-  "resourceManagement.serversDetail": lazy(() =>
-    import("@/domain/resource/pages/ResourceEditorPage").then((module) => ({
-      default: module.ResourceEditorPage,
-    }))
-  ),
-  "resourceManagement.serverAccounts": lazy(() =>
-    import("@/domain/resource/pages/ResourceConnectionManagementPage").then(
-      (module) => ({ default: module.ServerAccountManagementPage })
-    )
-  ),
-  "resourceManagement.serverAccountsDetail": lazy(() =>
-    import("@/domain/resource/pages/ResourceEditorPage").then((module) => ({
-      default: module.ResourceEditorPage,
-    }))
-  ),
   "settings.agents": lazy(() =>
     import("@/domain/agent/pages/PlatformAgentsPage").then((module) => ({
       default: module.PlatformAgentsPage,

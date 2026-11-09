@@ -51,7 +51,7 @@ base64 = "0.22"
 bcrypt = "0.17"
 flate2 = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "85a70d4573813596739ec0a9a6c1ce33946f1e98" }
+crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "7bf11a4ffb1fc01b00c369d2b16827ac619e6654" }
 cron = "0.12"
 gmcrypto-core = { version = "1.0.0", features = ["sm4-aead"] }
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
@@ -106,6 +106,13 @@ windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 # Dependencies of the frontend browser acceptance server.
 rand08 = { package = "rand", version = "0.8" }
 rsa = "0.9"
+
+# Framework 1.1.0 pins the preceding SDK revision. Replace that exact package
+# so its public SDK types and Tron's types come from the same revision.
+# Cargo's [patch] cannot override a Git source with another rev of that source.
+# Remove this replacement when Framework pins the same SDK revision.
+[replace]
+"https://gitee.com/person-ai/person-ai-index-rust-sdk.git#crab-serverapi:0.4.0" = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "7bf11a4ffb1fc01b00c369d2b16827ac619e6654" }
 
 [profile.release]
 # The desktop sidecar is distributed to end users.  These settings remove

@@ -1,18 +1,16 @@
-use std::{future::Future, sync::Arc, thread};
+use std::sync::Arc;
 
 use serde::Deserialize;
-use serde_json::Value;
 
 use crate::{
     application::resource::{
-        DataSourceCreateCommand, DataSourceUpdateCommand, ResourceBinaryAgentCommand,
+        ResourceBinaryAgentCommand,
         ResourceCreateCommand, ResourceDeleteCommand, ResourceGetQuery, ResourcePageQuery,
-        ResourceService, ResourceUpdateCommand, ServerAccountCreateCommand,
-        ServerAccountCreateInput, ServerCreateCommand,
+        ResourceService, ResourceUpdateCommand,
     },
     domain::{
         agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolRequest},
-        resource::{ResourceError, ResourceKind, ServerAuthenticationType},
+        resource::ResourceKind,
     },
 };
 
@@ -40,15 +38,5 @@ pub(super) fn tools(resources: ResourceService) -> Vec<Arc<dyn Tool>> {
         Arc::new(ResourceBinaryTool {
             resources: resources.clone(),
         }),
-        Arc::new(DataSourceCreateTool {
-            resources: resources.clone(),
-        }),
-        Arc::new(DataSourceUpdateTool {
-            resources: resources.clone(),
-        }),
-        Arc::new(ServerCreateTool {
-            resources: resources.clone(),
-        }),
-        Arc::new(ServerAccountCreateTool { resources }),
     ]
 }

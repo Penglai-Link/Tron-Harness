@@ -28,6 +28,22 @@ export interface DesktopBackendStatus {
   graphPath?: string;
 }
 
+export type BackendEnvironmentSelection = { mode: "local" } | { mode: "wsl"; distribution: string };
+export interface BackendEnvironmentState {
+  supported: boolean;
+  selection: BackendEnvironmentSelection;
+  status: {
+    phase: "idle" | "checking" | "dependencies" | "downloading" | "installing" | "installed" | "starting" | "ready" | "error";
+    distribution?: string;
+    dataDir?: string;
+    backendVersion?: string;
+    architecture?: string;
+    progress?: number;
+    message?: string;
+  };
+}
+export interface WslDistribution { name: string; wslVersion: number }
+
 export type UpdateStatusType =
   | "idle"
   | "checking"
@@ -373,6 +389,18 @@ export class DesktopBridge {
   public async getAppVersion(): Promise<string> {
     const response = await this.requireInvoke()("getAppVersion", {});
     return typeof response === "string" ? response : "";
+  }
+
+  public async getBackendEnvironment(): Promise<BackendEnvironmentState> {
+    return this.requireInvoke()("getBackendEnvironment", {}) as Promise<BackendEnvironmentState>;
+  }
+
+  public async listWslDistributions(): Promise<WslDistribution[]> {
+    return this.requireInvoke()("listWslDistributions", {}) as Promise<WslDistribution[]>;
+  }
+
+  public async selectBackendEnvironment(selection: BackendEnvironmentSelection): Promise<void> {
+    await this.requireInvoke()("selectBackendEnvironment", selection);
   }
 
   public async checkUpdate(accessToken: string): Promise<UpdateStatus> {

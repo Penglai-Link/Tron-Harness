@@ -106,27 +106,6 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "DATA_SOURCE_MANAGEMENT",
-        parent_menu_code: Some("RESOURCE_MANAGEMENT"),
-        position: 1,
-        child_display: NavigationMenuChildDisplay::Inline,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "SERVER_MANAGEMENT",
-        parent_menu_code: Some("RESOURCE_MANAGEMENT"),
-        position: 2,
-        child_display: NavigationMenuChildDisplay::Inline,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "SERVER_ACCOUNT_MANAGEMENT",
-        parent_menu_code: Some("RESOURCE_MANAGEMENT"),
-        position: 3,
-        child_display: NavigationMenuChildDisplay::Inline,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
         menu_code: "CHAT_PROJECTS",
         parent_menu_code: None,
         position: 3,

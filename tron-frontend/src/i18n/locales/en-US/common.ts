@@ -274,6 +274,7 @@ export const common = {
       "not-in-desktop": "File operations are only available in the desktop app",
       "root-not-found": "Folder session expired, please reopen",
       "path-outside-root": "Path is outside the authorized folder",
+      "wsl-linux-path-required": "Choose a folder inside the connected Linux distribution, not a Windows drive",
       "path-not-found": "Path not found",
       "parent-not-found": "Parent directory not found",
       "not-a-directory": "Target is not a folder",

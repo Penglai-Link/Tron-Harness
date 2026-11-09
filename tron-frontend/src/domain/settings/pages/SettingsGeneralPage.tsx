@@ -18,6 +18,7 @@ import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { UpdateSettingsCard } from "@/domain/update/UpdateSettingsCard";
 import { WebVersionCard } from "@/domain/update/WebVersionCard";
 import { BrowserNotificationSettingsCard } from "@/domain/notification/components/BrowserNotificationSettingsCard";
+import { BackendEnvironmentSettings } from "@/domain/settings/components/BackendEnvironmentSettings";
 
 export function SettingsGeneralPage() {
   const { t: shellT } = useTranslation("shell");
@@ -39,6 +40,7 @@ export function SettingsGeneralPage() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         {desktopBridge.isDesktop() ? <UpdateSettingsCard /> : <WebVersionCard />}
+        {desktopBridge.isElectron() && <BackendEnvironmentSettings />}
 
         <SystemConfigTable />
 

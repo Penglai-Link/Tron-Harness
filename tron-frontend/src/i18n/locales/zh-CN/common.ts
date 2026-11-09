@@ -274,6 +274,7 @@ export const common = {
       "not-in-desktop": "仅桌面端支持文件操作",
       "root-not-found": "文件夹会话已失效，请重新打开",
       "path-outside-root": "路径超出已授权的文件夹范围",
+      "wsl-linux-path-required": "请选择所连接 Linux 发行版内的目录，不能选择 Windows 磁盘",
       "path-not-found": "路径不存在",
       "parent-not-found": "父目录不存在",
       "not-a-directory": "目标不是文件夹",

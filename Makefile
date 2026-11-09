@@ -186,7 +186,8 @@ DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BIN
 ELECTRON_NPM := $(NPM)
 NODE ?= node
 
-# Standalone Linux backend builds use a fixed Debian 12 / glibc 2.36 baseline.
+# Build on Debian 12; bundled SQLite extensions require newer runtime libraries.
+# Supported runtimes: Ubuntu 24.04+ / Debian 13+ (including libstdc++6).
 # Keep the toolchain independent of the developer's host OS and Cargo caches.
 WSL_ARCH ?= x86_64
 WSL_BUILD_IMAGE := rust:1.95.0-bookworm
@@ -224,7 +225,7 @@ help:
 	@echo "  make be-install   Fetch backend dependencies"
 	@echo "  make be-check     Compile backend"
 	@echo "  make be-build-wsl 构建独立 Linux 后端二进制（需要 Node.js 和 Docker Linux 容器）"
-	@echo "                    运行基线：WSL2 Ubuntu 24.04+、Debian 12+；不包含前端和桌面安装包"
+	@echo "                    运行基线：WSL2 Ubuntu 24.04+、Debian 13+；不包含前端和桌面安装包"
 	@echo "                    WSL_ARCH=x86_64（默认）、aarch64 或 all；异构构建需要 Docker 模拟支持"
 	@echo "                    VERSION 必须与 version.properties 一致；SKIP_TESTS=true/false（本目标不运行测试）"
 	@echo "                    输出：output/wsl2/<版本>/<Rust target>/，含二进制、SHA-256 和运行库清单"
@@ -378,8 +379,9 @@ if grep -q 'not found' "$$wsl_stage/runtime-dependencies.txt"; then
     echo "错误：构建产物存在未解析的动态库。" >&2
     exit 1
 fi
-printf '\n构建镜像：%s\n版本：%s\n目标：%s\n运行基线：WSL2 Ubuntu 24.04+、Debian 12+（glibc 2.36+）\n' "$$TRON_WSL_IMAGE" "$$TRON_WSL_VERSION" "$$TRON_WSL_TARGET" >> "$$wsl_stage/runtime-dependencies.txt"
-printf '系统运行库：libc6、libgcc-s1、libssl3（或 libssl3t64）、libwayland-client0、ca-certificates；以以上 ldd 清单为准。\n' >> "$$wsl_stage/runtime-dependencies.txt"
+printf '\n构建镜像：%s\n版本：%s\n目标：%s\n运行基线：WSL2 Ubuntu 24.04+、Debian 13+\n' "$$TRON_WSL_IMAGE" "$$TRON_WSL_VERSION" "$$TRON_WSL_TARGET" >> "$$wsl_stage/runtime-dependencies.txt"
+printf '系统运行库：libc6、libgcc-s1、libstdc++6、libssl3t64、libwayland-client0、ca-certificates。\n' >> "$$wsl_stage/runtime-dependencies.txt"
+printf '以上 ldd 只列出主程序依赖；内嵌 SQLite 扩展还要求 GLIBC_2.38、GLIBCXX_3.4.32。Debian 12 不满足运行要求。\n' >> "$$wsl_stage/runtime-dependencies.txt"
 cd "$$wsl_stage"
 sha256sum tron-backend > SHA256SUMS
 chown -R "$$TRON_WSL_UID:$$TRON_WSL_GID" "$$wsl_stage"

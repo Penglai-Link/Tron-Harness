@@ -41,8 +41,6 @@ fn initialize(connection: &Connection, scope: &str, sql: &str) -> rusqlite::Resu
         )?;
     if !initialized {
         transaction.execute_batch(sql)?;
-    } else if scope == "business" {
-        refresh_empty_server_account_schema(&transaction, sql)?;
     }
     if scope == "business" {
         refresh_builtin_run_count_defaults(&transaction)?;
@@ -77,40 +75,5 @@ fn refresh_builtin_run_count_defaults(connection: &Connection) -> rusqlite::Resu
         "INSERT INTO tron_schema_initialized (scope) VALUES (?1)",
         [MARKER],
     )?;
-    Ok(())
-}
-
-// Development databases may have the pre-credential account table while the
-// initial schema has already changed. Recreate only an empty obsolete table;
-// never discard accounts or invent encrypted credentials for existing records.
-fn refresh_empty_server_account_schema(connection: &Connection, sql: &str) -> rusqlite::Result<()> {
-    let current: bool = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('resource_server_accounts') WHERE name = 'encrypted_credentials')",
-        [], |row| row.get(0),
-    )?;
-    if current {
-        return Ok(());
-    }
-    let populated: bool = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM resource_server_accounts)",
-        [],
-        |row| row.get(0),
-    )?;
-    if populated {
-        tracing::error!(
-            "server account schema is obsolete and contains accounts; refusing to discard credentials"
-        );
-        return Err(rusqlite::Error::InvalidQuery);
-    }
-    let start = sql
-        .find("CREATE TABLE resource_server_accounts (")
-        .expect("server account schema");
-    let end = sql[start..]
-        .find("CREATE TABLE resource_servers (")
-        .expect("resource server schema")
-        + start;
-    connection.execute_batch("DROP TABLE IF EXISTS resource_server_account_bindings; DROP TABLE resource_server_accounts;")?;
-    connection.execute_batch(&sql[start..end])?;
-    tracing::info!("refreshed empty server account tables from the initial schema");
     Ok(())
 }

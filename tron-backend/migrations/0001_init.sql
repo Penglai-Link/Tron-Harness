@@ -836,21 +836,6 @@ CREATE TABLE resource_code_registry (
     PRIMARY KEY (workspace_code, resource_code)
 );
 
-CREATE TABLE resource_data_source_connections (
-    id INTEGER PRIMARY KEY,
-    workspace_code TEXT NOT NULL COLLATE BINARY,
-    resource_code TEXT NOT NULL COLLATE BINARY,
-    kind TEXT NOT NULL CHECK (kind IN ('MYSQL_CONNECTION', 'POSTGRESQL_CONNECTION', 'REDIS_CONNECTION', 'KAFKA_CONNECTION')),
-    name TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    attributes_json TEXT NOT NULL,
-    allow_inheritance INTEGER NOT NULL CHECK (allow_inheritance IN (0, 1)) DEFAULT 0,
-    revision INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    UNIQUE(workspace_code, resource_code)
-);
-
 CREATE TABLE resource_files (
     id INTEGER PRIMARY KEY,
     workspace_code TEXT NOT NULL COLLATE BINARY,
@@ -862,49 +847,6 @@ CREATE TABLE resource_files (
     file_extension TEXT NOT NULL DEFAULT '',
     byte_size INTEGER NOT NULL CHECK (byte_size >= 0),
     storage_locator TEXT NOT NULL COLLATE BINARY,
-    allow_inheritance INTEGER NOT NULL CHECK (allow_inheritance IN (0, 1)) DEFAULT 0,
-    revision INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    UNIQUE(workspace_code, resource_code)
-);
-
-CREATE TABLE resource_server_accounts (
-    id INTEGER PRIMARY KEY,
-    workspace_code TEXT NOT NULL COLLATE BINARY,
-    resource_code TEXT NOT NULL COLLATE BINARY,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    username TEXT NOT NULL,
-    authentication_type TEXT NOT NULL CHECK (authentication_type IN ('Password', 'PrivateKey')),
-    encrypted_credentials TEXT NOT NULL,
-    allow_inheritance INTEGER NOT NULL CHECK (allow_inheritance IN (0, 1)) DEFAULT 0,
-    revision INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    UNIQUE(workspace_code, resource_code)
-);
-
-CREATE TABLE resource_server_account_bindings (
-    account_workspace_code TEXT NOT NULL COLLATE BINARY,
-    account_code TEXT NOT NULL COLLATE BINARY,
-    server_workspace_code TEXT NOT NULL COLLATE BINARY,
-    server_code TEXT NOT NULL COLLATE BINARY,
-    PRIMARY KEY(account_workspace_code, account_code, server_workspace_code, server_code),
-    FOREIGN KEY (account_workspace_code, account_code)
-        REFERENCES resource_server_accounts (workspace_code, resource_code) ON DELETE CASCADE,
-    FOREIGN KEY (server_workspace_code, server_code)
-        REFERENCES resource_servers (workspace_code, resource_code) ON DELETE RESTRICT
-);
-
-CREATE TABLE resource_servers (
-    id INTEGER PRIMARY KEY,
-    workspace_code TEXT NOT NULL COLLATE BINARY,
-    resource_code TEXT NOT NULL COLLATE BINARY,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    host TEXT NOT NULL,
-    port INTEGER NOT NULL CHECK (port > 0 AND port <= 65535),
     allow_inheritance INTEGER NOT NULL CHECK (allow_inheritance IN (0, 1)) DEFAULT 0,
     revision INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
@@ -1257,20 +1199,8 @@ CREATE INDEX idx_resource_chat_session_attachments_session
 CREATE INDEX idx_resource_chat_session_attachments_workspace
     ON resource_chat_session_attachments (workspace_code);
 
-CREATE INDEX idx_resource_data_source_connections_workspace
-    ON resource_data_source_connections (workspace_code);
-
 CREATE INDEX idx_resource_files_workspace
     ON resource_files (workspace_code);
-
-CREATE INDEX idx_resource_server_accounts_server
-    ON resource_server_account_bindings (server_workspace_code, server_code);
-
-CREATE INDEX idx_resource_server_accounts_workspace
-    ON resource_server_accounts (workspace_code);
-
-CREATE INDEX idx_resource_servers_workspace
-    ON resource_servers (workspace_code);
 
 CREATE INDEX idx_skill_rag_index_states_status
     ON skill_rag_index_states(vector_status, graph_status);
@@ -1332,18 +1262,6 @@ CREATE INDEX workspace_session_links_owner_source ON workspace_session_links(jso
 
 
 
-CREATE TRIGGER resource_servers_prevent_parent_delete
-             BEFORE DELETE ON resource_servers
-             FOR EACH ROW
-             WHEN EXISTS (
-                 SELECT 1 FROM resource_server_account_bindings
-                 WHERE server_workspace_code = OLD.workspace_code
-                   AND server_code = OLD.resource_code
-             )
-             BEGIN
-                 SELECT RAISE(ABORT, 'resource server has accounts');
-             END;
-
 CREATE TRIGGER trg_prompts_immutable_identity
 BEFORE UPDATE ON prompts
 FOR EACH ROW
@@ -1382,11 +1300,8 @@ INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, 
     (734510000000000005, 'AGENT_OPERATIONS', 'BuiltIn', 'Group', NULL, NULL, 'Bot', '智能体相关入口，包括 Dude 和 MCP 服务。', 'Agent-related entry points, including Dude and MCP servers.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000008, 'MCP_SERVERS', 'BuiltIn', 'Internal', 'mcpServers.index', NULL, 'PlugZap', '配置和管理可供智能体使用的 MCP 服务。', 'Configure MCP servers available to agents.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000012, 'DATA', 'BuiltIn', 'Group', NULL, NULL, 'Database', '数据与资源管理相关入口。', 'Entry points for data and resource management.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000017, 'RESOURCE_MANAGEMENT', 'BuiltIn', 'Group', NULL, NULL, 'Archive', '管理文件、数据源、服务器及服务器账号。', 'Manage files, data sources, servers, and server accounts.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000017, 'RESOURCE_MANAGEMENT', 'BuiltIn', 'Group', NULL, NULL, 'Archive', '管理文件。', 'Manage files.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000018, 'FILE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.files', NULL, 'Folder', '浏览和管理工作区文件与已上传资源。', 'Browse and manage workspace files and uploaded resources.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000019, 'DATA_SOURCE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.dataSources', NULL, 'DatabaseZap', '配置可供应用和智能体访问的数据源。', 'Configure data sources available to apps and agents.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000020, 'SERVER_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.servers', NULL, 'Server', '管理外部服务器连接及其配置。', 'Manage external server connections and their configuration.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000021, 'SERVER_ACCOUNT_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.serverAccounts', NULL, 'UserRound', '维护服务器连接可复用的账号和凭据。', 'Maintain reusable accounts and credentials for server connections.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', '管理平台或工作区可复用的变量。', 'Manage reusable platform or workspace variables.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', '会话区域的分组入口，包含主题、目录和随聊。', 'The chat section, containing topics, directories, and quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000003, 'CHAT_PROJECTS', 'BuiltIn', 'Widget', 'chat.projects', NULL, 'FolderKanban', '查看主题及其关联的会话。', 'Browse topics and their associated conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
@@ -1415,12 +1330,6 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734530000000000034, 734510000000000017, 'en-US', 'Resource Management'),
     (734530000000000035, 734510000000000018, 'zh-CN', '文件管理'),
     (734530000000000036, 734510000000000018, 'en-US', 'File Management'),
-    (734530000000000037, 734510000000000019, 'zh-CN', '数据源管理'),
-    (734530000000000038, 734510000000000019, 'en-US', 'Data Source Management'),
-    (734530000000000039, 734510000000000020, 'zh-CN', '服务器管理'),
-    (734530000000000040, 734510000000000020, 'en-US', 'Server Management'),
-    (734530000000000041, 734510000000000021, 'zh-CN', '服务器账号管理'),
-    (734530000000000042, 734510000000000021, 'en-US', 'Server Account Management'),
     (734530000000000043, 734510000000000022, 'zh-CN', '变量'),
     (734530000000000044, 734510000000000022, 'en-US', 'Variables'),
     (734550100000000001, 734550000000000001, 'zh-CN', '会话'),
@@ -1455,9 +1364,6 @@ INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, po
     (734520000000000012, 734500000000000001, 734510000000000012, 734570200000000001, 3, 'Inline'),
     (734520000000000017, 734500000000000001, 734510000000000017, 734520000000000012, 0, 'Inline'),
     (734520000000000018, 734500000000000001, 734510000000000018, 734520000000000017, 0, 'Inline'),
-    (734520000000000019, 734500000000000001, 734510000000000019, 734520000000000017, 1, 'Inline'),
-    (734520000000000020, 734500000000000001, 734510000000000020, 734520000000000017, 2, 'Inline'),
-    (734520000000000021, 734500000000000001, 734510000000000021, 734520000000000017, 3, 'Inline'),
     (734550200000000003, 734500000000000001, 734550000000000003, NULL, 3, 'Inline'),
     (734550200000000005, 734500000000000001, 734550000000000005, NULL, 4, 'Inline'),
     (734550200000000004, 734500000000000001, 734550000000000004, NULL, 5, 'Inline');

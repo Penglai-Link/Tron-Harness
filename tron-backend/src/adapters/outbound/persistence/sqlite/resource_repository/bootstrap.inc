@@ -5,8 +5,7 @@ use rusqlite::{Error as SqliteError, OptionalExtension, params};
 use crate::{
     application::resource::ResourceRepository,
     domain::resource::{
-        ChatSessionAttachmentRecord, DataSourceConnectionRecord, ResourceError, ResourceFileRecord,
-        ResourceKind, ServerAccountRecord, ServerAccountServer, ServerRecord,
+        ChatSessionAttachmentRecord, ResourceError, ResourceFileRecord,
     },
     shared::time::{timestamp_from_millis, timestamp_to_millis},
 };
@@ -14,11 +13,7 @@ use crate::{
 mod rows;
 mod schema;
 
-use rows::{
-    authentication_type_to_storage, bool_to_int, data_source_from_row, file_from_row,
-    insert_server_account_record, insert_server_record, replace_server_account_bindings, server_account_from_row, server_from_row,
-    value_to_storage,
-};
+use rows::{bool_to_int, file_from_row};
 use schema::{claim_resource_code, release_resource_code};
 
 pub struct SqliteResourceRepository {

@@ -42,21 +42,6 @@ impl ResourceService {
                 .into_iter()
                 .map(ManagedResource::File),
         );
-        resources.extend(
-            self.repository(|repository| repository.list_data_source_connections())?
-                .into_iter()
-                .map(ManagedResource::DataSourceConnection),
-        );
-        resources.extend(
-            self.repository(|repository| repository.list_servers())?
-                .into_iter()
-                .map(ManagedResource::Server),
-        );
-        resources.extend(
-            self.repository(|repository| repository.list_server_accounts())?
-                .into_iter()
-                .map(ManagedResource::ServerAccount),
-        );
         Ok(resources)
     }
 

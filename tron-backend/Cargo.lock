@@ -1007,7 +1007,7 @@ dependencies = [
 [[package]]
 name = "crab-serverapi"
 version = "0.4.0"
-source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=85a70d4573813596739ec0a9a6c1ce33946f1e98#85a70d4573813596739ec0a9a6c1ce33946f1e98"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=7bf11a4ffb1fc01b00c369d2b16827ac619e6654#7bf11a4ffb1fc01b00c369d2b16827ac619e6654"
 dependencies = [
  "aes-gcm 0.10.3",
  "async-trait",
@@ -1032,6 +1032,12 @@ dependencies = [
  "url",
  "uuid",
 ]
+
+[[package]]
+name = "crab-serverapi"
+version = "0.4.0"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=85a70d4573813596739ec0a9a6c1ce33946f1e98#85a70d4573813596739ec0a9a6c1ce33946f1e98"
+replace = "crab-serverapi 0.4.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=7bf11a4ffb1fc01b00c369d2b16827ac619e6654)"
 
 [[package]]
 name = "crc"
@@ -1782,7 +1788,7 @@ source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?tag=1.1
 dependencies = [
  "async-trait",
  "base64 0.22.1",
- "crab-serverapi",
+ "crab-serverapi 0.4.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=85a70d4573813596739ec0a9a6c1ce33946f1e98)",
  "eliteforge-agent-capability-auto-routing",
  "eliteforge-agent-core",
  "eliteforge-agent-framework",
@@ -2033,7 +2039,7 @@ source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?tag=1.1
 dependencies = [
  "async-trait",
  "base64 0.22.1",
- "crab-serverapi",
+ "crab-serverapi 0.4.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=85a70d4573813596739ec0a9a6c1ce33946f1e98)",
  "eliteforge-agent-core",
  "eliteforge-agent-official-plugin-model-genai",
  "flate2",
@@ -7811,7 +7817,7 @@ dependencies = [
  "bcrypt",
  "chrono",
  "chrono-tz",
- "crab-serverapi",
+ "crab-serverapi 0.4.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=7bf11a4ffb1fc01b00c369d2b16827ac619e6654)",
  "cron",
  "eliteforge-agent-capability-auto-routing",
  "eliteforge-agent-capability-chunking",

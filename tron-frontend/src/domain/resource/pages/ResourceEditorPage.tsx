@@ -3,7 +3,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,7 +17,6 @@ import {
   createResource,
   deleteResource,
   downloadResourceBinary,
-  updateDataSourceConnection,
   updateResource,
   uploadResourceBinary,
 } from "@/domain/resource/api";
@@ -46,16 +44,8 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Badge } from "@/components/ui/badge";
 import { ResourceFilePreviewDialog } from "../components/ResourceFilePreviewDialog";
 
-import { ServerAccountDetailPage } from "./ServerAccountDetailPage";
 
 const fileKinds: ResourceKind[] = ["FILE", "IMAGE", "PDF"];
-const dataSourceKinds: ResourceKind[] = [
-  "MYSQL_CONNECTION",
-  "POSTGRESQL_CONNECTION",
-  "REDIS_CONNECTION",
-  "KAFKA_CONNECTION",
-];
-
 function formatByteSize(byteSize: number) {
   if (byteSize < 1024) return `${byteSize} B`;
   if (byteSize < 1024 * 1024) return `${(byteSize / 1024).toFixed(1)} KB`;
@@ -92,29 +82,7 @@ function requestErrorMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : "Resource request failed";
 }
 
-function ResourceDetailItem({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="min-w-0 border-b border-[var(--color-outline-variant)] pb-3 last:border-b-0 sm:last:border-b">
-      <dt className="text-xs font-medium text-[var(--color-on-surface-variant)]">{label}</dt>
-      <dd className="mt-1 min-h-6 break-words text-sm leading-6 text-[var(--color-on-surface)]">
-        {value || <span className="text-[var(--color-on-surface-variant)]">—</span>}
-      </dd>
-    </div>
-  );
-}
-
-function displayResourceAttribute(attributes: Record<string, unknown> | null | undefined, key: string) {
-  const value = attributes?.[key];
-  return typeof value === "string" || typeof value === "number" ? String(value) : "—";
-}
-
 export function ResourceEditorPage() {
-  const location = useLocation();
-  if (location.pathname.startsWith("/resource-management/server-accounts/")) return <ServerAccountDetailPage />;
-  return <GenericResourceEditorPage />;
-}
-
-function GenericResourceEditorPage() {
   const { t } = useTranslation(["common", "pages"]);
   const toast = useToast();
   const location = useLocation();
@@ -147,12 +115,6 @@ function GenericResourceEditorPage() {
   );
   const listLabel = resourceManagementBasePath === "/resource-management/files"
     ? t("pages:resourceConnections.file.title", { defaultValue: "File Management" })
-    : resourceManagementBasePath === "/resource-management/data-sources"
-    ? t("pages:resourceConnections.dataSource.title", { defaultValue: "Data Source Management" })
-    : resourceManagementBasePath === "/resource-management/servers"
-    ? t("pages:resourceConnections.server.title", { defaultValue: "Server Management" })
-    : resourceManagementBasePath === "/resource-management/server-accounts"
-    ? t("pages:resourceConnections.serverAccount.title", { defaultValue: "Server Account Management" })
     : settingsScope.isSettings
     ? t("pages:resources.title.platform", { defaultValue: "Platform Resources" })
     : editorT("breadcrumb.resources", "Resources");
@@ -171,7 +133,6 @@ function GenericResourceEditorPage() {
   const [allowInheritance, setAllowInheritance] = useState(false);
   const [resourceCode, setResourceCode] = useState("");
   const [kind, setKind] = useState<ResourceKind>("FILE");
-  const [attributesText, setAttributesText] = useState("{}");
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [record, setRecord] = useState<ResourceRecord | null>(null);
   const [saving, setSaving] = useState(false);
@@ -193,7 +154,6 @@ function GenericResourceEditorPage() {
     setEditing(false);
     setRecord(null);
     setAllowInheritance(false);
-    setAttributesText("{}");
     setDescription("");
     setName("");
     setResourceCode(requestedResourceCode);
@@ -240,7 +200,6 @@ function GenericResourceEditorPage() {
       initializedFromRef.current = loadedKey;
       setRecord(loaded);
       setAllowInheritance(loaded.allowInheritance);
-      setAttributesText(JSON.stringify(loaded.attributes ?? {}, null, 2));
       setDescription(loaded.description);
       setKind(loaded.kind);
       setName(loaded.name);
@@ -249,8 +208,6 @@ function GenericResourceEditorPage() {
   }, [detailQuery.data, isNew, quickUploadId, scopeReady, toast, workspaceCode]);
 
   const isFileKind = fileKinds.includes(kind);
-  const isDataSource = dataSourceKinds.includes(kind);
-  const isServerKind = kind === "SERVER_CONNECTION";
   const loadedResource = !isNew && record?.workspaceCode === workspaceCode && record?.resourceCode === requestedResourceCode ? record : null;
   const inherited = loadedResource?.sourceKind === "INHERITED";
   const saveDisabled = saving || inherited || !name.trim() || (isNew && (!resourceCode.trim() || !stagedFile));
@@ -291,39 +248,9 @@ function GenericResourceEditorPage() {
       }
 
       if (!loadedResource) return;
-      let attributes = loadedResource.attributes;
-      if (isDataSource) {
-        try {
-          const parsed: unknown = JSON.parse(attributesText);
-          if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
-            throw new Error(editorT("messages.invalidAttributes", "Connection attributes must be a JSON object."));
-          }
-          attributes = parsed as Record<string, unknown>;
-        } catch (cause) {
-          throw cause instanceof Error
-            ? cause
-            : new Error(editorT("messages.invalidAttributes", "Connection attributes must be a JSON object."));
-        }
-      }
+      const attributes = loadedResource.attributes;
       if (isApi) {
-        if (isDataSource) {
-          await updateDataSourceConnection({
-            allowInheritance,
-            attributes: attributes ?? {},
-            description,
-            name: name.trim(),
-            resourceCode: loadedResource.resourceCode,
-            workspaceCode,
-          });
-        } else {
-          await updateResource({
-            allowInheritance,
-            description,
-            name: name.trim(),
-            resourceCode: loadedResource.resourceCode,
-            workspaceCode,
-          });
-        }
+        await updateResource({ allowInheritance, description, name: name.trim(), resourceCode: loadedResource.resourceCode, workspaceCode });
       }
       const updated = isApi
         ? {
@@ -455,150 +382,6 @@ function GenericResourceEditorPage() {
   }
 
   const readOnly = inherited || (!isNew && !editing);
-
-  if (!isNew && isServerKind && loadedResource) {
-    return (
-      <>
-        <PageHeader
-          breadcrumbs={[
-            { href: basePath, label: listLabel },
-            { label: loadedResource.resourceCode },
-          ]}
-          title={loadedResource.name}
-          actions={(
-            <>
-              {editing ? (
-                <>
-                  <Button
-                    disabled={saving}
-                    size="lg"
-                    variant="outline"
-                    onClick={() => {
-                      setEditing(false);
-                      setAllowInheritance(loadedResource.allowInheritance);
-                      setDescription(loadedResource.description);
-                      setName(loadedResource.name);
-                    }}
-                  >
-                    {editorT("actions.cancel", "Cancel")}
-                  </Button>
-                  <Button disabled={saving || !name.trim()} size="lg" onClick={() => { void save(); }}>
-
-                    {editorT("actions.saveActive", "Save")}
-                  </Button>
-                </>
-              ) : inherited ? null : (
-                <>
-                  <Button size="lg" variant="outline" onClick={() => setEditing(true)}>
-
-                    {editorT("actions.edit", "Edit")}
-                  </Button>
-                  <Button size="lg" variant="outline" onClick={() => setDeleteOpen(true)}>
-
-                    {editorT("actions.delete", "Delete resource")}
-                  </Button>
-                </>
-              )}
-            </>
-          )}
-        />
-
-        <SurfaceCard className="max-w-5xl space-y-5">
-          <section className="border-b border-[var(--color-outline-variant)] pb-5">
-            <h2 className="mb-5 text-base font-semibold text-[var(--color-on-surface)]">
-              {editorT("sections.basic", "Basic information")}
-            </h2>
-            <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-              <ResourceDetailItem
-                label={editorT("fields.code", "Resource code")}
-                value={<span className="font-mono">{loadedResource.resourceCode}</span>}
-              />
-              <ResourceDetailItem
-                label={t("pages:resources.kind.server_connection", "Server connection")}
-                value={t("pages:resources.source." + loadedResource.sourceKind.toLowerCase(), loadedResource.sourceKind)}
-              />
-              <div className="min-w-0 border-b border-[var(--color-outline-variant)] pb-3 sm:col-span-2">
-                <dt className="text-xs font-medium text-[var(--color-on-surface-variant)]">
-                  {editorT("fields.name", "Resource name")}
-                </dt>
-                <dd className="mt-1">
-                  {editing ? (
-                    <TextInput
-                      aria-label={editorT("fields.name", "Resource name")}
-                      disabled={saving}
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                    />
-                  ) : (
-                    <span className="text-sm leading-6 text-[var(--color-on-surface)]">{loadedResource.name}</span>
-                  )}
-                </dd>
-              </div>
-              <div className="min-w-0 border-b border-[var(--color-outline-variant)] pb-3 sm:col-span-2">
-                <dt className="text-xs font-medium text-[var(--color-on-surface-variant)]">
-                  {editorT("fields.description", "Description")}
-                </dt>
-                <dd className="mt-1">
-                  {editing ? (
-                    <TextArea
-                      aria-label={editorT("fields.description", "Description")}
-                      className="min-h-20"
-                      disabled={saving}
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                    />
-                  ) : (
-                    <span className="whitespace-pre-wrap text-sm leading-6 text-[var(--color-on-surface)]">
-                      {loadedResource.description || "—"}
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div className="sm:col-span-2">
-                <ToggleSwitch
-                  checked={allowInheritance}
-                  disabled={readOnly || saving}
-                  label={editorT("status.inheritance", "Allow inheritance")}
-                  onCheckedChange={setAllowInheritance}
-                />
-              </div>
-            </dl>
-          </section>
-
-          <section>
-            <h2 className="mb-5 text-base font-semibold text-[var(--color-on-surface)]">
-              {editorT("sections.connection", "Connection")}
-            </h2>
-            <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
-              <ResourceDetailItem
-                label={t("pages:resourceConnections.fields.host", "Host")}
-                value={<span className="font-mono">{displayResourceAttribute(loadedResource.attributes, "host")}</span>}
-              />
-              <ResourceDetailItem
-                label={t("pages:resourceConnections.fields.port", "Port")}
-                value={<span className="font-mono">{displayResourceAttribute(loadedResource.attributes, "port")}</span>}
-              />
-              <ResourceDetailItem
-                label={t("pages:resourceConnections.columns.protocol", "Protocol")}
-                value={displayResourceAttribute(loadedResource.attributes, "protocol")}
-              />
-            </dl>
-          </section>
-        </SurfaceCard>
-
-        <ConfirmDialog
-          cancelText={editorT("actions.cancel", "Cancel")}
-          confirmText={editorT("actions.delete", "Delete resource")}
-          description={editorT("messages.deleteDescription", "Delete this resource and its files. This cannot be undone.")}
-          open={deleteOpen}
-          pending={deleting}
-          title={editorT("messages.deleteTitle", "Delete {{name}}?", { name: name })}
-          onCancel={() => setDeleteOpen(false)}
-          onConfirm={() => { void deleteCurrentResource(); }}
-        />
-      </>
-    );
-  }
 
   return (
     <>
@@ -795,19 +578,6 @@ function GenericResourceEditorPage() {
                   {editorT("file.replace", "Replace file")}
                 </Button>
               ) : null}
-            </div>
-          ) : loadedResource && isDataSource && editing ? (
-            <div className="space-y-2">
-              <TextArea
-                aria-label={editorT("fields.connectionAttributes", "Connection attributes")}
-                className="min-h-72 font-mono text-[12px]"
-                disabled={saving}
-                value={attributesText}
-                onChange={(event) => setAttributesText(event.target.value)}
-              />
-              <p className="text-xs text-[var(--color-on-surface-variant)]">
-                {editorT("hints.directSecretRedacted", "Direct secret values are redacted. Leave their null value unchanged to retain the existing secret, or enter a replacement value.")}
-              </p>
             </div>
           ) : loadedResource && loadedResource.attributes ? (
             <pre className="overflow-x-auto rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-3 font-mono text-[12px] leading-5">

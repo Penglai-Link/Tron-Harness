@@ -7,6 +7,26 @@ use tron_backend::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Electron reads the SDK's platform codes before any backend is running.
+    // This command must not load configuration or initialize storage.
+    if std::env::args().nth(1).as_deref() == Some("--wsl-platforms") {
+        use crab_serverapi::version::os_type;
+
+        println!(
+            "{}",
+            serde_json::json!({
+                "ubuntu": {
+                    "x86_64": os_type::WSL_UBUNTU_X64,
+                    "aarch64": os_type::WSL_UBUNTU_ARM64,
+                },
+                "debian": {
+                    "x86_64": os_type::WSL_DEBIAN_X64,
+                    "aarch64": os_type::WSL_DEBIAN_ARM64,
+                },
+            })
+        );
+        return Ok(());
+    }
     // Native dialogs must run on the process main thread on macOS. A short-lived
     // helper process keeps the HTTP server responsive without a GUI event loop.
     if std::env::args().nth(1).as_deref() == Some("--pick-directory") {

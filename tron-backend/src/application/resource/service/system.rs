@@ -19,7 +19,6 @@ impl ResourceService {
         if let Some(resource) = self.managed_resource(SYSTEM_RESOURCE_SCOPE, &resource_code)? {
             let old = match resource {
                 ManagedResource::File(record) => record,
-                _ => return Err(ResourceError::Conflict),
             };
             if !self.repository(|repository| {
                 repository.delete_file(SYSTEM_RESOURCE_SCOPE, &resource_code, old.revision)
@@ -54,7 +53,7 @@ impl ResourceService {
         let resource_code = system_avatar_resource_code(actor_user_code)?;
         let record = match self.managed_resource(SYSTEM_RESOURCE_SCOPE, &resource_code)? {
             Some(ManagedResource::File(record)) => record,
-            Some(_) | None => return Err(ResourceError::NotFound),
+            None => return Err(ResourceError::NotFound),
         };
         if !self.storage.exists(&record.storage_locator)? {
             return Err(ResourceError::MissingBinaryObject);

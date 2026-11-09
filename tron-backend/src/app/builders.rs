@@ -57,7 +57,6 @@ fn build_variable_service(
 fn build_resource_service(
     database_url: &str,
     workspaces: WorkspaceService,
-    variables: VariableService,
     config: &AppConfig,
     event_bus: EventBusHandle,
 ) -> ResourceService {
@@ -85,13 +84,9 @@ fn build_resource_service(
     ResourceService::with_event_bus(
         repository,
         workspaces,
-        variables,
         config.resource.clone(),
         storage_profiles,
         event_bus,
-        Arc::new(ProtocolResourceConnectionVerifier::new(
-            Duration::from_millis(config.resource.connection_verification_timeout_ms),
-        )),
     )
     .expect("resource service should initialize")
     .with_profile_scope()

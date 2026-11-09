@@ -3215,6 +3215,27 @@ export const pages = {
     title: "Keyboard Shortcuts",
     unassigned: "Not assigned",
   },
+  backendEnvironment: {
+    title: "Backend environment",
+    local: "This computer",
+    current: "Current environment: {{environment}}",
+    description: "In WSL mode, agents, commands, terminals, MCP servers and background tasks run in Linux. Chats, databases, attachments and managed workspaces are stored in the distribution's ~/.tron directory. Supports Ubuntu 24.04+ and Debian 13+ on WSL2.",
+    switchNotice: "Connecting downloads the matching backend from Person-AI and installs Linux runtime dependencies. Tron then restarts and stops active tasks. Existing data stays in its original environment; it is not migrated automatically.",
+    noDistributions: "No WSL distributions found. Install and initialize Ubuntu or Debian with wsl --install, then refresh.",
+    connect: "Connect and restart",
+    refresh: "Refresh distributions",
+    phases: { idle: "Preparing…", checking: "Checking environment…", dependencies: "Installing Linux dependencies…", downloading: "Downloading backend…", installing: "Installing backend…", installed: "Restarting Tron…", starting: "Starting backend…", ready: "Connected", error: "Connection failed" },
+    errors: {
+      "wsl-not-installed": "WSL is unavailable. Install WSL2 and initialize an Ubuntu or Debian distribution, then refresh.",
+      "wsl2-distribution-required": "Select an installed WSL2 distribution.",
+      "wsl-unsupported-distribution": "Requires Ubuntu 24.04+ or Debian 13+, on x86_64 or ARM64.",
+      "wsl-linux-path-required": "Choose a directory inside the selected Linux distribution, not a mounted Windows drive.",
+      "wsl-version-mismatch": "The latest backend release does not match this desktop version. Update Tron or publish the matching WSL package first.",
+      "wsl-package-not-published": "No WSL package has been published for this distribution and architecture.",
+      "wsl-localhost-forwarding-unavailable": "The backend started in WSL but Windows cannot reach it. Enable WSL localhost forwarding or mirrored networking, then retry.",
+      "wsl-backend-already-running": "A managed backend is already using this Linux data directory. Close the other Tron instance first.",
+    },
+  },
   settingsGeneral: {
     browserNotifications: {
       title: "Browser Notifications",

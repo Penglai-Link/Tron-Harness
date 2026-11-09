@@ -1,11 +1,8 @@
 mod authorization;
 mod binaries;
-mod connection_attributes;
-mod connections;
 mod projection;
 mod resources;
 mod session_attachments;
-mod server_accounts;
 mod storage;
 mod system;
 
@@ -15,13 +12,13 @@ use std::{
 };
 
 use crate::{
-    application::{variable::VariableService, workspace::WorkspaceService},
+    application::workspace::WorkspaceService,
     config::ResourceConfig,
     domain::resource::ResourceError,
     shared::event_bus::EventBusHandle,
 };
 
-use super::{ObjectStorage, ResourceConnectionVerifier, ResourceRepository};
+use super::{ObjectStorage, ResourceRepository};
 
 pub use storage::StorageRouter;
 
@@ -67,12 +64,10 @@ pub trait ResourcePrivacyPolicy: Send + Sync {
 pub struct ResourceService {
     repository: Arc<Mutex<Box<dyn ResourceRepository>>>,
     workspaces: WorkspaceService,
-    variables: VariableService,
     config: ResourceConfig,
     runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
     storage: Arc<StorageRouter>,
     event_bus: EventBusHandle,
-    connection_verifier: Arc<dyn ResourceConnectionVerifier>,
     profile_scoped: bool,
     privacy: Option<Arc<dyn ResourcePrivacyPolicy>>,
     agent_scope: Option<Option<String>>,
@@ -83,21 +78,17 @@ impl ResourceService {
     pub fn new(
         repository: impl ResourceRepository + 'static,
         workspaces: WorkspaceService,
-        variables: VariableService,
         config: ResourceConfig,
         storage_profiles: std::collections::BTreeMap<String, Arc<dyn ObjectStorage>>,
-        connection_verifier: Arc<dyn ResourceConnectionVerifier>,
     ) -> Result<Self, ResourceError> {
         let storage = StorageRouter::new(&config.storage, storage_profiles)?;
         Ok(Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
-            variables,
             config,
             runtime_config: None,
             storage: Arc::new(storage),
             event_bus: EventBusHandle::disabled(),
-            connection_verifier,
             profile_scoped: false,
             privacy: None,
             agent_scope: None,
@@ -108,19 +99,15 @@ impl ResourceService {
     pub fn with_event_bus(
         repository: impl ResourceRepository + 'static,
         workspaces: WorkspaceService,
-        variables: VariableService,
         config: ResourceConfig,
         storage_profiles: std::collections::BTreeMap<String, Arc<dyn ObjectStorage>>,
         event_bus: EventBusHandle,
-        connection_verifier: Arc<dyn ResourceConnectionVerifier>,
     ) -> Result<Self, ResourceError> {
         let mut service = Self::new(
             repository,
             workspaces,
-            variables,
             config,
             storage_profiles,
-            connection_verifier,
         )?;
         service.event_bus = event_bus;
         Ok(service)
@@ -143,14 +130,6 @@ impl ResourceService {
 
     pub fn with_profile_scope(mut self) -> Self {
         self.profile_scoped = true;
-        self
-    }
-
-    pub fn with_connection_verifier(
-        mut self,
-        connection_verifier: Arc<dyn ResourceConnectionVerifier>,
-    ) -> Self {
-        self.connection_verifier = connection_verifier;
         self
     }
 

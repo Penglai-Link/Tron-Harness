@@ -530,6 +530,7 @@ module.exports = {
   createUpdater,
   currentOsType,
   normalizeVersion,
+  readJsonResponse,
   resolveInstallerFileName,
   runApplyUpdate,
   waitForLauncherExit

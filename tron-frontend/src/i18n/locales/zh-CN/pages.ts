@@ -3121,6 +3121,27 @@ export const pages = {
     title: "快捷键",
     unassigned: "未配置",
   },
+  backendEnvironment: {
+    title: "后端环境",
+    local: "本机",
+    current: "当前环境：{{environment}}",
+    description: "WSL 模式下，Agent、命令、终端、MCP 和后台任务在 Linux 中运行。聊天、数据库、附件和托管工作目录保存在该发行版的 ~/.tron 下。支持 WSL2 Ubuntu 24.04+、Debian 13+。",
+    switchNotice: "连接时会从 Person-AI 下载匹配的后端并安装 Linux 运行依赖，然后重启 Tron、停止正在运行的任务。已有数据保留在原环境，不会自动迁移。",
+    noDistributions: "未找到 WSL 发行版。请使用 wsl --install 安装并初始化 Ubuntu 或 Debian，然后刷新。",
+    connect: "连接并重启",
+    refresh: "刷新发行版",
+    phases: { idle: "正在准备…", checking: "正在检查环境…", dependencies: "正在安装 Linux 依赖…", downloading: "正在下载后端…", installing: "正在安装后端…", installed: "正在重启 Tron…", starting: "正在启动后端…", ready: "已连接", error: "连接失败" },
+    errors: {
+      "wsl-not-installed": "WSL 不可用。请安装 WSL2 并初始化 Ubuntu 或 Debian 发行版，然后刷新。",
+      "wsl2-distribution-required": "请选择已安装的 WSL2 发行版。",
+      "wsl-unsupported-distribution": "需要 Ubuntu 24.04+ 或 Debian 13+，架构为 x86_64 或 ARM64。",
+      "wsl-linux-path-required": "请选择该 Linux 发行版内的目录，不能使用挂载的 Windows 磁盘。",
+      "wsl-version-mismatch": "最新后端版本与当前桌面版本不同，请先更新 Tron，或发布匹配版本的 WSL 包。",
+      "wsl-package-not-published": "当前版本尚未发布适用于该发行版和架构的 WSL 包。",
+      "wsl-localhost-forwarding-unavailable": "WSL 后端已启动，但 Windows 无法连接。请启用 WSL localhost 转发或镜像网络后重试。",
+      "wsl-backend-already-running": "已有托管后端正在使用该 Linux 数据目录，请先关闭另一个 Tron 实例。",
+    },
+  },
   settingsGeneral: {
     browserNotifications: {
       title: "浏览器通知",

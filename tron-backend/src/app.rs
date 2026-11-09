@@ -1,7 +1,6 @@
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, OnceLock},
-    time::Duration,
 };
 
 mod automation_runner;
@@ -36,7 +35,6 @@ use crate::{
                 SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteTopicRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository,
             },
-            resource_connectivity::ProtocolResourceConnectionVerifier,
             resource_storage::LocalObjectStorage,
             s3_storage::S3ObjectStorage,
         },
@@ -297,7 +295,6 @@ impl AppState {
         let resources = build_resource_service(
             &config.database_url,
             workspaces.clone(),
-            variables.clone(),
             &config,
             event_bus.clone(),
         );
@@ -309,13 +306,7 @@ impl AppState {
                 database_url: config.database_url.clone(),
                 source: crate::domain::rag::RagError::StorageFailure,
             })?;
-        let connection_verifier =
-            crate::adapters::outbound::resource_connectivity::ProtocolResourceConnectionVerifier::new(
-                std::time::Duration::from_millis(config.resource.connection_verification_timeout_ms),
-            )
-            .with_runtime_config(runtime_config.clone());
         let resources = resources
-            .with_connection_verifier(Arc::new(connection_verifier))
             .with_runtime_config(runtime_config.clone())
             .with_privacy_policy(Arc::new(knowledge_base_repository.clone()));
         let topics = TopicService::new(

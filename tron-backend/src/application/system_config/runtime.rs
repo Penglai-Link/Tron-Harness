@@ -28,7 +28,6 @@ pub(super) fn supports_hot_update(path: &str) -> bool {
             "mineru.visualContextEnabled"
                 | "navigation.maxDepth"
                 | "terminalWorkingDirectory"
-                | "resource.connectionVerificationTimeoutMs"
                 | "resource.limits.attributesMaxBytes"
                 | "resource.limits.maxBinaryBytes"
                 | "resource.limits.maxCommitBytes"
@@ -79,10 +78,6 @@ pub(super) fn apply_hot_settings(current: &mut AppConfig, next: AppConfig, paths
         current.resource.limits.max_commit_bytes = next.resource.limits.max_commit_bytes;
         current.resource.limits.max_binary_name_length =
             next.resource.limits.max_binary_name_length;
-    }
-    if changed("resource.connectionVerificationTimeoutMs") {
-        current.resource.connection_verification_timeout_ms =
-            next.resource.connection_verification_timeout_ms;
     }
     if changed("navigation.") {
         current.navigation = next.navigation;

@@ -153,37 +153,6 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.resource.binary.sampleResultSummary" => {
             "Returns file operation status."
         }
-        "agent.toolCatalog.tools.resource.data_source.create.name" => "Create data source",
-        "agent.toolCatalog.tools.resource.data_source.create.description" => {
-            "Create and verify a data-source connection."
-        }
-        "agent.toolCatalog.tools.resource.data_source.create.sampleResultSummary" => {
-            "Returns the created data-source code and kind."
-        }
-        "agent.toolCatalog.tools.resource.data_source.update.name" => "Update data source",
-        "agent.toolCatalog.tools.resource.data_source.update.description" => {
-            "Update and re-verify a data-source connection."
-        }
-        "agent.toolCatalog.tools.resource.data_source.update.sampleResultSummary" => {
-            "Returns the updated data-source code and kind."
-        }
-        "agent.toolCatalog.schemas.resource.dataSource.attributes.description" => {
-            "Connection attributes must match the selected resource kind."
-        }
-        "agent.toolCatalog.tools.resource.server.create.name" => "Create server",
-        "agent.toolCatalog.tools.resource.server.create.description" => {
-            "Create and verify an SSH server with its initial account."
-        }
-        "agent.toolCatalog.tools.resource.server.create.sampleResultSummary" => {
-            "Returns the created server and initial-account records."
-        }
-        "agent.toolCatalog.tools.resource.server_account.create.name" => "Create server account",
-        "agent.toolCatalog.tools.resource.server_account.create.description" => {
-            "Create a standalone SSH account with encrypted credentials; assign servers separately."
-        }
-        "agent.toolCatalog.tools.resource.server_account.create.sampleResultSummary" => {
-            "Returns the created server-account code and kind."
-        }
         "agent.toolCatalog.domains.skill.name" => "Skill Tools",
         "agent.toolCatalog.domains.skill.description" => {
             "Inspect skills assigned to the current Agent."
@@ -503,37 +472,6 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.resource.binary.name" => "管理资源文件",
         "agent.toolCatalog.tools.resource.binary.description" => "上传或下载文件资源的文件内容。",
         "agent.toolCatalog.tools.resource.binary.sampleResultSummary" => "返回文件操作状态。",
-        "agent.toolCatalog.tools.resource.data_source.create.name" => "创建数据源",
-        "agent.toolCatalog.tools.resource.data_source.create.description" => {
-            "创建并验证数据源连接。"
-        }
-        "agent.toolCatalog.tools.resource.data_source.create.sampleResultSummary" => {
-            "返回已创建数据源的编码和类型。"
-        }
-        "agent.toolCatalog.tools.resource.data_source.update.name" => "更新数据源",
-        "agent.toolCatalog.tools.resource.data_source.update.description" => {
-            "更新并重新验证数据源连接。"
-        }
-        "agent.toolCatalog.tools.resource.data_source.update.sampleResultSummary" => {
-            "返回已更新数据源的编码和类型。"
-        }
-        "agent.toolCatalog.schemas.resource.dataSource.attributes.description" => {
-            "连接属性必须与所选资源类型匹配。"
-        }
-        "agent.toolCatalog.tools.resource.server.create.name" => "创建服务器",
-        "agent.toolCatalog.tools.resource.server.create.description" => {
-            "创建并验证带初始账号的 SSH 服务器。"
-        }
-        "agent.toolCatalog.tools.resource.server.create.sampleResultSummary" => {
-            "返回已创建的服务器和初始账号记录。"
-        }
-        "agent.toolCatalog.tools.resource.server_account.create.name" => "创建服务器账号",
-        "agent.toolCatalog.tools.resource.server_account.create.description" => {
-            "独立创建 SSH 账号并加密保存凭据，服务器另行分配。"
-        }
-        "agent.toolCatalog.tools.resource.server_account.create.sampleResultSummary" => {
-            "返回已创建服务器账号的编码和类型。"
-        }
         "agent.toolCatalog.domains.skill.name" => "技能工具",
         "agent.toolCatalog.domains.skill.description" => "查看当前 Agent 已分配的技能。",
         "agent.toolCatalog.domains.task.name" => "任务工具",

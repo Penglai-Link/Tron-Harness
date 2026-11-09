@@ -17,10 +17,7 @@ export const navigationPageRegistry: Record<string, string> = {
   "observability.traces": "/settings/observability/traces",
   "observability.metrics": "/settings/observability/metrics",
   "rag.index": "/rag",
-  "resourceManagement.dataSources": "/resource-management/data-sources",
   "resourceManagement.files": "/resource-management/files",
-  "resourceManagement.serverAccounts": "/resource-management/server-accounts",
-  "resourceManagement.servers": "/resource-management/servers",
   "tasks.index": "/tasks",
   "variables.index": "/variables",
 };
