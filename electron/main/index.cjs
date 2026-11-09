@@ -423,6 +423,7 @@ async function bootstrap() {
 
   await keepStartupScreenVisible(startupScreenStartedAt);
   await mainWindow.loadURL(state.backendUrl);
+  startupScene.dismissIfNotReadyAfter();
   if (shouldOpenMainDevTools()) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }

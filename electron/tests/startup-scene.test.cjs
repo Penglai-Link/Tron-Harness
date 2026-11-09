@@ -54,6 +54,29 @@ test("startup markup applies the persisted theme before painting", () => {
   }
 });
 
+test("dismisses the startup view if the loaded page never reports readiness", async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "tron-animation-"));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const window = new EventEmitter(), ipcMain = new EventEmitter();
+  let attached = false;
+  window.webContents = {};
+  window.isDestroyed = () => false;
+  window.setBackgroundColor = () => {};
+  window.getContentSize = () => [800, 600];
+  window.contentView = { addChildView() { attached = true; }, removeChildView() { attached = false; } };
+  class View {
+    constructor() { this.webContents = { loadURL: async () => {}, isDestroyed: () => false, close() {} }; }
+    setBounds() {}
+    setBackgroundColor() {}
+  }
+  const scene = createStartupScene({ window, ipcMain, WebContentsView: View, dataDir });
+  await scene.show("loading");
+  scene.dismissIfNotReadyAfter(10);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(attached, false);
+  window.emit("closed");
+});
+
 test("preload dismisses startup only after the skipped-animation destination paints", (t) => {
   const original = global.MutationObserver;
   t.after(() => { global.MutationObserver = original; });
@@ -80,4 +103,22 @@ test("preload dismisses startup only after the skipped-animation destination pai
   frame();
   update();
   assert.equal(sent.filter(([event]) => event === "tron-animation:ready").length, 1);
+});
+
+test("preload reveals a hidden mounted scene without waiting for an animation frame", (t) => {
+  const original = global.MutationObserver;
+  t.after(() => { global.MutationObserver = original; });
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  const sent = [];
+  const window = {
+    addEventListener(name, callback) { if (name === "DOMContentLoaded") callback(); },
+    requestAnimationFrame() { throw new Error("a hidden page cannot be expected to render a frame"); },
+  };
+  const document = {
+    hidden: true,
+    documentElement: { dataset: {} },
+    querySelector(selector) { return selector === ".black-hole-scene" ? {} : null; },
+  };
+  require("../preload/startup-animation.cjs")({ window, document, ipcRenderer: { send: (...args) => sent.push(args) } });
+  assert.deepEqual(sent, [["tron-animation:ready"]]);
 });

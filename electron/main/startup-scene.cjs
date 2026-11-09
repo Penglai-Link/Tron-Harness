@@ -8,11 +8,14 @@ function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
   try { if (JSON.parse(fs.readFileSync(themePath, "utf8")) === "light") theme = "light"; } catch {}
   window.setBackgroundColor(theme === "light" ? "#ffffff" : "#020305");
   let view = null;
+  let fallbackTimer = null;
   const resize = () => {
     const [width, height] = window.getContentSize();
     view?.setBounds({ x: 0, y: 0, width, height });
   };
   const dismiss = () => {
+    if (fallbackTimer) clearTimeout(fallbackTimer);
+    fallbackTimer = null;
     if (!view) return;
     if (!window.isDestroyed()) window.contentView.removeChildView(view);
     if (!view.webContents.isDestroyed()) view.webContents.close();
@@ -51,6 +54,10 @@ function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
         resize();
       }
       await view.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    },
+    dismissIfNotReadyAfter(delayMs = 5000) {
+      if (!view || fallbackTimer) return;
+      fallbackTimer = setTimeout(dismiss, delayMs);
     },
   };
 }
