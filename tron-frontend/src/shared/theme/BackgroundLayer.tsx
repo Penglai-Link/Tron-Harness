@@ -1,18 +1,21 @@
 import { useEffect, useRef } from "react";
+import { CodeRain } from "@/domain/dude/awakening/CodeRain";
 import { mountBackgroundEffect } from "./backgroundEffectAnimation";
 import type { BackgroundEffectSettings, BackgroundImageSettings } from "./backgroundPreferences";
 
 export function BackgroundLayer({
+  matrix,
   effectSettings,
   imageSettings,
   imageUrl,
 }: {
+  matrix: boolean;
   effectSettings: BackgroundEffectSettings;
   imageSettings: BackgroundImageSettings;
   imageUrl: string | null;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const hasBackground = Boolean(imageUrl || effectSettings.effect !== "off");
+  const hasBackground = Boolean(matrix || imageUrl || effectSettings.effect !== "off");
 
   useEffect(() => {
     if (hasBackground) document.body.dataset.backgroundEffects = "";
@@ -61,6 +64,7 @@ export function BackgroundLayer({
           />
         </>
       ) : null}
+      {matrix && <CodeRain />}
       {effectSettings.effect === "aurora" ? (
         <div className="tron-background-aurora" style={{ opacity: effectSettings.opacity, color: effectSettings.color }}>
           <span style={{ animationDuration: `${18 / effectSettings.speed}s` }} />

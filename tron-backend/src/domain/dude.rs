@@ -170,7 +170,7 @@ pub struct DudeSoul {
 impl DudeSoul {
     pub fn new(code: &str, name: &str) -> Self {
         Self { dude_code: code.into(), name: name.into(), name_confirmed: true,
-            markdown: String::new(), state: SoulState::Uninitialized, session_code: None,
+            markdown: "# 性格与相处方式\n真诚、友善、好奇，清晰直接地沟通；尊重用户的选择，主动协助解决问题。".into(), state: SoulState::Ready, session_code: None,
             user_code: None, pending_interaction_id: None, awakening_started: false,
             awakening_deferred: false }
     }

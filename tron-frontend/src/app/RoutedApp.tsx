@@ -1,9 +1,4 @@
 import { UpdateNotification } from "@/domain/update/UpdateNotification";
-import { HomeArrivalVeil } from "@/domain/dude/awakening/HomeArrivalVeil";
-import { lazy, Suspense } from "react";
-const AwakeningPage = lazy(
-  () => import("@/domain/dude/awakening/AwakeningPage")
-);
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBootstrapAuthSession } from "@/domain/auth";
@@ -42,19 +37,9 @@ export default function RoutedApp() {
     <FilePanelHostProvider>
       <TabPanelRegistryProvider>
         <ServerAuthDeviceUnboundHandler />
-        <HomeArrivalVeil>
           <Routes>
             <Route path="/" element={<EntryRoutePage />} />
-            <Route
-              path="/awakening"
-              element={
-                <ProtectedRoute>
-                  <Suspense fallback={<div className="fixed inset-0 bg-[var(--scene-background)]" />}>
-                    <AwakeningPage />
-                  </Suspense>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/awakening" element={<Navigate replace to="/workspace" />} />
             <Route path="/profiles" element={<ProfileSelectionPage />} />
             <Route path="/home" element={<Navigate replace to="/workspace" />} />
             <Route
@@ -82,14 +67,11 @@ export default function RoutedApp() {
               element={
                 <ProtectedRoute>
                   <AppRoutePage />
-                  {/* Authentication alone does not mean entry is complete: the
-                      awakening route must never mount the desktop updater. */}
                   <UpdateNotification />
                 </ProtectedRoute>
               }
             />
           </Routes>
-        </HomeArrivalVeil>
       </TabPanelRegistryProvider>
     </FilePanelHostProvider>
   );

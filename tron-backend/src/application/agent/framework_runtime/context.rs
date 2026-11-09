@@ -151,6 +151,14 @@ impl fw::ContextPreparationPolicy for TronContext {
         let snapshot_sequence = host.harness
             .framework_record_context(&context, &projection, &window.report)
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
+        // Detail does not complete the lifecycle: Framework emits completion
+        // only after admitting this context. Ordinary assemblies are ignored.
+        input.run.emit_output(fw::OutputEvent::Custom {
+            name: "agent.memory.compaction.details".into(),
+            value: serde_json::json!({
+                "blocks": crate::application::short_term_memory::compaction_blocks(&window.report),
+            }),
+        });
         // Inspector metadata follows the native output/replay channel. Do not
         // duplicate full history over SSE or fit a report into bus attribute caps.
         input.run.emit_output(fw::OutputEvent::Custom {

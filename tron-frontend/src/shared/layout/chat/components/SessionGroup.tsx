@@ -16,7 +16,6 @@ const sessionListPageSize = 5;
 
 const SessionGroup = ({
   project,
-  runningSessionCode,
   activeSessionCode,
   onNavigate,
   sessions,
@@ -31,7 +30,6 @@ const SessionGroup = ({
   onSelect,
 }: {
   project: ProjectRecord;
-  runningSessionCode: string;
   activeSessionCode: string;
   onNavigate: (path: string) => void;
   sessions: ChatSession[];
@@ -71,7 +69,7 @@ const SessionGroup = ({
           </div>
         }
         right={
-          <div className="flex shrink-0 gap-2 items-center opacity-0 pointer-events-none group-hover/project:opacity-100 group-hover/project:pointer-events-auto has-[button[data-popup-open]]:opacity-100 has-[button[data-popup-open]]:pointer-events-auto">
+          <div className="flex shrink-0 gap-2 items-center opacity-0 pointer-events-none group-hover/project:opacity-100 group-hover/project:pointer-events-auto group-focus-within/project:opacity-100 group-focus-within/project:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto has-[button[data-popup-open]]:opacity-100 has-[button[data-popup-open]]:pointer-events-auto">
             <CreateByProject project={project} sessions={sessions} />
             <ActionsMenu
               pinned={pinned}
@@ -88,7 +86,6 @@ const SessionGroup = ({
           {sortPinnedSessions(sessions, pinnedSessionCodes).slice(0, visibleSessionCount).map((session) => (
             <MessageItem
               key={session.sessionCode}
-              running={runningSessionCode === session.sessionCode}
               active={activeSessionCode === session.sessionCode}
               onNavigate={onNavigate}
               session={session}

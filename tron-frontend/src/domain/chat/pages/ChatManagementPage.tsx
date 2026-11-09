@@ -2970,9 +2970,6 @@ export function ChatManagementPage() {
   const handleRuntimeRunStateChange = useCallback((state: ChatRuntimeRunState) => {
     setRuntimeRunState(state);
     if (state.sessionCode) {
-      window.dispatchEvent(new CustomEvent("tron:chat-session-run-state", {
-        detail: { sessionCode: state.active ? state.sessionCode : "" },
-      }));
       setActiveChatDataRefreshKey((current) => current + 1);
       setShortTermMemoryRefreshKey((current) => current + 1);
     }
@@ -3104,11 +3101,6 @@ export function ChatManagementPage() {
     return () => window.removeEventListener(CHAT_SESSIONS_REMOVED_EVENT, refresh);
   }, []);
 
-  useEffect(() => () => {
-    window.dispatchEvent(new CustomEvent("tron:chat-session-run-state", {
-      detail: { sessionCode: "" },
-    }));
-  }, []);
 
   useEffect(() => {
     if (!optimisticActiveSession) return;

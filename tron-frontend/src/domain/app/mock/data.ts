@@ -266,3 +266,7 @@ export function restoreMockApp(appCode: string): AppLifecycleResult {
 export function isKnownAppCode(workspaceCode: string, appCode: string, runtimeRole?: AppRuntimeRole) {
   return listAppOptions({ workspaceCode, runtimeRole }).some((app) => app.appCode === appCode);
 }
+
+export function deleteMockApp(appCode: string) {
+  apps = apps.filter((app) => app.appCode !== appCode);
+}

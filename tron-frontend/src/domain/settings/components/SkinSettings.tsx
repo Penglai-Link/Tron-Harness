@@ -1,4 +1,5 @@
 import { Trash2, Check, Sun, Moon, Monitor } from "lucide-react";
+import { AppearanceSection } from "./AppearanceLayout";
 import { OnlineSkinMarket } from "./OnlineSkinMarket";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useToast } from "@/components/ui/toast";
-import { SurfaceCard, useTheme } from "@/shared";
+import { useTheme } from "@/shared";
 import type { Skin, ColorMode } from "@/shared/theme/Skin";
 
 export function SkinSettings() {
@@ -41,7 +42,7 @@ export function SkinSettings() {
     }
   }
   return (
-    <SurfaceCard className="space-y-4" aria-busy={loading}>
+    <AppearanceSection aria-label={t("settingsAppearance.skins")} aria-busy={loading}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold">{t("settingsAppearance.skins")}</h2>
@@ -72,7 +73,7 @@ export function SkinSettings() {
         <span>{t("settingsAppearance.skinLoadFailed")}</span>
         <Button variant="ghost" disabled={loading} onClick={() => void refreshSkins()}>{t("settingsAppearance.retrySkins")}</Button>
       </div> : null}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label={t("settingsAppearance.skins")}>
+      <div className="grid grid-cols-1 gap-3 @xl/appearance:grid-cols-2 @4xl/appearance:grid-cols-3" aria-label={t("settingsAppearance.skins")}>
         {skins.map((skin) => {
           const selected = skin.id === activeSkin.id;
           const colors = { ...skin.variants[resolvedMode], ...skin.layout };
@@ -81,11 +82,11 @@ export function SkinSettings() {
           const surface = colors["--color-surface-container"] ?? (dark ? "#102017" : "#f1edec");
           const foreground = colors["--color-on-surface"] ?? (dark ? "#e4ffe8" : "#1c1b1b");
           const accent = colors["--color-primary"] ?? (dark ? "#5cff85" : "#000000");
-          const imported = !["default", "brand"].includes(skin.id);
+          const imported = !["default", "brand", "matrix"].includes(skin.id);
           return <div key={skin.id} data-theme-anchor="card" className="relative min-w-0">
             <Button variant="outline" aria-label={label(skin)} aria-pressed={selected}
               disabled={loading} onClick={() => void select(skin.id)}
-              className="h-auto w-full min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-lg px-2 text-left aria-pressed:border-ring aria-pressed:ring-1 aria-pressed:ring-ring">
+              className="h-auto w-full min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-lg p-0 text-left aria-pressed:border-ring aria-pressed:ring-1 aria-pressed:ring-ring">
               <span className="flex h-28 gap-3 p-3" style={{ background, color: foreground }} aria-hidden="true">
                 <span className="flex w-1/4 flex-col gap-2 rounded p-2" style={{ background: surface }}>
                   <span className="h-2 w-3/4 rounded" style={{ background: accent }} />
@@ -128,6 +129,6 @@ export function SkinSettings() {
         onCancel={() => setSkinToUninstall(null)}
         onConfirm={() => void uninstall()}
       />
-    </SurfaceCard>
+    </AppearanceSection>
   );
 }

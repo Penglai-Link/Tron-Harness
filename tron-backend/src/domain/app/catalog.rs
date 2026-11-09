@@ -131,6 +131,7 @@ pub enum AppError {
     LocalDirectoryRequired,
     DuplicateName,
     ArchivedMutationDenied,
+    InUse,
     StorageFailure,
 }
 
@@ -145,6 +146,7 @@ impl fmt::Display for AppError {
             Self::LocalDirectoryRequired => formatter.write_str("localDirectory is required"),
             Self::DuplicateName => formatter.write_str("duplicate app name in workspace"),
             Self::ArchivedMutationDenied => formatter.write_str("archived app cannot be modified"),
+            Self::InUse => formatter.write_str("app is linked to a topic or task"),
             Self::StorageFailure => formatter.write_str("app storage failure"),
         }
     }

@@ -1303,10 +1303,10 @@ INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, 
     (734510000000000017, 'RESOURCE_MANAGEMENT', 'BuiltIn', 'Group', NULL, NULL, 'Archive', '管理文件。', 'Manage files.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000018, 'FILE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.files', NULL, 'Folder', '浏览和管理工作区文件与已上传资源。', 'Browse and manage workspace files and uploaded resources.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', '管理平台或工作区可复用的变量。', 'Manage reusable platform or workspace variables.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', '会话区域的分组入口，包含主题、目录和随聊。', 'The chat section, containing topics, directories, and quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
+    (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', '会话区域的分组入口，包含主题、工作区和随聊。', 'The chat section, containing topics, projects, and quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000003, 'CHAT_PROJECTS', 'BuiltIn', 'Widget', 'chat.projects', NULL, 'FolderKanban', '查看主题及其关联的会话。', 'Browse topics and their associated conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000004, 'CHAT_RECENTS', 'BuiltIn', 'Widget', 'chat.recents', NULL, 'History', '查看并继续随聊。', 'View and continue quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
-    (734550000000000005, 'CHAT_DIRECTORIES', 'BuiltIn', 'Widget', 'chat.directories', NULL, 'Folder', '查看目录及其会话。', 'Browse directories and their conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
+    (734550000000000005, 'CHAT_DIRECTORIES', 'BuiltIn', 'Widget', 'chat.directories', NULL, 'Folder', '查看工作区及其会话。', 'Browse projects and their conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734560000000000001, 'DUDES', 'BuiltIn', 'Internal', 'dudes.index', NULL, 'Bot', '与 Dude 助手交互，并查看其工作和历史记录。', 'Interact with Dude assistants and review their work and history.', 1, '2026-10-11T00:00:00Z', '2026-10-11T00:00:00Z'),
     (734560000000000002, 'NOTIFICATIONS', 'BuiltIn', 'Internal', 'notifications.index', NULL, 'Bell', '查看消息通知并处理需要关注的事项。', 'Review notifications and handle items that need attention.', 1, '2026-10-11T00:00:00Z', '2026-10-11T00:00:00Z'),
     (734570000000000001, 'EXPLORE_MORE', 'BuiltIn', 'Group', NULL, NULL, 'Ellipsis', '收纳不常用或可选的菜单入口。', 'Collect optional or less frequently used menu entries.', 1, '2026-10-13T00:00:00Z', '2026-10-13T00:00:00Z');
@@ -1338,8 +1338,8 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734550100000000006, 734550000000000003, 'en-US', 'Topics'),
     (734550100000000007, 734550000000000004, 'zh-CN', '随聊'),
     (734550100000000008, 734550000000000004, 'en-US', 'Quick Chats'),
-    (734550100000000009, 734550000000000005, 'zh-CN', '目录'),
-    (734550100000000010, 734550000000000005, 'en-US', 'Directories'),
+    (734550100000000009, 734550000000000005, 'zh-CN', '工作区'),
+    (734550100000000010, 734550000000000005, 'en-US', 'Projects'),
     (734560100000000001, 734560000000000001, 'zh-CN', '好兄弟'),
     (734560100000000002, 734560000000000001, 'en-US', 'Dude'),
     (734560100000000003, 734560000000000002, 'zh-CN', '通知'),
@@ -1399,7 +1399,7 @@ CREATE UNIQUE INDEX dudes_single_main ON dudes(is_main) WHERE is_main=1;
 -- Souls are platform identities; builtin seeds exist before runtime definitions.
 CREATE TABLE dude_souls (dude_code TEXT PRIMARY KEY, record_json TEXT NOT NULL CHECK(json_valid(record_json)));
 INSERT INTO dude_souls VALUES
-('main-dude','{"dudeCode":"main-dude","name":"未命名","nameConfirmed":false,"markdown":"","state":"Uninitialized","sessionCode":null,"userCode":null,"pendingInteractionId":null,"awakeningStarted":false,"awakeningDeferred":false}'),
+('main-dude','{"dudeCode":"main-dude","name":"好兄弟","nameConfirmed":true,"markdown":"# 性格与相处方式\n真诚、友善、好奇，清晰直接地沟通；尊重用户的选择，主动协助解决问题。","state":"Ready","sessionCode":null,"userCode":null,"pendingInteractionId":null,"awakeningStarted":false,"awakeningDeferred":false}'),
 ('memory-dude','{"dudeCode":"memory-dude","name":"记忆整理","nameConfirmed":true,"markdown":"谨慎、诚实、简洁。区分事实、推测和经验，保留不确定性。尊重用户选择，不将观察到的偏好擅自升级为稳定约定。","state":"Ready","sessionCode":null,"userCode":null,"pendingInteractionId":null,"awakeningStarted":false,"awakeningDeferred":false}');
 -- Dude config serialization deliberately omits the authoritative soul name.
 CREATE TRIGGER dude_config_name_insert AFTER INSERT ON platform_internal_agent_configs

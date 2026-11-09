@@ -1,3 +1,4 @@
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MoreHorizontal, ExternalLink } from "lucide-react";
 import {
   type SyntheticEvent,
@@ -28,6 +29,7 @@ import { useToast } from "@/components/ui/toast";
 
 import {
   archiveApp,
+  deleteApp,
   restoreApp,
 } from "@/domain/app/api";
 import {
@@ -38,6 +40,7 @@ import {
 import { useAppList } from "@/domain/app/hooks";
 import {
   archiveMockApp,
+  deleteMockApp,
   restoreMockApp,
 } from "@/domain/app/mock";
 import type {
@@ -62,11 +65,13 @@ function AppActions({
   app,
   onArchive,
   onRestore,
+  onDelete,
   pendingLifecycle,
 }: {
   app: AppListItem;
   onArchive: () => void;
   onRestore: () => void;
+  onDelete: () => void;
   pendingLifecycle: boolean;
 }) {
   const navigate = useNavigate();
@@ -118,6 +123,7 @@ function AppActions({
             {pageT("actions.archive")}
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem variant="destructive" disabled={pendingLifecycle} onClick={onDelete}>{pageT("permanentDelete.action")}</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={!app.repositoryUrl}
@@ -153,6 +159,8 @@ export function AppsPage() {
   const [status, setStatus] = useState<StatusFilter>("Active");
   const [current, setCurrent] = useState(1);
   const [size, setSize] = useState(15);
+  const [deleteTarget, setDeleteTarget] = useState<AppListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [pendingLifecycleCode, setPendingLifecycleCode] = useState<string | null>(null);
   const query = useMemo(() => ({
     current,
@@ -210,8 +218,23 @@ export function AppsPage() {
     }
   }
 
+  async function confirmDelete() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      if (dataSource === "api") await deleteApp(deleteTarget.appCode);
+      else deleteMockApp(deleteTarget.appCode);
+      setDeleteTarget(null);
+      refresh();
+      toast.success(pageT("permanentDelete.success"));
+    } catch (error) {
+      toast.error(pageT((error as { code?: string }).code === "APP_IN_USE" ? "permanentDelete.inUse" : "permanentDelete.failed"));
+    } finally { setDeleting(false); }
+  }
+
   return (
     <>
+      <ConfirmDialog open={Boolean(deleteTarget)} pending={deleting} title={pageT("permanentDelete.action")} description={pageT("permanentDelete.description", { name: deleteTarget?.name })} cancelText={t("common:dialogSelect.cancel")} confirmText={pageT("permanentDelete.action")} onCancel={() => { if (!deleting) setDeleteTarget(null); }} onConfirm={() => void confirmDelete()} />
       <PageHeader
         title={pageT("title")}
         actions={(
@@ -223,7 +246,6 @@ export function AppsPage() {
               disabled={loading}
               onClick={() => {
                 refresh();
-                toast.success(pageT("messages.refreshed"));
               }}
             >
               {pageT("actions.refresh")}
@@ -364,6 +386,7 @@ export function AppsPage() {
             render: (app) => (
               <AppActions
                 app={app}
+                onDelete={() => setDeleteTarget(app)}
                 onArchive={() => void updateLifecycle(app, "archive")}
                 onRestore={() => void updateLifecycle(app, "restore")}
                 pendingLifecycle={pendingLifecycleCode === app.appCode}

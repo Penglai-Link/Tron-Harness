@@ -11,10 +11,10 @@ publish = false
 
 [dependencies]
 async-trait = "0.1"
-eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.1.0" }
-eliteforge-agent-official-plugin-tools-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.1.0" }
+eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.1.1" }
+eliteforge-agent-official-plugin-tools-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.1.1" }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 
 [build-dependencies]
-eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.1.0" }
+eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.1.1" }

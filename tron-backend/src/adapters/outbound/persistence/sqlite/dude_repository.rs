@@ -137,7 +137,18 @@ impl DudeRepository for SqliteDudeRepository {
         let code=code.to_owned();
         self.call(move |c| {
             let json: Option<String> = c.query_row("SELECT s.record_json FROM dude_souls s JOIN dudes d USING(dude_code) WHERE s.dude_code=?1", [code], |r| r.get(0)).optional().map_err(storage)?;
-            decode(json.ok_or(DudeError::NotFound)?)
+            let mut soul: DudeSoul = decode(json.ok_or(DudeError::NotFound)?)?;
+            if soul.state != crate::domain::dude::SoulState::Ready {
+                if !soul.name_confirmed && soul.name == "未命名" { soul.name = "好兄弟".into(); }
+                if soul.markdown.trim().is_empty() {
+                    soul.markdown = DudeSoul::new(&soul.dude_code, &soul.name).markdown;
+                }
+                soul.state = crate::domain::dude::SoulState::Ready;
+                soul.name_confirmed = true;
+                soul.pending_interaction_id = None;
+                c.execute("UPDATE dude_souls SET record_json=?2 WHERE dude_code=?1", params![soul.dude_code, encode(&soul)?]).map_err(storage)?;
+            }
+            Ok(soul)
         })
     }
     fn save_soul(&mut self, soul: &DudeSoul) -> Result<(), DudeError> {

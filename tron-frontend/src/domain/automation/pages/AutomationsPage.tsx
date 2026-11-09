@@ -263,7 +263,6 @@ export function AutomationsPage() {
           <>
             <Button size="lg" variant="outline" onClick={() => {
               refresh();
-              toast.success(pt("Automation list refreshed"));
             }}
             >
               {pt("Refresh")}

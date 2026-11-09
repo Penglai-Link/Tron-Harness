@@ -1,22 +1,18 @@
 import { useTranslation } from "react-i18next";
-import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
-import { SurfaceCard } from "@/shared/layout/SurfaceCard";
+import { ItemDescription, ItemTitle } from "@/components/ui/item";
+import { AppearanceSection } from "./AppearanceLayout";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 
 export function SidebarAppearanceSettings() {
   const { t } = useTranslation("pages");
   const { sidebarAppearanceSettings, setSidebarAppearanceSettings } = useTheme();
 
-  return <SurfaceCard className="p-0">
-    <div className="border-b border-[var(--color-outline-variant)]/50 px-3 py-3">
-      <Item size="xs">
-        <ItemContent>
-          <ItemTitle>{t("settingsAppearance.sidebar")}</ItemTitle>
-          <ItemDescription>{t("settingsAppearance.sidebarDescription")}</ItemDescription>
-        </ItemContent>
-      </Item>
+  return <AppearanceSection aria-label={t("settingsAppearance.sidebar")}>
+    <div className="space-y-1">
+      <ItemTitle>{t("settingsAppearance.sidebar")}</ItemTitle>
+      <ItemDescription className="line-clamp-none text-xs">{t("settingsAppearance.sidebarDescription")}</ItemDescription>
     </div>
-    <div className="grid gap-4 px-3 py-3 sm:grid-cols-2">
+    <div className="grid gap-x-8 gap-y-4 @xl/appearance:grid-cols-2">
       <label className="grid gap-1.5 text-sm">
         <span className="flex items-center justify-between gap-2">
           <span>{t("settingsAppearance.sidebarOpacity")}</span>
@@ -50,5 +46,5 @@ export function SidebarAppearanceSettings() {
         />
       </label>
     </div>
-  </SurfaceCard>;
+  </AppearanceSection>;
 }

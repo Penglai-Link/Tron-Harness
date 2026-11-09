@@ -32,7 +32,7 @@ export function SectionHeader({ label, open, onToggle, onCreate, createLabel, cr
         shortcutAction={shortcutAction}
         disabled={createDisabled}
         onClick={onCreate}
-        className="size-6 shrink-0 justify-center rounded text-sidebar-foreground/60 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-30 motion-reduce:transition-none [@media(hover:hover)]:opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100"
+        className="size-6 shrink-0 justify-center rounded text-sidebar-foreground/60 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-30 motion-reduce:transition-none [@media(hover:hover)]:opacity-0 group-hover/section:opacity-100 group-has-[:focus-visible]/section:opacity-100"
       >
         <Plus size={15} aria-hidden="true" />
       </ActionButton>

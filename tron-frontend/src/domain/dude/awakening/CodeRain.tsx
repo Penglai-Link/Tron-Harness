@@ -177,5 +177,5 @@ export function CodeRain({ active = true, departing = false }: { active?: boolea
       ctx.clearRect(0, 0, w, h);
     };
   }, [active]);
-  return <canvas className="awakening-code-rain" ref={canvas} aria-hidden="true" />;
+  return <canvas className="absolute inset-0 size-full opacity-30" ref={canvas} aria-hidden="true" />;
 }

@@ -60,7 +60,6 @@ export function ChatNavigationProvider({
   const directoryPicker = useDirectoryPicker(workspaceCode);
   const { projects, loading, recentSessions, sessionsByProject, sessionsByDirectory } =
     useChatSidebarData(workspaceCode);
-  const [runningSessionCode, setRunningSessionCode] = useState("");
   const [projectListExpanded, setProjectListExpanded] = useState(true);
   const [visibleProjectCount, setVisibleProjectCount] =
     useState(sidebarListPageSize);
@@ -82,21 +81,6 @@ export function ChatNavigationProvider({
       setSelectedProjectCode(undefined);
     }
   }, [projects, selectedProjectCode]);
-  useEffect(() => {
-    const handleRunStateChange = (event: Event) => {
-      const detail = (event as CustomEvent<{ sessionCode?: string }>).detail;
-      setRunningSessionCode(detail?.sessionCode ?? "");
-    };
-    window.addEventListener(
-      "tron:chat-session-run-state",
-      handleRunStateChange
-    );
-    return () =>
-      window.removeEventListener(
-        "tron:chat-session-run-state",
-        handleRunStateChange
-      );
-  }, []);
   useEffect(() => {
     const createTopic = () => { if (workspaceCode) setProjectCreateOpen(true); };
     const addDirectory = () => { void directoryPicker.choose(); };
@@ -128,7 +112,6 @@ export function ChatNavigationProvider({
                   <SessionGroup
                     key={project.projectCode}
                     project={project}
-                    runningSessionCode={runningSessionCode}
                     activeSessionCode={activeSessionCode}
                     onNavigate={navigateToPath}
                     selected={project.projectCode === selectedProjectCode}
@@ -170,7 +153,7 @@ export function ChatNavigationProvider({
     if (menu.pageCode === CHAT_PANEL_WIDGET_KEYS.directories) {
       return <DirectorySection key={menu.menuCode} label={menu.label} workspaceCode={workspaceCode}
         onAdd={() => void directoryPicker.choose()} adding={directoryPicker.saving}
-        sessions={sessionsByDirectory} runningSessionCode={runningSessionCode} activeSessionCode={activeSessionCode}
+        sessions={sessionsByDirectory} activeSessionCode={activeSessionCode}
         onNavigate={navigateToPath} pinnedSessionCodes={pinnedSessionCodes}
         onToggleSessionPin={togglePinnedSession} onRemoveSessionPin={removePinnedSession} />;
     }
@@ -181,7 +164,7 @@ export function ChatNavigationProvider({
           onCreate={createQuickChat}
           canCreate={Boolean(workspaceCode)}
           key={menu.menuCode}
-          runningSessionCode={runningSessionCode}
+
           activeSessionCode={activeSessionCode}
           onNavigate={navigateToPath}
           sessions={recentSessions}

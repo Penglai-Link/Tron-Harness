@@ -537,7 +537,6 @@ export function TasksKanbanPage() {
             </SelectInput>
             <Button size="lg" variant="outline" onClick={() => {
               refresh();
-              toast.success(t("pages:tasks.kanban.messages.refreshed", "Task board refreshed"));
             }}>{flowT("actions.refresh", "Refresh")}</Button>
             <Button size="lg" onClick={() => navigate("/tasks/new")}>{t("pages:tasks.actions.new", "New")}</Button>
           </>

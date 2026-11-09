@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Palette } from "lucide-react";
+import { ChevronDown, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useTheme } from "@/shared";
@@ -38,7 +38,7 @@ export function OnlineSkinMarket({ onUninstall }: { onUninstall: (skin: Skin) =>
     try { await selectSkin(id); }
     catch (reason) { toast.error(reason instanceof Error ? reason.message : t("settingsAppearance.skinFailed")); }
   }
-  return <section className="space-y-3 border-t pt-4" aria-label={t("settingsAppearance.onlineSkins")} aria-busy={expanded && fetching}>
+  return <section className="space-y-3" aria-label={t("settingsAppearance.onlineSkins")} aria-busy={expanded && fetching}>
     <div className="flex items-center justify-between gap-3">
       <Button
         aria-controls="online-skin-market-content"
@@ -49,6 +49,7 @@ export function OnlineSkinMarket({ onUninstall }: { onUninstall: (skin: Skin) =>
       >
 
         <span>{t("settingsAppearance.onlineSkins")}</span>
+        <ChevronDown aria-hidden="true" className={`size-3.5 transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} />
       </Button>
       {expanded ? (
         <Button variant="ghost" size="sm" disabled={fetching || loading} onClick={() => setRevision((value) => value + 1)}>
@@ -62,7 +63,7 @@ export function OnlineSkinMarket({ onUninstall }: { onUninstall: (skin: Skin) =>
         {fetching ? <p className="text-sm text-muted-foreground">{t("settingsAppearance.marketLoading")}</p>
           : error ? <p role="alert" className="text-sm text-destructive">{t("settingsAppearance.marketFailed")}: {error}</p>
           : !result?.records.length ? <p className="text-sm text-muted-foreground">{t("settingsAppearance.marketEmpty")}</p>
-          : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          : <div className="grid grid-cols-1 gap-3 @xl/appearance:grid-cols-2 @4xl/appearance:grid-cols-3">
             {result.records.map((item) => {
               const installed = skins.find((skin) => skin.marketId === item.id);
               const selected = installed?.id === activeSkin.id;

@@ -194,7 +194,7 @@
 }
 .tron-settings-body {
   display: grid;
-  grid-template-columns: clamp(12rem, 16vw, 14rem) minmax(0, 1fr);
+  grid-template-columns: clamp(10rem, 12vw, 11rem) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   min-width: 0;

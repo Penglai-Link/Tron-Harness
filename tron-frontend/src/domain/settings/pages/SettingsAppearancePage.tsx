@@ -1,12 +1,12 @@
 import { SkinSettings } from "../components/SkinSettings";
 import { BackgroundAppearanceSettings } from "../components/BackgroundAppearanceSettings";
 import { MotionSettings } from "../components/MotionSettings";
-import { AppEntranceSettings } from "../components/AppEntranceSettings";
 import { SidebarAppearanceSettings } from "../components/SidebarAppearanceSettings";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { PageHeader, SurfaceCard, useTheme } from "@/shared";
+import { useTheme } from "@/shared";
+import { AppearanceRow, AppearanceSection } from "../components/AppearanceLayout";
 import {
   isSystemFontSize,
   maximumSystemFontSize,
@@ -15,7 +15,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  Item,
   ItemContent,
   ItemTitle,
   ItemDescription,
@@ -27,7 +26,6 @@ import type { TypingEffect } from "@/shared/theme/ThemeProvider";
 import type { TypingParticleShape, TypingParticleStyle } from "@/shared/theme/typingParticles";
 
 export function SettingsAppearancePage() {
-  const { t: shellT } = useTranslation("shell");
   const { t: pageT } = useTranslation("pages");
   const {
     fontSize,
@@ -67,22 +65,22 @@ export function SettingsAppearancePage() {
   }, [pageT]);
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <PageHeader title={shellT("settings.items.appearance")} />
+    <div className="@container/appearance mx-auto w-full max-w-6xl px-1 py-2 sm:px-3 lg:px-5">
       <SkinSettings />
-      <SurfaceCard className="p-0">
-        <Item size="xs">
-          <ItemContent>
+      <AppearanceSection>
+        <AppearanceRow>
+          <ItemContent className="min-w-0 gap-1">
             <ItemTitle>
               {pageT("settingsAppearance.fontSize")}
               <InfoTooltip ariaLabel={tips}>{tips}</InfoTooltip>
             </ItemTitle>
-            <ItemDescription>
+            <ItemDescription className="line-clamp-none">
               {pageT("settingsAppearance.fontSizeTips")}
             </ItemDescription>
           </ItemContent>
           <ItemActions>
             <Input
+              className="w-24"
               aria-label={pageT("settingsAppearance.fontSize")}
               max={maximumSystemFontSize}
               min={minimumSystemFontSize}
@@ -95,14 +93,13 @@ export function SettingsAppearancePage() {
             />
             <ItemDescription className="flex-shrink-0">px</ItemDescription>
           </ItemActions>
-        </Item>
-      </SurfaceCard>
+        </AppearanceRow>
+      </AppearanceSection>
       <BackgroundAppearanceSettings />
       <SidebarAppearanceSettings />
-      <AppEntranceSettings />
       <MotionSettings />
-      <SurfaceCard className="p-0">
-        <div className="space-y-2 border-b border-[var(--color-outline-variant)]/50 px-3 pb-3 pt-3">
+      <AppearanceSection>
+        <div className="flex flex-col items-start justify-between gap-3 @xl/appearance:flex-row @xl/appearance:items-center">
           <ItemTitle>{pageT("settingsAppearance.typingEffect")}</ItemTitle>
           <div className="flex flex-wrap gap-2" role="group" aria-label={pageT("settingsAppearance.typingEffect")}>
             {[
@@ -114,7 +111,7 @@ export function SettingsAppearancePage() {
               <Button
                 key={option.value}
                 aria-pressed={typingEffect === option.value}
-                variant={typingEffect === option.value ? "secondary" : "outline"}
+                variant={typingEffect === option.value ? "secondary" : "ghost"}
                 onClick={() => setTypingEffect(option.value as TypingEffect)}
               >
                 {option.label}
@@ -128,10 +125,10 @@ export function SettingsAppearancePage() {
             <TypingEffectPreview />
           </>
         ) : null}
-      </SurfaceCard>
-      <SurfaceCard className="p-0">
-        <Item size="xs">
-          <ItemContent>
+      </AppearanceSection>
+      <AppearanceSection>
+        <AppearanceRow>
+          <ItemContent className="min-w-0 gap-1">
             <ItemTitle>{pageT("settingsAppearance.agentReplyEffect")}</ItemTitle>
           </ItemContent>
           <ItemActions>
@@ -147,9 +144,9 @@ export function SettingsAppearancePage() {
               />
             </div>
           </ItemActions>
-        </Item>
+        </AppearanceRow>
         {agentReplyEffect === "typewriter" ? (
-          <label className="grid gap-1.5 border-t border-[var(--color-outline-variant)]/50 px-3 pb-3 pt-2 text-xs">
+          <label className="grid gap-2 text-xs @xl/appearance:ml-auto @xl/appearance:max-w-sm">
             <span className="flex items-center justify-between gap-2">
               <span>{pageT("settingsAppearance.agentReplySpeed")}</span>
               <span className="tabular-nums text-[var(--color-on-surface-variant)]">
@@ -168,7 +165,7 @@ export function SettingsAppearancePage() {
             />
           </label>
         ) : null}
-      </SurfaceCard>
+      </AppearanceSection>
     </div>
   );
 }
@@ -177,7 +174,7 @@ function TypingEffectPreview() {
   const { t } = useTranslation("pages");
   const [text, setText] = useState("");
   return (
-    <div className="border-t border-[var(--color-outline-variant)]/50 px-3 py-2">
+    <div className="min-w-0">
       <Input
         aria-label={t("settingsAppearance.typingEffectPreview")}
         placeholder={t("settingsAppearance.typingEffectPreviewHint")}
@@ -198,8 +195,8 @@ function TypingParticleOptions() {
   }
 
   return (
-    <div className="space-y-3 border-t border-[var(--color-outline-variant)]/50 px-3 pb-3 pt-2">
-      <div className="grid gap-1.5 sm:max-w-64">
+    <div className="space-y-4">
+      <div className="grid gap-1.5 @xl/appearance:max-w-64">
         <div className="text-xs font-medium">{t("settingsAppearance.typingParticleStyle")}</div>
         <OptionSelect
           ariaLabel={t("settingsAppearance.typingParticleStyle")}
@@ -226,7 +223,7 @@ function TypingParticleOptions() {
       </label>
 
       {settings.style === "custom" ? (
-        <div className="grid gap-1.5 sm:max-w-64">
+        <div className="grid gap-1.5 @xl/appearance:max-w-64">
           <span className="text-sm">{t("settingsAppearance.typingParticleShape")}</span>
           <OptionSelect
             ariaLabel={t("settingsAppearance.typingParticleShape")}
@@ -242,7 +239,7 @@ function TypingParticleOptions() {
         </div>
       ) : null}
 
-      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+      <div className="grid gap-x-6 gap-y-3 @xl/appearance:grid-cols-3">
         <ParticleRange
           label={t("settingsAppearance.typingParticleCount")}
           max={24}

@@ -73,10 +73,14 @@ export function toUiResult(value: ChatSendResult): Ui.ChatSendResult {
       metadata: { workspaceCode, systemAgentSessionId } },
     userInputRequest: value.userInputRequest ? toUiQuestion(value.userInputRequest) : value.userInputRequest };
 }
-export function toUiHistory(value: Ui.SessionHistory): Ui.SessionHistory {
-  return { ...value, records: { ...value.records, steps: value.records.steps.map((step) => ({
-    ...step, name: step.name === "framework.context.compaction" ? "agent.context.compaction" : step.name,
-  })) } };
+export function toUiHistory(value: Ui.SessionHistory & { compactionDetails?: Record<string, unknown> }): Ui.SessionHistory {
+  return { ...value, records: { ...value.records, steps: value.records.steps.map((step) => {
+    const blocks = Ui.parseCompactionBlocks(value.compactionDetails?.[step.id]);
+    return {
+      ...step, name: step.name === "framework.context.compaction" ? "agent.context.compaction" : step.name,
+      ...(blocks ? { compaction: { blocks } } : {}),
+    };
+  }) } };
 }
 export function toUiInput(input: SendChatMessageInput): MappedInput {
   const model = input.modelSelection;

@@ -1,4 +1,4 @@
-import { MoreHorizontal, Boxes } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import {
   useEffect,
@@ -147,29 +147,30 @@ function compareDomainRecords(left: MemoryWorkDomainRecord, right: MemoryWorkDom
   return right.updatedAt.localeCompare(left.updatedAt);
 }
 
-function formatUpdatedAt(value: string) {
+function formatUpdatedAt(value: string, locale: string) {
   const parsed = new Date(value);
   if (!Number.isNaN(parsed.getTime())) {
-    return new Intl.DateTimeFormat("en-US", { timeZone: getUserTimeZone(),
+    return new Intl.DateTimeFormat(locale, { timeZone: getUserTimeZone(),
       day: "2-digit",
       month: "short",
       year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     }).format(parsed);
   }
 
-  if (value.includes("T")) return value.split("T")[0];
-  if (value.includes(" ")) return value.split(" ")[0];
   return value;
 }
 
 function DomainStatusBadge({ status }: { status: MemoryWorkDomainRecord["status"] }) {
+  const { t } = useTranslation("pages");
   const className = status === "ACTIVE"
     ? "bg-[var(--color-success-container)] text-[var(--color-on-success-container)]"
     : "bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]";
 
   return (
     <span className={`inline-flex min-h-6 items-center rounded-full px-2.5 text-[12px] font-semibold ${className}`}>
-      {status}
+      {t(`memoryDomains.status.${status === "ACTIVE" ? "active" : "disabled"}`)}
     </span>
   );
 }
@@ -223,8 +224,8 @@ function DomainEditorDialog({
                 value={form.status}
                 onValueChange={(event) => onChange({ ...form, status: event as MemoryWorkDomainRecord["status"] })}
               >
-                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                <SelectItem value="DISABLED">DISABLED</SelectItem>
+                <SelectItem value="ACTIVE">{t("pages:memoryDomains.status.active")}</SelectItem>
+                <SelectItem value="DISABLED">{t("pages:memoryDomains.status.disabled")}</SelectItem>
               </SelectInput>
             </Field>
           </div>
@@ -263,7 +264,7 @@ function DomainEditorDialog({
 }
 
 export function PlatformMemoryDomainsPage() {
-  const { t } = useTranslation(["pages"]);
+  const { t, i18n } = useTranslation(["pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("memory");
   const [records, setRecords] = useState<MemoryWorkDomainRecord[]>([]);
@@ -545,9 +546,6 @@ export function PlatformMemoryDomainsPage() {
               cellClassName: "min-w-0",
               render: (row) => (
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-9 items-center justify-center rounded-xl bg-[var(--color-surface-container)] text-[var(--color-primary)]">
-                    <Boxes size={17} aria-hidden="true" />
-                  </span>
                   <div className="min-w-0">
                     <p className="truncate font-medium text-[var(--color-on-surface)]" title={row.name}>{row.name}</p>
                     <p className="truncate font-mono text-[12px] text-[var(--color-on-surface-variant)]" title={row.domainCode}>{row.domainCode}</p>
@@ -570,15 +568,15 @@ export function PlatformMemoryDomainsPage() {
               id: "status",
               header: t("pages:memoryDomains.columns.status", "Status"),
               width: "140px",
-              render: (row) => <Badge variant={row.status === 'ACTIVE' ? 'success' : 'error'} >{row.status}</Badge>,
+              render: (row) => <Badge variant={row.status === 'ACTIVE' ? 'success' : 'error'} >{t(`pages:memoryDomains.status.${row.status === "ACTIVE" ? "active" : "disabled"}`)}</Badge>,
             },
             {
               id: "updatedAt",
               header: t("pages:memoryDomains.columns.updated", "Updated"),
-              width: "150px",
+              width: "200px",
               render: (row) => (
                 <span className="whitespace-nowrap text-[13px] text-[var(--color-on-surface)]">
-                  {formatUpdatedAt(row.updatedAt)}
+                  {formatUpdatedAt(row.updatedAt, i18n.resolvedLanguage ?? i18n.language)}
                 </span>
               ),
             },

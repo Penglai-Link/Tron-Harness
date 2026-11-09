@@ -1,7 +1,3 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const asset = (name) =>
-  fs.readFileSync(path.join(__dirname, "../assets", name), "utf8");
 const escape = (value) =>
   String(value)
     .replace(/&/g, "&amp;")
@@ -10,27 +6,15 @@ const escape = (value) =>
 
 function startupPageHtml({ message, dataDir, logPath, locale = "en", theme = "matrix-dark" }) {
   const zh = locale.startsWith("zh");
-  // These local assets are packaged under assets/**/* and are available offline
-  // before the backend starts. The shader is also imported by the React scene.
-  const shader = JSON.stringify(asset("black-hole.frag")).replace(
-    /</g,
-    "\\u003c"
-  );
-  const postShader = JSON.stringify(asset("black-hole-post.frag")).replace(
-    /</g,
-    "\\u003c"
-  );
   return `<!doctype html>
 <html lang="${zh ? "zh-CN" : "en"}" data-theme="${theme === "light" ? "light" : "matrix-dark"}">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tron</title>
 <style>
-${asset("black-hole.css")}
-:root { color-scheme: dark; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; background:var(--scene-background); color:var(--scene-foreground); }
+
+:root { color-scheme: dark; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; background:#020305; color:#f3f1eb; }
 * { box-sizing:border-box; }
 html,body { height:100%; margin:0; }
 body { display:flex; align-items:center; padding:40px clamp(24px,8vw,150px); overflow:hidden; }
-.black-hole-fallback i { width:14vh; }
-.black-hole-fallback b { width:34vh; height:4vh; }
 .status { position:relative; width:min(360px,100%); padding:24px 0; animation:appear 600ms both; }
 .brand { margin:0 0 32px; font-size:13px; font-weight:650; letter-spacing:.32em; color:#f3f1eb; }
 .status-row { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:450; }
@@ -48,7 +32,7 @@ code { font-size:10px; overflow-wrap:anywhere; color:#a6b0c0; }
 @keyframes pulse { 50% { opacity:.35; } }
 @keyframes sweep { from { transform:translateX(-110%); } to { transform:translateX(390%); } }
 @media(max-width:700px) { body { align-items:flex-end; padding-bottom:12vh; } .status { width:100%; } }
-[data-theme="light"] { color-scheme:light; }
+[data-theme="light"] { color-scheme:light; background:#fff; color:#202124; }
 [data-theme="light"] .brand { color:#202124; }
 [data-theme="light"] .dot { background:#555; box-shadow:0 0 12px #0003; }
 [data-theme="light"] .progress { background:#0001; }
@@ -56,7 +40,6 @@ code { font-size:10px; overflow-wrap:anywhere; color:#a6b0c0; }
 [data-theme="light"] :is(.message, details, .meta span, code) { color:#60646b; }
 </style></head>
 <body>
-<div class="black-hole-scene" aria-hidden="true"><div class="black-hole-fallback"><i></i><b></b></div><canvas id="black-hole"></canvas></div>
 <section class="status">
 <p class="brand">TRON</p>
 <div role="status" aria-live="polite"><div class="status-row"><span class="dot"></span>${
@@ -74,8 +57,6 @@ code { font-size:10px; overflow-wrap:anywhere; color:#a6b0c0; }
     logPath
   )}</code></div>
 </div></details></section>
-<script>${asset("black-hole-startup.js")}
-startBlackHole(document.getElementById("black-hole"), ${shader}, ${postShader});</script>
 </body></html>`;
 }
 module.exports = { startupPageHtml };

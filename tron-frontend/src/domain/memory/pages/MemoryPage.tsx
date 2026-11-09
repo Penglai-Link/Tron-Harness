@@ -570,7 +570,6 @@ function MemoryRepository() {
                 disabled={!workspaceCode}
                 onClick={() => {
                   setRefreshKey((value) => value + 1);
-                  setNotice(t("pages:memory.messages.refreshed", "Memory refreshed."));
                 }}
               >
                 {t("pages:memory.actions.refresh", "Refresh")}

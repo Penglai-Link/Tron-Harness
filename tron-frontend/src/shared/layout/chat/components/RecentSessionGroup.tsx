@@ -12,7 +12,6 @@ export default function RecentSessionGroup({
   label,
   onCreate,
   canCreate,
-  runningSessionCode,
   activeSessionCode,
   onNavigate,
   sessions,
@@ -23,7 +22,6 @@ export default function RecentSessionGroup({
   label?: string;
   onCreate: () => void;
   canCreate: boolean;
-  runningSessionCode: string;
   activeSessionCode: string;
   onNavigate: (path: string) => void;
   sessions: ChatSession[];
@@ -53,7 +51,6 @@ export default function RecentSessionGroup({
           {sortPinnedSessions(sessions, pinnedSessionCodes).slice(0, visibleSessionCount).map((session) => (
             <MessageItem
               key={session.sessionCode}
-              running={runningSessionCode === session.sessionCode}
               active={activeSessionCode === session.sessionCode}
               onNavigate={onNavigate}
               session={session}

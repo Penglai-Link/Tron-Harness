@@ -1,3 +1,4 @@
+import { AppearanceSection } from "./AppearanceLayout";
 import { Trash2, Image as ImageIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -6,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { OptionSelect } from "@/components/option-select/OptionSelect";
 import { ItemTitle } from "@/components/ui/item";
 import { useToast } from "@/components/ui/toast";
-import { SurfaceCard, useTheme } from "@/shared";
+import { useTheme } from "@/shared";
 import type { BackgroundEffect, BackgroundEffectSettings } from "@/shared/theme/backgroundPreferences";
 
 const maxBackgroundImageBytes = 16 * 1024 * 1024;
@@ -64,8 +65,8 @@ export function BackgroundAppearanceSettings() {
   }
 
   return (
-    <SurfaceCard className="p-0">
-      <section className="space-y-3 border-b border-[var(--color-outline-variant)]/50 p-3">
+    <>
+      <AppearanceSection aria-label={t("settingsAppearance.backgroundImage")}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <ItemTitle>{t("settingsAppearance.backgroundImage")}</ItemTitle>
           <div className="flex items-center gap-2">
@@ -102,8 +103,8 @@ export function BackgroundAppearanceSettings() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
-          <div className="relative grid h-24 place-items-center overflow-hidden rounded-md border border-[var(--color-outline-variant)]/60 bg-[var(--color-surface-container)]">
+        <div className="grid gap-5 @xl/appearance:grid-cols-[9rem_minmax(0,1fr)]">
+          <div className="relative grid aspect-video w-full max-w-48 @xl/appearance:max-w-none place-items-center overflow-hidden rounded-md border border-[var(--color-outline-variant)]/60 bg-[var(--color-surface-container)]">
             {backgroundImageUrl ? (
               <>
                 <img
@@ -137,7 +138,7 @@ export function BackgroundAppearanceSettings() {
                 {backgroundImageSettings.fileName}
               </div>
             ) : null}
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-x-6 gap-y-4 @xl/appearance:grid-cols-2 @4xl/appearance:grid-cols-3">
               <SelectControl
                 ariaLabel={t("settingsAppearance.backgroundImageFit")}
                 disabled={!backgroundImageUrl}
@@ -195,10 +196,10 @@ export function BackgroundAppearanceSettings() {
             </div>
           </div>
         </div>
-      </section>
+      </AppearanceSection>
 
-      <section className="space-y-3 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <AppearanceSection aria-label={t("settingsAppearance.backgroundEffect")}>
+        <div className="flex flex-col items-start justify-between gap-3 @xl/appearance:flex-row @xl/appearance:items-center">
           <ItemTitle>{t("settingsAppearance.backgroundEffect")}</ItemTitle>
           <div className="w-48 max-w-full">
             <OptionSelect
@@ -216,7 +217,7 @@ export function BackgroundAppearanceSettings() {
           </div>
         </div>
         {backgroundEffectSettings.effect !== "off" ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-x-6 gap-y-4 @xl/appearance:grid-cols-2 @4xl/appearance:grid-cols-3">
             {backgroundEffectSettings.effect !== "aurora" ? (
               <>
                 <RangeControl
@@ -269,8 +270,8 @@ export function BackgroundAppearanceSettings() {
             />
           </div>
         ) : null}
-      </section>
-    </SurfaceCard>
+      </AppearanceSection>
+    </>
   );
 }
 

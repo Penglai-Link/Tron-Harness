@@ -12,9 +12,10 @@ use std::{
 
 const MAX_PACKAGE: usize = 20 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
-const BUILTINS: [&str; 2] = [
+const BUILTINS: [&str; 3] = [
     include_str!("../../../resources/skins/default.json"),
     include_str!("../../../resources/skins/brand.json"),
+    include_str!("../../../resources/skins/matrix.json"),
 ];
 const RETIRED_BUILTINS: [&str; 3] = ["light", "matrix-dark", "matrix-particles"];
 
@@ -231,20 +232,20 @@ impl SkinStore for FileSkinStore {
     fn list(&self) -> Result<Vec<Skin>, SkinError> {
         let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
         self.initialize()?;
-        let mut skins = vec![self.read_skin("default")?, self.read_skin("brand")?];
+        let mut skins = vec![self.read_skin("default")?, self.read_skin("brand")?, self.read_skin("matrix")?];
         for entry in fs::read_dir(&self.root)
             .map_err(|_| SkinError::Storage)?
             .flatten()
         {
             let id = entry.file_name().to_string_lossy().to_string();
-            if id == "default" || id == "brand" || RETIRED_BUILTINS.contains(&id.as_str()) {
+            if id == "default" || id == "brand" || id == "matrix" || RETIRED_BUILTINS.contains(&id.as_str()) {
                 continue;
             }
             if let Ok(skin) = self.read_skin(&id) {
                 skins.push(skin);
             }
         }
-        skins[2..].sort_by(|a, b| a.name.cmp(&b.name));
+        skins[3..].sort_by(|a, b| a.name.cmp(&b.name));
         Ok(skins)
     }
 
@@ -302,7 +303,7 @@ impl SkinStore for FileSkinStore {
     }
 
     fn uninstall(&self, id: &str) -> Result<(), SkinError> {
-        if id == "default" || id == "brand" || RETIRED_BUILTINS.contains(&id) {
+        if id == "default" || id == "brand" || id == "matrix" || RETIRED_BUILTINS.contains(&id) {
             return Err(SkinError::Protected);
         }
         if !valid_skin_id(id) {

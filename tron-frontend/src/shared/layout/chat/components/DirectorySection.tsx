@@ -27,7 +27,6 @@ interface DirectorySectionProps {
   adding: boolean;
   workspaceCode: string;
   sessions: Map<string, ChatSession[]>;
-  runningSessionCode: string;
   activeSessionCode: string;
   pinnedSessionCodes: string[];
   onNavigate: (path: string) => void;
@@ -130,7 +129,7 @@ function DirectoryNode({ node, refresh, ...props }: DirectorySectionProps & { no
           <Icon size={16} className="shrink-0" aria-hidden="true" /><span className="truncate">{directory.name}</span>{!directory.available ? <span className="text-xs opacity-60">{t("chatSidebar.directory.unavailable")}</span> : null}
         </button>} /><TooltipContent side="bottom" align="start" sideOffset={8} className="max-w-sm break-all">{directory.path}</TooltipContent></Tooltip>
       } right={
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 opacity-0 pointer-events-none group-hover/directory:opacity-100 group-hover/directory:pointer-events-auto group-focus-within/directory:opacity-100 group-focus-within/directory:pointer-events-auto has-[button[data-popup-open]]:opacity-100 has-[button[data-popup-open]]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto">
           <ActionButton aria-label={t("chatSidebar.directory.newChat", { name: directory.name })} onClick={() => create()}><Plus size={15} aria-hidden="true" /></ActionButton>
           <DropdownMenu><DropdownMenuTrigger render={<ActionButton aria-label={t("common:actions.more")}><MoreHorizontal size={16} aria-hidden="true" /></ActionButton>} />
             <DropdownMenuContent align="start"><DropdownMenuItem onClick={() => void copyPath()}>{t("chatSidebar.directory.copyPath")}</DropdownMenuItem><DropdownMenuItem onClick={() => { setName(directory.name); setRenameOpen(true); }}>{t("chatSidebar.directory.rename")}</DropdownMenuItem><DropdownMenuItem disabled={pending} onClick={() => setArchiveOpen(true)}>{t("chatSidebar.directory.archive")}</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" disabled={pending} onClick={() => setDeleteOpen(true)}>{t("chatSidebar.directory.delete")}</DropdownMenuItem></DropdownMenuContent>
@@ -139,7 +138,7 @@ function DirectoryNode({ node, refresh, ...props }: DirectorySectionProps & { no
       } />
       {open ? <div className="pl-3">
         {node.children.map((child) => <DirectoryNode key={child.directory.directoryCode} node={child} {...props} refresh={refresh} />)}
-        {sortPinnedSessions(sessions, props.pinnedSessionCodes).map((session) => <MessageItem key={session.sessionCode} session={session} running={props.runningSessionCode === session.sessionCode} active={props.activeSessionCode === session.sessionCode} onNavigate={props.onNavigate} pinned={props.pinnedSessionCodes.includes(session.sessionCode)} onTogglePin={() => props.onToggleSessionPin(session.sessionCode)} onRemovePin={() => props.onRemoveSessionPin(session.sessionCode)} />)}
+        {sortPinnedSessions(sessions, props.pinnedSessionCodes).map((session) => <MessageItem key={session.sessionCode} session={session} active={props.activeSessionCode === session.sessionCode} onNavigate={props.onNavigate} pinned={props.pinnedSessionCodes.includes(session.sessionCode)} onTogglePin={() => props.onToggleSessionPin(session.sessionCode)} onRemovePin={() => props.onRemoveSessionPin(session.sessionCode)} />)}
       </div> : null}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}><DialogContent><DialogHeader><DialogTitle>{t("chatSidebar.directory.rename")}</DialogTitle></DialogHeader><Field><FieldLabel htmlFor={`directory-name-${directory.directoryCode}`}>{t("chatSidebar.directory.name")}</FieldLabel><Input id={`directory-name-${directory.directoryCode}`} value={name} onChange={(event) => setName(event.target.value)} /></Field><DialogFooter><Button variant="outline" onClick={() => setRenameOpen(false)}>{t("chatSidebar.directory.cancel")}</Button><Button disabled={!name.trim() || pending} onClick={() => void rename()}>{t("chatSidebar.directory.save")}</Button></DialogFooter></DialogContent></Dialog>
       <ConfirmDialog open={archiveOpen} pending={pending} title={t("chatSidebar.directory.archiveTitle")} description={t("chatSidebar.directory.archiveDescription", { name: directory.name })} cancelText={t("chatSidebar.directory.cancel")} confirmText={t("chatSidebar.directory.archive")} onCancel={() => setArchiveOpen(false)} tone="default" onConfirm={() => void mutate(false)} />

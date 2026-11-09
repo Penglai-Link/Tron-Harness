@@ -27,8 +27,8 @@ export const tronNavigation: TronNavSection[] = [
   { id: "CHAT_PROJECTS", label: "Topics", translationKey: "shell:nav.items.projects", icon: getNavigationIcon("FolderKanban") ?? Folder, standalone: true, flyout: false, items: [
 { menuCode: "CHAT_PROJECTS", label: "Topics", translationKey: "shell:nav.items.projects", href: "", icon: getNavigationIcon("FolderKanban") ?? Folder, childDisplay: "Inline", widgetCode: "chat.projects" }
 ] },
-  { id: "CHAT_DIRECTORIES", label: "Directories", translationKey: "shell:chatSidebar.directories", icon: getNavigationIcon("Folder") ?? Folder, standalone: true, flyout: false, items: [
-{ menuCode: "CHAT_DIRECTORIES", label: "Directories", translationKey: "shell:chatSidebar.directories", href: "", icon: getNavigationIcon("Folder") ?? Folder, childDisplay: "Inline", widgetCode: "chat.directories" }
+  { id: "CHAT_DIRECTORIES", label: "Projects", translationKey: "shell:chatSidebar.directories", icon: getNavigationIcon("Folder") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "CHAT_DIRECTORIES", label: "Projects", translationKey: "shell:chatSidebar.directories", href: "", icon: getNavigationIcon("Folder") ?? Folder, childDisplay: "Inline", widgetCode: "chat.directories" }
 ] },
   { id: "CHAT_RECENTS", label: "Quick Chats", translationKey: "shell:chatSidebar.recent", icon: getNavigationIcon("History") ?? Folder, standalone: true, flyout: false, items: [
 { menuCode: "CHAT_RECENTS", label: "Quick Chats", translationKey: "shell:chatSidebar.recent", href: "", icon: getNavigationIcon("History") ?? Folder, childDisplay: "Inline", widgetCode: "chat.recents" }

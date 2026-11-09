@@ -44,6 +44,7 @@ pub fn app_error_response(error: AppError) -> Response {
             "APP_ARCHIVED_INVALID",
             "restore archived app before modifying it",
         ),
+        AppError::InUse => (StatusCode::CONFLICT, "APP_IN_USE", "Remove topic and task associations before permanently deleting this app"),
         AppError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "APP_STORAGE_FAILED",

@@ -232,7 +232,6 @@ export function AutomationExecutionsPage() {
 
   function handleRefreshExecutions() {
     refreshExecutions();
-    toast.success(pt("Execution history refreshed"));
   }
 
   function toggleExecutionRowMenu(row: AutomationExecutionListItem, trigger: HTMLButtonElement) {

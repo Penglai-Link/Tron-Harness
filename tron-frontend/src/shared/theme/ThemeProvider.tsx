@@ -15,6 +15,7 @@ import {
 import { resolveSkin, type Skin, type ColorMode } from "./Skin";
 import defaultSkin from "./builtin/default.json";
 import brandSkin from "./builtin/brand.json";
+import matrixSkin from "./builtin/matrix.json";
 import { BackgroundLayer } from "./BackgroundLayer";
 import {
   deleteBackgroundImage,
@@ -77,7 +78,7 @@ function readTypingParticleSettings(): TypingParticleSettings {
     return defaultTypingParticleSettings;
   }
 }
-const builtins = [defaultSkin, brandSkin] as Skin[];
+const builtins = [defaultSkin, brandSkin, matrixSkin] as Skin[];
 const currentBrand = (skin: Skin): Skin => skin.id === brandSkin.id ? brandSkin as Skin : skin;
 const colorModeStorageKey = "tron.color-mode";
 function readColorMode(): ColorMode {
@@ -452,6 +453,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     loading, error, refreshSkins, selectSkin, importSkin, installMarketSkin, uninstallSkin, previewSkin, stopPreviewSkin, previewSkinId,
   }}>
     <BackgroundLayer
+      matrix={previewSkinId ? previewSkinId === "matrix" : displayedSkin.id === "matrix"}
       effectSettings={backgroundEffectSettings}
       imageSettings={normalizedBackgroundImageSettings}
       imageUrl={backgroundImageUrl}

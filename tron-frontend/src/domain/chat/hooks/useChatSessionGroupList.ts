@@ -3,10 +3,12 @@ import {
   createMockChatSession,
   deleteMockChatSession,
   getChatSessionGroups,
+  restoreMockChatSession,
   updateMockChatSession,
 } from "@/domain/chat/mock/data";
 import { useEffect, useMemo } from "react";
 import { chatApiEndpoints } from "@/domain/chat/api";
+import { restoreArchivedChatSession } from "@/domain/admin/api/archivedChatsApi";
 import type { ChatSession, ChatSessionGroup, CreateChatSessionInput, UpdateChatSessionInput } from "@/domain/chat/model";
 import { requestApi } from "@/shared/api/httpClient";
 import { rememberChatWorkspace } from "@/shared/api/chatWorkspaceScope";
@@ -136,6 +138,16 @@ export async function deleteChatSession(sessionCode: string): Promise<void> {
   });
   recentlyCreatedSessions.delete(sessionCode);
   notifyChatSessionsRemoved([sessionCode]);
+}
+
+export async function restoreChatSession(sessionCode: string): Promise<void> {
+  const session = getServiceDataSource("chat") === "mock"
+    ? restoreMockChatSession(sessionCode)
+    : await restoreArchivedChatSession(sessionCode);
+  window.dispatchEvent(new Event("tron:directories-changed"));
+  window.dispatchEvent(new CustomEvent("tron:chat-session-updated", {
+    detail: { workspaceCode: session.workspaceCode, sessionCode: session.sessionCode },
+  }));
 }
 
 export function updateChatSession(sessionCode: string, input: UpdateChatSessionInput): Promise<ChatSession> {

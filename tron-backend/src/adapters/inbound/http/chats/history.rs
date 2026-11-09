@@ -21,6 +21,7 @@ pub struct ReadHistoryRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadHistoryResponse {
+    pub compaction_details: std::collections::BTreeMap<String, Vec<CompactionBlockResponse>>,
     pub can_delete_turns: bool,
     pub session_id: String,
     pub version: String,
@@ -29,6 +30,14 @@ pub struct ReadHistoryResponse {
     pub records: fw::HistoryRecords,
     pub pending_interactions: Vec<fw::HistoryInteraction>,
     pub active_runs: Vec<fw::HistoryRun>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompactionBlockResponse {
+    id: String,
+    before_tokens: usize,
+    after_tokens: usize,
+    kind: &'static str,
 }
 impl From<fw::SessionHistory> for ReadHistoryResponse {
     fn from(mut h: fw::SessionHistory) -> Self {
@@ -40,6 +49,7 @@ impl From<fw::SessionHistory> for ReadHistoryResponse {
                 .collect();
         }
         Self {
+            compaction_details: Default::default(),
             can_delete_turns: h.can_delete_turns,
             session_id: h.session_id,
             version: h.version,
@@ -96,7 +106,7 @@ pub async fn read_history(
             .storage_framework()
             .await
             .map_err(|_| fw::StateError::Backend("framework unavailable".into()))?;
-        framework
+        let history = framework
             .history()
             .map_err(|_| fw::StateError::Backend("history unavailable".into()))?
             .read_session(
@@ -106,12 +116,23 @@ pub async fn read_history(
                     cursor: query.cursor,
                 },
             )
-            .await
+            .await?;
+        let details = crate::adapters::outbound::persistence::sqlite::compaction_details::read_compaction_details(
+            &state.agent_framework, &session, &history.records.steps,
+        ).await?;
+        let mut response = ReadHistoryResponse::from(history);
+        response.compaction_details = details.into_iter().map(|(id, blocks)| (id,
+            blocks.into_iter().map(|block| CompactionBlockResponse {
+                id: block.id, before_tokens: block.before_tokens,
+                after_tokens: block.after_tokens, kind: block.kind,
+            }).collect()
+        )).collect();
+        Ok::<_, fw::StateError>(response)
     }
     .await;
     match result {
         Ok(history) => {
-            Json(ApiResponse::success(ReadHistoryResponse::from(history))).into_response()
+            Json(ApiResponse::success(history)).into_response()
         }
         Err(error) => history_error(error, locale),
     }

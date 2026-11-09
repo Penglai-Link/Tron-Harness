@@ -10,7 +10,7 @@ export function MemoryRecordSummary({
   return (
     <div className="min-w-0">
       <button
-        className="block w-full truncate text-left text-base font-medium leading-6 tracking-normal text-[#1a0dab] hover:underline"
+        className="block w-full truncate text-left text-base font-medium leading-6 tracking-normal text-[var(--color-primary)] underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]"
         title={memory.title}
         type="button"
         onClick={onOpen}

@@ -208,6 +208,9 @@ export interface ChatUserInputLabels {
 }
 
 export interface ChatRunNoticeLabels {
+  compactionBlock?: (block: { id: string; beforeTokens: number; afterTokens: number; kind: "compressed" | "summary" }) => string;
+  compactionNoChanges?: string;
+  compactionDetailsUnavailable?: string;
   presentationIncomplete?: string;
   presentationIncompleteDetail?: string;
   compactionRequested: string;

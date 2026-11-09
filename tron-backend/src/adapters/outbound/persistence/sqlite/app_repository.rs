@@ -114,6 +114,15 @@ impl SqliteAppRepositorySql<'_> {
 }
 
 impl AppRepository for SqliteAppRepositorySql<'_> {
+    fn delete_app(&mut self, app_code: &str) -> Result<(), AppError> {
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
+        let linked: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM project_app_links WHERE app_code=?1 UNION ALL SELECT 1 FROM task_app_links WHERE app_code=?1)", [app_code], |row| row.get(0)).map_err(storage_error)?;
+        if linked { return Err(AppError::InUse); }
+        tx.execute("DELETE FROM app_tags WHERE app_code=?1", [app_code]).map_err(storage_error)?;
+        if tx.execute("DELETE FROM apps WHERE app_code=?1", [app_code]).map_err(storage_error)? == 0 { return Err(AppError::NotFound); }
+        tx.commit().map_err(storage_error)
+    }
+
     fn list_apps(&mut self) -> Result<Vec<App>, AppError> {
         self.read_apps(None)
     }
@@ -286,6 +295,11 @@ impl SqliteAppRepository {
     }
 }
 impl AppRepository for SqliteAppRepository {
+    fn delete_app(&mut self, app_code: &str) -> Result<(), AppError> {
+        let app_code = app_code.to_owned();
+        self.connection.call(move |connection| SqliteAppRepositorySql { connection }.delete_app(&app_code), || AppError::StorageFailure)
+    }
+
     fn list_apps(&mut self) -> Result<Vec<App>, AppError> {
         self.connection.call(
             move |connection| SqliteAppRepositorySql { connection }.list_apps(),

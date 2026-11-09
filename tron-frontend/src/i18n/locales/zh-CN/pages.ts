@@ -112,7 +112,6 @@ export const pages = {
   "Automation {{code}} restored to {{status}}": "自动化 {{code}} 已恢复，当前状态：{{status}}",
   "Automation {{code}} archived": "自动化 {{code}} 已归档",
   "Automation lifecycle update failed": "无法更新自动化生命周期状态",
-  "Automation list refreshed": "自动化列表已刷新",
   "dude": {
 "soulSection":"灵魂","soulBody":"灵魂正文","soulEdit":"编辑","soulPreview":"预览","soulHelp":"性格、表达、相处偏好和稳定原则。","soulSaved":"灵魂已保存","soulStates":{"Uninitialized": "尚未建立灵魂", "AwaitingUser": "等待你的回答", "Ready": "已建立灵魂"},
   "selectDude": "切换 Dude",
@@ -1014,6 +1013,7 @@ export const pages = {
     terminal_list: "查询终端",
   },
   apps: {
+    permanentDelete: {"action": "永久删除", "description": "永久删除应用“{{name}}”及其标签，不可撤销。本地目录、代码仓库和聊天记录保留。", "success": "应用已永久删除", "failed": "删除应用失败", "inUse": "请先解除主题和任务与此应用的关联，再永久删除。"},
     actions: {
       archive: "归档",
       cancel: "取消",
@@ -1111,7 +1111,6 @@ export const pages = {
       createFailed: "应用创建失败。",
       created: "{{name}} 已创建",
       lifecycleUpdateFailed: "应用生命周期更新失败。",
-      refreshed: "应用列表已刷新",
       restoreBeforeEdit: "请先恢复应用，再进行编辑。",
       restored: "{{name}} 已恢复",
       updated: "{{name}} 已更新",
@@ -1376,7 +1375,6 @@ export const pages = {
       deleteDescription: "删除后无法恢复。",
       deleteFailed: "资源删除失败。",
       deleteTitle: "删除 {{name}}？",
-      refreshed: "资源已刷新",
     },
     pagination: {
       itemLabel: "资源",
@@ -1810,6 +1808,10 @@ export const pages = {
       working: "工作中",
       failed: "运行失败",
       stopped: "已停止",
+      compactionBlock: "{{name}}已压缩 · {{before}} → {{after}} tokens",
+      compactionSummary: "{{name}}已生成 · {{after}} tokens",
+      compactionNoChanges: "本次没有需要压缩的记忆块。",
+      compactionDetailsUnavailable: "这次压缩未记录记忆块详情。",
       compactionInterrupted: "本次运行已结束，未收到压缩完成事件",
       askingQuestions: "正在询问 {{count}} 个问题",
       askedQuestions: "已询问 {{count}} 个问题",
@@ -3089,7 +3091,7 @@ export const pages = {
         label: "切换到右侧标签页",
       },
       newTopic: { label: "新建主题", description: "打开主题创建对话框。" },
-      newDirectory: { label: "添加目录", description: "选择并添加工作目录。" },
+      newDirectory: { label: "添加工作区", description: "选择本地目录并添加为工作区。" },
       newSession: { label: "新建随聊", description: "打开当前空间的随聊草稿。" },
       openNotifications: {
         description: "打开通知页面。",
@@ -3864,7 +3866,6 @@ export const pages = {
       archived: "{{title}} 已归档。",
       created: "{{title}} 已创建",
       disabled: "{{title}} 已停用",
-      refreshed: "记忆已刷新。",
       saved: "{{title}} 已保存",
     },
     reviewValue: {
@@ -4549,7 +4550,6 @@ export const pages = {
     kanban: {
       allPriorities: "全部优先级",
       errors: { status: "任务状态更新失败" },
-      messages: { refreshed: "任务看板已刷新" },
       priority: "优先级",
       priorityFilter: "任务优先级筛选",
       scale: "任务看板缩放",
@@ -4747,11 +4747,8 @@ export const pages = {
       title: "已选知识库",
     },
     messages: {
-      catalogRefreshed: "知识库目录已刷新。",
-      catalogRefreshedFromApi: "已从 RAG API 刷新知识库。",
       createOpened: "已打开新建知识库面板。",
       policyOpened: "已打开 {{name}} 的写入策略。",
-      refreshedFromApi: "已从 RAG API 刷新 {{name}}。",
       syncStarted: "已为 {{name}} 启动同步任务。",
     },
     metrics: {

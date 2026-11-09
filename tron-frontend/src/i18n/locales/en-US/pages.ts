@@ -112,7 +112,6 @@ export const pages = {
   "Automation {{code}} restored to {{status}}": "Automation {{code}} restored to {{status}}",
   "Automation {{code}} archived": "Automation {{code}} archived",
   "Automation lifecycle update failed": "Automation lifecycle update failed",
-  "Automation list refreshed": "Automation list refreshed",
   "dude": {
 "soulSection":"Soul","soulBody":"Soul","soulEdit":"Edit","soulPreview":"Preview","soulHelp":"Personality, expression, preferences and lasting principles.","soulSaved":"Soul saved","soulStates":{"Uninitialized": "Not established", "AwaitingUser": "Awaiting your answer", "Ready": "Ready"},
   "selectDude": "Switch Dude",
@@ -1069,6 +1068,7 @@ export const pages = {
     terminal_list: "List terminals",
   },
   apps: {
+    permanentDelete: {"action": "Permanently delete", "description": "Permanently delete “{{name}}” and its tags. This cannot be undone. Local files, repositories and chat history are kept.", "success": "App permanently deleted", "failed": "Failed to delete app", "inUse": "Remove topic and task associations before permanently deleting this app."},
     actions: {
       archive: "Archive",
       cancel: "Cancel",
@@ -1169,7 +1169,6 @@ export const pages = {
       createFailed: "App could not be created.",
       created: "{{name}} created",
       lifecycleUpdateFailed: "App lifecycle update failed.",
-      refreshed: "App registry refreshed",
       restoreBeforeEdit: "Restore this app before editing.",
       restored: "{{name}} restored",
       updated: "{{name}} updated",
@@ -1437,7 +1436,6 @@ export const pages = {
       deleteDescription: "This cannot be undone.",
       deleteFailed: "Resource could not be deleted.",
       deleteTitle: "Delete {{name}}?",
-      refreshed: "Resources refreshed",
     },
     pagination: {
       itemLabel: "resources",
@@ -1879,6 +1877,10 @@ export const pages = {
       working: "Working",
       failed: "Run failed",
       stopped: "Run stopped",
+      compactionBlock: "{{name}} compacted · {{before}} → {{after}} tokens",
+      compactionSummary: "{{name}} generated · {{after}} tokens",
+      compactionNoChanges: "No memory blocks needed compaction.",
+      compactionDetailsUnavailable: "Block details were not recorded for this compaction.",
       compactionInterrupted:
         "Run ended before compaction completion was reported",
       askingQuestions: "Asking {{count}} questions",
@@ -3183,7 +3185,7 @@ export const pages = {
         label: "Next tab",
       },
       newTopic: { label: "New topic", description: "Open the topic creation dialog." },
-      newDirectory: { label: "Add directory", description: "Choose and add a working directory." },
+      newDirectory: { label: "Add project", description: "Choose a local directory to add as a project." },
       newSession: { label: "New quick chat", description: "Open a quick chat draft in the current workspace." },
       openNotifications: {
         description: "Open the notifications page.",
@@ -3987,7 +3989,6 @@ export const pages = {
       archived: "{{title}} archived.",
       created: "{{title}} created",
       disabled: "{{title}} disabled",
-      refreshed: "Memory refreshed.",
       saved: "{{title}} saved",
     },
     reviewValue: {
@@ -4720,7 +4721,6 @@ export const pages = {
     kanban: {
       allPriorities: "All priorities",
       errors: { status: "Task status could not be updated" },
-      messages: { refreshed: "Task board refreshed" },
       priority: "Priority",
       priorityFilter: "Task priority filter",
       scale: "Task board scale",
@@ -4933,11 +4933,8 @@ export const pages = {
       title: "Selected KnowledgeBase",
     },
     messages: {
-      catalogRefreshed: "Knowledge base catalog refreshed.",
-      catalogRefreshedFromApi: "Knowledge bases refreshed from the RAG API.",
       createOpened: "Create KnowledgeBase drawer opened.",
       policyOpened: "Ingestion policy opened for {{name}}.",
-      refreshedFromApi: "Refreshed {{name}} from the RAG API.",
       syncStarted: "Sync job started for {{name}}.",
     },
     metrics: {

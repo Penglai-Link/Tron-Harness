@@ -2,7 +2,7 @@ import { Archive, Copy, Folder, FolderInput, LoaderCircle, MoreHorizontal, Penci
 import { memo, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
-import { archiveChatSession, deleteChatSession, updateChatSession } from "@/domain/chat/hooks";
+import { archiveChatSession, deleteChatSession, restoreChatSession, updateChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
 import { moveChatSession, setChatWorkingDirectory } from "@/domain/chat/api/sessionLocationApi";
 import { listDirectories, type DirectoryRecord } from "@/domain/directory/api/directoryApi";
@@ -12,23 +12,24 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/toast";
+import { toastManager, useToast } from "@/components/ui/toast";
 import { cn } from "@/shared/lib/utils";
 import { useTabStore } from "@/store/tabStore";
 import ActionButton from "./ActionButton";
+import { useSessionRunning } from "../hooks/useSessionRunning";
 import Item from "./Item";
 
 const MessageItem = ({
-  active, onRemovePin, onTogglePin, pinned, running, session,
+  active, onRemovePin, onTogglePin, pinned, session,
 }: {
   active: boolean;
   onNavigate: (path: string) => void;
   onRemovePin: () => void;
   onTogglePin: () => void;
   pinned: boolean;
-  running: boolean;
   session: ChatSession;
 }) => {
+  const running = useSessionRunning(session.sessionCode);
   const toast = useToast();
   const { t } = useTranslation("shell");
   const [pendingAction, setPendingAction] = useState<"archive" | "delete" | null>(null);
@@ -81,7 +82,49 @@ const MessageItem = ({
     setPendingAction("archive");
     try {
       await archiveChatSession(session.sessionCode);
-      toast.success(t("shell:chatSidebar.session.archived"));
+      // Archiving unmounts this row; keep undo state with the toast itself.
+      let undoPending = false;
+      let restored = false;
+      const undoAction = {
+        children: t("shell:chatSidebar.session.undoArchive"),
+        onClick: () => { void undoArchive(); },
+      };
+      const toastId = toastManager.add({
+        type: "success",
+        title: session.title,
+        description: t("shell:chatSidebar.session.archived"),
+        timeout: 8000,
+        actionProps: undoAction,
+      });
+      async function undoArchive() {
+        if (undoPending || restored) return;
+        undoPending = true;
+        toastManager.update(toastId, {
+          type: "loading",
+          description: t("shell:chatSidebar.session.restoring"),
+          timeout: 0,
+          actionProps: { children: undoAction.children, disabled: true },
+        });
+        try {
+          await restoreChatSession(session.sessionCode);
+          restored = true;
+          toastManager.update(toastId, {
+            type: "success",
+            description: t("pages:archivedChats.restored"),
+            timeout: 3000,
+            actionProps: undefined,
+          });
+        } catch (error) {
+          toastManager.update(toastId, {
+            type: "error",
+            description: error instanceof Error ? error.message : t("pages:archivedChats.restoreFailed"),
+            timeout: 8000,
+            actionProps: undoAction,
+          });
+        } finally {
+          undoPending = false;
+        }
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.session.archiveFailed"));
     } finally {
@@ -164,6 +207,7 @@ const MessageItem = ({
             }}
           >
             {pinned ? <Pin size={12} className="shrink-0 opacity-70" aria-label={t("shell:chatSidebar.session.pinned")} /> : null}
+            {running ? <LoaderCircle aria-label={t("common:status.running", "Running")} size={14} className="shrink-0 animate-spin" /> : null}
             <span className="min-w-0 truncate">{session.title}</span>
           </Link>
         }
@@ -173,7 +217,6 @@ const MessageItem = ({
             "group-hover/session:pointer-events-auto group-hover/session:opacity-100",
             "group-focus-within/session:pointer-events-auto group-focus-within/session:opacity-100",
             "has-[button[data-popup-open]]:pointer-events-auto has-[button[data-popup-open]]:opacity-100",
-            running && "pointer-events-auto opacity-100",
           )}>
             <DropdownMenu>
               <DropdownMenuTrigger render={
@@ -207,7 +250,6 @@ const MessageItem = ({
             <ActionButton needHover className="size-6 shrink-0 justify-center rounded hover:bg-sidebar-accent" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void archive(); }} disabled={Boolean(pendingAction) || running} aria-label={t("common:actions.archive", "Archive")}>
               {pendingAction === "archive" ? <LoaderCircle size={14} className="animate-spin" aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
             </ActionButton>
-            {running ? <LoaderCircle aria-label={t("common:status.running", "Running")} size={14} className="animate-spin" /> : null}
           </div>
         }
       />

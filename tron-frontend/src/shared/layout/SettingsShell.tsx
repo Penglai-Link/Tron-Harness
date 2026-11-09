@@ -134,13 +134,13 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
             </div>
           </div>
           <Link to={returnTo} className={buttonVariants({ variant: "secondary" })}>
-            {t("shell:settings.back")}
+            {t("shell:settings.exit")}
           </Link>
         </div>
       </header>
 
       <div className="tron-settings-body">
-        <aside data-theme-anchor="sidebar" className="min-h-0 min-w-0 px-4 pb-4 lg:overflow-y-auto lg:overscroll-y-contain">
+        <aside data-theme-anchor="sidebar" className="min-h-0 min-w-0 px-4 pb-4 lg:px-2 lg:overflow-y-auto lg:overscroll-y-contain">
           <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
             {t("shell:settings.navigation")}
           </p>
@@ -162,8 +162,8 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
                   state={{ from: returnTo }}
                   aria-current={selected ? "page" : undefined}
                 >
-                  {Icon ? <Icon size={16} aria-hidden="true" /> : null}
-                  <span>{t(item.translationKey)}</span>
+                  {Icon ? <Icon size={16} className="shrink-0" aria-hidden="true" /> : null}
+                  <span className="truncate" title={t(item.translationKey)}>{t(item.translationKey)}</span>
                 </Link>
               );
             })}
@@ -179,7 +179,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
                   <button
                     type="button"
                     className={cn(
-                      "flex w-full items-center justify-between gap-3 px-2 py-1 text-left transition-colors",
+                      "group/settings-group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)]",
                       isActiveGroup
                         ? "text-[var(--color-on-surface)]"
                         : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]",
@@ -191,7 +191,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
                     <span className="text-[11px] font-semibold uppercase tracking-[0.05em]">
                       {t(group.translationKey)}
                     </span>
-                    <GroupChevron size={16} aria-hidden="true" />
+                    <GroupChevron size={14} aria-hidden="true" className="shrink-0 transition-opacity motion-reduce:transition-none [@media(hover:hover)]:opacity-0 group-hover/settings-group:opacity-100 group-focus-visible/settings-group:opacity-100" />
                   </button>
                   {expanded ? (
                     <div id={`settings-group-${group.groupKey}`} className="mt-1 space-y-1">
@@ -203,7 +203,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
                           <Link
                             key={item.href}
                             className={cn(
-                              "flex items-center gap-[12px] rounded-lg px-3 py-2 text-sm transition-colors",
+                              "flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors",
                               selected
                                 ? "bg-[var(--color-surface-container-high)] font-medium text-[var(--color-on-surface)]"
                                 : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
@@ -212,8 +212,8 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
                             state={{ from: returnTo }}
                             aria-current={selected ? "page" : undefined}
                           >
-                            {Icon ? <Icon size={16} aria-hidden="true" /> : null}
-                            <span>{t(item.translationKey)}</span>
+                            {Icon ? <Icon size={16} className="shrink-0" aria-hidden="true" /> : null}
+                            <span className="truncate" title={t(item.translationKey)}>{t(item.translationKey)}</span>
                           </Link>
                         );
                       })}

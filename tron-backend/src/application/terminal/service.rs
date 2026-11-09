@@ -194,6 +194,7 @@ fn map_app_error(error: AppError) -> TerminalError {
         | AppError::NameRequired
         | AppError::LocalDirectoryRequired
         | AppError::DuplicateName
+        | AppError::InUse
         | AppError::ArchivedMutationDenied => TerminalError::AppNotFound,
     }
 }

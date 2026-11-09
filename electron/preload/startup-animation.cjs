@@ -9,14 +9,9 @@ module.exports = function observeStartupAnimation({ ipcRenderer, window, documen
         theme = nextTheme;
         ipcRenderer.send("tron-animation:theme", theme);
       }
-      // A full-window startup view can make Chromium mark this page hidden.
-      // The animation stops while hidden, so waiting for its first frame would
-      // keep the view in place forever. Reveal the mounted scene in that case.
-      const hiddenScene = document.hidden && document.querySelector(".black-hole-scene");
-      if (!ready && (hiddenScene || document.querySelector(".black-hole-ready, .black-hole-scene[data-renderer='fallback'], [data-tron-entry-ready]"))) {
+      if (!ready && document.querySelector("[data-tron-entry-ready]")) {
         ready = true;
-        if (hiddenScene) ipcRenderer.send("tron-animation:ready");
-        else window.requestAnimationFrame(() => ipcRenderer.send("tron-animation:ready"));
+        window.requestAnimationFrame(() => ipcRenderer.send("tron-animation:ready"));
       }
     };
     const observer = new MutationObserver(update);

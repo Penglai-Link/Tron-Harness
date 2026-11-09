@@ -24,3 +24,9 @@ Tron 页面通过 `AgentChatWindow` 保留完整产品输入与会话范围。�
 模型 Code、质量路由、系统 Agent 会话、pageContext、附件引用、expectedRunCode、AbortSignal 以及恢复回答都由转换层保留。
 
 终端使用 `toUiEvent` 和 `fromUiResume` 处理同一套提问/恢复字段，PTY 生命周期由 Tron 后端管理。
+
+压缩详情：历史接口按步骤 ID 返回 `compactionDetails`，适配器映射为
+`HistoryStep.compaction.blocks`；实时流透传 `agent.memory.compaction.details`。
+记忆块名称与结果由宿主的 notices 文案回调国际化，历史摘要生成单独标注。
+
+Agent UI 依赖统一固定为公共 npm 的 `1.0.0-preview.5`，包含压缩详情展示能力。

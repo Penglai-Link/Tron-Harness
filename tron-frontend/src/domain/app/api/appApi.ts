@@ -90,3 +90,7 @@ export function restoreApp(appCode: string) {
     pathParams: { appCode },
   });
 }
+
+export function deleteApp(appCode: string) {
+  return requestApi<{ appCode: string }>("DELETE /api/v1/apps/{appCode}", { pathParams: { appCode } });
+}

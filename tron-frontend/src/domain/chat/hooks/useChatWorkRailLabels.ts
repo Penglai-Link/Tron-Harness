@@ -1,3 +1,4 @@
+import { contextBlockName } from "@/shared/context/contextBlockPresentation";
 import { isRawToolNameOverride, toolCommandLinePreview, toolDisplayName, type ToolActionSummary } from "@personai/agent-ui-chat-core";
 import type { ChatWorkRailLabels } from "@tron/chat-core";
 import { fetchToolDomains, listTools } from "@/domain/agent/api";
@@ -106,6 +107,12 @@ export function useChatWorkRailLabels() {
         resolveName: resolveToolName,
       },
       notices: {
+        compactionBlock: (block) => t(block.kind === "summary" ? "chat.workRail.compactionSummary" : "chat.workRail.compactionBlock", {
+          name: contextBlockName(block.id, (key, options) => t(key, options)),
+          before: number.format(block.beforeTokens), after: number.format(block.afterTokens),
+        }),
+        compactionNoChanges: t("chat.workRail.compactionNoChanges"),
+        compactionDetailsUnavailable: t("chat.workRail.compactionDetailsUnavailable"),
         mcpUnavailable: t("chat.shortTermMemory.contextPanel.runtimeNotices.mcp_unavailable.title"),
         presentationIncomplete: t("chat.shortTermMemory.contextPanel.runtimeNotices.presentation_incomplete.title"),
         presentationIncompleteDetail: t("chat.shortTermMemory.contextPanel.runtimeNotices.presentation_incomplete.detail"),

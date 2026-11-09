@@ -38,7 +38,7 @@ export function useChatInputSuggestions(agentCode?: string, sessionCode?: string
     if (query.error) feedback.error(query.error.message, "Chat suggestions failed");
   }, [query.error, feedback.error, t]);
   return useMemo<Pick<ChatClientConfig, "inputSuggestions" | "inputSuggestionLabels" | "skillSuggestionTriggers">>(() => ({
-    skillSuggestionTriggers: ["$"],
+    skillSuggestionTriggers: ["/", "$"],
     inputSuggestions: query.error ? [] : [
       ...(query.data?.commands ?? []).map(name => ({ kind: "command" as const, name, description: t(`chat.management.composer.${name}Suggestion`, { defaultValue: "" }) })),
       ...(query.data?.skills ?? []).map(skill => ({ ...skill, kind: "skill" as const })),

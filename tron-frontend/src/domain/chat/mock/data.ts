@@ -515,6 +515,14 @@ export function archiveMockChatSession(sessionCode: string): ChatSession {
   return { ...session };
 }
 
+export function restoreMockChatSession(sessionCode: string): ChatSession {
+  const session = sessions.find((item) => item.sessionCode === sessionCode);
+  if (!session) throw new Error("chat session was not found");
+  session.status = "ACTIVE";
+  session.updatedAt = new Date().toISOString();
+  return { ...session };
+}
+
 export function deleteMockChatSession(sessionCode: string): ChatSession {
   const sessionIndex = sessions.findIndex((item) => item.sessionCode === sessionCode);
   if (sessionIndex < 0) {

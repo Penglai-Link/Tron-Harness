@@ -54,6 +54,7 @@ pub trait AppRepository: Send {
     fn tags_for_apps(&mut self, codes: &[String]) -> Result<Vec<AppTag>, AppError>;
     fn next_id(&mut self) -> Result<i64, AppError>;
     fn create_app(&mut self, app: &App) -> Result<(), AppError>;
+    fn delete_app(&mut self, app_code: &str) -> Result<(), AppError>;
     fn update_app(&mut self, app: &App) -> Result<(), AppError>;
     fn replace_app_tags(
         &mut self,
@@ -70,6 +71,11 @@ pub struct AppService {
 }
 
 impl AppService {
+    pub fn delete_app(&self, app_code: &str) -> Result<(), AppError> {
+        validate_app_code(app_code)?;
+        self.repository.lock().expect("app repository mutex poisoned").delete_app(app_code.trim())
+    }
+
     pub fn new(repository: impl AppRepository + 'static, workspaces: WorkspaceService) -> Self {
         Self::with_id_generator(
             repository,

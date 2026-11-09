@@ -5,6 +5,7 @@ mod app_repository;
 mod automation_repository;
 mod automation_repository_helpers;
 mod chat_repository;
+pub(crate) mod compaction_details;
 mod connector_repository;
 mod directory_repository;
 pub(crate) mod framework_storage;

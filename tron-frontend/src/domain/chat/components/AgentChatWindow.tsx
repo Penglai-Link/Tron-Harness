@@ -119,7 +119,10 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     }) ?? Promise.resolve(false),
   }), []);
   const { preferences: workPreferences } = useAguiWorkReplayPreferences();
-  const inputSuggestions = useChatInputSuggestions(config.agentCode, initialSession?.sessionCode, initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined, config.workspaceCode, knowledgeBaseId);
+  const suggestionDudeCode = activeSession?.ownerDudeCode ?? initialSession?.ownerDudeCode
+    ?? (initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined);
+  const inputSuggestions = useChatInputSuggestions(config.agentCode, activeSessionCode ?? initialSession?.sessionCode,
+    suggestionDudeCode ?? undefined, config.workspaceCode ?? activeSession?.workspaceCode, knowledgeBaseId);
   const { t, i18n } = useTranslation("pages");
   const workRailLabels = useChatWorkRailLabels();
   const historyLabels = useChatHistoryLabels();
@@ -189,6 +192,11 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   const runStateCallback = useRef(onRunStateChange);
   runStateCallback.current = onRunStateChange;
   const handleRun = useCallback((value: Ui.ChatRuntimeRunState) => {
+    if (value.sessionId && !value.loading) {
+      window.dispatchEvent(new CustomEvent("tron:chat-session-run-state", {
+        detail: { sessionCode: value.sessionId, active: value.active },
+      }));
+    }
     setMetricsRunSessionCode(value.active ? value.sessionId ?? null : null);
     if (wasRunActiveRef.current && !value.active && value.sessionId) {
       void refreshComposerMetrics(value.sessionId);

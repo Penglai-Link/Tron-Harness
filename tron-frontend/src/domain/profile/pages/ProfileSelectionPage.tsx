@@ -1,9 +1,4 @@
-import { useAwakeningBackdrop } from "@/domain/dude/awakening/HomeArrivalVeil";
-import { useMotionPreference } from "@/shared/motion/motionPreferences";
-import { useAppEntranceAnimation } from "@/shared/motion/appEntrancePreferences";
-import { BlackHole } from "@/domain/dude/awakening/BlackHole";
 import { ParticlesBackground } from "@/components/particles-bg/ParticlesBackground";
-import { getAwakening } from "@/domain/dude/api/dudeApi";
 import { Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -83,73 +78,8 @@ export function ProfileSelectionPage() {
     supportedLocales.find((locale) => locale.code !== currentLocale)?.code ??
     currentLocale;
   const navigate = useNavigate();
-  const { beginArrival } = useAwakeningBackdrop();
-  const motion = useMotionPreference();
-  const entranceAnimation = useAppEntranceAnimation();
-  const [animateEntry, setAnimateEntry] = useState(entranceAnimation);
-  const enteringRef = useRef(false);
-  const enteredAt = useRef(performance.now());
-  const entryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mounted = useRef(true);
-  const [scenePhase, setScenePhase] = useState<"approach" | "login" | "dive">(
-    entranceAnimation ? "approach" : "login"
-  );
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      if (entryTimer.current) clearTimeout(entryTimer.current);
-    };
-  }, []);
-  useEffect(() => {
-    if (!animateEntry) return;
-    const reveal = setTimeout(
-      () => setScenePhase((phase) => (phase === "approach" ? "login" : phase)),
-      2400
-    );
-    return () => clearTimeout(reveal);
-  }, [animateEntry]);
   async function enterWorkspace() {
-    if (enteringRef.current) return;
-    enteringRef.current = true;
-    try {
-      const awakening = await getAwakening();
-      if (!mounted.current) return;
-      // Starting the guide only creates its session. Resume it until the soul
-      // is ready, unless the user explicitly chose to skip initialization.
-      const enterHome = awakening.state === "Ready" || awakening.deferred;
-      if (awakening.state === "Ready" && !entranceAnimation) {
-        navigate("/workspace", { replace: true });
-        return;
-      }
-      if (!animateEntry) {
-        // An unfinished guide still owns its entrance, regardless of the
-        // returning-user preference. Start its camera from the distant pose.
-        enteredAt.current = performance.now();
-        setScenePhase("approach");
-        setAnimateEntry(true);
-      }
-      // Auto-login can finish while the approach is still playing. Complete the
-      // approach first, then cross the horizon; never jump between camera poses.
-      const delay = Math.max(0, 2400 - (performance.now() - enteredAt.current));
-      entryTimer.current = setTimeout(() => {
-        setScenePhase("dive");
-        entryTimer.current = setTimeout(() => {
-          if (enterHome) {
-            beginArrival(motion !== "system" || matchMedia("(prefers-reduced-motion: reduce)").matches, false);
-          }
-          navigate(
-            enterHome ? "/workspace" : "/awakening?arrival=inside",
-            {
-              replace: true,
-            }
-          );
-        }, 1800);
-      }, delay);
-    } catch (reason) {
-      enteringRef.current = false;
-      setError(reason instanceof Error ? reason.message : String(reason));
-    }
+    navigate("/workspace", { replace: true });
   }
   const authStatus = useAuthStore((state) => state.status);
   const [searchParams] = useSearchParams();
@@ -186,13 +116,6 @@ export function ProfileSelectionPage() {
       fetchBootstrapProfileStatus(controller.signal),
     ])
       .then(([nextProfiles, nextBootstrap]) => {
-        // With no authorized account this is the first entrance, before soul
-        // status can be queried. Returning-user preferences must not hide it.
-        if (!animateEntry && nextProfiles.every((profile) => profile.status === "PENDING")) {
-          enteredAt.current = performance.now();
-          setScenePhase("approach");
-          setAnimateEntry(true);
-        }
         setProfiles(nextProfiles);
         setBootstrap(nextBootstrap);
         setSelectedProfileId(
@@ -450,14 +373,12 @@ export function ProfileSelectionPage() {
   return (
     <main
       data-theme-anchor="app-shell"
-      data-camera-phase={scenePhase}
-      data-tron-entry-ready={!animateEntry && !waitingForAutoEntry ? "" : undefined}
+      data-tron-entry-ready={!waitingForAutoEntry ? "" : undefined}
       className="tron-login relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--color-background)] px-6 text-[var(--color-on-surface)]"
     >
-      {animateEntry ? <BlackHole arriving diving={scenePhase === "dive"} /> : <ParticlesBackground />}
+      <ParticlesBackground />
       <section
         data-theme-anchor="card"
-        inert={scenePhase !== "login"}
         className="tron-login-panel relative z-10 w-full max-w-md rounded-2xl border border-[var(--color-outline)] bg-[var(--color-surface)] p-8 shadow-sm"
       >
         <header className="flex items-start justify-between gap-3">

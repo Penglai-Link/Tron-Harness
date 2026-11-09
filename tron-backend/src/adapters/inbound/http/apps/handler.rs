@@ -80,3 +80,14 @@ pub async fn restore_app(State(apps): State<AppService>, Path(app_code): Path<St
         Err(error) => app_error_response(error),
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteAppResponse { app_code: String }
+
+pub async fn delete_app(State(apps): State<AppService>, Path(app_code): Path<String>) -> Response {
+    match apps.delete_app(&app_code) {
+        Ok(()) => Json(ApiResponse::success(DeleteAppResponse { app_code })).into_response(),
+        Err(error) => app_error_response(error),
+    }
+}
