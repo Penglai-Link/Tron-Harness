@@ -45,6 +45,8 @@ mod host_sudo;
 pub(crate) use host_sudo::{PendingSudoInput, SudoInputError};
 #[path = "host_external.rs"]
 mod host_external;
+#[path = "host_navigation.rs"]
+pub(super) mod host_navigation;
 #[path = "host_import.rs"]
 mod host_import;
 #[path = "host_interactions.rs"]
@@ -92,6 +94,7 @@ struct Host {
     skill_registry: OnceCell<crate::application::skill::SkillRegistryService>,
     prompt_service: OnceCell<crate::application::prompt::PromptService>,
     capability_resources: OnceCell<crate::application::capability::CapabilityResources>,
+    navigation: OnceCell<crate::application::navigation::NavigationService>,
     skills: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     installed_packs: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     tools_enabled: Arc<std::sync::atomic::AtomicBool>,
@@ -371,6 +374,7 @@ impl FrameworkHost {
                 &self.0.extension_state.read().unwrap(),
             )?;
         }
+        if let Some(navigation) = self.0.navigation.get() { navigation.set_pack_enabled(&pack.id, false)?; }
         if let Some(resources) = self.0.capability_resources.get() {
             resources.transition(&pack.id, false, &[])?;
         }
@@ -392,6 +396,7 @@ impl FrameworkHost {
             return Err(error);
         }
         self.sync_pack_indexes(&pack.id, false).await?;
+        self.sync_navigation_packs()?;
         self.invalidate_environment().await?;
         self.framework().await.map_err(|e| e.to_string())?;
         Ok(pack)
@@ -460,6 +465,7 @@ impl FrameworkHost {
             vec![]
         };
         let result = async {
+            if let Some(navigation) = self.0.navigation.get() { navigation.set_pack_enabled(id, enabled)?; }
             if let Some(resources) = self.0.capability_resources.get() {
                 resources.transition(id, enabled, &agents)?;
             }
@@ -480,6 +486,7 @@ impl FrameworkHost {
         .await;
         if let Err(error) = result {
             packs.insert(id.into(), false);
+            if let Some(navigation) = self.0.navigation.get() { let _ = navigation.set_pack_enabled(id, false); }
             if let Some(resources) = self.0.capability_resources.get() {
                 let _ = resources.transition(id, false, &agents);
             }
@@ -516,6 +523,7 @@ impl FrameworkHost {
         let mut packs = self.0.capability_state.read().unwrap().clone();
         let extensions = self.0.extension_state.read().unwrap().clone();
         packs.insert(id.into(), false);
+        if let Some(navigation) = self.0.navigation.get() { navigation.set_pack_enabled(id, false)?; }
         persist_capability_state(&self.0.state_path, &packs, &extensions)?;
         *self.0.capability_state.write().unwrap() = packs;
         if let Some(resources) = self.0.capability_resources.get() {
@@ -557,6 +565,7 @@ impl FrameworkHost {
         if let Some(resources) = self.0.capability_resources.get() {
             resources.remove(id)?;
         }
+        if let Some(navigation) = self.0.navigation.get() { navigation.remove_pack(id)?; }
         self.0.skills.write().unwrap().remove(id);
         // Retain provider IDs as a disabled deny list until the initialized environment closes.
         let safe = id
@@ -750,6 +759,7 @@ impl FrameworkHost {
             skill_registry: OnceCell::new(),
             prompt_service: OnceCell::new(),
             capability_resources: OnceCell::new(),
+            navigation: OnceCell::new(),
             skills: Default::default(),
             installed_packs: Default::default(),
             tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -802,6 +812,7 @@ impl FrameworkHost {
             skill_registry: OnceCell::new(),
             prompt_service: OnceCell::new(),
             capability_resources: OnceCell::new(),
+            navigation: OnceCell::new(),
             skills: Default::default(),
             installed_packs: Default::default(),
             tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),

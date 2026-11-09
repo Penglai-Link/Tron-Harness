@@ -328,3 +328,25 @@ pub(super) fn plugin_display_name(id: &str, locale: &str) -> Option<&'static str
     };
     Some(if locale.starts_with("zh") { chinese } else { english })
 }
+
+
+pub(super) fn navigation_contents(path: &std::path::Path, manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest, locale: &str) -> Result<Vec<CapabilityContentInfo>, String> {
+    let navigation = super::super::host::host_navigation::read_navigation(path, manifest)?;
+    let mut items = Vec::new();
+    for domain in &navigation.domains {
+        let mut item = content("NavigationDomain", &domain.code, domain.description.localized().value(locale));
+        item.display_name = domain.name.localized().value(locale).into();
+        items.push(item);
+    }
+    for menu in &navigation.menus {
+        let mut item = content("NavigationMenu", &menu.code, menu.description.localized().value(locale));
+        item.display_name = menu.name.localized().value(locale).into();
+        items.push(item);
+    }
+    for (domain, layout) in &navigation.layouts {
+        let mut item = content("NavigationLayout", domain, "");
+        item.provides = layout.iter().map(|item| item.menu_code.clone()).collect();
+        items.push(item);
+    }
+    Ok(items)
+}

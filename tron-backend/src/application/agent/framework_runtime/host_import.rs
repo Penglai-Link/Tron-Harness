@@ -12,6 +12,12 @@ impl FrameworkHost {
                 .install_bytes(&bytes, InstallPolicy::Development)
                 .map_err(|e| e.to_string())?;
             let id = &installed.manifest.id;
+            let contribution = super::host_navigation::read_navigation(&installed.path, &installed.manifest)?;
+            if let Some(navigation) = host.0.navigation.get() {
+                navigation.validate_pack(id, &contribution)?;
+            } else if !contribution.domains.is_empty() || !contribution.menus.is_empty() {
+                return Err("navigation service is unavailable".into());
+            }
             if let Some(skills) = host.0.skill_registry.get() {
                 let roots = installed
                     .manifest

@@ -68,6 +68,7 @@ impl NavigationService {
         let domain = NavigationDomain {
             id,
             domain_code,
+            provider_pack_id: None,
             name: command.name,
             description: command.description,
             built_in: false,
@@ -109,6 +110,7 @@ impl NavigationService {
         }
         let mut repository = self.lock_repository();
         let current = repository.get_domain(domain_code)?;
+        if current.provider_pack_id.is_some() && current.enabled != command.enabled { return Err(NavigationError::CapabilityOwned); }
         if current.built_in && !command.enabled {
             return Err(NavigationError::BuiltInDomainProtected);
         }
@@ -150,6 +152,7 @@ impl NavigationService {
     pub fn delete_domain(&self, domain_code: &str) -> Result<(), NavigationError> {
         let mut repository = self.lock_repository();
         let domain = repository.get_domain(domain_code)?;
+        if domain.provider_pack_id.is_some() { return Err(NavigationError::CapabilityOwned); }
         if domain.built_in {
             return Err(NavigationError::BuiltInDomainProtected);
         }
@@ -197,6 +200,11 @@ impl NavigationService {
             updated_at: timestamp,
         };
         let mut repository = self.lock_repository();
+        match repository.get_menu(&menu.menu_code) {
+            Ok(_) => return Err(NavigationError::DuplicateMenuCode),
+            Err(NavigationError::MenuNotFound) => {},
+            Err(error) => return Err(error),
+        }
         repository.save_menu(&menu)?;
         Ok(menu)
     }
@@ -214,6 +222,7 @@ impl NavigationService {
         )?;
         let mut repository = self.lock_repository();
         let current = repository.get_menu(menu_code)?;
+        if current.source == MenuSource::CapabilityPack { return Err(NavigationError::CapabilityOwned); }
         if current.source == MenuSource::BuiltIn
             && (current.menu_type != command.menu_type
                 || current.page_code != command.page_code
@@ -251,6 +260,7 @@ impl NavigationService {
     pub fn delete_menu(&self, menu_code: &str) -> Result<(), NavigationError> {
         let mut repository = self.lock_repository();
         let menu = repository.get_menu(menu_code)?;
+        if menu.source == MenuSource::CapabilityPack { return Err(NavigationError::CapabilityOwned); }
         if menu.source == MenuSource::BuiltIn {
             return Err(NavigationError::BuiltInMenuProtected);
         }

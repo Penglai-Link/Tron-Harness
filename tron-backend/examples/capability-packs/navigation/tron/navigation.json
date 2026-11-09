@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "domains": [
+    {
+      "code": "NAV_EXAMPLE",
+      "name": {"zh-CN": "导航示例", "en-US": "Navigation example"},
+      "description": {"zh-CN": "能力包提供的菜单", "en-US": "Menus contributed by a capability pack"}
+    }
+  ],
+  "menus": [
+    {
+      "code": "NAV_EXAMPLE_GROUP",
+      "name": {"zh-CN": "常用入口", "en-US": "Quick access"},
+      "menuType": "Group",
+      "pageCode": null,
+      "url": null,
+      "icon": "Folder"
+    },
+    {
+      "code": "NAV_EXAMPLE_AGENTS",
+      "name": {"zh-CN": "智能体", "en-US": "Agents"},
+      "menuType": "Internal",
+      "pageCode": "agents.index",
+      "url": null,
+      "icon": "Bot"
+    },
+    {
+      "code": "NAV_EXAMPLE_WEBSITE",
+      "name": {"zh-CN": "项目主页", "en-US": "Project website"},
+      "menuType": "ExternalLink",
+      "pageCode": null,
+      "url": "https://github.com/CloudSen/Tron",
+      "icon": "ExternalLink"
+    }
+  ],
+  "layouts": {
+    "NAV_EXAMPLE": [
+      {"menuCode": "NAV_EXAMPLE_GROUP", "parentMenuCode": null, "position": 0, "childDisplay": "Inline"},
+      {"menuCode": "NAV_EXAMPLE_AGENTS", "parentMenuCode": "NAV_EXAMPLE_GROUP", "position": 0, "childDisplay": "Inline"},
+      {"menuCode": "NAV_EXAMPLE_WEBSITE", "parentMenuCode": "NAV_EXAMPLE_GROUP", "position": 1, "childDisplay": "Inline"}
+    ]
+  }
+}

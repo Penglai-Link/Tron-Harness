@@ -2409,6 +2409,7 @@ export const pages = {
     contents: "提供的内容",
     emptyContents: "此分类暂无内容。",
     contentKinds: {
+      NavigationDomain: "菜单领域", NavigationMenu: "菜单定义", NavigationLayout: "默认编排",
       Tool: "工具",
       Skill: "技能",
       Resource: "资源",

@@ -15,6 +15,7 @@ pub const WIDGET_CHAT_RECENTS: &str = "chat.recents";
 pub enum MenuSource {
     BuiltIn,
     Custom,
+    CapabilityPack,
 }
 
 impl MenuSource {
@@ -22,6 +23,7 @@ impl MenuSource {
         match self {
             Self::BuiltIn => "BuiltIn",
             Self::Custom => "Custom",
+            Self::CapabilityPack => "CapabilityPack",
         }
     }
 
@@ -29,6 +31,7 @@ impl MenuSource {
         match value {
             "BuiltIn" => Ok(Self::BuiltIn),
             "Custom" => Ok(Self::Custom),
+            "CapabilityPack" => Ok(Self::CapabilityPack),
             _ => Err(NavigationError::StorageFailure),
         }
     }
@@ -108,6 +111,7 @@ impl LocalizedText {
 pub struct NavigationDomain {
     pub id: SnowflakeId,
     pub domain_code: String,
+    pub provider_pack_id: Option<String>,
     pub name: LocalizedText,
     pub description: LocalizedText,
     pub built_in: bool,
@@ -215,6 +219,7 @@ pub enum NavigationError {
     InvalidHierarchy,
     MaxDepthExceeded { depth: usize, max_depth: usize },
     NonLeafItem,
+    CapabilityOwned,
     BuiltInMenuProtected,
     BuiltInDomainProtected,
     MenuInUse,
@@ -252,6 +257,7 @@ impl fmt::Display for NavigationError {
             Self::InvalidHierarchy => "navigation hierarchy operation is invalid",
             Self::MaxDepthExceeded { .. } => "navigation menu depth exceeds the configured maximum",
             Self::NonLeafItem => "navigation menu item must be a leaf",
+            Self::CapabilityOwned => "navigation resource is managed by a capability pack",
             Self::BuiltInMenuProtected => "built-in navigation menu is protected",
             Self::BuiltInDomainProtected => "built-in navigation domain is protected",
             Self::MenuInUse => "navigation menu is still used by a domain",

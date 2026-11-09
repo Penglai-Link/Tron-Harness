@@ -193,7 +193,8 @@ pub(crate) fn navigation_error_response(error: NavigationError, locale: &str) ->
             "导航编码或菜单引用已存在",
             "navigation code or menu reference already exists",
         ),
-        NavigationError::BuiltInMenuProtected
+        NavigationError::CapabilityOwned
+        | NavigationError::BuiltInMenuProtected
         | NavigationError::BuiltInDomainProtected
         | NavigationError::MenuInUse
         | NavigationError::DomainNotEmpty

@@ -64,7 +64,7 @@ fn build_tree(items: Vec<NavigationTreeItem>) -> Vec<NavigationTreeItem> {
     children(None, &items)
 }
 
-fn validate_flat_tree(
+pub(crate) fn validate_flat_tree(
     items: &[NavigationTreeItem],
     max_depth: usize,
 ) -> Result<(), NavigationError> {

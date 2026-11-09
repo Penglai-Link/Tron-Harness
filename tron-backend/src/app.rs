@@ -440,6 +440,7 @@ impl AppState {
         )
         .expect("initialize Framework storage configuration");
         agent_framework.bind_runtime_config(runtime_config.clone());
+        agent_framework.bind_navigation(navigation.clone()).expect("capability navigation catalog");
         agent_framework.bind_prompt_service(prompts.clone());
         agent_framework
             .bind_personai(model_providers.clone())

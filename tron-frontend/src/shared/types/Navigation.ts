@@ -1,5 +1,5 @@
 export type NavigationMenuType = "Group" | "Internal" | "ExternalLink" | "Widget";
-export type NavigationMenuSource = "BuiltIn" | "Custom";
+export type NavigationMenuSource = "BuiltIn" | "Custom" | "CapabilityPack";
 export type NavigationMenuChildDisplay = "Inline" | "Flyout";
 
 export interface NavigationLocalizedText {
@@ -36,6 +36,7 @@ export interface NavigationRuntimeTree {
 
 export interface NavigationAdminDomain {
   domainCode: string;
+  providerPackId: string | null;
   name: NavigationLocalizedText;
   description: NavigationLocalizedText;
   builtIn: boolean;

@@ -1,0 +1,8 @@
+{
+  "manifest_version": 1,
+  "id": "tron.navigation-example",
+  "name": "Navigation example",
+  "version": "1.0.0",
+  "framework": "^1.1.0",
+  "resources": ["tron/navigation.json"]
+}

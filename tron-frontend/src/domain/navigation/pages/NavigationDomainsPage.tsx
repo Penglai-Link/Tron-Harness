@@ -249,7 +249,7 @@ export function NavigationDomainsPage() {
                 <Field label={text("fields.nameEn", "英文名称", "English name")} required><TextInput value={editor.nameEn} onChange={(event) => setEditor({ ...editor, nameEn: event.target.value })} /></Field>
                 <Field label={text("fields.descriptionZh", "中文描述", "Chinese description")}><TextArea value={editor.descriptionZh} onChange={(event) => setEditor({ ...editor, descriptionZh: event.target.value })} /></Field>
                 <Field label={text("fields.descriptionEn", "英文描述", "English description")}><TextArea value={editor.descriptionEn} onChange={(event) => setEditor({ ...editor, descriptionEn: event.target.value })} /></Field>
-                <div className="flex flex-wrap items-center gap-5 lg:col-span-2"><ToggleSwitch checked={editor.enabled} disabled={editingCode === "ADVANCED"} label={text("fields.enabled", "启用", "Enabled")} onCheckedChange={(enabled) => setEditor({ ...editor, enabled })} /><ToggleSwitch checked={editor.isDefault} label={text("fields.default", "默认领域", "Default domain")} onCheckedChange={(isDefault) => setEditor({ ...editor, isDefault })} /></div>
+                <div className="flex flex-wrap items-center gap-5 lg:col-span-2"><ToggleSwitch checked={editor.enabled} disabled={editingCode === "ADVANCED" || Boolean(editingDomain?.providerPackId)} label={text("fields.enabled", "启用", "Enabled")} onCheckedChange={(enabled) => setEditor({ ...editor, enabled })} /><ToggleSwitch checked={editor.isDefault} label={text("fields.default", "默认领域", "Default domain")} onCheckedChange={(isDefault) => setEditor({ ...editor, isDefault })} /></div>
                 <div className="flex justify-end gap-2 lg:col-span-2">
                   <Button type="button" variant="ghost" disabled={saving} onClick={() => setEditor(null)}>{text("actions.cancel", "取消", "Cancel")}</Button>
                   <Button type="submit" disabled={saving} aria-busy={saving}>{saving ? text("actions.saving", "保存中…", "Saving…") : text("actions.save", "保存", "Save")}</Button>
@@ -286,7 +286,7 @@ export function NavigationDomainsPage() {
         pagination={<TablePagination page={current} pageCount={pageCount} pageSize={pageSize} totalItems={total} startItem={startItem} endItem={endItem} itemLabel={text("domains.itemLabel", "个领域", "domains")} onPageChange={setCurrent} onPageSizeChange={(size) => { setPageSize(size); setCurrent(1); }} />}
         columns={[
           { id: "domain", header: text("columns.domain", "领域", "Domain"), render: (row) => <div><div className="font-medium">{row.name[locale]}</div><div className="font-mono text-xs text-[var(--color-on-surface-variant)]">{row.domainCode}</div></div> },
-          { id: "status", header: text("columns.status", "状态", "Status"), render: (row) => <div className="flex flex-wrap gap-1.5"><Badge variant={row.enabled ? "success" : "default"}>{row.enabled ? text("status.enabled", "启用", "Enabled") : text("status.disabled", "禁用", "Disabled")}</Badge>{row.builtIn ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}{row.isDefault ? <Badge variant="warning">{text("status.default", "默认", "Default")}</Badge> : null}</div> },
+          { id: "status", header: text("columns.status", "状态", "Status"), render: (row) => <div className="flex flex-wrap gap-1.5"><Badge variant={row.enabled ? "success" : "default"}>{row.enabled ? text("status.enabled", "启用", "Enabled") : text("status.disabled", "禁用", "Disabled")}</Badge>{row.builtIn ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}{row.providerPackId ? <Badge>{text("status.capabilityPack", "能力包", "Capability pack")} · {row.providerPackId}</Badge> : null}{row.isDefault ? <Badge variant="warning">{text("status.default", "默认", "Default")}</Badge> : null}</div> },
           {
             id: "actions",
             header: text("columns.actions", "操作", "Actions"),
@@ -331,7 +331,7 @@ export function NavigationDomainsPage() {
                     <DropdownMenuContent align="end" className="w-36">
                       <DropdownMenuItem onClick={() => openEdit(row)}>{text("actions.edit", "编辑", "Edit")}</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => navigate(`/admin/navigation/menu-tree?treeCode=${encodeURIComponent(row.domainCode)}`)}>{text("actions.arrange", "编排菜单", "Arrange menu")}</DropdownMenuItem>
-                      {!row.builtIn ? (
+                      {!row.builtIn && !row.providerPackId ? (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem variant="destructive" disabled={deletingCode === row.domainCode} onClick={() => setDomainToDelete(row)}>{text("actions.delete", "删除", "Delete")}</DropdownMenuItem>

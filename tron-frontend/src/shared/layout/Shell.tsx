@@ -630,7 +630,7 @@ export function TronShell({
       });
 
     return () => controller.abort();
-  }, [authSession?.user.userCode, currentLocale, dataSource, setNavigationDomains, setNavigationMenuTree, setSelectedDomainCode, t]);
+  }, [authSession?.user.userCode, currentLocale, dataSource, navigationRevision, setNavigationDomains, setNavigationMenuTree, setSelectedDomainCode, t]);
 
   useEffect(() => {
     navigationTreeControllerRef.current?.abort();

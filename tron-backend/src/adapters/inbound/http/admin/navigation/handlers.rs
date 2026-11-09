@@ -415,6 +415,7 @@ fn request_to_localized(value: LocalizedTextRequest) -> LocalizedText {
 fn domain_vo(domain: NavigationDomain) -> DomainVo {
     DomainVo {
         domain_code: domain.domain_code,
+        provider_pack_id: domain.provider_pack_id,
         name: localized_vo(domain.name),
         description: localized_vo(domain.description),
         built_in: domain.built_in,
@@ -484,6 +485,7 @@ fn source_name(source: MenuSource) -> &'static str {
     match source {
         MenuSource::BuiltIn => "BuiltIn",
         MenuSource::Custom => "Custom",
+        MenuSource::CapabilityPack => "CapabilityPack",
     }
 }
 

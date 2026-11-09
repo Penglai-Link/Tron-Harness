@@ -1,4 +1,5 @@
 mod commands;
+pub mod packs;
 mod default_tree;
 mod repository;
 

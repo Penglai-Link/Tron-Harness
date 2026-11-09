@@ -2490,6 +2490,7 @@ export const pages = {
     contents: "Provided contents",
     emptyContents: "No content in this category.",
     contentKinds: {
+      NavigationDomain: "Menu domains", NavigationMenu: "Menu definitions", NavigationLayout: "Default layouts",
       Tool: "Tools",
       Skill: "Skills",
       Resource: "Resources",

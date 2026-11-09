@@ -26,3 +26,6 @@ pub struct SqliteNavigationRepository {
 
 include!("navigation_repository/storage.rs");
 include!("navigation_repository/implementation.rs");
+
+#[path = "navigation_repository/packs.rs"]
+mod packs;

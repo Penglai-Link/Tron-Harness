@@ -212,6 +212,21 @@ CREATE TABLE navigation_domain_translations (
     UNIQUE(domain_id, locale)
 );
 
+-- tron:navigation-packs:start
+CREATE TABLE IF NOT EXISTS navigation_pack_state (
+    pack_id TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+    manifest_json TEXT NOT NULL,
+    layouts_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS navigation_pack_ownership (
+    pack_id TEXT NOT NULL REFERENCES navigation_pack_state(pack_id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK(kind IN ('Domain','Menu')),
+    code TEXT NOT NULL,
+    PRIMARY KEY(kind, code)
+);
+-- tron:navigation-packs:end
+
 CREATE TABLE navigation_domains (
     id INTEGER PRIMARY KEY CHECK (id > 0),
     domain_code TEXT NOT NULL UNIQUE,

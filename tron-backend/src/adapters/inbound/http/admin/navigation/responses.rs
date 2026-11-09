@@ -2,6 +2,7 @@
 #[serde(rename_all = "camelCase")]
 struct DomainVo {
     domain_code: String,
+    provider_pack_id: Option<String>,
     name: LocalizedTextVo,
     description: LocalizedTextVo,
     built_in: bool,

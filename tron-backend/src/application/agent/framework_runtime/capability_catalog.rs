@@ -65,6 +65,7 @@ pub fn installed_capability_packs(
     // built-in call name or activate a plugin merely to display its manifest.
     for installed in manager.installed().map_err(|error| error.to_string())? {
         let mut contents=manifest_contents(&installed.manifest);
+        contents.extend(contents::navigation_contents(&installed.path, &installed.manifest, locale)?);
         for item in contents.iter_mut().filter(|item|item.kind=="Tool") {
             if let Some(entry)=installed.manifest.tools.iter().find(|entry|entry.descriptor.call_name==item.name) {
                 let display=entry.descriptor.resolve_display(locale);
@@ -95,8 +96,10 @@ pub fn install_capability_pack(
     let installed = manager
         .install_bytes(bytes, InstallPolicy::Development)
         .map_err(|error| error.to_string())?;
+    let mut contents = manifest_contents(&installed.manifest);
+    contents.extend(contents::navigation_contents(&installed.path, &installed.manifest, "en-US")?);
     Ok(CapabilityPackInfo {
-        contents: manifest_contents(&installed.manifest),
+        contents,
         id: installed.manifest.id,
         name: installed.manifest.name,
         version: installed.manifest.version.to_string(),

@@ -161,7 +161,7 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
              ON CONFLICT(menu_code) DO UPDATE SET menu_type = excluded.menu_type, page_code = excluded.page_code,
                  url = excluded.url, icon = excluded.icon, description_zh_cn = excluded.description_zh_cn,
                  description_en_us = excluded.description_en_us, enabled = excluded.enabled, updated_at = excluded.updated_at",
-            params![menu.id.value(), menu.menu_code, menu.source.as_storage(), menu.menu_type.as_storage(), menu.page_code, menu.url, menu.icon, menu.description.zh_cn, menu.description.en_us, i64::from(menu.enabled), menu.created_at, menu.updated_at],
+            params![menu.id.value(), menu.menu_code, (if menu.source == MenuSource::CapabilityPack { "Custom" } else { menu.source.as_storage() }), menu.menu_type.as_storage(), menu.page_code, menu.url, menu.icon, menu.description.zh_cn, menu.description.en_us, i64::from(menu.enabled), menu.created_at, menu.updated_at],
         ).map_err(|error| if error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation) { NavigationError::DuplicateMenuCode } else { NavigationError::StorageFailure })?;
         let menu_id: i64 = tx
             .query_row(
@@ -610,6 +610,12 @@ fn storage_error(_error: rusqlite::Error) -> NavigationError {
 }
 
 impl NavigationRepository for SqliteNavigationRepository {
+    fn sync_pack(&mut self, pack: &str, manifest: &crate::application::navigation::packs::NavigationContribution, enabled: bool, max_depth: usize, validate_only: bool) -> Result<(), String> {
+        self.sync_navigation_pack(pack, manifest, enabled, max_depth, validate_only)
+    }
+    fn set_pack_enabled(&mut self, pack: &str, enabled: bool) -> Result<(), String> { self.toggle_navigation_pack(pack, enabled) }
+    fn remove_pack(&mut self, pack: &str) -> Result<(), String> { self.remove_navigation_pack(pack) }
+
     fn next_id(&mut self) -> Result<i64, NavigationError> {
         self.connection.call(
             move |connection| SqliteNavigationRepositorySql { connection }.next_id(),

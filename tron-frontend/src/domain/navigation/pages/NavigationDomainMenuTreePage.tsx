@@ -467,7 +467,7 @@ export function NavigationDomainMenuTreePage() {
             {selectedItem && !loading ? <form className="space-y-5 p-5" onSubmit={(event) => void saveItem(event)}>
               <div className="space-y-2">
                 <div className="flex items-center gap-1"><h3 className="font-semibold">{selectedItem.translations[locale]}</h3><InfoTooltip ariaLabel={text("arrangement.menuUsageHelpAria", "查看菜单用途说明", "Show menu usage help")}>{menuUsageHelp}</InfoTooltip></div>
-                <div className="flex gap-2"><Badge>{menuTypeLabel(selectedItem.menuType, text)}</Badge>{selectedItem.source === "BuiltIn" ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}</div>
+                <div className="flex gap-2"><Badge>{menuTypeLabel(selectedItem.menuType, text)}</Badge>{selectedItem.source === "CapabilityPack" ? <Badge>{text("status.capabilityPack", "能力包", "Capability pack")}</Badge> : null}{selectedItem.source === "BuiltIn" ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}</div>
                 <p className="break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{selectedItem.menuCode}</p>
                 {selectedItem.description[locale] ? <p className="whitespace-pre-wrap break-words text-sm text-[var(--color-on-surface-variant)]">{selectedItem.description[locale]}</p> : null}
               </div>

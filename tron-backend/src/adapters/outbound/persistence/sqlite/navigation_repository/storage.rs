@@ -14,7 +14,8 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
                     (SELECT name FROM navigation_domain_translations WHERE domain_id = d.id AND locale = 'zh-CN'),
                     (SELECT name FROM navigation_domain_translations WHERE domain_id = d.id AND locale = 'en-US'),
                     (SELECT description FROM navigation_domain_translations WHERE domain_id = d.id AND locale = 'zh-CN'),
-                    (SELECT description FROM navigation_domain_translations WHERE domain_id = d.id AND locale = 'en-US')
+                    (SELECT description FROM navigation_domain_translations WHERE domain_id = d.id AND locale = 'en-US'),
+                    (SELECT pack_id FROM navigation_pack_ownership WHERE kind='Domain' AND code=d.domain_code)
              FROM navigation_domains d
              WHERE d.domain_code <> 'CHAT'
              ORDER BY position ASC, domain_code ASC",
@@ -24,6 +25,7 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
                 Ok(NavigationDomain {
                     id: SnowflakeId::new(row.get(0)?),
                     domain_code: row.get(1)?,
+                    provider_pack_id: row.get(12)?,
                     built_in: row.get::<_, i64>(2)? == 1,
                     enabled: row.get::<_, i64>(3)? == 1,
                     is_default: row.get::<_, i64>(4)? == 1,
@@ -96,7 +98,7 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
 
     fn all_menus(&self) -> Result<Vec<NavigationMenu>, NavigationError> {
         let mut statement = self.connection.prepare(
-            "SELECT id, menu_code, source, menu_type, page_code, url, icon, enabled, created_at, updated_at,
+            "SELECT id, menu_code, CASE WHEN EXISTS(SELECT 1 FROM navigation_pack_ownership o WHERE o.kind='Menu' AND o.code=m.menu_code) THEN 'CapabilityPack' ELSE source END, menu_type, page_code, url, icon, enabled, created_at, updated_at,
                     (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'zh-CN'),
                     (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'en-US'),
                     m.description_zh_cn, m.description_en_us
@@ -136,7 +138,7 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
     fn load_items(&self, tree_code: &str) -> Result<Vec<NavigationTreeItem>, NavigationError> {
         let mut statement = self.connection.prepare(
             "SELECT i.id, i.position, i.child_display, pm.menu_code,
-                    m.id, m.menu_code, m.source, m.menu_type, m.page_code, m.url, m.icon, m.enabled, m.created_at, m.updated_at,
+                    m.id, m.menu_code, CASE WHEN EXISTS(SELECT 1 FROM navigation_pack_ownership o WHERE o.kind='Menu' AND o.code=m.menu_code) THEN 'CapabilityPack' ELSE m.source END, m.menu_type, m.page_code, m.url, m.icon, m.enabled, m.created_at, m.updated_at,
                     (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'zh-CN'),
                     (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'en-US'),
                     m.description_zh_cn, m.description_en_us

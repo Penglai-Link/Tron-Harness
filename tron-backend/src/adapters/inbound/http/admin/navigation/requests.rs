@@ -24,6 +24,7 @@ mod request {
     pub enum MenuSourceRequest {
         BuiltIn,
         Custom,
+        CapabilityPack,
     }
 
     #[derive(Debug, Deserialize)]
@@ -139,6 +140,7 @@ mod request {
             match value {
                 MenuSourceRequest::BuiltIn => Self::BuiltIn,
                 MenuSourceRequest::Custom => Self::Custom,
+                MenuSourceRequest::CapabilityPack => Self::CapabilityPack,
             }
         }
     }
