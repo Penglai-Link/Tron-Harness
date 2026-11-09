@@ -37,6 +37,15 @@ pub(super) fn default_planned_start(now_ms: i64, due_at: Option<i64>) -> i64 {
 }
 
 impl TaskService {
+    /// Retain completed or cancelled Dude tasks for three days after their last update.
+    pub fn prune_finished_dude_tasks(&self, now_ms: i64) -> Result<usize, TaskError> {
+        const RETENTION_MS: i64 = 3 * 24 * 60 * 60 * 1000;
+        self.repository
+            .lock()
+            .expect("task repository mutex poisoned")
+            .prune_finished_dude_tasks(now_ms.saturating_sub(RETENTION_MS))
+    }
+
     pub fn cancel_dude_task(
         &self,
         dude_code: &str,

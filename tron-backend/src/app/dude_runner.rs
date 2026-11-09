@@ -384,6 +384,24 @@ impl crate::application::agent::ThreadFeedbackSink for ThreadFeedbackBridge {
     }
 }
 pub(super) fn start(state: AppState) {
+    let task_retention = state.tasks.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+        loop {
+            interval.tick().await;
+            let tasks = task_retention.clone();
+            match tokio::task::spawn_blocking(move || {
+                tasks.prune_finished_dude_tasks(chrono::Utc::now().timestamp_millis())
+            })
+            .await
+            {
+                Ok(Ok(count)) if count > 0 => tracing::info!(count, "Expired Dude tasks removed"),
+                Ok(Ok(_)) => {},
+                Ok(Err(error)) => tracing::error!(?error, "Dude task retention failed"),
+                Err(error) => tracing::error!(%error, "Dude task retention worker failed"),
+            }
+        }
+    });
     let retention_state = state.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));

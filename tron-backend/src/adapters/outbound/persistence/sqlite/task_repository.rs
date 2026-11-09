@@ -593,6 +593,48 @@ impl TaskRepository for SqliteTaskRepository {
             connection: self.connection.clone(),
         })
     }
+    fn prune_finished_dude_tasks(&mut self, cutoff_ms: i64) -> Result<usize, TaskError> {
+        self.connection.call(
+            move |connection| {
+                let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+                    connection,
+                    rusqlite::TransactionBehavior::Immediate,
+                )
+                .map_err(storage_error)?;
+                let mut deleted = 0;
+                loop {
+                    let codes = {
+                        let mut query = tx.prepare(
+                            "SELECT task_code FROM tasks t WHERE owner_dude_code IS NOT NULL \
+                             AND (status = ?1 OR archived_at IS NOT NULL) AND updated_at <= ?2 \
+                             AND NOT EXISTS (SELECT 1 FROM tasks child WHERE child.parent_task_code = t.task_code)",
+                        ).map_err(storage_error)?;
+                        let rows = query
+                            .query_map(
+                                params![crate::domain::task::CLOSED_STATUS_CODE, cutoff_ms],
+                                |row| row.get::<_, String>(0),
+                            )
+                            .map_err(storage_error)?;
+                        rows.collect::<Result<Vec<_>, _>>().map_err(storage_error)?
+                    };
+                    if codes.is_empty() {
+                        break;
+                    }
+                    for code in codes {
+                        tx.execute("DELETE FROM task_agent_links WHERE task_code = ?1", [&code])
+                            .map_err(storage_error)?;
+                        tx.execute("DELETE FROM task_app_links WHERE task_code = ?1", [&code])
+                            .map_err(storage_error)?;
+                        deleted += tx.execute("DELETE FROM tasks WHERE task_code = ?1", [&code])
+                            .map_err(storage_error)?;
+                    }
+                }
+                tx.commit().map_err(storage_error)?;
+                Ok(deleted)
+            },
+            || TaskError::StorageFailure,
+        )
+    }
     fn claim_dude_task(
         &mut self,
         task_code: &str,

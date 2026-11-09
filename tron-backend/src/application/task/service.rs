@@ -109,6 +109,7 @@ pub trait TaskReadRepository: Send + Sync {
 
 pub trait TaskRepository: Send {
     fn reader(&self) -> Arc<dyn TaskReadRepository>;
+    fn prune_finished_dude_tasks(&mut self, cutoff_ms: i64) -> Result<usize, TaskError>;
     /// Batch only the selected tasks, preserving each link set's ordering.
     fn relations(
         &mut self,
