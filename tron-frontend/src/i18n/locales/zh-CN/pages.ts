@@ -1652,6 +1652,12 @@ export const pages = {
     title: "知识图谱",
   },
   chat: {
+    sudo: {
+      title: "sudo 需要密码",
+      description: "为以下命令输入本机 sudo 密码。密码仅用于本次认证，不会发送给模型或保存到聊天记录。",
+      password: "sudo 密码", submit: "继续执行", cancel: "取消命令",
+      failed: "输入无效或提交失败。请检查请求是否仍有效，重新输入后再提交。",
+    },
     floating: {
       resizeHint: "拖动调整窗口大小；方向键微调，按住 Shift 加快调整。",
     },

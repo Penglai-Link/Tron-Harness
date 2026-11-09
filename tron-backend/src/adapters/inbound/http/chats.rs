@@ -14,6 +14,7 @@ pub(crate) mod short_term_memory;
 pub(crate) mod stream_task;
 mod subagents;
 mod terminals;
+mod sudo;
 
 pub(crate) mod workspace_scope;
 

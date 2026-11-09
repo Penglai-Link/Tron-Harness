@@ -21,6 +21,11 @@ use super::short_term_memory::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .merge(Router::new()
+            .route("/api/v1/chats/sessions/{session_code}/sudo-inputs", get(super::sudo::list))
+            .route("/api/v1/chats/sessions/{session_code}/sudo-inputs/{request_id}/answer", post(super::sudo::answer))
+            .layer(axum::extract::DefaultBodyLimit::max(32768))
+            .layer(axum::middleware::from_fn(super::sudo::private_response)))
         .route("/api/v1/chats/input-suggestions", get(super::composer::suggestions))
         .route("/api/v1/chats/sessions/{session_code}/subagents", get(super::subagents::list))
         .route("/api/v1/chats/sessions/{session_code}/subagents/{run_id}", get(super::subagents::read))

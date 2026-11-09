@@ -40,6 +40,9 @@ mod host_driver;
 mod host_environment;
 #[path = "host_execution.rs"]
 mod host_execution;
+#[path = "host_sudo.rs"]
+mod host_sudo;
+pub(crate) use host_sudo::{PendingSudoInput, SudoInputError};
 #[path = "host_external.rs"]
 mod host_external;
 #[path = "host_import.rs"]
@@ -98,6 +101,7 @@ struct Host {
     database:
         OnceCell<crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase>,
     native_bindings: super::native_sessions::Bindings,
+    sudo_inputs: host_sudo::SudoInputs,
     closed: std::sync::atomic::AtomicBool,
     control: host_control::NativeRuns,
     shutdown: host_shutdown::OwnedShutdown,
@@ -754,6 +758,7 @@ impl FrameworkHost {
             continuation_agent: RuntimeCell::new(),
             database: OnceCell::new(),
             native_bindings: Default::default(),
+            sudo_inputs: Default::default(),
             closed: Default::default(),
             control: Default::default(),
             shutdown: Default::default(),
@@ -805,6 +810,7 @@ impl FrameworkHost {
             continuation_agent: RuntimeCell::new(),
             database: OnceCell::new(),
             native_bindings: Default::default(),
+            sudo_inputs: Default::default(),
             closed: Default::default(),
             control: Default::default(),
             shutdown: Default::default(),

@@ -662,6 +662,10 @@ impl Runtime {
             summaries: host.summary_store().await?,
             sink: None,
         });
+        // Human credentials stay in the invoking chat, including nested children.
+        if let Some(provider) = parent.and_then(|run| run.extensions.get::<eliteforge_agent_official_plugin_tools_local::SudoPasswordProviderService>()) {
+            request.extensions.insert((*provider).clone());
+        }
         request.extensions.insert(
             eliteforge_agent_official_plugin_tools_local::CommandProgressSinkService(Arc::new(
                 super::super::tools::CommandProgress {

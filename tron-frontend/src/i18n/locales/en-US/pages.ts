@@ -1720,6 +1720,12 @@ export const pages = {
     title: "Knowledge Graph",
   },
   chat: {
+    sudo: {
+      title: "sudo password required",
+      description: "Enter your local sudo password for the command below. It is used only for this authentication and is not sent to the model or saved in chat history.",
+      password: "Sudo password", submit: "Continue", cancel: "Cancel command",
+      failed: "Invalid input or submission failed. Check that the request is still active and enter the password again.",
+    },
     floating: {
       resizeHint: "Drag to resize the window. Arrow keys fine-tune the size; hold Shift for larger steps.",
     },

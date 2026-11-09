@@ -20,6 +20,7 @@ import { OPEN_CHAT_CONTEXT_EVENT } from "@/shared/lib/shellEvents";
 import { requestApi } from "@/shared/api/httpClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import "./AgentChatWindow.css";
+import { SudoPasswordDialog } from "./SudoPasswordDialog";
 import { ChatSpeechButton } from "./ChatSpeechButton";
 import { useTabVisibility } from "@/components/editable-tabs";
 import { ChatAttachmentButton } from "./ChatAttachmentButton";
@@ -207,7 +208,12 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     };
     return input ? toUiInput(input) : null;
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
-  return <>{turnDeletion.dialog}<ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
+  return <>{turnDeletion.dialog}
+    {activeSession && tabVisible && (!config.floating || !props.windowState || (props.windowState.open && !props.windowState.collapsed)) && <SudoPasswordDialog
+      key={activeSession.sessionCode} sessionCode={activeSession.sessionCode}
+      workspaceCode={activeSession.workspaceCode ?? config.workspaceCode ?? ""}
+      dudeCode={activeSession.ownerDudeCode ?? undefined} knowledgeBaseId={knowledgeBaseId} />}
+    <ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
     draft={draft} onDraftChange={changeDraft} composerRef={setComposerRef}
     renderAttachmentControl={props.renderAttachmentControl ?? ((control) => <ChatAttachmentButton {...control} />)}
     footerAddon={<><ComposerControls>{footerAddon}</ComposerControls><ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /><ChatSpeechButton composer={composerRef}

@@ -370,6 +370,15 @@ impl FrameworkHost {
         request
             .extensions
             .insert(fw::ToolResultProcessorService(Arc::new(ToolAudit)));
+        if let Some(user) = context.user_code.as_ref() {
+            request.extensions.insert(
+                eliteforge_agent_official_plugin_tools_local::SudoPasswordProviderService(Arc::new(
+                    super::host_sudo::HostSudoInput {
+                        host: Arc::downgrade(&self.0), session: session.clone(), user: user.clone(),
+                    },
+                )),
+            );
+        }
         request.extensions.insert(
             eliteforge_agent_official_plugin_tools_local::CommandProgressSinkService(Arc::new(
                 super::super::tools::CommandProgress {

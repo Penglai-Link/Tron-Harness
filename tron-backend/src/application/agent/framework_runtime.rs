@@ -32,6 +32,7 @@ pub use capability_catalog::{
     extension_implementation_catalog_with_state, install_capability_pack,
     installed_capability_packs, installed_extension_implementations,
 };
+pub(crate) use host::{PendingSudoInput, SudoInputError};
 pub use host::{
     DudeThreadCatalogItem, FrameworkHost, SubagentRecord, SubagentView, ThreadFeedback,
     ThreadFeedbackSink,
