@@ -11,6 +11,11 @@ contextBridge.exposeInMainWorld("tronDesktop", {
     const handler = (_event, payload) => listener(payload);
     ipcRenderer.on("update:status-changed", handler);
     return () => ipcRenderer.removeListener("update:status-changed", handler);
+  },
+  onBackendEnvironmentStatus(listener) {
+    const handler = (_event, payload) => listener(payload);
+    ipcRenderer.on("backend-environment:status", handler);
+    return () => ipcRenderer.removeListener("backend-environment:status", handler);
   }
 });
 

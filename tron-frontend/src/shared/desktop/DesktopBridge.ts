@@ -119,6 +119,7 @@ type WindowWithElectronDesktop = Window & {
     targetPreloadUrl?: string;
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
     onUpdateStatus?: (listener: (payload: unknown) => void) => () => void;
+    onBackendEnvironmentStatus?: (listener: (status: BackendEnvironmentState["status"]) => void) => () => void;
   };
   __TAURI_INTERNALS__?: {
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
@@ -397,6 +398,12 @@ export class DesktopBridge {
 
   public async listWslDistributions(): Promise<WslDistribution[]> {
     return this.requireInvoke()("listWslDistributions", {}) as Promise<WslDistribution[]>;
+  }
+
+  public onBackendEnvironmentStatus(listener: (status: BackendEnvironmentState["status"]) => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    const desktopWindow = window as unknown as WindowWithElectronDesktop;
+    return desktopWindow.tronDesktop?.onBackendEnvironmentStatus?.(listener) ?? (() => {});
   }
 
   public async selectBackendEnvironment(selection: BackendEnvironmentSelection): Promise<void> {

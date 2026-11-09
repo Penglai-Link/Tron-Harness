@@ -32,13 +32,10 @@ export function BackendEnvironmentSettings() {
   }, [bridge]);
 
   useEffect(() => {
-    if (!busy) return;
-    let active = true;
-    const timer = window.setInterval(() => {
-      void bridge.getBackendEnvironment().then((value) => { if (active) setEnvironment(value); }).catch(() => {});
-    }, 1000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [bridge, busy]);
+    return bridge.onBackendEnvironmentStatus((status) => {
+      setEnvironment((current) => current ? { ...current, status } : current);
+    });
+  }, [bridge]);
 
   if (!environment?.supported) return null;
   const current = environment.selection.mode === "wsl" ? `WSL: ${environment.selection.distribution}` : t("backendEnvironment.local");

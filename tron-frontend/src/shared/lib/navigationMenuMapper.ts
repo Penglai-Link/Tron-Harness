@@ -90,6 +90,8 @@ function localizedDudeLabel(label: string, locale: string): string {
 export function mapNavigationTree(tree: NavigationRuntimeTree): TronNavSection[] {
   const prune = (menus: NavigationRuntimeMenu[]): NavigationRuntimeMenu[] => menus.flatMap((menu) => {
     if (menu.pageCode?.startsWith("observability.") || menu.menuCode === "OBSERVABILITY") return [];
+    // Persisted menu trees may still reference pages removed from this build.
+    if (menu.menuType === "Internal" && !Object.hasOwn(navigationPageRegistry, menu.pageCode ?? "")) return [];
     const children = prune(menu.children);
     if (menu.children.length && !children.length && menu.menuType === "Group") return [];
     return [{ ...menu, children }];
