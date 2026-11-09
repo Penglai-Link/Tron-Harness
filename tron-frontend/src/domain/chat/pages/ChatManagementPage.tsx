@@ -4,6 +4,7 @@ import { ContextBlockHelp } from "@/shared/context/ContextBlockHelp";
 import { useContextBlockCatalog, type ContextBlockCatalog } from "@/shared/context/useContextBlockCatalog";
 import {
   BookmarkPlus,
+  Bot,
   Copy,
   CheckCircle2,
   CircleAlert,
@@ -2444,7 +2445,7 @@ function ChatModelSelector({
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
           aria-label={t("chat.management.modelSelector.selectAria")}
-          className="inline-flex h-8 w-full min-w-0 items-center gap-[12px] rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled}
           title={selectedModelLabel}
         >
@@ -2559,7 +2560,7 @@ function ChatAgentSelector({
           disabled={disabled}
           title={locked ? t("chat.management.agentSelector.locked") : undefined}
         >
-
+          <Bot aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="truncate">{loading ? t("chat.management.agentSelector.loading") : selectedAgent?.name ?? t("chat.management.agentSelector.mainAgent")}</span>
           <ChevronDown aria-hidden="true" size={14} />
         </DropdownMenuTrigger>
@@ -2750,9 +2751,9 @@ export function ChatManagementPage() {
   );
   const currentSessionRunActive = Boolean(runtimeRunState?.active && runtimeRunState.sessionCode === activeSession?.sessionCode);
   useChatGeneratedTitle(activeSession, useStableCallback((updated: ChatSession) => {
-    setSessionGroups((current) => replaceSession(current, updated));
-    setOptimisticActiveSession((current) => current?.sessionCode === updated.sessionCode ? updated : current);
-    window.dispatchEvent(new Event("tron:chat-session-updated"));
+    window.dispatchEvent(new CustomEvent("tron:chat-session-updated", {
+      detail: { session: updated },
+    }));
   }));
   const shortTermMemoryTodosState = useChatSessionTodosState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
   const latestCompactionState = useChatLatestCompactionState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
@@ -3089,7 +3090,7 @@ export function ChatManagementPage() {
     const tab = useTabStore
       .getState()
       .getAllTabs().find((item) => item.activeNav === `chat-session:${activeSession.sessionCode}`);
-    if (tab && tab.title !== activeSession.title) {
+    if (tab && (tab.title !== activeSession.title || tab.titleTranslationKey)) {
       useTabStore.getState().updateTab(tab.id, {
         title: activeSession.title,
         titleTranslationKey: undefined,

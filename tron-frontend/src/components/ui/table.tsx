@@ -7,7 +7,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     <div
       data-slot="table-container"
       data-theme-anchor="panel"
-      className="relative w-full overflow-x-auto"
+      className="relative min-w-0 w-full max-w-full overflow-x-auto overscroll-x-contain"
     >
       <table
         data-slot="table"

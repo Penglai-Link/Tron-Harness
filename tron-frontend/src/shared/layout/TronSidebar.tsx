@@ -49,6 +49,7 @@ interface TronSidebarProps {
   openNavigationItems: Record<string, boolean>;
   openSections: Record<string, boolean>;
   renderDomainSelector: (compact: boolean, mobile: boolean) => ReactNode;
+  renderWorkspaceSelector?: (compact: boolean) => ReactNode;
   renderFooter: (compact: boolean, mobile: boolean) => ReactNode;
   setOpenNavigationItems: Dispatch<SetStateAction<Record<string, boolean>>>;
   translate: (key: string, options?: Record<string, string>) => string;
@@ -75,6 +76,7 @@ export function TronSidebar({
   openNavigationItems,
   openSections,
   renderDomainSelector,
+  renderWorkspaceSelector,
   renderFooter,
   setOpenNavigationItems,
   translate,
@@ -85,6 +87,8 @@ export function TronSidebar({
     state,
     toggleSidebar,
   } = useSidebar();
+  const location = useLocation();
+  useEffect(() => setOpenMobile(false), [location.pathname, location.search, setOpenMobile]);
   const compact = !isMobile && state === "collapsed";
 
   useEffect(() => {
@@ -106,7 +110,7 @@ export function TronSidebar({
       const WidgetIcon = item.icon;
       const widgetLabel = item.translationKey ? translate(item.translationKey) : item.label;
       return <SidebarMenuItem key={itemKey} className="list-none" data-menu-code={item.menuCode}>
-        {itemCompact || item.childDisplay === "Flyout" ? <SidebarFlyout label={widgetLabel} trigger={<SidebarMenuButton aria-label={widgetLabel} tooltip={itemCompact ? widgetLabel : undefined} className={itemCompact ? "justify-center px-0" : "gap-3 px-3"}><WidgetIcon size={17} /><span className={cn("min-w-0 flex-1 truncate text-left", itemCompact && "sr-only")}>{widgetLabel}</span>{itemCompact ? null : <ChevronRight size={14} />}</SidebarMenuButton>}>{widget}</SidebarFlyout> : widget}
+        {itemCompact || item.childDisplay === "Flyout" ? <SidebarFlyout label={widgetLabel} trigger={<SidebarMenuButton aria-label={widgetLabel} tooltip={itemCompact ? widgetLabel : undefined} className={itemCompact ? "justify-center px-0" : "gap-2 px-2"}><WidgetIcon size={17} /><span className={cn("min-w-0 flex-1 truncate text-left", itemCompact && "sr-only")}>{widgetLabel}</span>{itemCompact ? null : <ChevronRight size={14} />}</SidebarMenuButton>}>{widget}</SidebarFlyout> : widget}
       </SidebarMenuItem>;
     }
     const Icon = item.icon;
@@ -139,7 +143,7 @@ export function TronSidebar({
       <SidebarMenuItem className="space-y-1" data-theme-part="app-sidebar-menu-item" key={itemKey}>
         {hasChildren && (itemCompact || item.childDisplay === "Flyout") ? (
           <SidebarFlyout label={itemLabel} trigger={
-            <SidebarMenuButton isActive={active} tooltip={itemCompact ? itemLabel : undefined} className={cn(itemCompact ? "justify-center px-0" : "gap-[12px] px-3", "group/nav-trigger mb-0")} aria-label={itemLabel}>
+            <SidebarMenuButton isActive={active} tooltip={itemCompact ? itemLabel : undefined} className={cn(itemCompact ? "justify-center px-0" : "gap-2 px-2", "group/nav-trigger mb-0")} aria-label={itemLabel}>
               <Icon className="shrink-0" size={17} aria-hidden="true" />
               <span className={cn("min-w-0 flex-1 truncate text-left", itemCompact ? "sr-only" : "")}>{itemLabel}</span>
               {itemCompact ? null : <ChevronRight className="shrink-0 transition-opacity [@media(hover:hover)]:opacity-0 group-hover/nav-trigger:opacity-60 group-focus-visible/nav-trigger:opacity-60 group-aria-expanded/nav-trigger:opacity-60" size={14} aria-hidden="true" />}
@@ -150,8 +154,9 @@ export function TronSidebar({
         ) : hasChildren ? (
           <SidebarMenuButton
             aria-expanded={open}
+            title={itemLabel}
             aria-label={translate(open ? "shell:aria.collapseNavigationItem" : "shell:aria.expandNavigationItem", { item: itemLabel })}
-            className="gap-[12px] px-3 text-sidebar-foreground"
+            className="gap-2 px-2 text-sidebar-foreground"
             type="button"
             onClick={() => {
               setOpenNavigationItems((current) => ({ ...current, [itemKey]: !(current[itemKey] ?? openByDefault) }));
@@ -165,7 +170,8 @@ export function TronSidebar({
           <SidebarMenuButton
             isActive={active}
             tooltip={itemCompact ? itemLabel : undefined}
-            className={cn(itemCompact ? "justify-center px-0" : "gap-[12px] px-3")}
+            title={itemLabel}
+            className={cn(itemCompact ? "justify-center px-0" : "gap-2 px-2")}
             render={item.external
               ? <a aria-current={active ? "page" : undefined} aria-label={itemCompact ? itemLabel : undefined} href={item.href} target="_blank" rel="noreferrer" />
               : <Link aria-current={active ? "page" : undefined} aria-label={itemCompact ? itemLabel : undefined} to={item.href} />}
@@ -196,13 +202,15 @@ export function TronSidebar({
       collapsible="icon"
       id="tron-sidebar"
       dir={undefined}
-      className="pt-14"
+      position="flow"
+      className="tron-shell-navigation"
     >
-      <SidebarHeader className="gap-1.5 border-b border-[var(--color-card-border)] px-2 py-2.5">
+      <SidebarHeader className="gap-1 px-2 pb-2 pt-1.5">
+        {renderWorkspaceSelector?.(compact)}
         {renderDomainSelector(compact, isMobile)}
       </SidebarHeader>
       <SidebarContent data-theme-part="app-sidebar-content">
-        <nav className={cn("flex flex-1 flex-col gap-[12px] p-2", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")} data-theme-part="app-sidebar-menu">
+        <nav className={cn("flex flex-1 flex-col px-1.5 pb-2", compact ? "gap-1" : "gap-0")} aria-label={translate("shell:aria.primaryNavigation")} data-theme-part="app-sidebar-menu">
           {navigation.map((section) => {
             const sectionKey = section.id ?? section.label;
             const open = openSections[sectionKey] ?? true;
@@ -217,11 +225,11 @@ export function TronSidebar({
             }] : section.items;
 
             return (
-              <SidebarGroup className="p-0" key={sectionKey}>
+              <SidebarGroup className={cn("p-0", !compact && !section.standalone && !section.flyout && "mt-3")} key={sectionKey}>
                 {compact || section.flyout || section.standalone ? null : (
                   <SidebarGroupLabel
                     aria-expanded={open}
-                    className="h-8 w-full justify-between px-2 text-sm font-semibold text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    className="h-7 w-full justify-between px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     render={<button type="button" />}
                     onClick={() => onToggleSection(sectionKey)}
                   >
@@ -231,7 +239,7 @@ export function TronSidebar({
                 )}
                 {section.flyout || section.standalone || open || compact ? (
                   <SidebarGroupContent>
-                    <SidebarMenu className={cn(compact ? "" : "mt-1")}>
+                    <SidebarMenu>
                       {sectionItems.map((item) => renderNavigationItem(item, `${section.label}/${item.label}`))}
                     </SidebarMenu>
                   </SidebarGroupContent>
@@ -241,7 +249,9 @@ export function TronSidebar({
           })}
         </nav>
       </SidebarContent>
-      <SidebarFooter>{renderFooter(compact, isMobile)}</SidebarFooter>
+      <SidebarFooter className="px-1.5 py-2">
+        {renderFooter(compact, isMobile)}
+      </SidebarFooter>
     </Sidebar>
   );
 }

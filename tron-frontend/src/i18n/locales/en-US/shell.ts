@@ -1,5 +1,14 @@
 export const shell = {
+  workspaceStart: {
+    title: "Start your next project",
+    description: "Bring your ideas to life",
+    newChat: "Start a quick chat",
+  },
   aria: {
+    resizeSidebar: "Resize sidebar",
+    resizeSidebarHint: "Drag to resize; drag left to collapse or right to expand",
+    sidebarExpanded: "Sidebar expanded",
+    sidebarCollapsed: "Sidebar collapsed",
     openTerminal: "Open terminal",
     closeTerminal: "Close terminal",
     closeNavigation: "Close navigation menu",
@@ -112,7 +121,7 @@ export const shell = {
       workingDirectory: "Working directory",
       moveDescription: "Choose a topic or Quick Chats. The working directory stays the same.",
       quickChats: "Quick Chats",
-      noDirectory: "No working directory",
+      noDirectory: "None",
       locationFailed: "Could not change chat location",
       archiveFailed: "Failed to archive chat",
       archived: "Chat archived",
@@ -243,7 +252,6 @@ export const shell = {
   utilityPanel: {
     settings: "System Settings",
     user: "User",
-    workspace: "Workspace",
   },
   navigation: {
     emptyGroup: "No menus yet. Add items in menu arrangement.",

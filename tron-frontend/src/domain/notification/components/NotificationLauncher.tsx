@@ -5,10 +5,12 @@ import { Link, useNavigate } from "react-router";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { listNotifications, notificationQueryKey, updateNotification } from "../api/notificationApi";
 import { areBrowserNotificationsEnabled, browserNotificationPreferenceChangedEvent } from "../model/browserNotifications";
 
-export function NotificationLauncher() {
+export function NotificationLauncher({ className }: { className?: string }) {
   const { t, i18n } = useTranslation("pages");
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -64,12 +66,15 @@ export function NotificationLauncher() {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={<Button className="relative" variant="ghost" size="icon" aria-label={t("notifications.unreadCount", { count: unread })} title={t("notifications.title")} />}
-      >
-        <Bell size={17} aria-hidden="true" />
-        {unread > 0 ? <span className="absolute right-0 top-0 flex min-w-4 translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] leading-4 text-[var(--color-on-primary)]" aria-hidden="true">{unread}</span> : null}
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger render={
+          <PopoverTrigger render={<Button className={cn("relative", className)} variant="ghost" size="icon" aria-label={t("notifications.unreadCount", { count: unread })} />} />
+        }>
+          <Bell size={17} aria-hidden="true" />
+          {unread > 0 ? <span className="absolute right-0 top-0 flex min-w-4 translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] leading-4 text-[var(--color-on-primary)]" aria-hidden="true">{unread}</span> : null}
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={8}>{t("notifications.title")}</TooltipContent>
+      </Tooltip>
       <PopoverContent side="bottom" align="end" className="w-[min(24rem,calc(100vw-1rem))] p-0">
         <header className="flex flex-wrap items-center gap-2 border-b border-[var(--color-outline-variant)] px-3 py-2">
           <p className="mr-auto text-sm font-medium">{t("notifications.title")}</p>

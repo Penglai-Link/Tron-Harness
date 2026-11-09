@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../../shared/theme/components.css";
+@import "../../shared/layout/workspace.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
@@ -357,25 +358,7 @@ body[data-background-effects] [data-theme-part="app-page"] {
   .tron-background-aurora span { animation: none; }
 }
 
-/* Built-in Matrix sidebars use tonal separation instead of bright rules. */
-:root[data-skin="default"][data-theme="matrix-dark"] [data-theme-part="app-sidebar"] {
-  --sidebar-border: transparent;
-  border-color: transparent;
-}
 
-:root[data-skin="default"][data-theme="matrix-dark"] [data-theme-part="app-sidebar"] :is([data-slot="sidebar-header"], [data-theme-part="app-sidebar-chats"]) {
-  border-color: transparent;
-}
-
-:root[data-skin="default"][data-theme="matrix-dark"] [data-theme-part="app-sidebar"] [data-slot="sidebar-inner"] {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, color-mix(in srgb, var(--sidebar) 85%, var(--color-background)) var(--tron-sidebar-bg-opacity, 100%), transparent),
-    color-mix(in srgb, var(--color-background) var(--tron-sidebar-bg-opacity, 100%), transparent)
-  );
-  -webkit-backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
-  backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
-}
 
 /* Keep numeric validation while presenting a plain text-style field. */
 input[type="number"] {

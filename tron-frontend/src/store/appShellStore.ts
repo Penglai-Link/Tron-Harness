@@ -25,6 +25,7 @@ interface AppShellState {
   rightSidebarCollapsed: boolean;
   shortcutBindings: ShellShortcutBindings;
   sidebarCollapsed: boolean;
+  sidebarWidth: number | null;
   utilityPanel: string | null;
   workspaceSwitcherSnapshot: WorkspaceSwitcherData;
   closeFloatingPanels: () => void;
@@ -34,6 +35,7 @@ interface AppShellState {
   setAgentOpen: (open: boolean) => void;
   setRightSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  setSidebarWidth: (width: number) => void;
   setShortcutBinding: (
     action: ShellShortcutAction,
     binding: ShellShortcutBinding | null,
@@ -76,6 +78,7 @@ export const useAppShellStore = create<AppShellState>()(
       rightSidebarCollapsed: true,
       shortcutBindings: createDefaultShellShortcutBindings(),
       sidebarCollapsed: false,
+      sidebarWidth: null,
       utilityPanel: null,
       workspaceSwitcherSnapshot: defaultWorkspaceSwitcherSnapshot,
       closeFloatingPanels: () => set({ agentOpen: false, utilityPanel: null }),
@@ -106,6 +109,7 @@ export const useAppShellStore = create<AppShellState>()(
       setAgentOpen: (agentOpen) => set({ agentOpen }),
       setRightSidebarCollapsed: (rightSidebarCollapsed) => set({ rightSidebarCollapsed }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setShortcutBinding: (action, binding) =>
         set((state) => ({
           shortcutBindings: {
@@ -141,6 +145,7 @@ export const useAppShellStore = create<AppShellState>()(
         selectedPrimarySpaceId: state.selectedPrimarySpaceId,
         selectedSecondarySpaceId: state.selectedSecondarySpaceId,
         sidebarCollapsed: state.sidebarCollapsed,
+        sidebarWidth: state.sidebarWidth,
         shortcutBindings: state.shortcutBindings,
         workspaceSwitcherSnapshot: state.workspaceSwitcherSnapshot,
       }),

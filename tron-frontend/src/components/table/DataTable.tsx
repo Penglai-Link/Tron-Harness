@@ -75,7 +75,7 @@ export function DataTable<T extends RowData>({
   return (
     <section
       className={cn(
-        "overflow-hidden",
+        "min-w-0 w-full max-w-full overflow-hidden",
         variant === "default"
           ? "rounded-[var(--tron-card-radius,8px)] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
           : "rounded-none border-0 bg-transparent",

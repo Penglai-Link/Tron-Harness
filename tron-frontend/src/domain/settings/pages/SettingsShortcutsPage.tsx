@@ -104,7 +104,7 @@ export function SettingsShortcutsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="@container min-w-0 space-y-6">
       <PageHeader title={pageT("title")} />
 
       <SurfaceCard className="overflow-hidden p-0">
@@ -126,7 +126,7 @@ export function SettingsShortcutsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[760px] divide-y divide-[var(--color-outline-variant)]">
+          <div className="min-w-0 divide-y divide-[var(--color-outline-variant)]">
             {shellShortcutActions.map((action, index) => {
               const binding = shortcutBindings[action];
               const isCapturing = capturingAction === action;
@@ -134,14 +134,14 @@ export function SettingsShortcutsPage() {
 
               return (
                 <Fragment key={action}>
-                  <Item size="xs">
+                  <Item size="xs" className="flex-col items-stretch @min-[36rem]:flex-row @min-[36rem]:items-center">
                     <ItemContent>
-                      <ItemTitle>{label}</ItemTitle>
-                      <ItemDescription>
+                      <ItemTitle className="break-words">{label}</ItemTitle>
+                      <ItemDescription className="line-clamp-none">
                         {pageT(`shortcuts.${action}.description`)}
                       </ItemDescription>
                     </ItemContent>
-                    <ItemActions className="w-[196px] shrink-0 flex-nowrap justify-end gap-2">
+                    <ItemActions className="w-full shrink-0 flex-nowrap justify-end gap-2 @min-[36rem]:w-56">
                       <Button
                         aria-label={pageT("actions.configure", { label })}
                         className="min-w-0 flex-1 justify-start font-mono"

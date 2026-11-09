@@ -48,6 +48,12 @@ impl FileSkinStore {
         if !valid_skin_id(id) {
             return Err(SkinError::Invalid);
         }
+        // Reserved built-in skins follow the running application version.
+        if let Some(content) = BUILTINS.iter().find(|content| {
+            serde_json::from_str::<Skin>(content).is_ok_and(|skin| skin.id == id)
+        }) {
+            return serde_json::from_str(content).map_err(|_| SkinError::Storage);
+        }
         let result = self
             .checked_resource(id, "skin.json")
             .and_then(|path| {

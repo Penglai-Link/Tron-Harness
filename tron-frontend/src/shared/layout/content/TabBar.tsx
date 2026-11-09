@@ -64,7 +64,7 @@ export function TabBar({ className }: TabBarProps) {
   return (
     <div
       className={cn(
-        "inline-flex w-full items-center gap-1 overflow-hidden p-1",
+        "flex w-full min-w-0 items-center gap-1 overflow-x-auto px-1 pb-2",
         className,
       )}
       role="tablist"
@@ -140,7 +140,7 @@ function TabBarItem({
           render={
             <ContextMenuTrigger
               className={cn(
-                "group relative inline-flex h-8 min-w-0 max-w-[200px] shrink cursor-pointer items-center rounded-[4px] bg-[var(--color-surface-container)] px-1 text-sm font-medium whitespace-nowrap text-[var(--color-on-surface-variant)] transition-all",
+                "group relative inline-flex h-9 min-w-0 max-w-[16rem] shrink-0 cursor-pointer items-center rounded-lg px-1 text-sm font-medium whitespace-nowrap text-[var(--color-on-surface-variant)] transition-all",
                 isActive
                   ? "bg-[var(--color-elevated-surface)] text-foreground"
                   : "hover:bg-background/50 hover:text-foreground",

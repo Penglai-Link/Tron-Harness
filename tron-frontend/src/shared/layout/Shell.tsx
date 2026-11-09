@@ -1,3 +1,4 @@
+import { TabBar } from "./content/TabBar";
 import { CREATE_TOPIC_SHORTCUT_EVENT, ADD_DIRECTORY_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import {
   Settings,
@@ -29,6 +30,7 @@ import {
   lazy,
   Suspense,
   type CSSProperties,
+  type ReactElement,
   type ReactNode,
 } from "react";
 
@@ -57,6 +59,7 @@ import { tronNavigation } from "@/shared/constants/shellNavigation";
 import { getEmptyWorkspaceSwitcher, getWorkspaceSwitcherMock } from "@/shared/constants/workspaceSpaces";
 import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLocale } from "@/i18n";
 import { useAppShellStore } from "@/store/appShellStore";
 import { useNavigationStore } from "@/store/navigationStore";
@@ -83,15 +86,45 @@ import type {
 import DraggleLine from "@/components/draggle-line";
 import {
   SidebarProvider,
-  SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Content } from "./content";
 import RightPanelContainer from "./content/RightPanelContainer";
 import { TronSidebar } from "./TronSidebar";
+import { WorkspaceLayout } from "./WorkspaceLayout";
 import { ChatNavigationProvider } from "./chat";
 import { useTabPanelRegistry } from "./content/TabPanelRegistry";
 
 const ChatContextInspector = lazy(() => import("@/domain/chat/components/ChatContextInspector").then((module) => ({ default: module.ChatContextInspector })));
+
+function ToolbarControl({ label, children }: { label: string; children: ReactElement }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={children} className="tron-shell-tool" />
+      <TooltipContent side="bottom" sideOffset={8}>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function MobileNavigationEntry() {
+  const { isMobile, openMobile, toggleSidebar } = useSidebar();
+  const { t } = useTranslation();
+  if (!isMobile) return null;
+
+  return (
+    <Button
+      className="tron-shell-tool"
+      variant="ghost"
+      size="icon"
+      aria-label={t(openMobile ? "shell:aria.closeNavigation" : "shell:aria.openNavigation")}
+      aria-controls="tron-sidebar"
+      aria-expanded={openMobile}
+      onClick={toggleSidebar}
+    >
+      <span className="tron-workspace-monogram" aria-hidden="true">T</span>
+    </Button>
+  );
+}
 
 interface TronShellProps {
   activeItem?: string;
@@ -1083,8 +1116,8 @@ export function TronShell({
         <button
           ref={userMenuTriggerRef}
           className={cn(
-            "flex h-14 min-w-0 w-full cursor-pointer items-center rounded-lg text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
-            compact ? "justify-center px-1" : "gap-3 px-2.5 hover:bg-[var(--color-hover-surface)]",
+            "flex h-12 min-w-0 w-full cursor-pointer items-center rounded-lg text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            compact ? "justify-center px-1" : "gap-2 px-2 hover:bg-[var(--color-hover-surface)]",
           )}
           type="button"
           aria-label={t("shell:aria.openUserMenu")}
@@ -1092,7 +1125,7 @@ export function TronShell({
           aria-haspopup="dialog"
           onClick={() => handleUtilityPanelClick("user")}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
+          <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
             {avatarSrc ? <img alt="" className="size-full object-cover" onError={handleAvatarLoadError} src={avatarSrc} /> : initial}
           </span>
           {compact ? null : (
@@ -1173,7 +1206,7 @@ export function TronShell({
         <button
           ref={domainTriggerRef}
           className={cn(
-            "group/domain-trigger flex h-10 w-full min-w-0 items-center rounded-lg text-left text-sm font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            "group/domain-trigger flex h-8 w-full min-w-0 items-center rounded-lg text-left text-sm font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
             compact ? "justify-center px-1.5" : "justify-between gap-2 px-2.5",
           )}
           type="button"
@@ -1212,6 +1245,40 @@ export function TronShell({
     );
   }
 
+  function renderWorkspaceSelector(compact: boolean) {
+    return (
+      <div className="relative min-w-0">
+        <button
+          ref={workspaceTriggerRef}
+          className="tron-workspace-selector"
+          type="button"
+          id="tron-workspace-trigger"
+          aria-busy={workspaceSwitcherLoading}
+          aria-expanded={utilityPanel === "workspace"}
+          aria-haspopup="dialog"
+          aria-label={utilityPanel === "workspace" ? t("shell:aria.closeWorkspaceSelector") : t("shell:aria.openWorkspaceSelector")}
+          onClick={handleWorkspaceSwitcherClick}
+          title={selectedWorkspacePathLabel}
+        >
+          <span className="tron-workspace-monogram" aria-hidden="true">T</span>
+          {!compact ? <span className="min-w-0 flex-1 truncate text-left">{selectedWorkspacePathLabel}</span> : null}
+          {!compact ? <ChevronDown className="shrink-0" size={15} aria-hidden="true" /> : null}
+        </button>
+        {utilityPanel === "workspace" ? (
+          <div
+            ref={utilityPanelRef}
+            id="tron-workspace-selector-panel"
+            className="absolute left-0 top-[calc(100%+8px)] z-[80] w-[min(22rem,calc(100vw-1rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-2 py-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]"
+            role="dialog" data-theme-anchor="dialog"
+            aria-label={t("shell:workspace.selectorTitle")}
+          >
+            {renderWorkspaceSwitcherContent()}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   if (shellFrameMounted) {
     return <>{children}</>;
   }
@@ -1220,125 +1287,132 @@ export function TronShell({
     <TronShellFrameContext.Provider value={true}>
       <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
         <SidebarProvider
-          className="tron-skin-canvas isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]"
+          className="tron-skin-canvas tron-shell-frame"
           data-theme-part="app-sidebar-frame"
           data-theme-anchor="app-shell"
           data-tron-entry-ready=""
           open={!sidebarCollapsed}
           onOpenChange={(open) => setSidebarCollapsed(!open)}
         >
-          <header className="fixed inset-x-0 top-0 z-[60] h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
-            <div className="flex h-full items-center justify-between gap-4">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <SidebarTrigger aria-label={t("shell:aria.openNavigation")} className="-ml-3 size-9 cursor-pointer md:hidden" />
-                <SidebarTrigger
-                  aria-label={sidebarCollapsed ? t("shell:aria.openNavigation") : t("shell:aria.closeNavigation")}
-                  className="-ml-3 hidden size-9 cursor-pointer md:flex"
+          <ChatNavigationProvider
+            activeSessionCode={new URLSearchParams(search).get("sessionCode") ?? ""}
+            navigateToPath={navigateToPath}
+          >
+            <WorkspaceLayout
+              navigation={
+                <TronSidebar
+                  activeItem={activeItem}
+                  activeHref={pathname}
+                  navigation={visibleNavigation}
+                  openNavigationItems={openNavigationItems}
+                  openSections={openSections}
+                  renderWorkspaceSelector={renderWorkspaceSelector}
+                  renderDomainSelector={renderNavigationDomainSelector}
+                  renderFooter={renderSidebarUserSection}
+                  setOpenNavigationItems={setOpenNavigationItems}
+                  translate={(key, options) => t(key, options)}
+                  onNavigate={handleSidebarNavigationClick}
+                  onToggleSection={toggleSection}
                 />
-                <button
-                  ref={workspaceTriggerRef}
-                  className="ml-1 inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 cursor-pointer items-center gap-[12px] rounded-[4px] border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-3 text-sm font-medium text-[var(--color-on-surface)]"
-                  type="button"
-                  id="tron-workspace-trigger"
-                  aria-busy={workspaceSwitcherLoading}
-                  aria-expanded={utilityPanel === "workspace"}
-                  aria-haspopup="dialog"
-                  aria-label={utilityPanel === "workspace" ? t("shell:aria.closeWorkspaceSelector") : t("shell:aria.openWorkspaceSelector")}
-                  onClick={handleWorkspaceSwitcherClick}
-                  title={selectedWorkspacePathLabel}
-                >
-                  <span className="truncate">{selectedWorkspacePathLabel}</span>
-                  <ChevronDown size={15} aria-hidden="true" />
-                </button>
-              </div>
-              <div className="flex shrink-0 items-center gap-[12px]">
-                {renderedTopbarActions}
-                <NotificationLauncher />
-                <Button className={cn("hidden min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
-                  <Bot size={17} aria-hidden="true" />
-                </Button>
-                <div ref={topbarToolsMenuContainerRef} className="relative min-[900px]:hidden">
-                  <Button
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                    aria-expanded={topbarToolsMenuOpen}
-                    aria-haspopup="menu"
-                    aria-label={t("shell:aria.moreActions")}
-                    onClick={() => setTopbarToolsMenuOpen((open) => !open)}
-                  >
-                    <MoreHorizontal size={18} aria-hidden="true" />
-                  </Button>
-                  {topbarToolsMenuOpen ? (
-                    <div ref={topbarToolsMenuRef} className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
-                      <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
-                        <Bot size={16} aria-hidden="true" />
-                        {t("shell:assistant.title")}
-                      </button>
+              }
+              toolbar={
+                <header className="tron-shell-toolbar" data-theme-part="app-toolbar">
+                  <div className="flex h-full items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <MobileNavigationEntry />
+                      <TabBar className="min-w-0 flex-1 py-0" />
                     </div>
-                  ) : null}
-                </div>
-                <Button
-                  className={cn(
-                    "hidden min-[900px]:inline-flex",
-                    showBottomPanel
-                      ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]"
-                      : "",
-                  )}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                  aria-label={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}
-                  aria-expanded={showBottomPanel}
-                  title={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}
-                  onClick={toggleBottomPanel}
-                >
-                  {showBottomPanel ? <PanelBottomClose size={17} /> : <PanelBottomOpen size={17} />}
-                </Button>
-                <>
-                  <Button
-                    className="lg:hidden"
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                    aria-controls="tron-mobile-right-sidebar"
-                    aria-expanded={rightDrawerOpen}
-                    aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
-                    title={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
-                    data-testid="tron-mobile-right-sidebar-toggle"
-                    onClick={toggleRightSidebarPanel}
-                  >
-                    {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
-                  </Button>
-                  <Button
-                    className="hidden lg:flex"
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                    aria-controls="tron-mobile-right-sidebar"
-                    aria-expanded={rightPanelOpen}
-                    aria-label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
-                    title={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
-                    data-testid="tron-mobile-right-sidebar-toggle"
-                    onClick={toggleRightSidebarPanel}
-                  >
-                    {rightPanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
-                  </Button>
-                  </>
-              </div>
-            </div>
-            {utilityPanel === "workspace" ? (
-              <div
-                ref={utilityPanelRef}
-                id="tron-workspace-selector-panel"
-                className="absolute left-4 top-[calc(100%+8px)] w-[min(220px,calc(100vw-1rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-2 py-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
-                role="dialog" data-theme-anchor="dialog"
-                aria-label={t("shell:workspace.selectorTitle")}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {renderedTopbarActions}
+                      <NotificationLauncher className="tron-shell-tool" />
+                      <ToolbarControl label={t("shell:assistant.title")}>
+                        <Button className="hidden min-[900px]:inline-flex" size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} onClick={handleAgentLauncherClick}>
+                          <Bot size={17} aria-hidden="true" />
+                        </Button>
+                      </ToolbarControl>
+                      <div ref={topbarToolsMenuContainerRef} className="relative min-[900px]:hidden">
+                        <ToolbarControl label={t("shell:aria.moreActions")}>
+                          <Button
+                            size="icon"
+                            type="button"
+                            variant="ghost"
+                            aria-expanded={topbarToolsMenuOpen}
+                            aria-haspopup="menu"
+                            aria-label={t("shell:aria.moreActions")}
+                            onClick={() => setTopbarToolsMenuOpen((open) => !open)}
+                          >
+                            <MoreHorizontal size={18} aria-hidden="true" />
+                          </Button>
+                        </ToolbarControl>
+                        {topbarToolsMenuOpen ? (
+                          <div ref={topbarToolsMenuRef} className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
+                            <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
+                              <Bot size={16} aria-hidden="true" />
+                              {t("shell:assistant.title")}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      <ToolbarControl label={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}>
+                        <Button
+                          className="hidden min-[900px]:inline-flex"
+                          size="icon"
+                          type="button"
+                          variant="ghost"
+                          aria-label={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}
+                          aria-expanded={showBottomPanel}
+                          onClick={toggleBottomPanel}
+                        >
+                          {showBottomPanel ? <PanelBottomClose size={17} /> : <PanelBottomOpen size={17} />}
+                        </Button>
+                      </ToolbarControl>
+                      <>
+                        <ToolbarControl label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}>
+                          <Button
+                            className="lg:hidden"
+                            size="icon"
+                            type="button"
+                            variant="ghost"
+                            aria-controls="tron-mobile-right-sidebar"
+                            aria-expanded={rightDrawerOpen}
+                            aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
+                            data-testid="tron-mobile-right-sidebar-toggle"
+                            onClick={toggleRightSidebarPanel}
+                          >
+                            {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
+                          </Button>
+                        </ToolbarControl>
+                        <ToolbarControl label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}>
+                          <Button
+                            className="hidden lg:flex"
+                            size="icon"
+                            type="button"
+                            variant="ghost"
+                            aria-controls="tron-mobile-right-sidebar"
+                            aria-expanded={rightPanelOpen}
+                            aria-label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
+                            data-testid="tron-mobile-right-sidebar-toggle"
+                            onClick={toggleRightSidebarPanel}
+                          >
+                            {rightPanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
+                          </Button>
+                        </ToolbarControl>
+                      </>
+                    </div>
+                  </div>
+                </header>
+              }
+            >
+              <Content
+                sessionCode={terminalSessionCode}
+                contentClassName={renderedContentClassName}
+                showBottomPanel={showBottomPanel}
+                changeBottomPanel={setBottomPanel}
               >
-                {renderWorkspaceSwitcherContent()}
-              </div>
-            ) : null}
-          </header>
+                {children}
+              </Content>
+            </WorkspaceLayout>
+          </ChatNavigationProvider>
 
           {agentOpen ? (
             <MainAgentChatWindow
@@ -1353,14 +1427,14 @@ export function TronShell({
           {rightDrawerOpen && isRightDrawerViewport ? (
             <>
               <button
-                className="fixed inset-x-0 bottom-0 top-14 z-40 bg-[var(--color-backdrop-scrim)] lg:hidden"
+                className="fixed inset-x-0 bottom-0 top-[var(--tron-shell-toolbar-height)] z-40 bg-[var(--color-backdrop-scrim)] lg:hidden"
                 type="button"
                 aria-label={t("shell:aria.closeRightSidebar")}
                 data-testid="tron-mobile-right-sidebar-backdrop"
                 onClick={closeRightDrawer}
               />
               <aside
-                className="fixed bottom-0 right-0 top-14 z-50 flex w-[min(22rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-5 py-5 text-[var(--color-on-surface)] shadow-[-12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
+                className="fixed bottom-2 right-2 top-[var(--tron-shell-toolbar-height)] z-50 rounded-xl flex w-[min(22rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-5 py-5 text-[var(--color-on-surface)] shadow-[-12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
                 data-theme-part="app-right-sidebar"
                 data-theme-anchor="panel"
                 data-testid="tron-mobile-right-sidebar"
@@ -1370,37 +1444,6 @@ export function TronShell({
               </aside>
             </>
           ) : null}
-
-          <ChatNavigationProvider
-            activeSessionCode={new URLSearchParams(search).get("sessionCode") ?? ""}
-            navigateToPath={navigateToPath}
-          >
-          <TronSidebar
-            activeItem={activeItem}
-            activeHref={pathname}
-            navigation={visibleNavigation}
-            openNavigationItems={openNavigationItems}
-            openSections={openSections}
-            renderDomainSelector={renderNavigationDomainSelector}
-            renderFooter={renderSidebarUserSection}
-            setOpenNavigationItems={setOpenNavigationItems}
-            translate={(key, options) => t(key, options)}
-            onNavigate={handleSidebarNavigationClick}
-            onToggleSection={toggleSection}
-          />
-          </ChatNavigationProvider>
-
-          <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14" data-theme-part="app-content">
-            <Content
-              sessionCode={terminalSessionCode}
-              contentClassName={renderedContentClassName}
-              showBottomPanel={showBottomPanel}
-
-              changeBottomPanel={setBottomPanel}
-            >
-              {children}
-            </Content>
-          </div>
 
         </SidebarProvider>
       </WorkspaceSpacesContext.Provider>

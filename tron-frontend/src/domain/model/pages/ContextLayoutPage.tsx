@@ -80,12 +80,13 @@ export function ContextLayoutPage() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : t("contextLayout.saveFailed")); }
     finally { setSaving(false); }
   }
-  const columns = "grid grid-cols-[minmax(18rem,1fr)_4rem_9rem_10rem_6rem] items-center gap-3 xl:grid-cols-[minmax(18rem,1fr)_4.5rem_10rem_16rem_9rem] xl:gap-5";
+  const columns = "grid-cols-2 items-center gap-3 @min-[54rem]:grid-cols-[minmax(0,1fr)_4rem_9rem_10rem_6rem] @min-[72rem]:grid-cols-[minmax(0,1fr)_4.5rem_10rem_16rem_9rem] @min-[72rem]:gap-5";
+  const mobileLabel = (label: string) => <span className="mb-1 block text-xs text-[var(--color-on-surface-variant)] @min-[54rem]:hidden">{label}</span>;
   const tokenPreview = allocateContextShares(shares, previewWindow);
   const budgets = order.map(id => ({ id, name: blocksById.get(id)?.displayName || contextBlockName(id, t), share: shares[id] ?? 0, tokens: tokenPreview[id] ?? 0 }));
 
   return (
-    <div className="min-w-0 pb-8">
+    <div className="@container min-w-0 pb-8">
       <PageHeader title={t("contextLayout.title")} actions={<>
         <Button disabled={loading || saving || !changed || !valid} onClick={() => void save()}>{saving ? t("contextLayout.saving") : t("contextLayout.save")}</Button>
         <Button variant="secondary" disabled={loading || saving || !canReset} onClick={() => setResetOpen(true)}>{t("contextLayout.reset")}</Button>
@@ -97,8 +98,8 @@ export function ContextLayoutPage() {
       {!loading && order.length > 0 ? <>
         <ContextBudgetPreview budgets={budgets} windowTokens={previewWindow} onWindowChange={setPreviewWindow} highlightedId={highlightedId} onHighlightChange={setHighlightedId} />
         <div className="overflow-x-auto">
-          <section aria-label={t("contextLayout.title")} className="min-w-[54rem] overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
-            <div className={`${columns} border-b border-[var(--color-outline-variant)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]`}>
+          <section aria-label={t("contextLayout.title")} className="min-w-0 overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
+            <div className={`hidden @min-[54rem]:grid ${columns} border-b border-[var(--color-outline-variant)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]`}>
               <span className="pl-6">{t("contextLayout.blockColumn")}</span>
               <span className="text-center">{t("contextLayout.updateMode")}</span>
               <span className="flex items-center justify-center gap-1">{t("contextLayout.compressionColumn")} <InfoTooltip ariaLabel={t("contextLayout.compressionColumn")}>{t("contextLayout.compressionHelp")}</InfoTooltip></span>
@@ -122,8 +123,8 @@ export function ContextLayoutPage() {
                     if (!movable || saving || !draggedId) return;
                     event.preventDefault(); moveBlock(draggedId, id); setDraggedId(null);
                   }}
-                  className={`group ${columns} min-h-14 px-4 py-2 hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)] ${draggedId === id ? "opacity-50" : ""}`}>
-                  <div className="flex min-w-0 items-center gap-2">
+                  className={`group grid ${columns} min-h-14 px-4 py-2 hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)] ${draggedId === id ? "opacity-50" : ""}`}>
+                  <div className="col-span-2 flex min-w-0 items-center gap-2 @min-[54rem]:col-span-1">
                     <span className="flex w-4 shrink-0 justify-center">{movable ? <Button
                       variant="ghost" size="icon-xs" disabled={saving} draggable={!saving}
                       aria-label={t("contextLayout.reorderBlock", { name })}
@@ -146,11 +147,11 @@ export function ContextLayoutPage() {
                     {block?.plugin ? <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-on-surface-variant)] ring-1 ring-inset ring-[var(--color-outline-variant)]" title={block.providerId ?? undefined}>{t("contextLayout.plugin")}</span> : null}
                     {block?.unavailable ? <Button variant="ghost" size="icon-xs" disabled={saving} aria-label={t("contextLayout.removeUnavailable", { name })} onClick={() => removeBlock(id)}><Trash2 /></Button> : null}
                   </div>
-                  <span className="text-center text-xs text-[var(--color-on-surface-variant)]">{t(`contextLayout.updateModes.${block?.updateMode ?? "Unspecified"}`)}</span>
-                  <ContextCompressionLabel name={name} compression={block?.compression} unavailable={block?.unavailable} />
-                  <BudgetShareControl value={shares[id] ?? null} disabled={saving} label={t("contextLayout.ratioLimitFor", { name })} placeholder="0"
-                    onChange={value => { setShares(current => ({ ...current, [id]: value ?? 0 })); setError(""); setNotice(""); }} />
-                  <span className="text-right text-sm tabular-nums text-[var(--color-on-surface-variant)]" title={t("contextLayout.estimatedTokensHelp")}>{number.format(tokenPreview[id] ?? 0)}</span>
+                  <div className="min-w-0 text-xs text-[var(--color-on-surface-variant)] @min-[54rem]:text-center">{mobileLabel(t("contextLayout.updateMode"))}{t(`contextLayout.updateModes.${block?.updateMode ?? "Unspecified"}`)}</div>
+                  <div className="min-w-0">{mobileLabel(t("contextLayout.compressionColumn"))}<ContextCompressionLabel name={name} compression={block?.compression} unavailable={block?.unavailable} /></div>
+                  <div className="min-w-0">{mobileLabel(t("contextLayout.allocationColumn"))}<BudgetShareControl value={shares[id] ?? null} disabled={saving} label={t("contextLayout.ratioLimitFor", { name })} placeholder="0"
+                    onChange={value => { setShares(current => ({ ...current, [id]: value ?? 0 })); setError(""); setNotice(""); }} /></div>
+                  <div className="min-w-0 text-sm tabular-nums text-[var(--color-on-surface-variant)] @min-[54rem]:text-right" title={t("contextLayout.estimatedTokensHelp")}>{mobileLabel(t("contextLayout.estimatedTokens"))}{number.format(tokenPreview[id] ?? 0)}</div>
                 </li>;
               })}
             </ol>

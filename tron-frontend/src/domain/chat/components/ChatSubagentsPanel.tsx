@@ -14,20 +14,21 @@ import type { ChatSubagent, ChatSubagentDetail } from "../model/ChatSubagent";
 import { SubagentAvatar } from "./SubagentAvatar";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 
-export function ChatSubagentsPanel({ sessionCode, workspaceCode, data, workRailLabels, historyLabels }: {
+export function ChatSubagentsPanel({ sessionCode, workspaceCode, ownerDudeCode, data, workRailLabels, historyLabels }: {
   sessionCode: string;
-  workspaceCode: string;
+  workspaceCode?: string | null;
+  ownerDudeCode?: string | null;
   data?: ReturnType<typeof useChatSubagents>;
   workRailLabels?: ChatWorkRailLabels;
   historyLabels?: ChatHistoryLabels;
 }) {
   const { t } = useTranslation("pages");
   const visible = useTabVisibility();
-  const queried = useChatSubagents(sessionCode, workspaceCode, visible && !data);
+  const queried = useChatSubagents(sessionCode, workspaceCode, visible && !data, ownerDudeCode);
   const { items, loading, error } = data ?? queried;
   const [selected, setSelected] = useState("");
   const item = items.find((item) => item.runId === selected);
-  if (item) return <SubagentSession key={`${sessionCode}:${selected}`} parent={sessionCode} workspace={workspaceCode} item={item} workRailLabels={workRailLabels} historyLabels={historyLabels} onBack={() => setSelected("")} />;
+  if (item) return <SubagentSession key={`${sessionCode}:${selected}`} parent={sessionCode} workspace={workspaceCode} ownerDudeCode={ownerDudeCode} item={item} workRailLabels={workRailLabels} historyLabels={historyLabels} onBack={() => setSelected("")} />;
   return <section className="tron-scrollbar h-full min-h-0 overflow-y-auto p-4" aria-label={t("chat.subagents.title")}>
     {error ? <p role="alert" className="py-3 text-sm text-[var(--color-error)]">{t("chat.subagents.loadFailed")}</p> : null}
     {loading ? <p role="status" className="py-3 text-sm text-[var(--color-on-surface-variant)]"><ShinyText>{t("chat.subagents.loading")}</ShinyText></p> : null}
@@ -47,13 +48,13 @@ export function ChatSubagentsPanel({ sessionCode, workspaceCode, data, workRailL
   </section>;
 }
 
-function SubagentSession({ parent, workspace, item, onBack, workRailLabels, historyLabels }: {
-  parent: string; workspace: string; item: ChatSubagent; onBack: () => void;
+function SubagentSession({ parent, workspace, ownerDudeCode, item, onBack, workRailLabels, historyLabels }: {
+  parent: string; workspace?: string | null; ownerDudeCode?: string | null; item: ChatSubagent; onBack: () => void;
   workRailLabels?: ChatWorkRailLabels; historyLabels?: ChatHistoryLabels;
 }) {
   const { t } = useTranslation("pages");
   const visible = useTabVisibility();
-  const { detail, error } = useChatSubagentDetail(parent, workspace, item.runId, visible);
+  const { detail, error } = useChatSubagentDetail(parent, workspace, item.runId, visible, ownerDudeCode);
   return <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden" aria-label={t("chat.subagents.session")}>
     <header className="flex shrink-0 items-center gap-2 border-b border-[var(--color-outline-variant)]/40 px-3 py-2">
       <Button size="icon" variant="ghost" aria-label={t("chat.subagents.back")} onClick={onBack}><ArrowLeft aria-hidden className="size-4" /></Button>

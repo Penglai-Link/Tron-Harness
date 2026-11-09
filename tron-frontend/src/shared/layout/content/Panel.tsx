@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import type { ReactNode } from "react";
 
 import {
@@ -8,78 +7,14 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { usePanel } from "@/shared/hooks/usePanel";
-import {
-  formatShortcutKeys,
-  shellShortcutActions,
-} from "@/shared/lib/keyboardShortcuts";
 import { cn } from "@/shared/lib/utils";
-import { TabBar } from "@/shared/layout/content/TabBar";
-import { useAppShellStore } from "@/store/appShellStore";
 import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 import RightPanelContainer from "./RightPanelContainer";
-import { MotionReveal } from "@/shared/motion";
+import { EmptyTabWorkspace } from "./EmptyTabWorkspace";
 
 interface IPanelProps {
   children: ReactNode;
   contentClassName?: string;
-}
-
-function EmptyTabWorkspace() {
-  const { t: pageT } = useTranslation("pages");
-  const shortcutBindings = useAppShellStore((state) => state.shortcutBindings);
-  const useMacSymbols =
-    typeof navigator !== "undefined" &&
-    /Mac|iPhone|iPad/i.test(navigator.userAgent);
-  const shortcuts = shellShortcutActions.flatMap((action) => {
-    const binding = shortcutBindings[action];
-    if (!binding) return [];
-
-    return [
-      {
-        action,
-        keys: formatShortcutKeys(binding, useMacSymbols),
-      },
-    ];
-  });
-
-  return (
-    <section
-      aria-label={pageT("settingsShortcuts.title")}
-      className="flex min-h-full items-center justify-center overflow-hidden px-6 py-10"
-      data-testid="tron-empty-tab-workspace"
-    >
-      <MotionReveal className="flex w-full max-w-md flex-col items-center">
-        <div
-          className="w-full space-y-2.5"
-          data-testid="tron-empty-tab-shortcuts"
-        >
-          {shortcuts.map(({ action, keys }) => (
-            <div
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-5"
-              key={action}
-            >
-              <span className="text-sm text-[var(--color-on-surface-variant)]">
-                {pageT(`settingsShortcuts.shortcuts.${action}.label`)}
-              </span>
-              <span
-                className="flex items-center gap-1"
-                aria-label={keys.join(" ")}
-              >
-                {keys.map((key, index) => (
-                  <kbd
-                    className="min-w-6 rounded border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-1.5 py-0.5 text-center text-xs font-medium text-[var(--color-on-surface-variant)] shadow-[0_1px_0_rgba(15,23,42,0.05)]"
-                    key={`${key}-${index}`}
-                  >
-                    {key}
-                  </kbd>
-                ))}
-              </span>
-            </div>
-          ))}
-        </div>
-      </MotionReveal>
-    </section>
-  );
 }
 
 export function Panel({ children, contentClassName }: IPanelProps) {
@@ -118,6 +53,7 @@ export function Panel({ children, contentClassName }: IPanelProps) {
     panelRef,
     panelResize,
   } = usePanel({
+    adaptToWidth: true,
     open: storedPanelOpen,
     initialSize: activeTab?.rightPanelSize,
     onOpenChange: handleRightPanelOpenChange,
@@ -126,7 +62,6 @@ export function Panel({ children, contentClassName }: IPanelProps) {
   });
   return (
     <section className="flex h-full flex-col">
-      <TabBar className="h-12 flex-initial" />
       <div className={cn("relative z-0 grid h-1/2 flex-1 grid-cols-1")}>
         <style>{`
           #resize-panel {
@@ -140,10 +75,10 @@ export function Panel({ children, contentClassName }: IPanelProps) {
           }
         `}</style>
         <ResizablePanelGroup orientation="horizontal" className="w-full">
-          <ResizablePanel defaultSize="100%" className="min-w-0" style={{ overflow: "hidden" }}>
+          <ResizablePanel defaultSize="100%" minSize="40%" className="min-w-0" style={{ overflow: "hidden" }}>
             <main
               className={cn(
-                "relative z-0 h-full min-w-[400px] overflow-x-hidden overflow-y-auto bg-[var(--color-background)] px-6 py-6 text-[var(--color-on-surface)]",
+                "relative z-0 h-full min-w-0 overflow-x-hidden overflow-y-auto bg-[var(--color-elevated-surface)] px-4 py-4 md:px-6 md:py-6 text-[var(--color-on-surface)]",
                 contentClassName,
               )}
               data-theme-part="app-page"
@@ -169,8 +104,8 @@ export function Panel({ children, contentClassName }: IPanelProps) {
               collapsible
               collapsedSize={0}
               defaultSize="0%"
-              minSize={400}
-              maxSize="80%"
+              minSize="25%"
+              maxSize="60%"
               onResize={panelResize}
             >
               <aside

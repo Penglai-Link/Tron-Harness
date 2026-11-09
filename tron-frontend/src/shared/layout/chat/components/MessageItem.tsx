@@ -154,6 +154,7 @@ const MessageItem = ({
         left={
           <Link
             to={sessionPath}
+            title={session.title}
             className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
             onClick={(event) => {
               if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

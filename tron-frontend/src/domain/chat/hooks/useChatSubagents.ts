@@ -8,7 +8,7 @@ export function subagentEndpoint(session: string, runId?: string) {
 }
 
 /** The list polls summaries only. A transcript is fetched only while selected. */
-export function useChatSubagents(session: string, workspace: string, active: boolean) {
+export function useChatSubagents(session: string, workspace: string | null | undefined, active: boolean, ownerDudeCode?: string | null) {
   const [state, setState] = useState<{ session: string; items: ChatSubagent[]; error: boolean; loading: boolean }>({ session, items: [], error: false, loading: true });
   useEffect(() => {
     if (!session || !active || getServiceDataSource("chat") !== "api") return;
@@ -18,6 +18,7 @@ export function useChatSubagents(session: string, workspace: string, active: boo
       try {
         const items = await requestApi<ChatSubagent[]>(subagentEndpoint(session), {
           signal: controller.signal, queryParams: { workspaceCode: workspace },
+          headers: ownerDudeCode ? { "X-Dude-Code": ownerDudeCode } : undefined,
         });
         if (!controller.signal.aborted) setState({ session, items, error: false, loading: false });
       } catch {
@@ -28,7 +29,7 @@ export function useChatSubagents(session: string, workspace: string, active: boo
     }
     void refresh();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [session, workspace, active]);
+  }, [session, workspace, active, ownerDudeCode]);
   const api = getServiceDataSource("chat") === "api";
   return useMemo(() => {
     if (!session || !api) return { session, items: [], error: false, loading: false };
@@ -36,7 +37,7 @@ export function useChatSubagents(session: string, workspace: string, active: boo
   }, [api, session, state]);
 }
 
-export function useChatSubagentDetail(session: string, workspace: string, runId: string, active: boolean) {
+export function useChatSubagentDetail(session: string, workspace: string | null | undefined, runId: string, active: boolean, ownerDudeCode?: string | null) {
   const [state, setState] = useState<{ key: string; detail: ChatSubagentDetail | null; error: boolean }>({ key: "", detail: null, error: false });
   const key = `${session}:${runId}`;
   useEffect(() => {
@@ -47,6 +48,7 @@ export function useChatSubagentDetail(session: string, workspace: string, runId:
       try {
         const detail = await requestApi<ChatSubagentDetail>(subagentEndpoint(session, runId), {
           signal: controller.signal, queryParams: { workspaceCode: workspace },
+          headers: ownerDudeCode ? { "X-Dude-Code": ownerDudeCode } : undefined,
         });
         if (controller.signal.aborted) return;
         setState({ key, detail, error: false });
@@ -60,6 +62,6 @@ export function useChatSubagentDetail(session: string, workspace: string, runId:
     }
     void refresh();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [session, workspace, runId, key, active]);
+  }, [session, workspace, runId, key, active, ownerDudeCode]);
   return state.key === key ? state : { key, detail: null, error: false };
 }

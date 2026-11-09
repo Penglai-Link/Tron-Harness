@@ -1,5 +1,14 @@
 export const shell = {
+  workspaceStart: {
+    title: "开始你的下一项工作",
+    description: "让想法成为现实",
+    newChat: "开始随聊",
+  },
   aria: {
+    resizeSidebar: "调整侧边栏宽度",
+    resizeSidebarHint: "拖动调整宽度，向左拖可折叠，向右拖可展开",
+    sidebarExpanded: "侧边栏已展开",
+    sidebarCollapsed: "侧边栏已折叠",
     openTerminal: "打开终端",
     closeTerminal: "关闭终端",
     closeNavigation: "关闭导航菜单",
@@ -112,7 +121,7 @@ export const shell = {
       workingDirectory: "工作目录",
       moveDescription: "选择主题或随聊，工作目录保持不变。",
       quickChats: "随聊",
-      noDirectory: "不指定工作目录",
+      noDirectory: "无",
       locationFailed: "更改会话位置失败",
       archiveFailed: "归档会话失败",
       archived: "会话已归档",

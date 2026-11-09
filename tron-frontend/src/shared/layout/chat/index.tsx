@@ -26,6 +26,16 @@ interface ChatWidgetMenu {
   pageCode: string | null;
 }
 
+interface ChatCreationActions {
+  available: boolean;
+  addingDirectory: boolean;
+  createQuickChat: () => void;
+  createTopic: () => void;
+  addDirectory: () => void;
+}
+const ChatCreationContext = createContext<ChatCreationActions | null>(null);
+export function useChatCreationActions() { return useContext(ChatCreationContext); }
+
 const ChatNavigationContext = createContext<((menu: ChatWidgetMenu) => ReactNode) | null>(null);
 
 export function ChatNavigationWidget({ menu }: { menu: ChatWidgetMenu }) {
@@ -185,6 +195,13 @@ export function ChatNavigationProvider({
   }
 
   return (
+    <ChatCreationContext.Provider value={{
+      available: Boolean(workspaceCode),
+      addingDirectory: directoryPicker.saving,
+      createQuickChat,
+      createTopic: () => setProjectCreateOpen(true),
+      addDirectory: () => { void directoryPicker.choose(); },
+    }}>
     <ChatNavigationContext.Provider value={renderMenuItem}>
       {children}
       <ProjectCreateDialog
@@ -204,5 +221,6 @@ export function ChatNavigationProvider({
         }}
       />
     </ChatNavigationContext.Provider>
+    </ChatCreationContext.Provider>
   );
 }

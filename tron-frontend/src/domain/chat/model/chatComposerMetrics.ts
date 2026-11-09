@@ -60,6 +60,42 @@ function sessionCacheHitPercent(events: ChatAguiEvent[]): number | null {
     : null;
 }
 
+/** Match dsh: sum paired provider output usage and decode time across the session. */
+function sessionTokensPerSecond(events: ChatAguiEvent[]): number | null {
+  const seen = new Set<string>();
+  let outputTokens = 0;
+  let decodeMs = 0;
+
+  for (const event of events) {
+    if (event.eventName !== "agent.model.responded") continue;
+    const audit = auditPayload(event);
+    if (audit?.usageSource !== "provider" || audit.usageConfidence !== "actual") continue;
+    const output = tokenCount(record(audit.providerUsage)?.outputTokens);
+    if (output === null) continue;
+
+    let duration: number | null = null;
+    try { duration = tokenCount(record(JSON.parse(event.metadata.model_timing_json ?? "null"))?.decodeMs); }
+    catch { /* Older records have no reliable decode timing. */ }
+    if (duration === null) continue;
+
+    const attempt = event.metadata.model_attempt_id;
+    const key = attempt
+      ? [event.streamKey, event.runCode, "attempt", attempt].join("\u0000")
+      : event.id || [event.streamKey, event.runCode, event.occurredAt, audit.responseId ?? "", output, duration].join("\u0000");
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    // Keep numerator and denominator paired. Missing timings must not inflate
+    // speed, and reasoning tokens are already included in provider output usage.
+    outputTokens += output;
+    decodeMs += duration;
+  }
+
+  const speed = decodeMs > 0 ? outputTokens * 1000 / decodeMs : null;
+  return speed !== null && Number.isFinite(speed)
+    ? speed >= 10 ? Math.round(speed) : Math.round(speed * 10) / 10 : null;
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown> : null;
@@ -79,12 +115,12 @@ function auditPayload(event: ChatAguiEvent): Record<string, unknown> | null {
   }
 }
 
-/** Provider output usage divided by the same model call’s measured decode time. */
+/** Session-wide generation speed and cache usage, with the latest context use. */
 export function latestChatComposerMetrics(
   events: ChatAguiEvent[],
   contextSnapshot: ContextAssemblySnapshot | null = null,
 ): ChatComposerMetrics | null {
-
+  const tokensPerSecond = sessionTokensPerSecond(events);
   const responses = events
     .filter((event) => event.eventName === "agent.model.responded")
     .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
@@ -96,7 +132,6 @@ export function latestChatComposerMetrics(
     const provider = audit.usageSource === "provider" && audit.usageConfidence === "actual"
       ? record(audit.providerUsage) : null;
     const inputTokens = tokenCount(provider?.inputTokens);
-    const outputTokens = tokenCount(provider?.outputTokens);
     const cachedInputTokens = tokenCount(provider?.cachedInputTokens);
     const contextWindowTokens = tokenCount(estimate?.effectiveInputBudget)
       ?? tokenCount(estimate?.contextWindowLimit);
@@ -111,14 +146,6 @@ export function latestChatComposerMetrics(
     const latestCacheHitPercent = inputTokens && cachedInputTokens !== null
       ? Math.min(100, Math.round(cachedInputTokens / inputTokens * 100)) : null;
     const cacheHitPercent = sessionCacheHitPercent(events) ?? latestCacheHitPercent;
-
-    let decodeMs: number | null = null;
-    try { decodeMs = tokenCount(record(JSON.parse(response.metadata.model_timing_json ?? "null"))?.decodeMs); }
-    catch { /* Older records have no reliable decode timing. */ }
-    const speed = outputTokens !== null && decodeMs !== null && decodeMs > 0
-      ? outputTokens * 1000 / decodeMs : null;
-    const tokensPerSecond = speed !== null && Number.isFinite(speed)
-      ? speed >= 10 ? Math.round(speed) : Math.round(speed * 10) / 10 : null;
 
     if (tokensPerSecond !== null || cacheHitPercent !== null || contextPercent !== null) {
       return {

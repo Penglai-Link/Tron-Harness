@@ -153,11 +153,13 @@ function Sidebar({
   side = "left",
   variant = "sidebar",
   collapsible = "offcanvas",
+  position = "fixed",
   className,
   children,
   dir,
   ...props
 }: React.ComponentProps<"div"> & {
+  position?: "fixed" | "flow"
   side?: "left" | "right"
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
@@ -204,6 +206,24 @@ function Sidebar({
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
       </Sheet>
+    )
+  }
+
+  if (position === "flow") {
+    return (
+      <div
+        className={cn("group peer relative flex min-h-0 flex-col text-sidebar-foreground", className)}
+        data-state={state}
+        data-collapsible={state === "collapsed" ? collapsible : ""}
+        data-variant={variant}
+        data-side={side}
+        data-slot="sidebar"
+        data-position="flow"
+        data-theme-anchor="sidebar"
+        {...props}
+      >
+        {children}
+      </div>
     )
   }
 

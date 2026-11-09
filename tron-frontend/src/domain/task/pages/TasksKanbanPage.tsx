@@ -207,9 +207,9 @@ function KanbanCard({
     <button
       aria-busy={pending}
       className={cn(
-        "relative z-0 w-full rounded-xl border bg-[var(--color-elevated-surface)] text-left shadow-[0_2px_6px_rgba(15,23,42,0.05)] transition-[box-shadow,border-color,background-color,opacity] duration-150 hover:z-10 hover:border-[var(--color-outline)] hover:shadow-[0_12px_28px_rgba(15,23,42,0.10)]",
+        "relative z-0 w-full rounded-xl border bg-[var(--color-elevated-surface)] text-left shadow-[0_2px_6px_rgba(15,23,42,0.05)] transition-[box-shadow,border-color,background-color,opacity] duration-150 hover:z-10 hover:border-[var(--color-outline)] hover:shadow-[0_3px_10px_rgba(15,23,42,0.06)]",
         dense ? "p-2" : compact ? "p-2.5" : "p-3",
-        selected ? "border-[var(--color-primary)] shadow-[0_10px_24px_rgba(15,23,42,0.08)]" : "border-[var(--color-outline-variant)]",
+        selected ? "border-[var(--color-primary)] shadow-[0_2px_6px_rgba(15,23,42,0.05)]" : "border-[var(--color-outline-variant)]",
         dragging ? "translate-y-0 border-dashed border-[var(--color-primary)]/35 bg-[var(--color-primary)]/5 shadow-none hover:translate-y-0 hover:shadow-none" : "",
         pending ? "cursor-wait opacity-70" : "cursor-grab active:cursor-grabbing",
       )}
@@ -400,7 +400,8 @@ export function TasksKanbanPage() {
   const fitBoardScale = useMemo(() => {
     if (!columns.length || boardViewportWidth <= 0) return 1;
     const naturalBoardWidth = columns.length * BOARD_BASE_COLUMN_WIDTH + Math.max(0, columns.length - 1) * BOARD_BASE_GAP;
-    return clampBoardScale(boardViewportWidth / naturalBoardWidth);
+    // Keep automatic fitting readable; explicit zoom presets remain available.
+    return Math.max(0.8, clampBoardScale(boardViewportWidth / naturalBoardWidth));
   }, [boardViewportWidth, columns.length]);
 
   const boardScale = presetScaleFactor(boardScalePreset) ?? fitBoardScale;
@@ -525,12 +526,12 @@ export function TasksKanbanPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">
+    <div className="@container flex min-h-full min-w-0 flex-col">
       <PageHeader
         title={t("pages:tasks.kanban.title", "Task Management")}
         actions={
           <>
-            <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="w-[128px] bg-[var(--color-elevated-surface)]" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
+            <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="w-auto min-w-40 max-w-full bg-[var(--color-elevated-surface)]" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
               <SelectItem value="fit">{t("pages:tasks.taskFlows.fit", "Fit ({{percent}}%)", { percent: boardScalePercent })}</SelectItem>
               {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
             </SelectInput>
@@ -542,7 +543,7 @@ export function TasksKanbanPage() {
           </>
         }
       />
-      <SurfaceCard className="mb-4 grid min-w-0 grid-cols-1 items-center gap-3 p-4 sm:grid-cols-2 2xl:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))]">
+      <SurfaceCard className="mb-4 grid min-w-0 grid-cols-1 items-center gap-3 p-4 @min-[32rem]:grid-cols-2 @min-[64rem]:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))]">
         <div className="min-w-0">
           <SearchField ariaLabel={t("pages:tasks.kanban.search", "Search")} placeholder={t("pages:tasks.kanban.searchPlaceholder", "Filter task code, title, or description...")} value={searchInput} onChange={setSearchInput} />
         </div>
@@ -563,7 +564,7 @@ export function TasksKanbanPage() {
           </SelectInput>
         </div>
       </SurfaceCard>
-      <div className="flex min-h-0 flex-1 overflow-x-auto pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
+      <div className="flex min-h-64 min-w-0 flex-1 overflow-x-auto overscroll-x-contain pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
         {rootTaskColumns.map((column) => (
           <section
             aria-label={t("pages:tasks.taskFlows.aria.taskColumn", "{{name}} task column", { name: column.title })}

@@ -5,6 +5,7 @@ import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels"
 const RIGHT_PANEL_COLLAPSE_THRESHOLD = 300
 
 interface UsePanelOptions {
+    adaptToWidth?: boolean
     collapseThreshold?: number
     initialSize?: number | string
     onOpenChange?: (open: boolean) => void
@@ -14,6 +15,7 @@ interface UsePanelOptions {
 }
 
 export function usePanel({
+    adaptToWidth = false,
     collapseThreshold = RIGHT_PANEL_COLLAPSE_THRESHOLD,
     initialSize,
     onOpenChange,
@@ -52,10 +54,7 @@ export function usePanel({
                         typeof initialSize === "number" ? `${initialSize}px` : initialSize,
                     )
                 } else {
-                    const panelElement = document.getElementById("resize-panel")
-                    const groupWidth = panelElement?.parentElement?.getBoundingClientRect().width || window.innerWidth
-                    const targetPixels = Math.min(680, Math.max(520, groupWidth * 0.42))
-                    panelRef.current?.resize(`${targetPixels}px`)
+                    panelRef.current?.resize("42%")
                 }
             } else {
                 panelRef.current?.collapse()
@@ -84,16 +83,23 @@ export function usePanel({
         onOpenChangeRef.current?.(nextOpen)
     }, [])
 
+    // The same drag gesture must work when the main workspace is narrow.
+    const effectiveCollapseThreshold = useCallback(() => {
+        if (!adaptToWidth) return collapseThreshold
+        const groupWidth = document.getElementById("resize-panel")?.parentElement?.getBoundingClientRect().width
+        return groupWidth ? Math.min(collapseThreshold, groupWidth * 0.2) : collapseThreshold
+    }, [adaptToWidth, collapseThreshold])
+
     const panelResize = useCallback((panelSize: PanelSize) => {
         if (!isNumber(panelSize.inPixels)) {
             return
         }
 
         panelLastSizeRef.current = panelSize.inPixels
-        const shouldCollapse = panelSize.inPixels < collapseThreshold
+        const shouldCollapse = panelSize.inPixels < effectiveCollapseThreshold()
         panelCollapseRequestedRef.current = shouldCollapse
 
-        if (panelDraggingRef.current && panelSize.inPixels >= collapseThreshold) {
+        if (panelDraggingRef.current && panelSize.inPixels >= effectiveCollapseThreshold()) {
             onSizeChangeRef.current?.(panelSize.inPixels)
         }
 
@@ -101,7 +107,7 @@ export function usePanel({
             setDragTimeCollapsed(shouldCollapse)
             notifyOpenChange(!shouldCollapse)
         }
-    }, [collapseThreshold, notifyOpenChange])
+    }, [effectiveCollapseThreshold, notifyOpenChange])
 
     const handlePanelPointerDown = useCallback(() => {
         panelDraggingRef.current = true
@@ -117,7 +123,7 @@ export function usePanel({
         }
 
         const currentSize = panelRef.current?.getSize().inPixels ?? panelLastSizeRef.current
-        if (!isNumber(currentSize) || currentSize >= collapseThreshold) {
+        if (!isNumber(currentSize) || currentSize >= effectiveCollapseThreshold()) {
             panelCollapseRequestedRef.current = false
             if (panelRef.current?.isCollapsed()) {
                 panelRef.current.expand()
@@ -129,7 +135,7 @@ export function usePanel({
         if (!panelRef.current?.isCollapsed()) {
             panelRef.current?.collapse()
         }
-    }, [collapseThreshold])
+    }, [effectiveCollapseThreshold])
 
     const handlePanelPointerEnd = useCallback(() => {
         if (!panelDraggingRef.current && !panelCollapseRequestedRef.current) {
@@ -138,7 +144,7 @@ export function usePanel({
 
         const currentSize = panelRef.current?.getSize().inPixels
         const size = isNumber(currentSize) ? currentSize : panelLastSizeRef.current
-        const shouldCollapse = !isNumber(size) || size < collapseThreshold
+        const shouldCollapse = !isNumber(size) || size < effectiveCollapseThreshold()
 
         if (shouldCollapse) {
             panelRef.current?.collapse()
@@ -160,7 +166,7 @@ export function usePanel({
         if (isNumber(size)) {
             onSizeChangeRef.current?.(size)
         }
-    }, [collapseThreshold, notifyOpenChange])
+    }, [effectiveCollapseThreshold, notifyOpenChange])
 
     useEffect(() => {
         window.addEventListener("pointerup", handlePanelPointerEnd)

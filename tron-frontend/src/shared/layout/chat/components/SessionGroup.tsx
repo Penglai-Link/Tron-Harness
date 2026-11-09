@@ -54,19 +54,19 @@ const SessionGroup = ({
     <section>
       <Item
         className={cn(
-          "group/project flex mb-1 pl-2 w-full min-w-0 items-center gap-1",
+          "group/project flex pl-2 w-full min-w-0 items-center gap-1",
         )}
         left={
           <div className="flex min-w-0 flex-1 items-center gap-1">
             <ActionButton aria-label={t(open ? "common:actions.collapse" : "common:actions.expand")} onClick={() => setOpen((value) => !value)}>
               <ChevronRight size={14} className={open ? "rotate-90" : undefined} aria-hidden="true" />
             </ActionButton>
-            <ActionButton className="flex min-w-0 flex-1 items-center gap-2 text-left justify-start truncate" onClick={() => {
+            <ActionButton className="flex min-w-0 flex-1 items-center gap-1.5 text-left justify-start truncate" onClick={() => {
               onSelect(project.projectCode);
               onNavigate(`/topics/${encodeURIComponent(project.projectCode)}`);
             }}>
             <TopicIcon size={16} className="shrink-0" aria-hidden="true" />
-            <span className="truncate">{project.name}</span>
+            <span className="truncate" title={project.name}>{project.name}</span>
             </ActionButton>
           </div>
         }
@@ -84,7 +84,7 @@ const SessionGroup = ({
         }
       />
       {open ? (
-        <div className="flex flex-col gap-1 pl-2">
+        <div className="flex flex-col gap-0.5 pl-1.5">
           {sortPinnedSessions(sessions, pinnedSessionCodes).slice(0, visibleSessionCount).map((session) => (
             <MessageItem
               key={session.sessionCode}
@@ -98,7 +98,7 @@ const SessionGroup = ({
             />
           ))}
           {sessions.length === 0 ? (
-            <p className="py-1 pl-6 text-sm opacity-45">{t("shell:chatSidebar.noSessions")}</p>
+            <p className="py-1 pl-6 text-xs opacity-45">{t("shell:chatSidebar.noSessions")}</p>
           ) : null}
           {sessions.length > visibleSessionCount ? (
             <button

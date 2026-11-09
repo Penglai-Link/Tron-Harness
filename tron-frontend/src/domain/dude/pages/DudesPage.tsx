@@ -6,8 +6,11 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useTabVisibility, type EditableTab } from "@/components/editable-tabs";
-import { useRightPanelTabs, useTabPanelConfig } from "@/shared/layout/content/TabPanelRegistry";
+import { useRightPanelTabs, useTabPanelConfig, useTabPanelScopeId } from "@/shared/layout/content/TabPanelRegistry";
+import { useTabStore } from "@/store/tabStore";
 import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
+import { ChatSubagentsPanel } from "@/domain/chat/components/ChatSubagentsPanel";
+import { useChatSubagents } from "@/domain/chat/hooks/useChatSubagents";
 import { useChatHistoryLabels, useChatWorkRailLabels } from "@/domain/chat";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import type { ChatSession, SendChatMessageInput } from "@tron/chat-core";
@@ -99,6 +102,10 @@ export function DudesPage() {
   const { t, i18n } = useTranslation("pages");
   const [search, setSearch] = useSearchParams();
   const visible = useTabVisibility();
+  const scopeTabId = useTabPanelScopeId();
+  const rightPanelOpen = useTabStore((state) => state.tabs.find((item) => item.id === scopeTabId)?.rightPanelOpen ?? false);
+  const workRailLabels = useChatWorkRailLabels();
+  const historyLabels = useChatHistoryLabels();
   const dudes = useDudes();
   const code =
     search.get("dude") ??
@@ -136,15 +143,41 @@ export function DudesPage() {
     : tab === "history" ? selectedHistory : null;
   const inspectedSession = candidateSession?.ownerDudeCode === code ? candidateSession : null;
   useRightPanelTabs(inspectedSession?.sessionCode);
-  const rightPanelTabs = useMemo<EditableTab[]>(() => inspectedSession ? [{
-    key: "context",
-    label: t("chat.shortTermMemory.shortTermMemoryTab"),
-    closable: false,
-    children: <Suspense fallback={null}><ChatContextInspector
-      key={`${inspectedSession.ownerDudeCode}:${inspectedSession.sessionCode}`}
-      session={inspectedSession}
-    /></Suspense>,
-  }] : [], [inspectedSession, t]);
+  // Discover child runs before their tab exists, using the same Dude identity
+  // as the parent transcript. The panel reuses this query instead of polling twice.
+  const subagents = useChatSubagents(
+    inspectedSession?.sessionCode ?? "",
+    inspectedSession?.workspaceCode,
+    visible && rightPanelOpen,
+    inspectedSession?.ownerDudeCode,
+  );
+  const rightPanelTabs = useMemo<EditableTab[]>(() => {
+    if (!inspectedSession) return [];
+    const tabs: EditableTab[] = [{
+      key: "context",
+      label: t("chat.shortTermMemory.shortTermMemoryTab"),
+      closable: false,
+      children: <Suspense fallback={null}><ChatContextInspector
+        key={`${inspectedSession.ownerDudeCode}:${inspectedSession.sessionCode}`}
+        session={inspectedSession}
+      /></Suspense>,
+    }];
+    if (subagents.items.length > 0 || subagents.error) {
+      tabs.push({
+        key: "subagents", label: t("chat.subagents.title"), closable: false,
+        children: <ChatSubagentsPanel
+          key={`${inspectedSession.ownerDudeCode}:${inspectedSession.sessionCode}`}
+          sessionCode={inspectedSession.sessionCode}
+          workspaceCode={inspectedSession.workspaceCode}
+          ownerDudeCode={inspectedSession.ownerDudeCode}
+          data={subagents}
+          workRailLabels={workRailLabels}
+          historyLabels={historyLabels}
+        />,
+      });
+    }
+    return tabs;
+  }, [inspectedSession, subagents, workRailLabels, historyLabels, t]);
   useTabPanelConfig({ rightPanelTabs, rightPanelBrowserOnly: false });
   function selectTab(next: string) {
     setSearch((current) => {
