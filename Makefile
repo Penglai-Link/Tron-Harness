@@ -186,6 +186,12 @@ DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BIN
 ELECTRON_NPM := $(NPM)
 NODE ?= node
 
+# Standalone Linux backend builds use a fixed Debian 12 / glibc 2.36 baseline.
+# Keep the toolchain independent of the developer's host OS and Cargo caches.
+WSL_ARCH ?= x86_64
+WSL_BUILD_IMAGE := rust:1.95.0-bookworm
+SKIP_TESTS ?= false
+
 # Compiler caches follow the current user, including Windows and Git worktrees.
 _BUILD_CACHE_HOME := $(if $(filter Windows_NT,$(OS)),$(if $(strip $(USERPROFILE)),$(subst \,/,$(USERPROFILE)),$(HOME)),$(HOME))
 export RUST_CACHE_DIR ?= $(_BUILD_CACHE_HOME)/rust-cache
@@ -217,6 +223,13 @@ help:
 	@echo "Backend commands:"
 	@echo "  make be-install   Fetch backend dependencies"
 	@echo "  make be-check     Compile backend"
+	@echo "  make be-build-wsl 构建独立 Linux 后端二进制（需要 Node.js 和 Docker Linux 容器）"
+	@echo "                    运行基线：WSL2 Ubuntu 24.04+、Debian 12+；不包含前端和桌面安装包"
+	@echo "                    WSL_ARCH=x86_64（默认）、aarch64 或 all；异构构建需要 Docker 模拟支持"
+	@echo "                    VERSION 必须与 version.properties 一致；SKIP_TESTS=true/false（本目标不运行测试）"
+	@echo "                    输出：output/wsl2/<版本>/<Rust target>/，含二进制、SHA-256 和运行库清单"
+	@echo "                    make be-clean 同时清理 WSL 产物，保留 Docker 构建缓存"
+	@echo "                    示例：make be-build-wsl WSL_ARCH=all"
 	@echo "  make be-clean     Remove backend build artifacts and scratch files"
 	@echo "  make be-clean-package Remove backend crate artifacts; retain dependency caches"
 	@echo "  make be-dev       Run backend server"
@@ -333,12 +346,128 @@ agent-capability-check agent-harness-check: harness-capability-check
 be-check:
 	$(CARGO) check --manifest-path "$(BACKEND_MANIFEST)"
 
+# Pass scripts through the environment and stdin rather than interpolating
+# user input into cmd.exe or POSIX shell command strings. The source mount is
+# read-only; Cargo downloads/build outputs stay in repository-scoped volumes.
+define _WSL_BUILD_SCRIPT
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
+for wsl_attempt in 1 2 3; do
+    if apt-get -o Acquire::Retries=3 -o APT::Update::Error-Mode=any update && apt-get -o Acquire::Retries=3 install -y --no-install-recommends cmake libwayland-dev; then
+        break
+    fi
+    if [ "$$wsl_attempt" -eq 3 ]; then exit 1; fi
+    echo "构建依赖下载失败，重试安装（已尝试 $$wsl_attempt 次）。" >&2
+done
+export CARGO_HOME=/cargo-cache
+export CARGO_TARGET_DIR=/build
+export RUSTC_WRAPPER=
+export RUSTC_WORKSPACE_WRAPPER=
+unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_TARGET
+cargo build --locked --release --manifest-path tron-backend/Cargo.toml --bin tron-backend --target "$$TRON_WSL_TARGET"
+wsl_binary="/build/$$TRON_WSL_TARGET/release/tron-backend"
+test -x "$$wsl_binary"
+wsl_stage=$$(mktemp -d /output/.build-XXXXXXXX)
+trap 'rm -rf -- "$$wsl_stage"' EXIT
+cp "$$wsl_binary" "$$wsl_stage/tron-backend"
+chmod 755 "$$wsl_stage/tron-backend"
+ldd "$$wsl_stage/tron-backend" > "$$wsl_stage/runtime-dependencies.txt"
+if grep -q 'not found' "$$wsl_stage/runtime-dependencies.txt"; then
+    cat "$$wsl_stage/runtime-dependencies.txt" >&2
+    echo "错误：构建产物存在未解析的动态库。" >&2
+    exit 1
+fi
+printf '\n构建镜像：%s\n版本：%s\n目标：%s\n运行基线：WSL2 Ubuntu 24.04+、Debian 12+（glibc 2.36+）\n' "$$TRON_WSL_IMAGE" "$$TRON_WSL_VERSION" "$$TRON_WSL_TARGET" >> "$$wsl_stage/runtime-dependencies.txt"
+printf '系统运行库：libc6、libgcc-s1、libssl3（或 libssl3t64）、libwayland-client0、ca-certificates；以以上 ldd 清单为准。\n' >> "$$wsl_stage/runtime-dependencies.txt"
+cd "$$wsl_stage"
+sha256sum tron-backend > SHA256SUMS
+chown -R "$$TRON_WSL_UID:$$TRON_WSL_GID" "$$wsl_stage"
+for wsl_file in tron-backend runtime-dependencies.txt SHA256SUMS; do
+    mv -f "$$wsl_file" "/output/$$wsl_file"
+done
+endef
+
+define _WSL_BUILD_DRIVER
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
+function fail(message) { console.error('错误：' + message); process.exit(1); }
+const root = process.cwd();
+const requestedArch = process.env.TRON_WSL_ARCH;
+const targets = {
+    x86_64: ['linux/amd64', 'x86_64-unknown-linux-gnu'],
+    aarch64: ['linux/arm64', 'aarch64-unknown-linux-gnu']
+};
+if (requestedArch !== 'all' && !Object.hasOwn(targets, requestedArch)) fail('WSL_ARCH 只支持 x86_64、aarch64 或 all。');
+if (!['true', 'false'].includes(process.env.TRON_WSL_SKIP_TESTS)) fail('SKIP_TESTS 只支持 true 或 false。');
+const revision = fs.readFileSync('version.properties', 'utf8').match(/^revision\s*=\s*(\S+)\s*$$/m)?.[1];
+if (!revision || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$$/.test(revision)) fail('version.properties 缺少有效的 revision。');
+const manifestVersion = fs.readFileSync('tron-backend/Cargo.toml', 'utf8').match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+if (manifestVersion !== revision) fail('后端版本与 revision 不一致，请先执行 make version。');
+const requestedVersion = process.env.TRON_WSL_VERSION;
+if (requestedVersion && requestedVersion !== revision) fail('VERSION 必须等于 ' + revision + '；修改版本请先执行 make version VERSION=<版本>。');
+function docker(args, options = {}) {
+    const result = spawnSync('docker', args, { stdio: 'inherit', ...options });
+    if (result.error) fail('无法执行 Docker：' + result.error.message);
+    if (result.status !== 0) fail('Docker 命令失败，请查看以上日志，检查镜像访问、构建依赖及目标架构支持。');
+    return result;
+}
+const info = docker(['info', '--format', '{{.OSType}}'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+if (info.stdout.trim() !== 'linux') fail('请将 Docker 切换为 Linux 容器。');
+if (root.includes(',')) fail('Docker 挂载不支持包含逗号的仓库路径。');
+const cacheId = crypto.createHash('sha256').update(root).digest('hex').slice(0, 12);
+const uid = process.getuid ? process.getuid() : 0;
+const gid = process.getgid ? process.getgid() : 0;
+const image = process.env.TRON_WSL_IMAGE;
+for (const arch of requestedArch === 'all' ? Object.keys(targets) : [requestedArch]) {
+    const [platform, target] = targets[arch];
+    const output = path.join(root, 'output', 'wsl2', revision, target);
+    fs.mkdirSync(output, { recursive: true });
+    console.log('构建 ' + target + '，版本 ' + revision + '，镜像 ' + image);
+    docker([
+        'run', '--rm', '--init', '--interactive', '--platform', platform,
+        '--mount', 'type=bind,source=' + root + ',target=/workspace,readonly',
+        '--mount', 'type=bind,source=' + output + ',target=/output',
+        '--mount', 'type=volume,source=tron-wsl-cargo-' + cacheId + ',target=/cargo-cache',
+        '--mount', 'type=volume,source=tron-wsl-build-' + cacheId + '-' + arch + ',target=/build',
+        '--workdir', '/workspace',
+        '--env', 'TRON_WSL_TARGET=' + target,
+        '--env', 'TRON_WSL_VERSION=' + revision,
+        '--env', 'TRON_WSL_IMAGE=' + image,
+        '--env', 'TRON_WSL_UID=' + uid,
+        '--env', 'TRON_WSL_GID=' + gid,
+        image, 'sh', '-s'
+    ], { input: process.env.TRON_WSL_BUILD_SCRIPT, stdio: ['pipe', 'inherit', 'inherit'] });
+    for (const file of ['tron-backend', 'SHA256SUMS', 'runtime-dependencies.txt']) {
+        if (!fs.statSync(path.join(output, file)).isFile()) fail('缺少构建产物：' + file);
+    }
+    console.log('构建完成：' + output);
+}
+endef
+
+.PHONY: be-build-wsl
+be-build-wsl: export TRON_WSL_BUILD_SCRIPT = $(_WSL_BUILD_SCRIPT)
+be-build-wsl: export TRON_WSL_BUILD_DRIVER = $(_WSL_BUILD_DRIVER)
+be-build-wsl: export TRON_WSL_ARCH = $(WSL_ARCH)
+be-build-wsl: export TRON_WSL_VERSION = $(VERSION)
+be-build-wsl: export TRON_WSL_SKIP_TESTS = $(SKIP_TESTS)
+be-build-wsl: export TRON_WSL_IMAGE = $(WSL_BUILD_IMAGE)
+be-build-wsl:
+	@$(NODE) -e "eval(process.env.TRON_WSL_BUILD_DRIVER)"
+
 .PHONY: be-clean-package
 # Retain dependency caches and running development data when reclaiming local artifacts.
 be-clean-package:
 	$(CARGO) clean --manifest-path "$(BACKEND_MANIFEST)" --package tron-backend
 
 .PHONY: be-clean
+be-clean: _be-wsl-clean
+.PHONY: _be-wsl-clean
+_be-wsl-clean:
+	$(call REMOVE,output/wsl2)
+
 ifeq ($(HOST_OS),windows)
 be-clean:
 	$(call REMOVE,$(BACKEND_DIR)/target)
@@ -385,11 +514,13 @@ dev-api:
 	wait "$$backend_pid" "$$frontend_pid"
 endif
 
-.PHONY: web-build
-web-build:
+.PHONY: web-assets web-build
+web-assets:
 	$(call REMOVE,$(BACKEND_FRONTEND_DIR))
 	$(call MKDIR,$(BACKEND_FRONTEND_DIR))
 	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(call RUN_WITH_ENV,$(APP_FRONTEND_ENV),$(NPM) run build))
+
+web-build: web-assets
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)"
 
 .PHONY: web-dev
@@ -444,7 +575,7 @@ endif
 .PHONY: desktop-build
 desktop-build: _desktop-build-tools
 	$(MAKE) desktop-clean
-	$(MAKE) web-build
+	$(MAKE) web-assets
 ifeq ($(HOST_OS),windows)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/frontend)

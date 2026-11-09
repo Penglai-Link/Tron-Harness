@@ -1,0 +1,34 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: tron-frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tron-backend -> target
+      - run: sudo apt-get update && sudo apt-get install -y libwayland-dev
+      - run: npm ci --prefix tron-frontend
+      - run: make version-check
+      - run: make fe-check
+      - run: make be-check

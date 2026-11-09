@@ -32,6 +32,12 @@
 
 Makefile中集成了前端、后端、WEB继承模式、桌面APP模式的相关构建和运行命令，使用 `make help` 查看使用说明。
 
+### GitHub Actions 构建和发布
+
+提交 PR 或推送到 `main`、`master` 时，CI 检查版本、构建前端并检查后端。在 Actions 页面手动运行 `Build packages` 可以下载各平台安装包和 x86_64 WSL 后端。推送与 `version.properties` 中版本一致的标签（例如 `v1.2.3`）也会触发构建，并在全部任务成功后创建 Release 草稿；包含后缀的标签会标记为预发布。检查产物和 SHA-256 后，再手动发布草稿。已有同名 Release 时，创建草稿的任务会失败，不会覆盖已有文件。
+
+macOS 包当前使用 ad-hoc 签名，公开分发前需要配置正式签名和公证。
+
 ### 构建缓存
 
 从仓库根目录使用 Makefile 构建。后端通过 `.cargo/config.toml` 中的 `rustc-wrapper = "sccache"` 复用 Rust 编译缓存，构建环境需要提供可执行的 `sccache`。当前配置关闭了 Cargo 增量编译（`incremental = false`）。

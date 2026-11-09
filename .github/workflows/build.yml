@@ -1,0 +1,120 @@
+name: Build packages
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: linux-x64
+          - os: windows-2022
+            name: windows-x64
+          - os: macos-15
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+      ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: tron-frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tron-backend -> target
+      - name: Install GNU Make on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command make -ErrorAction SilentlyContinue)) { choco install make -y --no-progress; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwayland-dev rpm xz-utils unzip libopenjp2-tools
+      - name: Install frontend dependencies
+        run: npm ci --prefix tron-frontend
+      - run: make version-check
+      - name: Check tag matches version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version=$(sed -n 's/^revision=//p' version.properties | tr -d '\r')
+          test "${GITHUB_REF_NAME}" = "v${version}"
+      - run: make desktop-build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tron-desktop-${{ matrix.name }}
+          path: |
+            electron/dist/*.dmg
+            electron/dist/*.exe
+            electron/dist/*.AppImage
+            electron/dist/*.deb
+            electron/dist/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+  wsl:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: make version-check
+      - name: Check tag matches version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version=$(sed -n 's/^revision=//p' version.properties | tr -d '\r')
+          test "${GITHUB_REF_NAME}" = "v${version}"
+      - run: make be-build-wsl WSL_ARCH=x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tron-wsl-backend-x86_64
+          path: output/wsl2/
+          if-no-files-found: error
+          retention-days: 14
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [desktop, wsl]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Prepare release files
+        run: |
+          mkdir release
+          for file in artifacts/tron-desktop-*/*; do
+            [ -f "$file" ] || continue
+            name=$(basename "$file")
+            if [ -e "release/$name" ]; then
+              echo "Duplicate release asset: $name" >&2
+              exit 1
+            fi
+            cp "$file" release/
+          done
+          tar -czf release/tron-wsl-backend-x86_64.tar.gz -C artifacts/tron-wsl-backend-x86_64 .
+          (cd release && sha256sum * > SHA256SUMS)
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          args=(--draft --title "$GITHUB_REF_NAME" --generate-notes --verify-tag)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then args+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" release/* "${args[@]}"
