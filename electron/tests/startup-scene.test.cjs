@@ -54,6 +54,41 @@ test("startup markup applies the persisted theme before painting", () => {
   }
 });
 
+test("first startup stays dark until the page is ready, then remembers its theme", async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "tron-animation-"));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const window = new EventEmitter(), ipcMain = new EventEmitter();
+  let background, attached;
+  window.webContents = {};
+  window.isDestroyed = () => false;
+  window.setBackgroundColor = (value) => { background = value; };
+  window.getContentSize = () => [800, 600];
+  window.contentView = { addChildView(view) { attached = view; }, removeChildView() { attached = null; } };
+  class View {
+    constructor() { this.webContents = { loadURL: async () => {}, isDestroyed: () => false, close() {} }; }
+    setBounds() {}
+    setBackgroundColor(value) { this.background = value; }
+  }
+  const scene = createStartupScene({ window, ipcMain, WebContentsView: View, dataDir });
+  await scene.show("loading");
+  ipcMain.emit("tron-animation:theme", { sender: window.webContents }, "light");
+  assert.equal(scene.theme, "matrix-dark");
+  assert.equal(background, "#020305");
+  assert.equal(attached.background, "#020305");
+  assert.equal(fs.existsSync(path.join(dataDir, "startup-theme.json")), false);
+  ipcMain.emit("tron-animation:ready", { sender: window.webContents });
+  assert.equal(attached, null);
+  assert.equal(scene.theme, "light");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, "startup-theme.json"))), "light");
+  window.emit("closed");
+  const nextWindow = new EventEmitter();
+  nextWindow.webContents = {};
+  nextWindow.setBackgroundColor = () => {};
+  const nextScene = createStartupScene({ window: nextWindow, ipcMain, WebContentsView: View, dataDir });
+  assert.equal(nextScene.theme, "light");
+  nextWindow.emit("closed");
+});
+
 test("dismisses the startup view if the loaded page never reports readiness", async (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "tron-animation-"));
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));

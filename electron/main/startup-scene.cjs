@@ -5,7 +5,15 @@ const path = require("node:path");
 function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
   const themePath = path.join(dataDir, "startup-theme.json");
   let theme = "matrix-dark";
-  try { if (JSON.parse(fs.readFileSync(themePath, "utf8")) === "light") theme = "light"; } catch {}
+  let firstStartup = true;
+  let pendingTheme = null;
+  try {
+    const stored = JSON.parse(fs.readFileSync(themePath, "utf8"));
+    if (["light", "matrix-dark"].includes(stored)) {
+      theme = stored;
+      firstStartup = false;
+    }
+  } catch {}
   window.setBackgroundColor(theme === "light" ? "#ffffff" : "#020305");
   let view = null;
   let fallbackTimer = null;
@@ -13,17 +21,21 @@ function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
     const [width, height] = window.getContentSize();
     view?.setBounds({ x: 0, y: 0, width, height });
   };
-  const dismiss = () => {
+  const dismiss = (initialized = false) => {
     if (fallbackTimer) clearTimeout(fallbackTimer);
     fallbackTimer = null;
     if (!view) return;
     if (!window.isDestroyed()) window.contentView.removeChildView(view);
     if (!view.webContents.isDestroyed()) view.webContents.close();
     view = null;
+    if (initialized && firstStartup) {
+      firstStartup = false;
+      if (pendingTheme) applyTheme(pendingTheme);
+      pendingTheme = null;
+    }
   };
-  const ready = (event) => { if (event.sender === window.webContents) dismiss(); };
-  const saveTheme = (event, value) => {
-    if (event.sender !== window.webContents || !["light", "matrix-dark"].includes(value)) return;
+  const ready = (event) => { if (event.sender === window.webContents) dismiss(true); };
+  const applyTheme = (value) => {
     const changed = theme !== value;
     theme = value;
     window.setBackgroundColor(theme === "light" ? "#ffffff" : "#020305");
@@ -35,6 +47,14 @@ function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
       fs.mkdirSync(dataDir, { recursive: true });
       fs.writeFileSync(themePath, JSON.stringify(theme));
     } catch (error) { console.error("Could not save startup animation theme", error); }
+  };
+  const saveTheme = (event, value) => {
+    if (event.sender !== window.webContents || !["light", "matrix-dark"].includes(value)) return;
+    if (firstStartup) {
+      pendingTheme = value;
+      return;
+    }
+    applyTheme(value);
   };
   ipcMain.on("tron-animation:ready", ready);
   ipcMain.on("tron-animation:theme", saveTheme);
@@ -57,7 +77,7 @@ function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
     },
     dismissIfNotReadyAfter(delayMs = 5000) {
       if (!view || fallbackTimer) return;
-      fallbackTimer = setTimeout(dismiss, delayMs);
+      fallbackTimer = setTimeout(() => dismiss(true), delayMs);
     },
   };
 }
