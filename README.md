@@ -87,3 +87,7 @@ make be-check SCCACHE_DIR=/path/to/sccache CCACHE_DIR=/path/to/ccache
   - 前端静态资源
   - Web 应用入口
 后端服务启动后，用户可以直接通过后端服务器访问应用界面。
+
+## 许可证
+
+本项目采用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）。第三方组件及资源保留各自的许可证和版权声明。
