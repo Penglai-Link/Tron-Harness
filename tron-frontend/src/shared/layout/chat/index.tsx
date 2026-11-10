@@ -201,6 +201,7 @@ export function ChatNavigationProvider({
           setSelectedProjectCode(project.projectCode);
           setProjectListExpanded(true);
           window.dispatchEvent(new Event("tron:project-created"));
+          if (!editingProject) navigateToPath(`/topics/${encodeURIComponent(project.projectCode)}`);
         }}
       />
     </ChatNavigationContext.Provider>

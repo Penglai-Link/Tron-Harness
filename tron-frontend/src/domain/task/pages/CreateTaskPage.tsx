@@ -1,3 +1,4 @@
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Maximize2, X } from "lucide-react";
 import {
   useEffect,
@@ -12,7 +13,6 @@ import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
 import { OptionSelect } from "@/components/option-select";
 import {
   PageHeader,
-  SurfaceCard,
   useWorkspaceSpaces,
 } from "@/shared";
 import { useToast } from "@/components/ui/toast";
@@ -154,22 +154,6 @@ export function CreateTaskPage() {
     setSelectedAppCodes((current) => current.filter((appCode) => allowed.has(appCode)));
   }, [appOptions]);
 
-  useEffect(() => {
-    if (!descriptionFullscreenOpen) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDescriptionFullscreenOpen(false);
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [descriptionFullscreenOpen]);
 
   async function submitTask() {
     if (submitting) return;
@@ -208,7 +192,7 @@ export function CreateTaskPage() {
   }
 
   return (
-    <>
+    <div className="flex min-h-full flex-col">
       <PageHeader
         breadcrumbs={[{ label: pageT("title", "Tasks"), href: "/tasks" }, { label: pageT("actions.new", "New") }]}
         title={pageT("detail.create", "Create Task")}
@@ -221,18 +205,16 @@ export function CreateTaskPage() {
           </>
         )}
       />
-      <div className="space-y-6">
-        <Field label={pageT("fields.title", "Task Title")} required>
+      <div className="flex flex-1 flex-col gap-6">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-6 lg:grid-cols-2">
+        <div className="lg:col-span-2"><Field label={pageT("fields.title", "Task Title")} required>
           <TextInput aria-label={pageT("fields.title", "Task title")} aria-required="true" className="w-full" required value={title} onChange={(event) => setTitle(event.target.value)} />
-        </Field>
-        <div className="grid gap-6 xl:grid-cols-2">
+        </Field></div>
           <Field label={pageT("fields.priority", "Priority")} required>
             <SelectInput aria-label={pageT("fields.priority", "Priority")} aria-required="true" required value={priority} onValueChange={(event) => setPriority(event as TaskPriority)}>
               {options.priorities.map((item) => <SelectItem key={item} value={item}>{pageT(`priorities.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
           <Field label={pageT("fields.taskType", "Task Type")} required>
             <SelectInput aria-label={pageT("fields.taskType", "Task Type")} aria-required="true" required value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
               {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{pageT(`types.${item}`, item)}</SelectItem>)}
@@ -279,10 +261,7 @@ export function CreateTaskPage() {
             />
           </Field>
         </div>
-        <SurfaceCard className="rounded-[4px]">
-          <div className="grid gap-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-[12px]">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("fields.description", "Description")}</span>
+        <Field className="flex flex-1 flex-col" label={pageT("fields.description", "Description")} hint={pageT("descriptionHelp", "The description is included in the task context sent to the execution agent. Refer to configured variables by name, for example $VAR1; the description is not automatically substituted.")} hintAriaLabel={pageT("aria.descriptionHelp", "Task description help")} actions={
               <Button
                 size="lg"
                 type="button"
@@ -292,22 +271,20 @@ export function CreateTaskPage() {
               >
                 <Maximize2 size={14} aria-hidden="true" />
               </Button>
-            </div>
+        }>
             <TextArea
               aria-label={pageT("aria.description", "Task description")}
-              className="min-h-36 w-full"
+              className="min-h-36 w-full flex-1"
               placeholder={pageT("placeholders.description", "Describe the outcome, expected deliverables, context, constraints, and variable references like $VAR1...")}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
-          </div>
-        </SurfaceCard>
+        </Field>
       </div>
       {descriptionFullscreenOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-          <div
-            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog" data-theme-anchor="dialog"
+        <Dialog open={descriptionFullscreenOpen} onOpenChange={setDescriptionFullscreenOpen}>
+          <DialogContent showCloseButton={false}
+            className="gap-0 p-0 sm:max-w-none flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             aria-modal="true"
             aria-label={pageT("aria.descriptionFullscreen", "Description fullscreen editor")}
           >
@@ -336,9 +313,9 @@ export function CreateTaskPage() {
                 onChange={(event) => setDescription(event.target.value)}
               />
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
-    </>
+    </div>
   );
 }

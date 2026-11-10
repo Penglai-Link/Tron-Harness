@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { TablePagination } from "@/components/table-pagination";
 import { useTablePagination } from "@/shared/hooks/useTablePagination";
-import { PageHeader, SurfaceCard } from "@/shared";
+import { SurfaceCard } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import {
   fetchRegistrySkills,
@@ -124,24 +124,6 @@ function InstalledSkillList() {
   }
   return (
     <>
-      <PageHeader
-        title={t("installedSkills.title")}
-        actions={
-          <>
-            <Button
-              size="lg"
-              variant="outline"
-              disabled={busy}
-              onClick={() => void sync(true)}
-            >
-              {t("installedSkills.actions.update")}
-            </Button>
-            <Button size="lg" onClick={() => navigate("/settings/skills/sync")}>
-              {t("installedSkills.actions.sync")}
-            </Button>
-          </>
-        }
-      />
       {error ? (
         <p role="alert">
           {error}
@@ -152,9 +134,9 @@ function InstalledSkillList() {
       ) : null}
       <div>
         <SurfaceCard className="p-0">
-          <div className="flex gap-3 p-4">
+          <div className="flex flex-wrap items-center justify-end gap-3 p-4">
             <SearchField
-              className="flex-1"
+              className="w-full max-w-80"
               ariaLabel={text("search")}
               placeholder={text("search")}
               value={search}
@@ -167,6 +149,14 @@ function InstalledSkillList() {
             >
               {t("installedSkills.actions.refresh")}
             </Button>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" disabled={busy} onClick={() => void sync(true)}>
+                {t("installedSkills.actions.update")}
+              </Button>
+              <Button onClick={() => navigate("/settings/skills/sync")}>
+                {t("installedSkills.actions.sync")}
+              </Button>
+            </div>
           </div>
           <DataTable<RegistrySkillRecord>
             variant="embedded"

@@ -129,7 +129,7 @@ function readGraphCanvasTheme(): GraphCanvasTheme {
     edgeLabelBackgroundFill: color("--tron-graph-label-bg", "--color-elevated-surface"),
     edgeLabelBackgroundOpacity: 0.94,
     edgeLabelBackgroundStroke: color("--tron-graph-label-border", "--color-outline-variant"),
-    edgeStroke: color("--tron-graph-edge", "--color-outline-variant"),
+    edgeStroke: color("--tron-graph-edge", "--color-on-surface-variant"),
     highlightedNodeStroke: color("--tron-graph-highlight", "--color-accent"),
     nodeLabelFill: color("--tron-graph-label-fg", "--color-on-surface"),
     selectedNodeStroke: color("--tron-graph-selected", "--color-primary"),
@@ -854,7 +854,7 @@ function buildG6Data(
     nodes: nodes.map((node) => {
       const selected = node.nodeCode === selectedNodeCode;
       const highlighted = selection.nodes.has(node.nodeCode);
-      const palette = graphNodeColorForGroup(node.colorGroup);
+      const palette = graphNodeColorForGroup(node.nodeCode);
       const point = graphPointForNode(node);
       return {
         id: node.nodeCode,
@@ -1487,7 +1487,7 @@ export function GraphCanvas({
               )}
               key={`mini-${node.nodeCode}`}
               style={{
-                backgroundColor: graphNodeColorForGroup(node.colorGroup).color,
+                backgroundColor: graphNodeColorForGroup(node.nodeCode).color,
                 opacity: graphNodeSelectionStyle(selection, node.nodeCode).opacity,
                 boxShadow: node.nodeCode === selectedNodeCode ? "0 0 0 2px color-mix(in srgb, var(--color-focus-ring) 28%, transparent)" : undefined,
                 ...minimapNodePosition(node, graphBounds),

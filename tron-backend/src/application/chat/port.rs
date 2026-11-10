@@ -21,6 +21,8 @@ pub struct ChatContainerSnapshot {
 }
 
 pub trait ChatRepository: Send {
+    fn archived_containers(&mut self, kind: super::ArchivedContainerKind, workspace_code: Option<&str>, offset: u32, limit: u32) -> Result<(Vec<super::ArchivedContainer>, u64), super::ArchiveError>;
+    fn restore_archived_container(&mut self, kind: super::ArchivedContainerKind, code: &str) -> Result<(), super::ArchiveError>;
     fn validate_annotation_sources(&mut self, session: &str, annotations: &[eliteforge_agent_core::MessageAnnotation]) -> Result<(), ChatError>;
     fn session_titles(&mut self, codes: &[String]) -> Result<Vec<ChatSessionTitle>, ChatError>;
     fn sessions_by_codes(&mut self, codes: &[String]) -> Result<Vec<ChatSession>, ChatError>;

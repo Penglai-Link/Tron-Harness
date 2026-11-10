@@ -24,7 +24,7 @@ use std::{
 
 const HEALTH: &str = "tron/presentation-health";
 struct Storage {
-    sessions: fw::SessionService,
+    sessions: Arc<dyn fw::SessionLifecycleStore>,
     database: SqliteDatabase,
     native_run_active: Arc<dyn Fn(&str) -> bool + Send + Sync>,
 }
@@ -97,15 +97,19 @@ impl SqliteAgentEventReplayStore {
         Ok(store)
     }
     pub fn bind_framework(&self, host: &FrameworkHost) -> Result<(), String> {
-        let framework = blocking(host.storage_framework()).map_err(|e| e.to_string())?;
-        let sessions = framework.sessions().map_err(|e| e.to_string())?;
+        let database = blocking(host.shared_database()).map_err(|e| e.to_string())?;
+        let sessions = blocking(host.storage_framework())
+            .map_err(|e| e.to_string())?
+            .sessions()
+            .map_err(|e| e.to_string())?
+            .store;
         blocking(async {
-            match sessions.get(HEALTH).await {
+            match sessions.get_session(HEALTH).await {
                 Ok(_) => {}
                 Err(fw::StateError::NotFound) => {
                     let mut health = fw::SessionRecord::new("Presentation delivery diagnostics");
                     health.id = HEALTH.into();
-                    sessions.create(health).await?;
+                    sessions.create_session(health).await?;
                 }
                 Err(e) => return Err(e),
             };
@@ -115,7 +119,7 @@ impl SqliteAgentEventReplayStore {
         self.storage
             .set(Storage {
                 sessions,
-                database: blocking(host.shared_database()).map_err(|e| e.to_string())?,
+                database,
                 native_run_active: host.native_run_observer(),
             })
             .map_err(|_| "replay storage already bound".to_owned())?;
@@ -128,11 +132,11 @@ impl SqliteAgentEventReplayStore {
             .ok_or_else(|| "Framework presentation storage is not bound".into())
     }
     async fn session(storage: &Storage, key: &str) -> Result<String, fw::StateError> {
-        match storage.sessions.get(key).await {
+        match storage.sessions.get_session(key).await {
             Ok(s) => Ok(s.id),
             Err(fw::StateError::NotFound) => {
                 if let Ok(id) = fw::RunId::parse_str(key) {
-                    if let Ok(run) = storage.sessions.store.get_run(id).await {
+                    if let Ok(run) = storage.sessions.get_run(id).await {
                         return Ok(run.session_id);
                     }
                 }
@@ -141,7 +145,7 @@ impl SqliteAgentEventReplayStore {
                 // session keyed by the stream, shared with later runs.
                 let mut record = fw::SessionRecord::new("");
                 record.id = key.into();
-                storage.sessions.create(record).await.map(|s| s.id)
+                storage.sessions.create_session(record).await.map(|s| s.id)
             }
             Err(e) => Err(e),
         }
@@ -163,7 +167,7 @@ impl SqliteAgentEventReplayStore {
                 );
                 event.id = format!("tron.agui/{key}/{identity}/{category}/{index}");
                 event.run_id = fw::RunId::parse_str(key).ok().filter(|_| key != session);
-                storage.sessions.store.append_event(event).await?;
+                storage.sessions.append_event(event).await?;
             }
             Ok(())
         }))
@@ -209,7 +213,6 @@ impl SqliteAgentEventReplayStore {
             loop {
                 let page = storage
                     .sessions
-                    .store
                     .list_events(&session, after, 1000)
                     .await
                     .map_err(|e| e.to_string())?;

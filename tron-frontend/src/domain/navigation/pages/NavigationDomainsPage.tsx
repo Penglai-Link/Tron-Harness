@@ -242,7 +242,7 @@ export function NavigationDomainsPage() {
         </>}
       />
 
-      <ModalDialog open={Boolean(editor)} title={editor ? (editingDomain ? text("domains.edit", "编辑领域", "Edit domain") : text("domains.create", "新建领域", "New domain")) : ""} className="max-h-[88vh] max-w-2xl overflow-y-auto">
+      <ModalDialog open={Boolean(editor)} onClose={() => { if (!saving) setEditor(null); }} title={editor ? (editingDomain ? text("domains.edit", "编辑领域", "Edit domain") : text("domains.create", "新建领域", "New domain")) : ""} className="max-h-[88vh] sm:max-w-2xl overflow-y-auto">
         {editor ? (
           <form className="grid gap-4 lg:grid-cols-2" onSubmit={(event) => void saveDomain(event)}>
                 <Field label={text("fields.nameZh", "中文名称", "Chinese name")} required><TextInput value={editor.nameZh} onChange={(event) => setEditor({ ...editor, nameZh: event.target.value })} /></Field>

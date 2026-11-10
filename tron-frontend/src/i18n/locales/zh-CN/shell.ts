@@ -1,6 +1,6 @@
 export const shell = {
   workspaceStart: {
-    title: "让想法成为现实",
+    title: "让想法成为现实，我们一起实现",
     newChat: "开始随聊",
   },
   aria: {
@@ -34,12 +34,33 @@ export const shell = {
     title: "\u5e73\u53f0\u4e3b Dude \u5bf9\u8bdd",
   },
   topic: {
+    autosave: {
+      saved: "已自动保存",
+      waiting: "有待保存的修改",
+      saving: "正在保存…",
+      error: "尚未保存",
+      conflict: "请处理内容冲突",
+      failed: "主题说明保存失败，修改已保留，请在连接恢复后重试。",
+      tooLong: "主题说明超过 64 KB，请缩短内容后继续自动保存。",
+      conflictHelp: "其他窗口已修改主题说明，本地草稿已保留。请查看最新内容后，选择要保留的版本。",
+      viewLatest: "查看最新说明",
+      emptyLatest: "最新说明为空。",
+      useLatest: "使用最新说明",
+      keepMine: "保留我的修改",
+    },
     notes: "主题说明", notesPlaceholder: "描述要做的事情和重要背景", saveNotes: "保存说明", refresh: "刷新", retry: "重试",
     references: "关联资源", addReference: "添加资源", noReferences: "还没有关联资源。", sessions: "会话", unavailable: "不可用", open: "打开", remove: "移除",
     referencesChanged: "主题资源已更改，请保留未保存的说明后刷新。",
     checkout: { chooseFolder: "选择文件夹", chooseParent: "选择父文件夹", pathHelp: "目录路径说明", clonePathHint: "选择父文件夹后，会自动追加仓库名作为克隆目录；也可直接修改为尚不存在的完整路径。", usernameHelp: "Git 账户名说明", usernameHint: "HTTPS 克隆时使用的用户名，与代码仓库连接中保存的令牌配合认证。通常保留默认值；若平台要求账户名，请填写该平台的登录名。", giteeUsernameHint: "填写 Gitee 登录用户名，与代码仓库连接中保存的令牌配合完成 HTTPS 克隆认证。", title: "准备本地目录", prepare: "准备本地目录", preparing: "正在准备…", existing: "使用已有目录", clone: "克隆仓库", existingPath: "已有仓库目录", clonePath: "新目录路径", username: "Git 账户名", existingHint: "所选目录必须是此仓库的本地检出目录。", httpsRequired: "克隆需要受支持的 HTTPS 地址；你仍可使用已有检出目录。", failed: "准备本地目录失败" },
     kind: { Directory: "工作区", Repository: "仓库", Resource: "资料", Task: "任务", Link: "链接" },
-    noDirectories: "请先在左侧添加工作区。", url: "链接地址", label: "名称", add: "添加", close: "关闭",
+    chooseResource: "选择已有文件资料",
+    fileResources: "文件资料",
+    noFileResources: "当前工作空间暂无文件资料，可在下方上传。",
+    noMatchingResources: "没有匹配的文件资料，请尝试其他关键词。",
+    resourceLoadFailed: "无法加载文件资料。",
+    linkHint: "未填写协议的地址（如 example.com）将自动使用 HTTPS。",
+    invalidLink: "请输入有效的 HTTP 或 HTTPS 链接，且不要包含账号密码，例如 example.com 或 https://example.com。",
+    noDirectories: "请先在左侧添加工作区。", url: "链接地址", label: "描述", add: "添加", close: "关闭",
     connectPlatform: "连接平台", newConnection: "新增连接", connectionType: "连接类型", connectionName: "连接名称", endpoint: "平台地址", connect: "连接", connected: "连接成功", connectFailed: "连接失败",
     repositorySettings: "代码仓库", manageConnections: "管理代码仓库连接", noConnections: "还没有代码仓库连接。", connectionSaved: "连接已保存",
     testConnection: "测试连接", editConnection: "编辑连接", deleteConnection: "删除连接", saveConnection: "保存连接", keepToken: "留空则保留当前 Token", deleteConnectionDescription: "删除此连接？主题中的仓库引用会保留，但将变为不可用。",
@@ -176,7 +197,7 @@ export const shell = {
       users: "用户",
       variables: "变量",
       workspaceAdmin: "工作空间",
-      archivedChats: "已归档会话",
+      archivedChats: "归档",
     },
     sections: {
       exploreMore: "探索更多",
@@ -223,7 +244,7 @@ export const shell = {
       platform: "平台能力",
     },
     items: {
-      archivedChats: "已归档会话",
+      archivedChats: "归档",
       agents: "智能体",
       appearance: "外观",
       auditLogs: "审计日志",
@@ -258,6 +279,7 @@ export const shell = {
   },
   navigation: {
     scopeLabel: "领域",
+    manage: "管理菜单领域",
     switchTitle: "切换领域",
     search: "搜索领域…",
     workspaceContext: "当前空间：{{name}}",
@@ -284,6 +306,8 @@ export const shell = {
   },
   workspace: {
     scopeLabel: "工作空间",
+    shortScopeLabel: "空间",
+    manage: "管理工作空间",
     switchTitle: "切换工作空间",
     search: "搜索工作空间…",
     noSearchResults: "没有匹配的结果。",

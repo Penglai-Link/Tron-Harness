@@ -309,7 +309,7 @@ export function AutomationsPage() {
           <>
             <SearchField
               ariaLabel={pt("Search automations")}
-              className="min-w-0 grow basis-full sm:basis-0"
+              className="ml-auto w-full min-w-0 sm:w-80"
               placeholder={pt("Filter by code, name, description, or latest result...")}
               value={searchInput}
               onChange={setSearchInput}

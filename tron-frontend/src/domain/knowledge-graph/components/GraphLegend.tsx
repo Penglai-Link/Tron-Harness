@@ -25,7 +25,6 @@ export function GraphLegend({ className, items }: GraphLegendProps) {
       <div className="mt-2 flex max-h-32 flex-wrap gap-3 overflow-y-auto">
       {items.map((item) => (
         <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-on-surface-variant)]" key={item.label}>
-          <span className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />
           {item.label}
         </span>
       ))}

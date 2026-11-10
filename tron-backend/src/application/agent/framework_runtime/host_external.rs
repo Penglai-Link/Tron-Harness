@@ -68,6 +68,7 @@ impl FrameworkHost {
             _ => AgentInvocationError::RuntimeFailed(error.to_string()),
         };
         let admission = self.0.config_lock.lock().await;
+        let _runtime_lease = self.0.runtime_access.read().await;
         registration
             .ensure_active()
             .map_err(|_| AgentInvocationError::RunStopped)?;

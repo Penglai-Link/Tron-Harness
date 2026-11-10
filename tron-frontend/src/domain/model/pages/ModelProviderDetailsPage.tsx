@@ -23,7 +23,6 @@ import {
   type ProviderAccountBalance,
   type ProviderAuthorizationSession,
 } from "@/domain/model/api";
-import { ModelProviderStatusBadge } from "@/domain/model/components/ModelProviderStatusBadge";
 
 import { ConfiguredProviderPage } from "./ConfiguredProviderPage";
 
@@ -315,9 +314,6 @@ function ManagedProviderDetailsPage({ providerCode, displayName }: { providerCod
             <InfoTooltip ariaLabel={t("modelProviders.aria.connectionHelp")}>
               {t("modelProviders.help.connection")}
             </InfoTooltip>
-            <ModelProviderStatusBadge
-              status={connection?.status ?? "Disconnected"}
-            />
           </div>
           <div className="flex flex-wrap gap-2">
             <Button

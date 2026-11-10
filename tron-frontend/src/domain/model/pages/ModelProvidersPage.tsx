@@ -236,7 +236,7 @@ export function ModelProvidersPage() {
         }
         rowKey={(provider) => provider.providerCode}
         rows={loading ? [] : records}
-        tableClassName="min-w-[860px]"
+        tableClassName="min-w-[860px] [&_thead_th]:bg-[var(--color-background)] [&_thead_th]:text-xs [&_thead_th]:font-semibold [&_thead_th]:text-[var(--color-on-surface-variant)] [&_thead_th:first-child]:rounded-l-md [&_thead_th:last-child]:rounded-r-md"
       />
       <ConfirmDialog open={confirmation !== null}
         title={t(confirmation?.kind === "disconnect" ? "modelProviders.disconnectDialog.title" : "configuredProviders.deleteTitle")}

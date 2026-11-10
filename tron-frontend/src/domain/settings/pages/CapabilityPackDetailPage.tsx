@@ -4,7 +4,6 @@ import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarkdownContent } from "@/components/markdown-content/MarkdownContent";
 import { capabilityDescription, capabilityPackDetails } from "../model/capabilityDescription";
@@ -24,7 +23,6 @@ export function CapabilityPackDetailPage() {
   const [record, setRecord] = useState<CapabilityPackRecord>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const [revision, setRevision] = useState(0);
   const pageT = (key: string) => t(`pages:capabilityManagement.${key}`);
 
   useEffect(() => {
@@ -38,7 +36,7 @@ export function CapabilityPackDetailPage() {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [packId, revision, i18n.resolvedLanguage]);
+  }, [packId, i18n.resolvedLanguage]);
 
   const groups = new Map<string, NonNullable<CapabilityPackRecord["contents"]>>();
   for (const item of record?.contents ?? []) {
@@ -54,15 +52,13 @@ export function CapabilityPackDetailPage() {
   const contentGroups = kinds.map((kind) => ({ kind, items: groups.get(kind) ?? [] })).filter(({ items }) => items.length > 0);
   const defaultKind = contentGroups.find(({ items }) => items.length > 0)?.kind ?? CONTENT_KIND_ORDER[0];
 
-  return <div data-theme-part="capability-pack-detail-page" className="space-y-5">
-    <PageHeader title={record?.name ?? pageT("details")} breadcrumbs={[
+  return <div data-theme-part="capability-pack-detail-page" className="space-y-4">
+    <PageHeader className="mb-0" title={record?.name ?? pageT("details")} breadcrumbs={[
       { label: t("shell:settings.items.capabilityPacks"), href: "/settings/capability-packs" },
       { label: record?.name ?? pageT("details") },
-    ]} actions={<div className="flex gap-2">
-      <Button variant="outline" size="sm" disabled={loading} onClick={() => setRevision((value) => value + 1)}>{pageT("refresh")}</Button>
-    </div>} />
-    {loading ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{pageT("loading")}</p> : error ? <SurfaceCard role="alert" className="text-sm text-[var(--color-error)]">{pageT("loadFailed")}: {error}</SurfaceCard> : !record ? <SurfaceCard>{pageT("notFound")}</SurfaceCard> : <div className="flex min-w-0 flex-col gap-6">
-      <SurfaceCard className="space-y-4">
+    ]} />
+    {loading ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{pageT("loading")}</p> : error ? <SurfaceCard role="alert" className="text-sm text-[var(--color-error)]">{pageT("loadFailed")}: {error}</SurfaceCard> : !record ? <SurfaceCard>{pageT("notFound")}</SurfaceCard> : <div className="flex min-w-0 flex-col gap-4">
+      <SurfaceCard className="space-y-3 p-4">
         <div className="flex items-start gap-3"><Package size={24} className="shrink-0" /><div className="min-w-0 flex-1"><h1 className="text-lg font-semibold">{record.name}</h1><p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{record.id}</p></div><Badge variant={record.effective ? "success" : "outline"}>{pageT(record.effective ? "effective" : "inactive")}</Badge></div>
         <MarkdownContent className="max-w-4xl text-sm leading-6 text-[var(--color-on-surface-variant)]" content={capabilityPackDetails(t, record.id, record.description)} />
         <dl className="grid grid-cols-1 gap-3 border-t border-[var(--color-outline-variant)] pt-3 text-sm sm:grid-cols-3">
@@ -78,9 +74,9 @@ export function CapabilityPackDetailPage() {
         </TabsList>
         {contentGroups.map(({ kind, items }) => <TabsContent key={kind} value={kind}>
           {items.length === 0 ? <SurfaceCard className="text-sm text-[var(--color-on-surface-variant)]">{pageT("emptyContents")}</SurfaceCard> :
-            <ul className="grid gap-4">{items.map((item, index) => {
+            <ul className="grid gap-3 sm:grid-cols-2">{items.map((item, index) => {
               return <li key={`${item.name}-${index}`}>
-                <SurfaceCard>
+                <SurfaceCard className="p-3">
                   {kind === "Navigation" && <Badge variant="outline" className="mb-2">{t(`pages:capabilityManagement.contentKinds.${item.kind}`, { defaultValue: item.kind })}</Badge>}
                   <h2 className="break-words text-sm font-semibold">{item.displayName || item.name}</h2>
                   {item.displayName && item.displayName !== item.name && <p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{item.name}</p>}

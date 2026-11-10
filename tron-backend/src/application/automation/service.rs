@@ -7,6 +7,12 @@ use std::{
 
 use chrono::{SecondsFormat, Utc};
 use cron::Schedule;
+
+pub fn preview_schedule(expression: &str) -> Result<Vec<i64>, AutomationError> {
+    let normalized = projection::normalized_scheduler_expression(expression)?;
+    let schedule = Schedule::from_str(&normalized).map_err(|_| AutomationError::InvalidCron)?;
+    Ok(schedule.upcoming(Utc).take(5).map(|time| time.timestamp_millis()).collect())
+}
 use tokio::task::JoinHandle;
 
 use crate::{

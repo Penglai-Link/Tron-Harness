@@ -271,7 +271,7 @@ export function NavigationMenusPage() {
     <>
       <PageHeader title={text("menus.title", "菜单定义", "Menu Definitions")} actions={<><Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}>{text("actions.refresh", "刷新", "Refresh")}</Button><Button onClick={openCreate}>{text("actions.newMenu", "新建菜单", "New menu")}</Button></>} />
 
-      <ModalDialog open={Boolean(editor)} title={editor ? (editingCode ? text("menus.edit", "编辑菜单", "Edit menu") : text("menus.create", "新建菜单", "New menu")) : ""} className="max-h-[88vh] max-w-2xl overflow-y-auto">
+      <ModalDialog open={Boolean(editor)} onClose={() => { if (!saving) setEditor(null); }} title={editor ? (editingCode ? text("menus.edit", "编辑菜单", "Edit menu") : text("menus.create", "新建菜单", "New menu")) : ""} className="max-h-[88vh] sm:max-w-2xl overflow-y-auto">
         {editor ? (
           <form className="grid gap-4 lg:grid-cols-2" onSubmit={(event) => void saveMenu(event)}>
                 <Field label={text("fields.menuCode", "菜单编码", "Menu code")} required><TextInput value={editor.menuCode} disabled={Boolean(editingCode)} onChange={(event) => setEditor({ ...editor, menuCode: event.target.value })} /></Field>

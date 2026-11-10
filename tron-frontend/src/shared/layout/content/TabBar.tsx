@@ -17,6 +17,8 @@ import { cn } from "@/shared/lib/utils";
 import { useTabStore, type TabItem } from "@/store/tabStore";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { ShortcutHint } from "@/shared/shortcuts/ShortcutHints";
+import type { ShellShortcutAction } from "@/shared/lib/keyboardShortcuts";
 
 interface TabBarProps {
   className?: string;
@@ -64,7 +66,7 @@ export function TabBar({ className }: TabBarProps) {
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 items-center gap-1 overflow-x-auto px-1 pb-2",
+        "tron-scrollbar-none flex w-full min-w-0 items-center gap-1 overflow-x-auto px-1 py-2",
         className,
       )}
       role="tablist"
@@ -85,6 +87,7 @@ export function TabBar({ className }: TabBarProps) {
             key={tab.id}
             tab={tab}
             isActive={tab.id === activeTabId}
+            shortcutAction={tabIndex < 9 ? `activateTab${tabIndex + 1}` as ShellShortcutAction : undefined}
             closableLeftTabs={closableLeftTabs}
             closableRightTabs={closableRightTabs}
             closableOtherTabs={closableOtherTabs}
@@ -102,6 +105,7 @@ export function TabBar({ className }: TabBarProps) {
 interface TabBarItemProps {
   tab: TabItem;
   isActive: boolean;
+  shortcutAction?: ShellShortcutAction;
   closableLeftTabs: TabItem[];
   closableRightTabs: TabItem[];
   closableOtherTabs: TabItem[];
@@ -114,6 +118,7 @@ interface TabBarItemProps {
 function TabBarItem({
   tab,
   isActive,
+  shortcutAction,
   closableLeftTabs,
   closableRightTabs,
   closableOtherTabs,
@@ -140,7 +145,7 @@ function TabBarItem({
           render={
             <ContextMenuTrigger
               className={cn(
-                "group relative inline-flex h-9 min-w-0 max-w-[16rem] shrink-0 cursor-pointer items-center rounded-lg px-1 text-sm font-medium whitespace-nowrap text-[var(--color-on-surface-variant)] transition-all",
+                "group relative inline-flex h-8 min-w-0 max-w-[16rem] shrink-0 cursor-pointer items-center rounded-lg px-1 text-sm font-medium whitespace-nowrap text-[var(--color-on-surface-variant)] transition-all",
                 isActive
                   ? "bg-[var(--color-elevated-surface)] text-foreground"
                   : "hover:bg-background/50 hover:text-foreground",
@@ -156,6 +161,7 @@ function TabBarItem({
               >
                 {label}
               </span>
+              {shortcutAction ? <ShortcutHint action={shortcutAction} compact align="start" /> : null}
               {tab.closable && (
                 <Button
                   size="icon-xs"
@@ -169,6 +175,7 @@ function TabBarItem({
                   }}
                 >
                   <X aria-hidden="true" className="size-3.5" />
+                  {isActive ? <ShortcutHint action="closeCurrentTab" compact /> : null}
                 </Button>
               )}
             </ContextMenuTrigger>
@@ -184,6 +191,7 @@ function TabBarItem({
           }
         >
           {t("tabs.closeOthers")}
+          <ShortcutHint action="closeOtherTabs" />
         </ContextMenuItem>
         <ContextMenuItem
           disabled={closableLeftTabs.length === 0}

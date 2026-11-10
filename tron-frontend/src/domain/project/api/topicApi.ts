@@ -28,10 +28,14 @@ export interface AddTopicReference {
 }
 
 export function getTopicMemo(projectCode: string, signal?: AbortSignal) {
-  return requestApi<TopicMemo>("GET /api/v1/topics/{projectCode}/memo", { pathParams: { projectCode }, signal });
+  return requestApi<TopicMemo>("GET /api/v1/topics/{projectCode}/memo", { pathParams: { projectCode }, signal, cache: "no-store" });
 }
 export function saveTopicNotes(projectCode: string, revision: number, notes: string) {
-  return requestApi<TopicMemo>("PUT /api/v1/topics/{projectCode}/memo", { pathParams: { projectCode }, body: { revision, notes } });
+  const body = { revision, notes };
+  return requestApi<TopicMemo>("PUT /api/v1/topics/{projectCode}/memo", {
+    pathParams: { projectCode }, body, retryOnUnauthorized: false,
+    keepalive: new TextEncoder().encode(JSON.stringify(body)).length < 60_000,
+  });
 }
 export function addTopicReference(projectCode: string, input: AddTopicReference) {
   return requestApi<TopicMemo>("POST /api/v1/topics/{projectCode}/references", { pathParams: { projectCode }, body: input });

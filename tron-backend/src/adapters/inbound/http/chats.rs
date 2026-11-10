@@ -1,4 +1,5 @@
 mod context_assembly;
+mod archives;
 mod location;
 mod application_context;
 pub mod error_mapper;

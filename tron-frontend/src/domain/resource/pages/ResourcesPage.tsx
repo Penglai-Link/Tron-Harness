@@ -1,4 +1,4 @@
-import { MoreHorizontal, RefreshCcw } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router";
@@ -440,14 +440,13 @@ export function ResourcesPage() {
         actions={(
           <>
             <Button
-              aria-label={pageT("actions.refresh")}
               size="lg"
               variant="outline"
               onClick={() => {
                 void resourceTable.refresh();
               }}
             >
-              <RefreshCcw aria-hidden="true" size={15} />
+              {pageT("actions.refresh")}
             </Button>
             <Button
               disabled={!activeWorkspace}

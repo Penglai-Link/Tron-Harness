@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { ShortcutHint } from "@/shared/shortcuts/ShortcutHints";
 import { listNotifications, notificationQueryKey, updateNotification } from "../api/notificationApi";
 import { areBrowserNotificationsEnabled, browserNotificationPreferenceChangedEvent } from "../model/browserNotifications";
 
@@ -71,6 +72,7 @@ export function NotificationLauncher({ className }: { className?: string }) {
           <PopoverTrigger render={<Button className={cn("relative", className)} variant="ghost" size="icon" aria-label={t("notifications.unreadCount", { count: unread })} />} />
         }>
           <Bell size={17} aria-hidden="true" />
+          <ShortcutHint action="openNotifications" compact />
           {unread > 0 ? <span className="absolute right-0 top-0 flex min-w-4 translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] leading-4 text-[var(--color-on-primary)]" aria-hidden="true">{unread}</span> : null}
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={8}>{t("notifications.title")}</TooltipContent>

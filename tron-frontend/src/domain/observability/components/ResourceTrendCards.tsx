@@ -1,11 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { fetchPlatformSystemAgents, fetchWorkspaceInternalAgents, listTools } from "@/domain/agent/api/agentManagementApi";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
 import { listDudes } from "@/domain/dude/api/dudeApi";
-import { fetchRegistrySkills } from "@/domain/skill/api";
+import { CAPABILITY_RESOURCES_CHANGED, fetchRegistrySkills } from "@/domain/skill/api";
 import { SurfaceCard, useLocaleFormatters } from "@/shared";
-import { listCapabilityPacks } from "@/domain/settings/api/capabilityApi";
+import { getCapabilityPluginCounts } from "@/domain/settings/api/capabilityApi";
 import { queryMetricPoints } from "../api/observabilityApi";
 import { useQueryErrorToast } from "../hooks/useObservability";
 import type { MetricPoint } from "../model/Trace";
@@ -54,7 +55,8 @@ export function ResourceTrendCards() {
 export function PluginCountCard() {
   const { t } = useTranslation("observability");
   const { formatNumber } = useLocaleFormatters();
-  const plugins = useQuery({ queryKey: ["capability-packs"], queryFn: ({ signal }) => listCapabilityPacks(signal), refetchInterval: 10000 });
+  const client = useQueryClient();
+  const plugins = useQuery({ queryKey: ["capability-plugin-counts"], queryFn: ({ signal }) => getCapabilityPluginCounts(signal), retry: false, refetchInterval: 10000 });
   const inventory = useQuery({
     queryKey: ["observability-inventory-counts"],
     queryFn: async ({ signal }) => {
@@ -77,17 +79,17 @@ export function PluginCountCard() {
   });
   useQueryErrorToast(plugins.error);
   useQueryErrorToast(inventory.error);
-  const names = new Set<string>();
-  const enabled = new Set<string>();
-  for (const pack of plugins.data ?? []) {
-    for (const item of pack.contents.filter(item => item.kind === "Plugin")) {
-      names.add(item.name);
-      if (pack.effective) enabled.add(item.name);
-    }
-  }
+  useEffect(() => {
+    const refresh = () => {
+      void client.invalidateQueries({ queryKey: ["capability-plugin-counts"] });
+      void client.invalidateQueries({ queryKey: ["observability-inventory-counts"] });
+    };
+    window.addEventListener(CAPABILITY_RESOURCES_CHANGED, refresh);
+    return () => window.removeEventListener(CAPABILITY_RESOURCES_CHANGED, refresh);
+  }, [client]);
   const counts = [
-    ["pluginCount", plugins.data ? names.size : undefined],
-    ["enabledPluginCount", plugins.data ? enabled.size : undefined],
+    ["pluginCount", plugins.data?.total],
+    ["enabledPluginCount", plugins.data?.enabled],
     ["toolCount", inventory.data?.tools],
     ["skillCount", inventory.data?.skills],
     ["agentCount", inventory.data?.agents],

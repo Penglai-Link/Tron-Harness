@@ -23,7 +23,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -206,12 +205,9 @@ export function TronSidebar({
       position="flow"
       className="tron-shell-navigation"
     >
-      <SidebarHeader className="px-2 pb-4 pt-2">
-        <div className={cn("tron-scope-switcher", compact && "tron-scope-switcher-compact")}>
-          {renderWorkspaceSelector?.(compact)}
-          {renderDomainSelector(compact, isMobile)}
-        </div>
-      </SidebarHeader>
+      <div className="tron-sidebar-brand">
+        <span className="tron-sidebar-brand-name" role="img" aria-label="TRON Harness">TRON<span className="tron-sidebar-brand-suffix"> Harness</span></span>
+      </div>
       <SidebarContent data-theme-part="app-sidebar-content">
         <nav className={cn("flex flex-1 flex-col px-1.5 pb-2", compact ? "gap-1" : "gap-1.5")} aria-label={translate("shell:aria.primaryNavigation")} data-theme-part="app-sidebar-menu">
           {navigation.map((section) => {
@@ -253,7 +249,11 @@ export function TronSidebar({
         </nav>
       </SidebarContent>
       <SidebarFooter className="px-1.5 py-2">
-        {renderFooter(compact, isMobile)}
+        <div className={cn("tron-scope-switcher", compact && "tron-scope-switcher-compact")}>
+          {renderWorkspaceSelector?.(compact)}
+          {renderDomainSelector(compact, isMobile)}
+        </div>
+        <div className="tron-sidebar-account">{renderFooter(compact, isMobile)}</div>
       </SidebarFooter>
     </Sidebar>
   );

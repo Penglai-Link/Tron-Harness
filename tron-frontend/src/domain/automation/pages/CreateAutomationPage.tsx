@@ -1,7 +1,9 @@
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Maximize2, X } from "lucide-react";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,10 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
 import { OptionSelect } from "@/components/option-select";
 import { PageHeader } from "@/shared/layout/PageHeader";
-import { SurfaceCard } from "@/shared/layout/SurfaceCard";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { useToast } from "@/components/ui/toast";
-import { createAutomation } from "@/domain/automation/api";
+import { createAutomation, previewAutomationSchedule } from "@/domain/automation/api";
 import { editableAutomationStatuses } from "@/domain/automation/constants";
 import { createMockAutomation } from "@/domain/automation/mock/data";
 import type { AutomationOperationalStatus } from "@/domain/automation/model";
@@ -22,6 +23,7 @@ import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/doma
 import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import { fetchModelSelectOptions } from "@/domain/model/api/modelApi";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { isApiError } from "@/shared/api/httpClient";
 
 import {
   automationModelCodeFromOption,
@@ -45,7 +47,11 @@ export function CreateAutomationPage() {
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [cronExpression, setCronExpression] = useState("0 9 * * *");
+  const [cronExpression, setCronExpression] = useState("*/30 * * * *");
+  const [previewTimes, setPreviewTimes] = useState<number[] | null>(null);
+  const [previewError, setPreviewError] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const previewRequest = useRef(0);
   const [status, setStatus] = useState<AutomationOperationalStatus>("Active");
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -68,8 +74,8 @@ export function CreateAutomationPage() {
     [agentOptions],
   );
   const modelOptions = useMemo(
-    () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent),
-    [selectedAgent, workspaceModelOptions],
+    () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent, t("modelAutoRoutes.chat")),
+    [selectedAgent, workspaceModelOptions, t],
   );
   const executionModelSelectOptions = useMemo(
     () => modelOptions.map((model) => ({
@@ -136,22 +142,6 @@ export function CreateAutomationPage() {
     return () => controller.abort();
   }, [activeWorkspaceCode, dataSource, toast]);
 
-  useEffect(() => {
-    if (!promptFullscreenOpen) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPromptFullscreenOpen(false);
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [promptFullscreenOpen]);
 
   async function submitAutomation() {
     if (submitting) return;
@@ -194,7 +184,7 @@ export function CreateAutomationPage() {
   }
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         breadcrumbs={[{ label: pageT("title", "Automations"), href: "/automations" }, { label: pageT("actions.new", "New") }]}
         title={pageT("detail.create", "Create Automation")}
@@ -207,8 +197,8 @@ export function CreateAutomationPage() {
           </>
         }
       />
-      <div>
-        <SurfaceCard className="space-y-5">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col gap-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
             <Field label={pageT("fields.name", "Automation name")}>
               <TextInput aria-label={pageT("fields.name", "Automation name")} placeholder={pageT("placeholders.name", "Daily workspace release digest")} value={name} onChange={(event) => setName(event.target.value)} />
@@ -222,7 +212,7 @@ export function CreateAutomationPage() {
             </Field>
           </div>
           <Field label={pageT("fields.description", "Description")}>
-            <TextArea aria-label={pageT("aria.description", "Automation description")} className="min-h-24" placeholder={pageT("placeholders.description", "Summarize the business intent, constraints, or expected operator-facing output.")} value={description} onChange={(event) => setDescription(event.target.value)} />
+            <TextArea aria-label={pageT("aria.description", "Automation description")} className="min-h-24" placeholder={pageT("placeholders.description", "Briefly describe what this automation does.")} value={description} onChange={(event) => setDescription(event.target.value)} />
           </Field>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={pageT("fields.executionAgent", "Execution agent")}>
@@ -253,9 +243,20 @@ export function CreateAutomationPage() {
             </Field>
           </div>
           <Field label={pageT("fields.cron", "Cron expression")}>
-            <TextInput aria-label={pageT("fields.cron", "Cron expression")} className="font-mono" placeholder="*/15 * * * *" value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
+            <div className="flex items-center gap-2">
+              <TextInput aria-label={pageT("fields.cron", "Cron expression")} className="min-w-0 flex-1 font-mono" placeholder="*/15 * * * *" value={cronExpression} onChange={(event) => { previewRequest.current += 1; setPreviewLoading(false); setCronExpression(event.target.value); setPreviewTimes(null); setPreviewError(""); }} />
+              <Button type="button" variant="outline" disabled={previewLoading} onClick={async () => {
+                const request = ++previewRequest.current;
+                setPreviewLoading(true); setPreviewError(""); setPreviewTimes(null);
+                try { const result = await previewAutomationSchedule(cronExpression); if (request === previewRequest.current) setPreviewTimes(result.executionTimes); }
+                catch (error) { if (request === previewRequest.current) setPreviewError(isApiError(error) && error.code === "AUTOMATION_CRON_INVALID" ? pageT("errors.invalidCron", "Could not preview this schedule. Check the Cron expression.") : pageT("errors.previewUnavailable", "Schedule preview is unavailable. Check the server and try again.")); }
+                finally { if (request === previewRequest.current) setPreviewLoading(false); }
+              }}>{pageT("actions.preview", "Preview next 5 runs")}</Button>
+            </div>
+            {previewError ? <p role="alert" className="mt-2 text-sm text-[var(--color-error)]">{previewError}</p> : null}
+            {previewTimes ? <div className="mt-2 text-sm text-[var(--color-on-surface-variant)]"><p>{pageT("values.previewTimezone", "Next runs (your local time; schedule evaluated in UTC)")}</p>{previewTimes.length ? <ol>{previewTimes.map((time) => <li key={time}>{new Date(time).toLocaleString()}</li>)}</ol> : <p>{pageT("values.noFutureRuns", "No future runs")}</p>}</div> : null}
           </Field>
-          <div className="grid gap-1.5">
+          <div className="flex min-h-80 flex-1 flex-col gap-1.5">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                 {pageT("fields.prompt", "Prompt body")}
@@ -266,19 +267,18 @@ export function CreateAutomationPage() {
             </div>
             <TextArea
               aria-label={pageT("aria.prompt", "Automation prompt")}
-              className="min-h-80 w-full"
-              placeholder={pageT("placeholders.prompt", "Write the long-form prompt that the automation should dispatch for this workspace.")}
+              className="min-h-80 w-full flex-1"
+              placeholder={pageT("placeholders.prompt", "Write the prompt the automation should execute in this workspace.")}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
             />
           </div>
-        </SurfaceCard>
+        </div>
       </div>
       {promptFullscreenOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-          <div
-            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog" data-theme-anchor="dialog"
+        <Dialog open={promptFullscreenOpen} onOpenChange={setPromptFullscreenOpen}>
+          <DialogContent showCloseButton={false}
+            className="gap-0 p-0 sm:max-w-none flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             aria-modal="true"
             aria-label={pageT("aria.promptFullscreen", "Prompt fullscreen editor")}
           >
@@ -286,7 +286,7 @@ export function CreateAutomationPage() {
               <div>
                 <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("fields.automationPrompt", "Automation prompt")}</h2>
                 <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">
-                  {pageT("promptFullscreenHint", "Write the long-form prompt that will be dispatched whenever this automation runs.")}
+                  {pageT("promptFullscreenHint", "Write the prompt to execute whenever this automation runs.")}
                 </p>
               </div>
               <Button size="icon" type="button" variant="ghost" aria-label={pageT("aria.closePrompt", "Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>
@@ -301,9 +301,9 @@ export function CreateAutomationPage() {
                 onChange={(event) => setPrompt(event.target.value)}
               />
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
-    </>
+    </div>
   );
 }

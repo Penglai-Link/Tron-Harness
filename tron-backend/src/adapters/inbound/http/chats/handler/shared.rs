@@ -139,6 +139,7 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "CHAT_WORKSPACE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => "CHAT_WORKSPACE_FORBIDDEN",
         ChatSendError::Chat(ChatError::ProjectRequired) => "CHAT_PROJECT_REQUIRED",
+        ChatSendError::Chat(ChatError::ProjectNameConflict) => crate::application::chat::ArchiveError::TopicNameConflict.descriptor().code,
         ChatSendError::Chat(ChatError::ProjectInvalid) => "CHAT_PROJECT_INVALID",
         ChatSendError::Chat(ChatError::DirectoryFixed) => "CHAT_DIRECTORY_FIXED",
         ChatSendError::Chat(ChatError::DirectoryInvalid) => "CHAT_DIRECTORY_INVALID",

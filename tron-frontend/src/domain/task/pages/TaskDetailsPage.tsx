@@ -1,3 +1,4 @@
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Maximize2, X } from "lucide-react";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import {
@@ -14,7 +15,6 @@ import {
   useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
@@ -300,23 +300,6 @@ export function TaskDetailsPage() {
     setSelectedModelOptionCode(visibleModelOptions[0].optionCode);
   }, [selectedModelOptionCode, visibleModelOptions]);
 
-  useEffect(() => {
-    if (!descriptionFullscreenOpen && !executionResultFullscreenOpen) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDescriptionFullscreenOpen(false);
-      if (event.key === "Escape") setExecutionResultFullscreenOpen(false);
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [descriptionFullscreenOpen, executionResultFullscreenOpen]);
 
   const detailEditable = editing && !archived;
   const updatesEditable = !archived;
@@ -816,11 +799,10 @@ export function TaskDetailsPage() {
           </div>
         </SurfaceCard>
       </div>
-      {descriptionFullscreenOpen ? createPortal(
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-          <div
-            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog" data-theme-anchor="dialog"
+      {descriptionFullscreenOpen ? (
+        <Dialog open={descriptionFullscreenOpen} onOpenChange={setDescriptionFullscreenOpen}>
+          <DialogContent showCloseButton={false}
+            className="gap-0 p-0 sm:max-w-none flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             aria-modal="true"
             aria-label={detailEditable ? pageT("detail.descriptionFullscreenEditorAria", "Description fullscreen editor") : pageT("detail.descriptionFullscreenPreviewAria", "Description fullscreen preview")}
           >
@@ -855,15 +837,13 @@ export function TaskDetailsPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>,
-        document.body,
+          </DialogContent>
+        </Dialog>
       ) : null}
-      {executionResultFullscreenOpen ? createPortal(
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-          <div
-            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog" data-theme-anchor="dialog"
+      {executionResultFullscreenOpen ? (
+        <Dialog open={executionResultFullscreenOpen} onOpenChange={setExecutionResultFullscreenOpen}>
+          <DialogContent showCloseButton={false}
+            className="gap-0 p-0 sm:max-w-none flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             aria-modal="true"
             aria-label={pageT("detail.executionResultFullscreenAria", "Execution result fullscreen preview")}
           >
@@ -887,9 +867,8 @@ export function TaskDetailsPage() {
                 <MarkdownContent ariaLabel={pageT("detail.executionResultMarkdownFullscreenAria", "Task execution result markdown fullscreen")} className="max-w-none" content={task.executionResult} />
               </div>
             </div>
-          </div>
-        </div>,
-        document.body,
+          </DialogContent>
+        </Dialog>
       ) : null}
     </>
   );

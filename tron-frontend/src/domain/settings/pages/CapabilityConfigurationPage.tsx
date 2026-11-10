@@ -7,7 +7,7 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageHeader, SurfaceCard } from "@/shared";
+import { SurfaceCard } from "@/shared";
 import { capabilityDescription } from "../model/capabilityDescription";
 import { ToolPolicySettings } from "../components/ToolPolicySettings";
 import { listExtensionImplementations, setExtensionEnabled, type ExtensionImplementationRecord } from "../api/capabilityApi";
@@ -70,23 +70,23 @@ export function CapabilityConfigurationPage() {
   ];
 
   return <div data-theme-part="capability-configuration-page" className="space-y-5 [--tron-capability-effective-fg:var(--color-success)] [--tron-capability-inactive-fg:var(--color-on-surface-variant)] [--tron-capability-provider-fg:var(--color-on-surface-variant)]">
-    <PageHeader title={t("shell:settings.items.capabilityConfiguration")} actions={
-      <Button size="sm" variant="outline" disabled={loading || busyId !== null} onClick={() => setRevision((value) => value + 1)}>{pageT("refresh")}</Button>
-    } />
     {error ? <SurfaceCard role="alert" className="text-sm text-[var(--color-error)]">{pageT("loadFailed")}: {error}</SurfaceCard> : null}
     {loading && records.length === 0 ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{pageT("loading")}</p> : null}
-    {!loading || records.length > 0 ? <Tabs defaultValue="model" className="min-w-0">
-      <TabsList aria-label={pageT("extensionPoint")} data-theme-part="capability-extension-tabs" className="max-w-full flex-wrap justify-start gap-1 box-border! bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)] group-data-horizontal/tabs:h-auto">
+    <Tabs defaultValue="model" className="min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+      {!loading || records.length > 0 ? <TabsList aria-label={pageT("extensionPoint")} data-theme-part="capability-extension-tabs" className="max-w-full flex-wrap justify-start gap-1 box-border! bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)] group-data-horizontal/tabs:h-auto">
         {groups.map(({ point, items }) => <TabsTrigger key={point} value={point} className="flex-none gap-2 px-3 text-[var(--color-on-surface-variant)] data-active:bg-[var(--color-surface)] data-active:text-[var(--color-on-surface)] dark:data-active:bg-[var(--color-surface-container-high)]">
           {label(point)}<span className="font-mono text-xs">{items.length}</span>
         </TabsTrigger>)}
-      </TabsList>
-      {groups.map(({ point, items }) => <TabsContent key={point} value={point} className="min-w-0">
+      </TabsList> : null}
+      <Button className="ml-auto" size="sm" variant="outline" disabled={loading || busyId !== null} onClick={() => setRevision((value) => value + 1)}>{pageT("refresh")}</Button>
+      </div>
+      {!loading || records.length > 0 ? groups.map(({ point, items }) => <TabsContent key={point} value={point} className="min-w-0">
         {point === "tool-policy" ? <ToolPolicySettings revision={revision} onSavingChange={(saving) => setBusyId(saving ? "tool-policy" : null)} /> : null}
         <DataTable className="overflow-x-auto" rows={items}
           rowKey={(row) => `${row.extensionPoint}:${row.providerPackId}:${row.implementation}`}
           pagination={null} emptyState={pageT("emptyExtensions")} columns={columns} tableClassName="min-w-[960px]" />
-      </TabsContent>)}
-    </Tabs> : null}
+      </TabsContent>) : null}
+    </Tabs>
   </div>;
 }

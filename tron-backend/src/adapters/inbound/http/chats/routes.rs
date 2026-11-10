@@ -39,6 +39,8 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/chats/sessions/applications", get(super::application_context::get_session_applications))
         .route("/api/v1/chats/session-groups", get(list_session_groups))
         .route("/api/v1/admin/archived-sessions", get(list_archived_sessions))
+        .route("/api/v1/admin/archived-containers/query", post(super::archives::query).layer(axum::extract::DefaultBodyLimit::max(4096)))
+        .route("/api/v1/admin/archived-containers/{kind}/{code}/restore", post(super::archives::restore))
         .route("/api/v1/admin/archived-sessions/batch-delete", post(batch_delete_archived_sessions))
         .route("/api/v1/admin/archived-sessions/{session_code}/restore", post(restore_session))
         .route("/api/v1/admin/archived-sessions/{session_code}", get(archived_session_detail).delete(delete_archived_session))

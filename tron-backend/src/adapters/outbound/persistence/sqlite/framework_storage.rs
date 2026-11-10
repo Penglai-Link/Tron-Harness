@@ -129,6 +129,17 @@ impl SharedDatabase {
     pub fn runtime(&self) -> eliteforge_agent_official_plugin_storage_local::SqliteDatabase {
         self.0.as_ref().clone()
     }
+    /// Retire the application connection before closing it, so a later profile
+    /// activation cannot obtain a closed handle from the process registry.
+    pub(crate) async fn close(&self) -> Result<(), tokio_rusqlite::Error> {
+        database_registry()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .retain(|_, handle| {
+                handle.upgrade().is_some_and(|open| !Arc::ptr_eq(&open, &self.0))
+            });
+        self.runtime().close().await
+    }
     #[track_caller]
     pub fn call<T: Send + 'static, E: Send + 'static>(
         &self,

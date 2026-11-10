@@ -36,11 +36,11 @@ export function TraceDetailPage() {
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3" aria-label={t("detail")}>
         <PlatformWorkspaceFilter />
         <div className="ml-auto flex flex-wrap items-center gap-3">
-            {rootSpanId && <Button variant="secondary" onClick={() => setShowFull((value) => !value)}>
+            {rootSpanId && <Button variant="outline" onClick={() => setShowFull((value) => !value)}>
               {t(showFull ? "showTriggerTrace" : "showFullTrace")}
             </Button>}
             <Button
-              variant="secondary"
+              variant="outline"
               nativeButton={false}
               render={
                 <Link
@@ -51,7 +51,7 @@ export function TraceDetailPage() {
               {t("backToTraces")}
             </Button>
             <Button
-              variant="secondary"
+              variant="outline"
               disabled={detail.isFetching}
               onClick={() => void detail.refetch()}
             >

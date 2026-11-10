@@ -1,10 +1,8 @@
-import { DomainIcon, WorkspaceIcon } from "@/shared/icons/ScopeIcons";
 import { TabBar } from "./content/TabBar";
 import { CREATE_TOPIC_SHORTCUT_EVENT, ADD_DIRECTORY_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import {
   Settings,
   Check,
-  Search,
   Bot,
   ChevronDown,
   PanelBottomClose,
@@ -25,6 +23,7 @@ import { CheckinButton } from "@/domain/auth/components/CheckinButton";
 import {
   useCallback,
   createContext,
+  cloneElement,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -63,14 +62,12 @@ import { tronNavigation } from "@/shared/constants/shellNavigation";
 import { getEmptyWorkspaceSwitcher, getWorkspaceSwitcherMock } from "@/shared/constants/workspaceSpaces";
 import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLocale } from "@/i18n";
 import { useAppShellStore } from "@/store/appShellStore";
 import { useNavigationStore } from "@/store/navigationStore";
 import {
   buildWorkspaceTree,
-  findWorkspaceNodePath,
   type WorkspaceTreeNode,
 } from "@/shared/lib/workspaceTree";
 import { useCreateChatTab } from "./chat/hooks/useCreateChatTab";
@@ -99,13 +96,17 @@ import { TronSidebar } from "./TronSidebar";
 import { WorkspaceLayout } from "./WorkspaceLayout";
 import { ChatNavigationProvider } from "./chat";
 import { useTabPanelRegistry } from "./content/TabPanelRegistry";
+import { ShortcutHint } from "@/shared/shortcuts/ShortcutHints";
+import type { ShellShortcutAction } from "@/shared/lib/keyboardShortcuts";
 
 const ChatContextInspector = lazy(() => import("@/domain/chat/components/ChatContextInspector").then((module) => ({ default: module.ChatContextInspector })));
 
-function ToolbarControl({ label, children }: { label: string; children: ReactElement }) {
+function ToolbarControl({ label, children, shortcutAction }: { label: string; children: ReactElement<{ children?: ReactNode }>; shortcutAction?: ShellShortcutAction }) {
   return (
     <Tooltip>
-      <TooltipTrigger render={children} className="tron-shell-tool" />
+      <TooltipTrigger render={cloneElement(children, undefined, children.props.children,
+        shortcutAction ? <ShortcutHint action={shortcutAction} compact /> : null,
+      )} className="tron-shell-tool" />
       <TooltipContent side="bottom" sideOffset={8}>{label}</TooltipContent>
     </Tooltip>
   );
@@ -127,6 +128,7 @@ function MobileNavigationEntry() {
       onClick={toggleSidebar}
     >
       {openMobile ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
+      <ShortcutHint action="toggleLeftSidebar" compact />
     </Button>
   );
 }
@@ -342,8 +344,6 @@ export function TronShell({
     return () => window.removeEventListener(OPEN_CHAT_CONTEXT_EVENT, handleOpenContext);
   }, [activeTabId, activePanelId, tabPanelRegistry, t, updateRightPanelState]);
 
-  const [workspaceSearch, setWorkspaceSearch] = useState("");
-  const [domainSearch, setDomainSearch] = useState("");
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
   const [navigationLoading, setNavigationLoading] = useState(false);
   const [mainAgentWindowState, setMainAgentWindowState] = useState<ChatFloatingState>(() => ({
@@ -550,12 +550,6 @@ export function TronShell({
     () => buildWorkspaceTree(workspaceSwitcher.secondarySpaces),
     [workspaceSwitcher.secondarySpaces],
   );
-  const defaultExpandedWorkspaceCodes = useMemo(
-    () => findWorkspaceNodePath(workspaceTree, selectedWorkspaceNode?.workspaceCode)
-      .filter((node) => node.children.length > 0)
-      .map((node) => node.space.workspaceCode),
-    [selectedWorkspaceNode?.workspaceCode, workspaceTree],
-  );
   const workspaceSpacesValue = useMemo<WorkspaceSpacesContextValue>(
     () => ({
       primarySpaces,
@@ -747,10 +741,6 @@ export function TronShell({
   ]);
 
   useEffect(() => {
-    setExpandedWorkspaceCodes(defaultExpandedWorkspaceCodes);
-  }, [defaultExpandedWorkspaceCodes]);
-
-  useEffect(() => {
     writeFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, mainAgentWindowState);
   }, [mainAgentWindowState]);
 
@@ -940,7 +930,6 @@ export function TronShell({
   }
 
   function handleWorkspaceSwitcherClick() {
-    setWorkspaceSearch("");
     setAgentOpen(false);
     if (utilityPanel !== "workspace") {
       void refreshWorkspaceSwitcher();
@@ -949,7 +938,6 @@ export function TronShell({
   }
 
   function handleNavigationDomainSwitcherClick() {
-    setDomainSearch("");
     setAgentOpen(false);
     toggleUtilityPanel("domain");
   }
@@ -1006,7 +994,7 @@ export function TronShell({
     const { space } = node;
     const workspacePathLabel = compactWorkspacePath(space.label);
     const hasChildren = node.children.length > 0;
-    const expanded = hasChildren && (Boolean(workspaceSearch.trim()) || expandedWorkspaceCodes.includes(space.workspaceCode));
+    const expanded = hasChildren && expandedWorkspaceCodes.includes(space.workspaceCode);
     const selected = space.workspaceCode === selectedWorkspaceNode?.workspaceCode;
     const rowClassName = cn(
       "flex min-h-10 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)]",
@@ -1016,7 +1004,6 @@ export function TronShell({
     );
     const content = (
       <>
-        <span className="tron-scope-icon"><WorkspaceIcon /></span>
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{space.name}</span>
         {selected ? <Check size={16} className="shrink-0" aria-hidden="true" /> : null}
       </>
@@ -1024,19 +1011,19 @@ export function TronShell({
 
     return (
       <div key={space.workspaceCode} className="space-y-0.5">
-        <div className="flex items-center gap-1" style={{ paddingLeft: `${nestingLevel * 8}px` }}>
+        <div className="flex items-center gap-1" style={{ paddingInlineStart: `${nestingLevel}rem` }}>
           {hasChildren ? (
             <button
               className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-menu-hover-surface)] hover:text-[var(--color-on-surface)]"
               type="button"
-              aria-label={`${expanded ? "Collapse" : "Expand"} ${workspacePathLabel}`}
+              aria-label={t(expanded ? "shell:aria.collapseNavigationItem" : "shell:aria.expandNavigationItem", { item: workspacePathLabel })}
               aria-expanded={expanded}
               onClick={() => toggleWorkspaceExpanded(space.workspaceCode)}
             >
-              <ChevronDown className={cn("transition-transform", expanded ? "rotate-180" : "-rotate-90")} size={14} aria-hidden="true" />
+              <ChevronDown className={cn("transition-transform", !expanded && "-rotate-90")} size={14} aria-hidden="true" />
             </button>
           ) : (
-            <span className="block size-0 shrink-0" aria-hidden="true" />
+            <span className="block size-6 shrink-0" aria-hidden="true" />
           )}
           <button
             className={rowClassName}
@@ -1057,52 +1044,54 @@ export function TronShell({
     );
   }
 
-  function renderSwitcherSearch(value: string, onChange: (value: string) => void, label: string) {
+  function renderScopeSwitcherHeader(title: string, settingsLabel: string, settingsPath: string) {
     return (
-      <div className="relative mb-2">
-        <Search className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
-        <Input autoFocus type="search" className="h-10 rounded-lg pl-9" aria-label={label} placeholder={label} value={value} onChange={(event) => onChange(event.target.value)} />
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2 pl-1">
+        <h2 className="min-w-0 text-sm font-semibold">{title}</h2>
+        <Tooltip>
+          <TooltipTrigger render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={settingsLabel}
+              onClick={() => {
+                closeFloatingPanels();
+                navigate(settingsPath, { state: { from: `${pathname}${search}` } });
+              }}
+            >
+              <Settings size={16} aria-hidden="true" />
+            </Button>
+          } />
+          <TooltipContent side="top" sideOffset={8}>{settingsLabel}</TooltipContent>
+        </Tooltip>
       </div>
     );
   }
 
   function renderWorkspaceSwitcherContent() {
-    const query = workspaceSearch.trim().toLocaleLowerCase();
-    function filterNodes(nodes: WorkspaceSwitcherTreeNode[]): WorkspaceSwitcherTreeNode[] {
-      return nodes.flatMap((node) => {
-        if (node.space.name.toLocaleLowerCase().includes(query) || node.space.label.toLocaleLowerCase().includes(query)) return [node];
-        const children = filterNodes(node.children);
-        return children.length ? [{ ...node, children }] : [];
-      });
-    }
-    const visibleTree = query ? filterNodes(workspaceTree) : workspaceTree;
     return (
       <>
-        <h2 className="mb-3 px-1 text-sm font-semibold">{t("shell:workspace.switchTitle")}</h2>
-        {renderSwitcherSearch(workspaceSearch, setWorkspaceSearch, t("shell:workspace.search"))}
+        {renderScopeSwitcherHeader(t("shell:workspace.switchTitle"), t("shell:workspace.manage"), "/admin/workspace")}
         {workspaceSwitcherLoading ? <p role="status" className="mb-2 px-1 text-xs text-[var(--color-on-surface-variant)]"><ShinyText>{t("shell:workspace.refreshing")}</ShinyText></p> : null}
-        {visibleTree.length ? (
+        {workspaceTree.length ? (
           <div className="max-h-[min(50vh,24rem)] space-y-1 overflow-y-auto" role="group" aria-label={t("shell:workspace.selectorTitle")}>
-            {visibleTree.map((root) => renderWorkspaceTreeNode(root))}
+            {workspaceTree.map((root) => renderWorkspaceTreeNode(root))}
           </div>
         ) : (
-          <p role="status" className="px-2 py-3 text-sm text-[var(--color-on-surface-variant)]">{t(query ? "shell:workspace.noSearchResults" : "shell:workspace.noPrimarySpaces")}</p>
+          <p role="status" className="px-2 py-3 text-sm text-[var(--color-on-surface-variant)]">{t("shell:workspace.noPrimarySpaces")}</p>
         )}
       </>
     );
   }
 
   function renderNavigationDomainSwitcherContent() {
-    const query = domainSearch.trim().toLocaleLowerCase();
-    const domains = navigationDomains.filter((domain) => `${domain.name} ${domain.description ?? ""}`.toLocaleLowerCase().includes(query));
     return (
       <>
-        <h2 className="px-1 text-sm font-semibold">{t("shell:navigation.switchTitle")}</h2>
-        <p className="mb-3 mt-1 truncate px-1 text-xs text-[var(--color-on-surface-variant)]">{t("shell:navigation.workspaceContext", { name: selectedWorkspaceName })}</p>
-        {renderSwitcherSearch(domainSearch, setDomainSearch, t("shell:navigation.search"))}
+        {renderScopeSwitcherHeader(t("shell:navigation.switchTitle"), t("shell:navigation.manage"), "/admin/navigation/domains")}
         <div className="max-h-[min(50vh,24rem)] space-y-1 overflow-y-auto" role="group" aria-label={t("shell:navigation.selectorTitle")}>
           {navigationLoading ? <p role="status" className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]"><ShinyText>{t("shell:navigation.refreshing")}</ShinyText></p> : null}
-          {domains.length ? domains.map((domain) => {
+          {navigationDomains.length ? navigationDomains.map((domain) => {
             const selected = domain.domainCode === selectedDomainCode;
             return (
               <button
@@ -1119,7 +1108,6 @@ export function TronShell({
                   domainTriggerRef.current?.focus();
                 }}
               >
-                <span className="tron-scope-icon"><DomainIcon /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{domain.name}</span>
                   {domain.description ? <span className="mt-0.5 block truncate text-xs text-[var(--color-on-surface-variant)]">{domain.description}</span> : null}
@@ -1127,7 +1115,7 @@ export function TronShell({
                 {selected ? <Check size={16} className="shrink-0" aria-hidden="true" /> : null}
               </button>
             );
-          }) : <p role="status" className="px-2 py-3 text-sm text-[var(--color-on-surface-variant)]">{t(query ? "shell:workspace.noSearchResults" : "shell:navigation.noDomains")}</p>}
+          }) : <p role="status" className="px-2 py-3 text-sm text-[var(--color-on-surface-variant)]">{t("shell:navigation.noDomains")}</p>}
         </div>
       </>
     );
@@ -1241,7 +1229,7 @@ export function TronShell({
   function renderNavigationDomainSelector(compact: boolean, mobile: boolean) {
     const domainName = selectedNavigationDomain?.name ?? t("shell:navigation.defaultName");
     return (
-      <div className="tron-scope-selector-row relative">
+      <div className="tron-scope-selector-row">
         <button
           ref={domainTriggerRef}
           className="tron-scope-selector tron-domain-selector"
@@ -1255,20 +1243,24 @@ export function TronShell({
           onClick={handleNavigationDomainSwitcherClick}
           title={domainName}
         >
-          <span className="tron-scope-icon"><DomainIcon /></span>
-          {!compact ? <span className="tron-scope-selector-copy"><span className="tron-scope-selector-label">{t("shell:navigation.scopeLabel")}</span><span className="tron-scope-selector-name">{domainName}</span></span> : null}
-          {!compact ? <ChevronDown className="tron-scope-selector-chevron" size={16} aria-hidden="true" /> : null}
+          <span className="tron-scope-selector-copy"><span className="tron-scope-selector-label">{t("shell:navigation.scopeLabel")}</span>{!compact ? <span className="tron-scope-selector-name">{domainName}</span> : null}</span>
         </button>
         {utilityPanel === "domain" ? (
           <div
             ref={utilityPanelRef}
             id="tron-domain-selector-panel"
             className={cn(
-              "tron-scope-popover absolute z-[70] w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
-              compact && !mobile ? "left-[calc(100%+8px)] top-0" : "left-0 top-[calc(100%+8px)]",
+              "tron-scope-popover absolute z-[70] max-h-[calc(100dvh-10rem)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+              compact && !mobile ? "bottom-0 left-[calc(100%+8px)]" : "bottom-[calc(100%+8px)] left-0",
             )}
             role="dialog" data-theme-anchor="dialog" data-tron-sidebar-surface
             aria-label={t("shell:navigation.selectorTitle")}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.stopPropagation();
+              toggleUtilityPanel("domain");
+              domainTriggerRef.current?.focus();
+            }}
           >
             {renderNavigationDomainSwitcherContent()}
           </div>
@@ -1279,7 +1271,7 @@ export function TronShell({
 
   function renderWorkspaceSelector(compact: boolean) {
     return (
-      <div className="tron-scope-selector-row relative min-w-0">
+      <div className="tron-scope-selector-row min-w-0">
         <button
           ref={workspaceTriggerRef}
           className="tron-scope-selector tron-workspace-selector"
@@ -1293,17 +1285,21 @@ export function TronShell({
           onClick={handleWorkspaceSwitcherClick}
           title={selectedWorkspacePathLabel}
         >
-          <span className="tron-scope-icon"><WorkspaceIcon /></span>
-          {!compact ? <span className="tron-scope-selector-copy"><span className="tron-scope-selector-label">{t("shell:workspace.scopeLabel")}</span><span className="tron-scope-selector-name">{selectedWorkspaceName}</span></span> : null}
-          {!compact ? <ChevronDown className="tron-scope-selector-chevron" size={16} aria-hidden="true" /> : null}
+          <span className="tron-scope-selector-copy"><span className="tron-scope-selector-label">{t("shell:workspace.shortScopeLabel")}</span>{!compact ? <span className="tron-scope-selector-name">{selectedWorkspaceName}</span> : null}</span>
         </button>
         {utilityPanel === "workspace" ? (
           <div
             ref={utilityPanelRef}
             id="tron-workspace-selector-panel"
-            className={cn("tron-scope-popover absolute z-[80] w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]", compact ? "left-[calc(100%+8px)] top-0" : "left-0 top-[calc(100%+8px)]")}
+            className={cn("tron-scope-popover absolute z-[80] max-h-[calc(100dvh-10rem)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]", compact ? "bottom-0 left-[calc(100%+8px)]" : "bottom-[calc(100%+8px)] left-0")}
             role="dialog" data-theme-anchor="dialog"
             aria-label={t("shell:workspace.selectorTitle")}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.stopPropagation();
+              toggleUtilityPanel("workspace");
+              workspaceTriggerRef.current?.focus();
+            }}
           >
             {renderWorkspaceSwitcherContent()}
           </div>
@@ -1335,8 +1331,8 @@ export function TronShell({
             <WorkspaceLayout
               navigation={
                 <TronSidebar
-                  activeItem={activeItem}
-                  activeHref={pathname}
+                  activeItem={activeTabId === DEFAULT_TAB_ID ? "" : activeItem}
+                  activeHref={activeTabId === DEFAULT_TAB_ID ? undefined : pathname}
                   navigation={visibleNavigation}
                   openNavigationItems={openNavigationItems}
                   openSections={openSections}
@@ -1354,17 +1350,17 @@ export function TronShell({
                   <div className="flex h-full items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <MobileNavigationEntry />
-                      <TabBar className="min-w-0 flex-1 py-0" />
+                      <TabBar className="min-w-0 flex-1" />
                     </div>
                     <div className="flex shrink-0 items-center gap-0.5">
                       {renderedTopbarActions}
                       <NotificationLauncher className="tron-shell-tool" />
-                      <ToolbarControl label={t("shell:assistant.title")}>
+                      <ToolbarControl label={t("shell:assistant.title")} shortcutAction="toggleAgentWindow">
                         <Button className="tron-shell-tool" size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} onClick={handleAgentLauncherClick}>
                           <Bot size={17} aria-hidden="true" />
                         </Button>
                       </ToolbarControl>
-                      <ToolbarControl label={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}>
+                      <ToolbarControl label={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")} shortcutAction="toggleBottomPanel">
                         <Button
                           className="hidden min-[900px]:inline-flex"
                           size="icon"
@@ -1378,7 +1374,7 @@ export function TronShell({
                         </Button>
                       </ToolbarControl>
                       <>
-                        <ToolbarControl label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}>
+                        <ToolbarControl label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")} shortcutAction="toggleRightSidebar">
                           <Button
                             className="lg:hidden"
                             size="icon"
@@ -1393,7 +1389,7 @@ export function TronShell({
                             {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
                           </Button>
                         </ToolbarControl>
-                        <ToolbarControl label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}>
+                        <ToolbarControl label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")} shortcutAction="toggleRightSidebar">
                           <Button
                             className="hidden lg:flex"
                             size="icon"

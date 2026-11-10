@@ -1,3 +1,4 @@
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { X } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import {
@@ -228,22 +229,6 @@ export function AutomationDetailsPage() {
     return () => controller.abort();
   }, [automation.workspaceCode, dataSource, toast]);
 
-  useEffect(() => {
-    if (!promptFullscreenOpen) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPromptFullscreenOpen(false);
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [promptFullscreenOpen]);
 
   const detailDirty = name !== automation.name
     || description !== (automation.description ?? "")
@@ -549,10 +534,9 @@ export function AutomationDetailsPage() {
         </SurfaceCard>
       </div>
       {promptFullscreenOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-          <div
-            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog" data-theme-anchor="dialog"
+        <Dialog open={promptFullscreenOpen} onOpenChange={setPromptFullscreenOpen}>
+          <DialogContent showCloseButton={false}
+            className="gap-0 p-0 sm:max-w-none flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             aria-modal="true"
             aria-label={editing ? pt("Prompt fullscreen editor") : pt("Prompt fullscreen preview")}
           >
@@ -583,8 +567,8 @@ export function AutomationDetailsPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </>
   );

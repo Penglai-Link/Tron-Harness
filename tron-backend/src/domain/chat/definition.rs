@@ -217,6 +217,7 @@ pub enum ChatError {
     WorkspaceRequired,
     ProjectRequired,
     ProjectInvalid,
+    ProjectNameConflict,
     DirectoryInvalid,
     DirectoryFixed,
     UserInputAlreadyAnswered,
@@ -254,6 +255,7 @@ impl Display for ChatError {
             Self::ProjectRequired => {
                 f.write_str("projectCode is required for a manual chat session")
             }
+            Self::ProjectNameConflict => f.write_str("an active topic already uses this name"),
             Self::ProjectInvalid => f.write_str("chat project is invalid for this workspace"),
             Self::DirectoryFixed => f.write_str("directory chats must use their own directory"),
             Self::DirectoryInvalid => f.write_str("chat directory is invalid for this workspace"),

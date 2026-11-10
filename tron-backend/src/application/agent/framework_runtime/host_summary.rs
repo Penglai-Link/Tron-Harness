@@ -18,7 +18,7 @@ impl FrameworkHost {
     pub(crate) async fn summary_store(&self) -> Result<Arc<dyn SummaryStore>, fw::AgentError> {
         self.ensure_open()
             .map_err(fw::AgentError::InvalidConfiguration)?;
-        self.framework()
+        self.storage_framework()
             .await?
             .services()?
             .get::<SummaryStoreService>()

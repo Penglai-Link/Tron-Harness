@@ -85,6 +85,11 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_PROJECT_REQUIRED",
             "projectCode is required for a manual chat session".to_string(),
         ),
+        ChatError::ProjectNameConflict => (
+            StatusCode::CONFLICT,
+            crate::application::chat::ArchiveError::TopicNameConflict.descriptor().code,
+            "An active topic already uses this name".into(),
+        ),
         ChatError::ProjectInvalid => (
             StatusCode::UNPROCESSABLE_ENTITY,
             "CHAT_PROJECT_INVALID",

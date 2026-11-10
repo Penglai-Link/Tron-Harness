@@ -7,22 +7,18 @@ export const tronNavigation: TronNavSection[] = [
   { id: "DUDES", label: "Dude", translationKey: "shell:nav.items.dudes", icon: getNavigationIcon("Bot") ?? Folder, standalone: true, flyout: false, items: [
 { menuCode: "DUDES", label: "Dude", translationKey: "shell:nav.items.dudes", href: "/dudes", icon: getNavigationIcon("Bot") ?? Folder, childDisplay: "Inline" }
 ] },
+  { id: "TASKS", label: "Tasks", translationKey: "shell:nav.items.tasks", icon: getNavigationIcon("ListTodo") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "TASKS", label: "Tasks", translationKey: "shell:nav.items.tasks", href: "/tasks", icon: getNavigationIcon("ListTodo") ?? Folder, childDisplay: "Inline" }
+] },
+  { id: "AUTOMATIONS", label: "Automations", translationKey: "shell:nav.items.automations", icon: getNavigationIcon("AlarmClock") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "AUTOMATIONS", label: "Automations", translationKey: "shell:nav.items.automations", href: "/automations", icon: getNavigationIcon("AlarmClock") ?? Folder, childDisplay: "Inline" }
+] },
   { id: "EXPLORE_MORE", label: "Explore more", translationKey: "shell:nav.sections.exploreMore", icon: getNavigationIcon("Ellipsis") ?? Folder, standalone: false, flyout: true, items: [
-{ menuCode: "NOTIFICATIONS", label: "Notifications", translationKey: "shell:nav.items.notifications", href: "/notifications", icon: getNavigationIcon("Bell") ?? Folder, childDisplay: "Inline" },
-{ menuCode: "CORE", label: "Core", translationKey: "shell:nav.sections.core", href: "", icon: getNavigationIcon("LayoutDashboard") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
 { menuCode: "APPS", label: "Apps", translationKey: "shell:nav.items.apps", href: "/apps", icon: getNavigationIcon("FolderGit2") ?? Folder, childDisplay: "Inline" },
-{ menuCode: "TASKS", label: "Tasks", translationKey: "shell:nav.items.tasks", href: "/tasks", icon: getNavigationIcon("ListTodo") ?? Folder, childDisplay: "Inline" },
-{ menuCode: "AUTOMATIONS", label: "Automations", translationKey: "shell:nav.items.automations", href: "/automations", icon: getNavigationIcon("AlarmClock") ?? Folder, childDisplay: "Inline" },
-{ menuCode: "VARIABLES", label: "Variables", translationKey: "shell:nav.items.variables", href: "/variables", icon: getNavigationIcon("KeyRound") ?? Folder, childDisplay: "Inline" }
-] },
-{ menuCode: "AGENT_OPERATIONS", label: "Agent Operations", translationKey: "shell:nav.sections.agentOperations", href: "", icon: getNavigationIcon("Bot") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
+{ menuCode: "NOTIFICATIONS", label: "Notifications", translationKey: "shell:nav.items.notifications", href: "/notifications", icon: getNavigationIcon("Bell") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "VARIABLES", label: "Variables", translationKey: "shell:nav.items.variables", href: "/variables", icon: getNavigationIcon("KeyRound") ?? Folder, childDisplay: "Inline" },
 { menuCode: "MCP_SERVERS", label: "MCP Servers", translationKey: "shell:nav.items.mcpServers", href: "/mcp-servers", icon: getNavigationIcon("PlugZap") ?? Folder, childDisplay: "Inline" },
-] },
-{ menuCode: "DATA", label: "Data", translationKey: "shell:nav.sections.data", href: "", icon: getNavigationIcon("Database") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
-{ menuCode: "RESOURCE_MANAGEMENT", label: "Resource Management", translationKey: "shell:nav.items.resourceManagement", href: "", icon: getNavigationIcon("Archive") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
 { menuCode: "FILE_MANAGEMENT", label: "File Management", translationKey: "shell:nav.items.fileManagement", href: "/resource-management/files", icon: getNavigationIcon("Folder") ?? Folder, childDisplay: "Inline" },
-] }
-] }
 ] },
   { id: "CHAT_PROJECTS", label: "Topics", translationKey: "shell:nav.items.projects", icon: getNavigationIcon("FolderKanban") ?? Folder, standalone: true, flyout: false, items: [
 { menuCode: "CHAT_PROJECTS", label: "Topics", translationKey: "shell:nav.items.projects", href: "", icon: getNavigationIcon("FolderKanban") ?? Folder, childDisplay: "Inline", widgetCode: "chat.projects" }

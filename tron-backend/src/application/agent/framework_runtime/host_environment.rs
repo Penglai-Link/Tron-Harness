@@ -1,7 +1,6 @@
 //! One plugin environment per profile; Agent bindings only select capabilities.
 use super::*;
 use eliteforge_agent_framework::FrameworkBuilder;
-use eliteforge_agent_official_plugin_storage_local::LocalStoragePlugin;
 impl FrameworkHost {
     pub fn sync_capability_resources(&self) -> Result<(), String> {
         use crate::application::capability::CapabilityResource;
@@ -365,19 +364,7 @@ impl FrameworkHost {
                 )
                 .map_err(|error| error.to_string())?,
             )
-            .plugin({
-                let mut storage =
-                    LocalStoragePlugin::new(&self.0.path, self.0.path.with_extension("artifacts"))
-                        .with_database(self.shared_database().await.map_err(|e| e.to_string())?);
-                // Match the assembler's source-size safety guard. The owning
-                // memory block's token quota controls summary size, not the
-                // storage plugin's smaller general-purpose default record cap.
-                storage.config.summaries.max_record_bytes = 16 * 1024 * 1024;
-                // Persistent product conversations are not an in-memory cache:
-                // normal saved history must not block every new chat/child at 1024.
-                storage.config.conversations.max_sessions = usize::MAX;
-                storage
-            })
+            .plugin(self.storage().await.map_err(|e| e.to_string())?.plugin())
             // Stable two-tool gateway: every other provider's bindings become
             // wrapped inventory so `request.tools` stays the same pair for the
             // whole run and provider prompt caches survive tool growth.
@@ -672,7 +659,7 @@ impl FrameworkHost {
     pub(crate) async fn context_block_catalog(
         &self,
     ) -> Result<Vec<super::super::ContextLayoutContributorInfo>, fw::AgentError> {
-        let framework = self.framework().await?;
+        let framework = self.runtime_framework().await?;
         let services = framework.services()?;
         Ok(services
             .providers::<fw::ContextContributorService>()

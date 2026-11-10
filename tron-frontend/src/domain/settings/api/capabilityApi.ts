@@ -51,6 +51,23 @@ export function listCapabilityPacks(signal?: AbortSignal) {
   });
 }
 
+export async function getCapabilityPluginCounts(signal?: AbortSignal) {
+  const packs = await requestApi<CapabilityPackRecord[]>("GET /api/v1/capabilities/packs", {
+    signal,
+    queryParams: { includeContents: true },
+  });
+  const plugins = new Set<string>();
+  const enabled = new Set<string>();
+  for (const pack of packs) {
+    for (const item of pack.contents) {
+      if (item.kind !== "Plugin") continue;
+      plugins.add(item.name);
+      if (pack.effective) enabled.add(item.name);
+    }
+  }
+  return { total: plugins.size, enabled: enabled.size };
+}
+
 export async function getCapabilityPack(id: string, signal?: AbortSignal) {
   const records = await requestApi<CapabilityPackRecord[]>("GET /api/v1/capabilities/packs", {
     signal, queryParams: { id, includeContents: true },

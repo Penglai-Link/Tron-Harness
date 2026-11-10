@@ -577,6 +577,14 @@ export const pages = {
     builtinAgent: "内置主智能体，所有空间可用",
   },
   archivedChats: {
+    archiveType: "归档类型",
+    chats: "会话",
+    topics: "主题",
+    projects: "工作区",
+    emptyContainers: "暂无归档内容。",
+    containerItems: "归档内容",
+    archivedChatCount: "归档会话数",
+    containerRestored: "已恢复。所属会话仍保持归档，可单独恢复。",
     errors: {
       CHAT_SESSION_NOT_FOUND: "会话不存在。",
       CHAT_SESSION_MUST_BE_ARCHIVED: "请先归档会话。",
@@ -1335,7 +1343,7 @@ export const pages = {
       edit: "编辑",
       forResource: "{{name}} 的操作",
       new: "新建资源",
-      quickUpload: "快捷上传",
+      quickUpload: "上传",
       refresh: "刷新",
     },
     columns: {
@@ -4463,7 +4471,7 @@ export const pages = {
     title: "变量",
   },
   automationCreate: {
-    actions: { cancel: "取消", new: "新建", save: "保存", saving: "保存中..." },
+    actions: { cancel: "取消", new: "新建", save: "保存", saving: "保存中...", preview: "预览未来 5 次执行时间" },
     aria: {
       closePrompt: "关闭提示词全屏编辑器",
       description: "自动化描述",
@@ -4476,6 +4484,8 @@ export const pages = {
     errors: {
       create: "自动化创建失败",
       executionOptions: "执行选项加载失败",
+      invalidCron: "无法预览执行时间，请检查 Cron 表达式。",
+      previewUnavailable: "执行时间预览不可用，请检查服务是否已更新并运行。",
       workspaceRequired: "请先在 shell 顶部选择工作区再创建自动化",
     },
     fields: {
@@ -4489,12 +4499,12 @@ export const pages = {
       status: "自动化状态",
     },
     placeholders: {
-      description: "概述业务意图、约束或面向操作人员的预期输出。",
-      name: "每日工作区发布摘要",
-      prompt: "编写此自动化在工作区运行时要分发的长文本提示词。",
+      description: "简要描述此自动化的用途。",
+      name: "输入自动化名称",
+      prompt: "编写此自动化在工作区运行时要执行的提示词。",
     },
     messages: { created: "自动化 {{code}} 已创建" },
-    promptFullscreenHint: "编写此自动化每次运行时要分发的长文本提示词。",
+    promptFullscreenHint: "编写此自动化每次运行时要执行的提示词。",
     status: {
       Active: "启用",
       Disabled: "停用",
@@ -4506,6 +4516,8 @@ export const pages = {
       loadingAgents: "正在加载智能体...",
       loadingModels: "正在加载模型...",
       noModels: "没有可执行模型",
+      previewTimezone: "未来执行时间（本地时间；调度按 UTC 计算）",
+      noFutureRuns: "没有未来执行时间",
     },
   },
   mainAgent: {
@@ -4546,7 +4558,7 @@ export const pages = {
       aria: {
         deleteFlow: "删除 {{name}}",
         deleteStatus: "删除状态",
-        flow: "工作流",
+        flow: "任务流",
         taskColumn: "{{name}} 任务列",
       },
       columns: {
@@ -4616,6 +4628,7 @@ export const pages = {
     },
     kanban: {
       allPriorities: "全部优先级",
+      allTypes: "全部",
       errors: { status: "任务状态更新失败" },
       priority: "优先级",
       priorityFilter: "任务优先级筛选",
@@ -4632,6 +4645,7 @@ export const pages = {
       assignees: "任务负责人",
       closeDescription: "关闭描述全屏编辑器",
       description: "任务描述",
+      descriptionHelp: "任务描述说明",
       descriptionFullscreen: "任务描述全屏编辑器",
       executionAgent: "任务执行智能体",
       executionModel: "任务执行模型",
@@ -4639,6 +4653,7 @@ export const pages = {
     },
     descriptionFullscreenHint:
       "在更大的编辑区中填写目标、交付物、上下文、约束和变量引用。",
+    descriptionHelp: "执行任务时，描述会作为任务上下文提供给执行智能体。可用 $VAR1 等名称指明已配置的变量；描述中的文字不会自动替换。",
     detail: {
       actions: { edit: "编辑", execute: "执行", executing: "执行中..." },
       addSubtask: "添加子任务",
@@ -4750,7 +4765,7 @@ export const pages = {
       Review: "评审中",
     },
     title: "任务",
-    types: { Bug: "缺陷", Feature: "功能", Improvement: "改进", Task: "任务" },
+    types: { Bug: "缺陷", Feature: "功能", General: "通用", Improvement: "改进", Task: "任务" },
     values: {
       automaticModel: "对话自动路由",
       loadingAgents: "正在加载智能体...",
@@ -5160,6 +5175,7 @@ export const pages = {
     typingParticleSpeed: "速度",
   },
   workspaceManagement: {
+    flowBindingFailed: "工作空间已创建，但任务流绑定失败。请选择该工作空间后重试。",
     loading: "正在加载工作空间…",
     saved: "工作空间已保存。",
     nameRequired: "请输入工作空间名称。",

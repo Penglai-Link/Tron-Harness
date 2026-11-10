@@ -39,5 +39,5 @@ export function graphNodeSelectionStyle(focus: GraphSelection, id: string) {
 }
 
 export function graphEdgeSelectionStyle(focus: GraphSelection, id: string) {
-  return { opacity: focus.edges.has(id) ? 0.82 : focus.active ? 0.07 : 0.38 };
+  return { opacity: focus.edges.has(id) ? 0.9 : focus.active ? 0.14 : 0.7 };
 }

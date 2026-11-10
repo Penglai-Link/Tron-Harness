@@ -19,5 +19,5 @@ export function CollectorConfigButton() {
       toast.error(t("copyFailed"));
     }
   };
-  return <Button variant="secondary" onClick={() => void copy()}>{t("copyCollectorConfig")}</Button>;
+  return <Button variant="outline" onClick={() => void copy()}>{t("copyCollectorConfig")}</Button>;
 }

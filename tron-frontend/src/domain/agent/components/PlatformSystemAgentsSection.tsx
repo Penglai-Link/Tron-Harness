@@ -216,7 +216,7 @@ export function PlatformSystemAgentsSection() {
     {confirmDelete && selectedAgent ? <Dialog open onOpenChange={(open) => { if (!rowBusyCode) setConfirmDelete(open); }}>
       <DialogContent showCloseButton={!rowBusyCode}>
         <DialogHeader><DialogTitle>{pageT("profile.deleteTitle", "Delete system Agent?")}</DialogTitle><DialogDescription>{selectedAgent.name}</DialogDescription></DialogHeader>
-        <div className="flex justify-end gap-2"><Button variant="outline" disabled={Boolean(rowBusyCode)} onClick={() => setConfirmDelete(false)}>{pageT("profile.cancel", "Cancel")}</Button><Button disabled={Boolean(rowBusyCode)} onClick={() => void removeProfile(selectedAgent)}>{pageT("profile.delete", "Delete")}</Button></div>
+        <div className="flex justify-end gap-2"><Button variant="outline" disabled={Boolean(rowBusyCode)} onClick={() => setConfirmDelete(false)}>{pageT("profile.cancel", "Cancel")}</Button><Button data-dialog-primary disabled={Boolean(rowBusyCode)} onClick={() => void removeProfile(selectedAgent)}>{pageT("profile.delete", "Delete")}</Button></div>
       </DialogContent>
     </Dialog> : null}
   </section>;

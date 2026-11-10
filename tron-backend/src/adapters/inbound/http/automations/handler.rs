@@ -16,6 +16,21 @@ use super::{
     request::{CreateAutomationRequest, UpdateAutomationRequest, UpdateAutomationStatusRequest},
 };
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulePreviewQuery { cron_expression: String }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SchedulePreviewView { execution_times: Vec<i64> }
+
+pub async fn preview_schedule(Query(query): Query<SchedulePreviewQuery>) -> Response {
+    match crate::application::automation::preview_schedule(&query.cron_expression) {
+        Ok(execution_times) => Json(ApiResponse::success(SchedulePreviewView { execution_times })).into_response(),
+        Err(error) => automation_error_response(error),
+    }
+}
+
 pub async fn options(State(automations): State<AutomationService>) -> Response {
     Json(ApiResponse::success(automations.options())).into_response()
 }

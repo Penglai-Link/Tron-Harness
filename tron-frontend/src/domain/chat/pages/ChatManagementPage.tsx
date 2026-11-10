@@ -2195,6 +2195,7 @@ function RightWorkspaceSidebar({
 
 export function RightContextSidebar({
   dudeCode,
+  refreshInterval,
   events,
   latestCompactionStatus,
   latestUsageAudit,
@@ -2204,6 +2205,7 @@ export function RightContextSidebar({
   session,
 }: {
   dudeCode?: string;
+  refreshInterval?: number;
   events: TranscriptAguiEvent[];
   goal?: ChatSessionGoalView | null;
   latestCompaction?: ChatSessionCompaction | null;
@@ -2223,7 +2225,7 @@ export function RightContextSidebar({
   const usage = chatTokenUsage(messages);
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
   const liveAssembly = useMemo(() => latestContextAssemblyFromEvents(events), [events]);
-  const assembly = useSavedContextAssembly(session?.sessionCode ?? "", liveAssembly.snapshot?.snapshotSequence ? liveAssembly.snapshot : null, dudeCode);
+  const assembly = useSavedContextAssembly(session?.sessionCode ?? "", liveAssembly.snapshot?.snapshotSequence ? liveAssembly.snapshot : null, dudeCode, refreshInterval);
   const modelLabel = useContextModelLabel(assembly.snapshot?.modelCode ?? null, session?.workspaceCode ?? "");
   const budgetBreakdown = assembly.snapshot ? normalizeContextBudgetBreakdown({
     ...assembly.snapshot.budgetBreakdown,

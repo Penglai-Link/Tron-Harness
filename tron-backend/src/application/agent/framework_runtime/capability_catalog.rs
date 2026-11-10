@@ -127,7 +127,7 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             "External Agent",
             "External Agent Invocation and Session Bridge",
             "EliteForge",
-            "0.1.0",
+            env!("TRON_FRAMEWORK_VERSION"),
             Some("2026-09-27"),
         ),
         (
@@ -135,7 +135,7 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             "Scoped Local Tools",
             "Scoped filesystem, command and shared PTY capabilities",
             "EliteForge",
-            "0.1.0",
+            env!("TRON_FRAMEWORK_VERSION"),
             Some("2026-09-27"),
         ),
         (
@@ -143,7 +143,7 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             "Agent Collaboration",
             "Named child-agent delegation and independent threads",
             "EliteForge",
-            "0.1.0",
+            env!("TRON_FRAMEWORK_VERSION"),
             Some("2026-10-09"),
         ),
         (
@@ -151,7 +151,7 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             "A2UI Interfaces",
             "Optional interactive cards, forms, guidance and skills for A2UI v0.9.1 clients",
             "EliteForge",
-            "0.1.0",
+            env!("TRON_FRAMEWORK_VERSION"),
             Some("2026-10-10"),
         ),
         (
@@ -159,7 +159,7 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             "PersonAI",
             "Web search, image generation, task querying and AIGC detection with host credentials",
             "EliteForge",
-            "0.1.0",
+            env!("TRON_FRAMEWORK_VERSION"),
             Some("2026-10-10"),
         ),
         (
@@ -167,7 +167,7 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             "Web Fetch",
             "Read public webpage text",
             "EliteForge",
-            "0.1.0",
+            env!("TRON_FRAMEWORK_VERSION"),
             Some("2026-10-10"),
         ),
         (
@@ -175,7 +175,7 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             "Media",
             "Read scoped images and PDF files or attachments",
             "EliteForge",
-            "0.1.0",
+            env!("TRON_FRAMEWORK_VERSION"),
             Some("2026-10-10"),
         ),
         (
@@ -183,7 +183,7 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             "Tron Harness",
             "Tron context, business tool policy and bundled theme / memory skills",
             "Tron",
-            "0.1.0",
+            env!("CARGO_PKG_VERSION"),
             Some("2026-10-10"),
         ),
     ]

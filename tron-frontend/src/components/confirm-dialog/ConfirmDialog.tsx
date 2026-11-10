@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { createPortal } from "react-dom";
+import { useRef } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { CircleAlert, LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -32,33 +32,14 @@ export function ConfirmDialog({
   title,
   tone = "danger",
 }: ConfirmDialogProps) {
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !pending) {
-        onCancel();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel, open, pending]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm"
-      onMouseDown={(event) => {
-        if (event.target !== event.currentTarget || pending) return;
-        onCancel();
-      }}
-    >
-      <div
-        className="w-[min(92vw,32rem)] rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-        role="dialog" data-theme-anchor="dialog"
-        aria-modal="true"
+  const dialogRef = useRef<HTMLDivElement>(null);
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !pending) onCancel(); }}>
+      <DialogContent
+        showCloseButton={false}
+        ref={dialogRef}
+        initialFocus={dialogRef}
+        className="block w-[min(92vw,32rem)] gap-0 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-0 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:max-w-[32rem]"
         aria-label={ariaLabel ?? title}
       >
         <div className="flex items-start gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
@@ -68,9 +49,9 @@ export function ConfirmDialog({
             </div>
           ) : null}
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{title}</h2>
+            <DialogTitle className="text-base font-semibold text-[var(--color-on-surface)]">{title}</DialogTitle>
             {description ? (
-              <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{description}</p>
+              <DialogDescription className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{description}</DialogDescription>
             ) : null}
           </div>
         </div>
@@ -90,14 +71,14 @@ export function ConfirmDialog({
             )}
             disabled={pending}
             aria-busy={pending}
+            data-dialog-primary
             onClick={onConfirm}
           >
             {pending ? <LoaderCircle className="animate-spin" size={14} aria-hidden="true" /> : null}
             {pending ? pendingText ?? confirmText : confirmText}
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 mod container;
+mod archives;
 
 pub struct SqliteChatRepository {
     host: FrameworkHost,
@@ -390,6 +391,12 @@ impl SqliteChatRepository {
     }
 }
 impl ChatRepository for SqliteChatRepository {
+    fn archived_containers(&mut self, kind: crate::application::chat::ArchivedContainerKind, workspace_code: Option<&str>, offset: u32, limit: u32) -> Result<(Vec<crate::application::chat::ArchivedContainer>, u64), crate::application::chat::ArchiveError> {
+        self.read_archived_containers(kind, workspace_code, offset, limit)
+    }
+    fn restore_archived_container(&mut self, kind: crate::application::chat::ArchivedContainerKind, code: &str) -> Result<(), crate::application::chat::ArchiveError> {
+        self.restore_container_registration(kind, code)
+    }
     fn validate_annotation_sources(&mut self, session: &str, annotations: &[fw::MessageAnnotation]) -> Result<(), ChatError> {
         if annotations.is_empty() { return Ok(()); }
         blocking(async {
@@ -597,6 +604,7 @@ impl ChatRepository for SqliteChatRepository {
             let f = self.framework().await?;
             let s = f.sessions().map_err(|_| ChatError::StorageFailure)?;
             let db = self.host.shared_database().await.map_err(chat_error)?;
+            let mut topic_name_conflict = false;
             db.transaction(async {
                 if status == ChatSessionStatus::Archived {
                     if f.goals()
@@ -611,9 +619,19 @@ impl ChatRepository for SqliteChatRepository {
                 } else {
                     if let Some(project_code) = link.project_code {
                         let workspace_code = link.workspace_code.clone();
-                        let changed = db.call(move |c| c.execute("UPDATE projects SET status='ACTIVE',archived_at=NULL WHERE project_code=?1 AND workspace_code=?2", params![project_code, workspace_code]))
-                            .await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
-                        if changed == 0 { return Err(fw::StateError::NotFound); }
+                        let changed = db.call(move |c| -> rusqlite::Result<Option<usize>> {
+                            let name: Option<String> = c.query_row("SELECT name FROM projects WHERE project_code=?1 AND workspace_code=?2", params![project_code, workspace_code], |row| row.get(0)).optional()?;
+                            let Some(name) = name else { return Ok(Some(0)); };
+                            if super::project_repository::active_name_exists(c, &workspace_code, &name, &project_code)? {
+                                return Ok(None);
+                            }
+                            c.execute("UPDATE projects SET status='ACTIVE',archived_at=NULL WHERE project_code=?1 AND workspace_code=?2", params![project_code, workspace_code]).map(Some)
+                        }).await.map_err(|error| fw::StateError::Backend(error.to_string()))?;
+                        match changed {
+                            None => { topic_name_conflict = true; return Err(fw::StateError::Conflict); }
+                            Some(0) => return Err(fw::StateError::NotFound),
+                            Some(_) => {}
+                        }
                     }
                     if let Some(directory_code) = link.directory_code {
                         let workspace_code = link.workspace_code;
@@ -626,7 +644,7 @@ impl ChatRepository for SqliteChatRepository {
                 Ok(())
             })
             .await
-            .map_err(chat_error)?;
+            .map_err(|error| if topic_name_conflict { ChatError::ProjectNameConflict } else { chat_error(error) })?;
             Ok(())
         })
     }

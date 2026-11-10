@@ -1,4 +1,8 @@
 import { requestApi } from "@/shared/api/httpClient";
+
+export function previewAutomationSchedule(cronExpression: string) {
+  return requestApi<{ executionTimes: number[] }>("GET /api/v1/automations/schedule-preview", { queryParams: { cronExpression } });
+}
 import type {
   AutomationDetailData,
   AutomationExecutionListItem,

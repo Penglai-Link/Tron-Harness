@@ -1,3 +1,4 @@
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Clipboard, X } from "lucide-react";
 import {
   type ReactNode,
@@ -6,7 +7,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   useLocation,
   useNavigate,
@@ -742,7 +742,11 @@ export function PromptEditorPage({
                     className="min-h-64 resize-y font-mono leading-6"
                     value={form.promptBody}
                     onKeyDown={(event) => {
-                      if (event.key === "Escape") setPromptVariablePickerTrigger(null);
+                      if (event.key === "Escape" && promptVariablePickerTrigger) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setPromptVariablePickerTrigger(null);
+                    }
                     }}
                     onChange={(event) => updatePromptBody(
                       event.target.value,
@@ -863,11 +867,10 @@ export function PromptEditorPage({
             </div>
           </SurfaceCard>
       </div>
-      {promptBodyFullscreenOpen ? createPortal(
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-          <div
-            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog" data-theme-anchor="dialog"
+      {promptBodyFullscreenOpen ? (
+        <Dialog open={promptBodyFullscreenOpen} onOpenChange={setPromptBodyFullscreenOpen}>
+          <DialogContent showCloseButton={false}
+            className="gap-0 p-0 sm:max-w-none flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             aria-modal="true"
             aria-label={isReadOnlyDetail ? pt("aria.promptBodyFullscreenPreview", "Prompt body fullscreen preview") : pt("aria.promptBodyFullscreenEditor", "Prompt body fullscreen editor")}
           >
@@ -900,7 +903,11 @@ export function PromptEditorPage({
                   disabled={editorLocked}
                   value={form.promptBody}
                   onKeyDown={(event) => {
-                    if (event.key === "Escape") setPromptVariablePickerTrigger(null);
+                    if (event.key === "Escape" && promptVariablePickerTrigger) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setPromptVariablePickerTrigger(null);
+                    }
                   }}
                   onChange={(event) => updatePromptBody(
                     event.target.value,
@@ -910,9 +917,8 @@ export function PromptEditorPage({
                 />
               )}
             </div>
-          </div>
-        </div>,
-        document.body,
+          </DialogContent>
+        </Dialog>
       ) : null}
     </>
   );

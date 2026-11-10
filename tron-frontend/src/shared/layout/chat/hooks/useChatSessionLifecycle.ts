@@ -23,6 +23,8 @@ export function useChatSessionLifecycle() {
       const removedPath = (path: string) => {
         if (removed.has(sessionCodeFromPath(path) ?? "")) return true;
         const url = new URL(path, "https://tron.local");
+        const topic = /^\/topics\/([^/]+)\/?$/.exec(url.pathname);
+        if (topic && detail.projectCodes?.includes(decodeURIComponent(topic[1]))) return true;
         return url.pathname === "/chats" && Boolean(url.searchParams.get("draftCode")) && (
           detail.projectCodes?.includes(url.searchParams.get("projectCode") ?? "")
           || detail.directoryCodes?.includes(url.searchParams.get("directoryCode") ?? "")

@@ -161,5 +161,5 @@ function systemAutomationModelOptionCode(agentCode: string, modelId: string) {
 }
 
 function isAutomationTextModelOption(model: ModelSelectOption) {
-  return model.enabled && model.modelType === "TEXT";
+  return model.enabled && model.modelType === "TEXT" && model.modelSelection?.kind !== "ProviderRoute" && model.modelSelection?.kind !== "Auto";
 }

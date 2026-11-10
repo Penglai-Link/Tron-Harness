@@ -1,4 +1,6 @@
 mod admission;
+mod archives;
+pub use archives::{ArchiveError, ArchivedContainer, ArchivedContainerKind};
 mod attachments;
 mod dto;
 pub(crate) mod composer_input;

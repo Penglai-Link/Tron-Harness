@@ -432,7 +432,7 @@ export function DialogSelect(props: DialogSelectProps) {
             <Button onClick={() => setOpen(false)} variant="outline">
               {cancelText}
             </Button>
-            <Button onClick={handleConfirm}>{confirmText}</Button>
+            <Button data-dialog-primary onClick={handleConfirm}>{confirmText}</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -227,6 +227,8 @@ impl FrameworkHost {
         report
     }
     async fn close_dependent_stores(&self) -> ShutdownReport {
+        let _exclusive = self.0.runtime_access.write().await;
+        let _storage_initializers = self.0.storage_access.write().await;
         // Branch leases must finish before the backing SQLite connections close.
         let mut report = self.0.native_bindings.close().await;
         if let Err(error) = self.close_personai_tools().await {
@@ -234,6 +236,17 @@ impl FrameworkHost {
         }
         if let Some(framework) = self.0.framework.get() {
             report.merge(framework.close().await);
+        }
+        if let Some(framework) = self.0.storage_framework.get() {
+            report.merge(framework.close().await);
+        }
+        if let Some(storage) = self.0.storage.get() {
+            report.merge(storage.close().await);
+        }
+        if let Some(database) = self.0.database.get() {
+            if let Err(error) = database.close().await {
+                report.errors.push(format!("application database close failed: {error}"));
+            }
         }
         if let Some(telemetry) = self.0.telemetry.get() {
             if let Err(error) = telemetry.close().await {

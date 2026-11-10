@@ -38,7 +38,7 @@ pub struct StateResponse {
 async fn service(state: &AppState) -> Result<std::sync::Arc<a2ui::A2uiService>, fw::AgentError> {
     state
         .agent_framework
-        .storage_framework()
+        .runtime_framework()
         .await
         .map_err(|_| fw::AgentError::Run("Framework unavailable".into()))?
         .services()?

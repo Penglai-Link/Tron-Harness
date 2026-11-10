@@ -5,7 +5,7 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 export const pages = {
   capabilityPage: {"loading": "Loading page…", "retry": "Retry", "changed": "This page changed or is unavailable. Enable the pack and reopen it.", "protocol": "Incompatible page protocol.", "load": "Unable to load page. Check the pack assets and build format."},
   voiceInput: {"start": "Start voice input", "stop": "Stop recording and transcribe", "requesting": "Requesting microphone…", "transcribing": "Transcribing…", "recording": "Recording {{seconds}} s", "cancel": "Cancel voice input (Esc)", "permissionDenied": "Microphone access was denied. Allow microphone access in your browser and try again.", "noMicrophone": "No microphone is available.", "unsupported": "Recording is unavailable. Use a supported browser over HTTPS or localhost.", "failed": "Recording failed. Please try again.", "empty": "No speech was recognized. Please try again.", "tooLarge": "Recording exceeds 8 MB. Please record a shorter clip."},
-  automaticRouters: { modelCode: "Model code", dimensions: "{{value}} dimensions", "routeHelp": {"SpeechRecognition": "Transcribe audio using enabled speech recognition models. Person-AI selects from its active speech models on the server; a model selection must include its entire active speech model pool.", "Realtime": "Select enabled realtime models for live audio sessions.", "ImageGeneration": "Select enabled image models for image generation.", "Chat": "Agent conversation models", "TextGeneration": "Select models for text generation that support disabling reasoning.", "Embedding": "Select by input modalities and rotate providers of the same logical model/version. Indexes pin the model, dimensions and preprocessing.", "Rerank": "Check query and document modalities, then rotate providers of the same logical model/version."}, "title": "Automatic Routers", "refresh": "Refresh", "loading": "Loading…", "save": "Save", "saved": "Router sources saved for the next run", "failed": "Could not load or save router settings", "source": "Data sources", "providers": "Providers", "models": "Models", "choose": "Search and select multiple", "unavailable": "Unavailable: {{id}}", "empty": "No available candidate models", "candidates": "Candidate models ({{count}})", "help": "Automatically include enabled provider models by model type, or restrict sources to selected providers or models. An empty selection leaves no candidates. Chat also respects Agent authorization and context limits. Existing runs keep their snapshot. Indexes retain their embedding model and dimensions.", "modes": {"AllProviders": "All providers (automatic)", "SelectedProviders": "Selected providers", "SelectedModels": "Selected models"}, "kinds": {"SpeechRecognition": "Speech recognition", "Realtime": "Realtime models", "ImageGeneration": "Image generation", "Chat": "Conversation", "TextGeneration": "Text generation", "Embedding": "Embedding", "Rerank": "Rerank"}},
+  automaticRouters: { modelCode: "Model code", dimensions: "{{value}} dimensions", "routeHelp": {"SpeechRecognition": "Transcribe audio using enabled speech recognition models. Person-AI selects from its active speech models on the server; a model selection must include its entire active speech model pool.", "Realtime": "Select enabled realtime models for live audio sessions.", "ImageGeneration": "Select enabled image models for image generation.", "Chat": "Agent conversation models", "TextGeneration": "Select models for text generation that support disabling reasoning.", "Embedding": "Select by input modalities and rotate providers of the same logical model/version. Indexes pin the model, dimensions and preprocessing.", "Rerank": "Check query and document modalities, then rotate providers of the same logical model/version."}, "title": "Model Router", "refresh": "Refresh", "loading": "Loading…", "save": "Save", "saved": "Router sources saved for the next run", "failed": "Could not load or save router settings", "source": "Data sources", "providers": "Providers", "models": "Models", "choose": "Search and select multiple", "unavailable": "Unavailable: {{id}}", "empty": "No available candidate models", "candidates": "Candidate models ({{count}})", "help": "Automatically include enabled provider models by model type, or restrict sources to selected providers or models. An empty selection leaves no candidates. Chat also respects Agent authorization and context limits. Existing runs keep their snapshot. Indexes retain their embedding model and dimensions.", "modes": {"AllProviders": "All providers (automatic)", "SelectedProviders": "Selected providers", "SelectedModels": "Selected models"}, "kinds": {"SpeechRecognition": "Speech recognition", "Realtime": "Realtime models", "ImageGeneration": "Image generation", "Chat": "Conversation", "TextGeneration": "Text generation", "Embedding": "Embedding", "Rerank": "Rerank"}},
   contextLayout: {
     updateMode: "Updates",
     compressionColumn: "Compression",
@@ -46,7 +46,7 @@ export const pages = {
     blockColumn: "Context block",
     ratioLimitFor: "Share (%) for {{name}}",
     reorderBlock: "Reorder {{name}}",
-    title: "Context Configuration",
+    title: "Context",
     refresh: "Refresh",
     loading: "Loading…",
     save: "Save",
@@ -585,6 +585,14 @@ export const pages = {
     builtinAgent: "Built-in main agent, available in all workspaces",
   },
   archivedChats: {
+    archiveType: "Archive type",
+    chats: "Chats",
+    topics: "Topics",
+    projects: "Projects",
+    emptyContainers: "No archived items found.",
+    containerItems: "archived items",
+    archivedChatCount: "Archived chats",
+    containerRestored: "Restored. Its chats remain archived and can be restored separately.",
     errors: {
       CHAT_SESSION_NOT_FOUND: "Chat not found.",
       CHAT_SESSION_MUST_BE_ARCHIVED: "Archive the chat first.",
@@ -1396,7 +1404,7 @@ export const pages = {
       edit: "Edit",
       forResource: "Actions for {{name}}",
       new: "New Resource",
-      quickUpload: "Quick Upload",
+      quickUpload: "Upload",
       refresh: "Refresh",
     },
     columns: {
@@ -4618,6 +4626,7 @@ export const pages = {
     actions: {
       cancel: "Cancel",
       new: "New",
+      preview: "Preview next 5 runs",
       save: "Save",
       saving: "Saving...",
     },
@@ -4633,6 +4642,8 @@ export const pages = {
     errors: {
       create: "Automation could not be created",
       executionOptions: "Execution options could not be loaded",
+      invalidCron: "Could not preview this schedule. Check the Cron expression.",
+      previewUnavailable: "Schedule preview is unavailable. Check that the server is up to date and running.",
       workspaceRequired:
         "Select a workspace in the shell header before creating an automation",
     },
@@ -4648,14 +4659,14 @@ export const pages = {
     },
     placeholders: {
       description:
-        "Summarize the business intent, constraints, or expected operator-facing output.",
-      name: "Daily workspace release digest",
+        "Briefly describe what this automation does.",
+      name: "Enter an automation name",
       prompt:
-        "Write the long-form prompt that the automation should dispatch for this workspace.",
+        "Write the prompt the automation should execute in this workspace.",
     },
     messages: { created: "Automation {{code}} created" },
     promptFullscreenHint:
-      "Write the long-form prompt that will be dispatched whenever this automation runs.",
+      "Write the prompt to execute whenever this automation runs.",
     status: {
       Active: "Active",
       Disabled: "Disabled",
@@ -4667,6 +4678,8 @@ export const pages = {
       loadingAgents: "Loading agents...",
       loadingModels: "Loading models...",
       noModels: "No executable models",
+      previewTimezone: "Next runs (your local time; schedule evaluated in UTC)",
+      noFutureRuns: "No future runs",
     },
   },
   mainAgent: {
@@ -4715,7 +4728,7 @@ export const pages = {
       aria: {
         deleteFlow: "Delete {{name}}",
         deleteStatus: "Delete status",
-        flow: "Workflow",
+        flow: "Task Flow",
         taskColumn: "{{name}} task column",
       },
       columns: {
@@ -4788,6 +4801,7 @@ export const pages = {
     },
     kanban: {
       allPriorities: "All priorities",
+      allTypes: "All",
       errors: { status: "Task status could not be updated" },
       priority: "Priority",
       priorityFilter: "Task priority filter",
@@ -4804,6 +4818,7 @@ export const pages = {
       assignees: "Task assignees",
       closeDescription: "Close description fullscreen",
       description: "Task description",
+      descriptionHelp: "Task description help",
       descriptionFullscreen: "Task description fullscreen",
       executionAgent: "Task execution agent",
       executionModel: "Task execution model",
@@ -4811,6 +4826,7 @@ export const pages = {
     },
     descriptionFullscreenHint:
       "Write the objective, deliverables, context, constraints, and variable references in a larger workspace.",
+    descriptionHelp: "The description is included in the task context sent to the execution agent. Refer to configured variables by name, for example $VAR1; the description is not automatically substituted.",
     detail: {
       actions: { edit: "Edit", execute: "Execute", executing: "Executing..." },
       addSubtask: "Add Subtask",
@@ -4933,6 +4949,7 @@ export const pages = {
     types: {
       Bug: "Bug",
       Feature: "Feature",
+      General: "General",
       Improvement: "Improvement",
       Task: "Task",
     },
@@ -5053,9 +5070,9 @@ export const pages = {
       openAuthorizationPage: "Open Authorization Page",
       reauthorize: "Reauthorize",
       refresh: "Refresh",
-      remoteModels: "Remote Models",
+      remoteModels: "Models",
       syncHistory: "Sync History",
-      syncNow: "Sync Now",
+      syncNow: "Sync",
     },
     aria: {
       authorizationSessionHelp: "Authorization session help",
@@ -5376,6 +5393,7 @@ export const pages = {
     typingParticleSpeed: "Speed",
   },
   workspaceManagement: {
+    flowBindingFailed: "Workspace created, but workflow binding failed. Select the workspace and try again.",
     loading: "Loading workspaces…",
     saved: "Workspace saved.",
     nameRequired: "Enter a workspace name.",

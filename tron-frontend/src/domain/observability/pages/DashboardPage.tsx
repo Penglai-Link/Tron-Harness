@@ -103,9 +103,9 @@ export function DashboardPage() {
               </time>
             )}
             <CollectorConfigButton />
-            <Button variant="secondary" disabled={reset.isPending} onClick={() => setResetOpen(true)}>{t("resetStatistics")}</Button>
+            <Button variant="outline" disabled={reset.isPending} onClick={() => setResetOpen(true)}>{t("resetStatistics")}</Button>
             <Button
-              variant="secondary"
+              variant="outline"
               disabled={query.isFetching}
               onClick={() => void query.refetch()}
             >

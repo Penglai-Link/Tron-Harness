@@ -88,6 +88,10 @@ struct Host {
     config_lock: tokio::sync::Mutex<()>,
     pty: eliteforge_agent_capability_tools::PtyService,
     framework: RuntimeCell<Framework>,
+    storage: OnceCell<eliteforge_agent_official_plugin_storage_local::LocalStorageRuntime>,
+    storage_framework: OnceCell<Framework>,
+    storage_access: tokio::sync::RwLock<()>,
+    runtime_access: Arc<tokio::sync::RwLock<()>>,
     telemetry: OnceCell<crate::app::telemetry::LocalTelemetry>,
     agent: RuntimeCell<Agent>,
     internal_agents: std::sync::RwLock<BTreeMap<(String, String), Arc<OnceCell<Agent>>>>,
@@ -323,6 +327,9 @@ impl FrameworkHost {
     }
 
     async fn invalidate_environment(&self) -> Result<(), String> {
+        // New runs are excluded by config_lock; drain outstanding runtime
+        // readers before closing the old assembly. Storage is not replaced.
+        let _exclusive = self.0.runtime_access.write().await;
         // Preflight has excluded active and durable users. Release package runtimes and
         // MCP leases before removing package files; session data remains in shared storage.
         for agent in self.initialized_internal_agents().into_iter().chain(
@@ -784,6 +791,10 @@ impl FrameworkHost {
             extension_state: std::sync::RwLock::new(extensions),
             config_lock: tokio::sync::Mutex::new(()),
             framework: RuntimeCell::new(),
+            storage: OnceCell::new(),
+            storage_framework: OnceCell::new(),
+            storage_access: Default::default(),
+            runtime_access: Default::default(),
             telemetry: OnceCell::new(),
             agent: RuntimeCell::new(),
             internal_agents: Default::default(),
@@ -838,6 +849,10 @@ impl FrameworkHost {
             extension_state: std::sync::RwLock::new(BTreeMap::new()),
             config_lock: tokio::sync::Mutex::new(()),
             framework: RuntimeCell::new(),
+            storage: OnceCell::new(),
+            storage_framework: OnceCell::new(),
+            storage_access: Default::default(),
+            runtime_access: Default::default(),
             telemetry: OnceCell::new(),
             agent: RuntimeCell::new(),
             internal_agents: Default::default(),

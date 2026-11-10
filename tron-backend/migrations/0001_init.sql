@@ -402,9 +402,10 @@ CREATE TABLE projects (
     status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'ARCHIVED')),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    archived_at INTEGER,
-    UNIQUE (workspace_code, name)
+    archived_at INTEGER
 );
+CREATE UNIQUE INDEX idx_projects_active_name
+    ON projects(workspace_code, name) WHERE status = 'ACTIVE';
 
 CREATE TABLE directories (
     directory_code TEXT PRIMARY KEY,
@@ -1299,17 +1300,12 @@ INSERT INTO navigation_domain_translations (id, domain_id, locale, name, descrip
     (734500100000000002, 734500000000000001, 'en-US', 'Daily Work', 'Daily Work');
 
 INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, description_zh_cn, description_en_us, enabled, created_at, updated_at) VALUES
-    (734510000000000001, 'CORE', 'BuiltIn', 'Group', NULL, NULL, 'LayoutDashboard', '常用工作入口，包括应用、任务和自动化。', 'Primary workspace shortcuts for apps, tasks, and automations.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000002, 'APPS', 'BuiltIn', 'Internal', 'apps.index', NULL, 'FolderGit2', '查看和管理工作区中的应用。', 'Browse and manage applications in the workspace.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000003, 'TASKS', 'BuiltIn', 'Internal', 'tasks.index', NULL, 'ListTodo', '创建、查看和跟踪工作任务。', 'Create, review, and track work tasks.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000004, 'AUTOMATIONS', 'BuiltIn', 'Internal', 'automations.index', NULL, 'AlarmClock', '配置自动化规则并查看执行情况。', 'Configure automation rules and review their executions.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000005, 'AGENT_OPERATIONS', 'BuiltIn', 'Group', NULL, NULL, 'Bot', '智能体相关入口，包括 Dude 和 MCP 服务。', 'Agent-related entry points, including Dude and MCP servers.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000008, 'MCP_SERVERS', 'BuiltIn', 'Internal', 'mcpServers.index', NULL, 'PlugZap', '配置和管理可供智能体使用的 MCP 服务。', 'Configure MCP servers available to agents.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000012, 'DATA', 'BuiltIn', 'Group', NULL, NULL, 'Database', '数据与资源管理相关入口。', 'Entry points for data and resource management.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000017, 'RESOURCE_MANAGEMENT', 'BuiltIn', 'Group', NULL, NULL, 'Archive', '管理文件。', 'Manage files.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000018, 'FILE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.files', NULL, 'Folder', '浏览和管理工作区文件与已上传资源。', 'Browse and manage workspace files and uploaded resources.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', '管理平台或工作区可复用的变量。', 'Manage reusable platform or workspace variables.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', '会话区域的分组入口，包含主题、工作区和随聊。', 'The chat section, containing topics, projects, and quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000003, 'CHAT_PROJECTS', 'BuiltIn', 'Widget', 'chat.projects', NULL, 'FolderKanban', '查看主题及其关联的会话。', 'Browse topics and their associated conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000004, 'CHAT_RECENTS', 'BuiltIn', 'Widget', 'chat.recents', NULL, 'History', '查看并继续随聊。', 'View and continue quick chats.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000005, 'CHAT_DIRECTORIES', 'BuiltIn', 'Widget', 'chat.directories', NULL, 'Folder', '查看工作区及其会话。', 'Browse projects and their conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
@@ -1318,28 +1314,18 @@ INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, 
     (734570000000000001, 'EXPLORE_MORE', 'BuiltIn', 'Group', NULL, NULL, 'Ellipsis', '收纳不常用或可选的菜单入口。', 'Collect optional or less frequently used menu entries.', 1, '2026-10-13T00:00:00Z', '2026-10-13T00:00:00Z');
 
 INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
-    (734530000000000001, 734510000000000001, 'zh-CN', '核心'),
-    (734530000000000002, 734510000000000001, 'en-US', 'Core'),
     (734530000000000003, 734510000000000002, 'zh-CN', '应用'),
     (734530000000000004, 734510000000000002, 'en-US', 'Apps'),
     (734530000000000005, 734510000000000003, 'zh-CN', '任务'),
     (734530000000000006, 734510000000000003, 'en-US', 'Tasks'),
     (734530000000000007, 734510000000000004, 'zh-CN', '自动化'),
     (734530000000000008, 734510000000000004, 'en-US', 'Automations'),
-    (734530000000000009, 734510000000000005, 'zh-CN', '智能体操作'),
-    (734530000000000010, 734510000000000005, 'en-US', 'Agent Operations'),
     (734530000000000015, 734510000000000008, 'zh-CN', 'MCP 服务'),
     (734530000000000016, 734510000000000008, 'en-US', 'MCP Servers'),
-    (734530000000000023, 734510000000000012, 'zh-CN', '数据'),
-    (734530000000000024, 734510000000000012, 'en-US', 'Data'),
-    (734530000000000033, 734510000000000017, 'zh-CN', '资源管理'),
-    (734530000000000034, 734510000000000017, 'en-US', 'Resource Management'),
     (734530000000000035, 734510000000000018, 'zh-CN', '文件管理'),
     (734530000000000036, 734510000000000018, 'en-US', 'File Management'),
     (734530000000000043, 734510000000000022, 'zh-CN', '变量'),
     (734530000000000044, 734510000000000022, 'en-US', 'Variables'),
-    (734550100000000001, 734550000000000001, 'zh-CN', '会话'),
-    (734550100000000002, 734550000000000001, 'en-US', 'Chats'),
     (734550100000000005, 734550000000000003, 'zh-CN', '主题'),
     (734550100000000006, 734550000000000003, 'en-US', 'Topics'),
     (734550100000000007, 734550000000000004, 'zh-CN', '随聊'),
@@ -1361,15 +1347,11 @@ INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, po
     (734520000000000003, 734500000000000001, 734510000000000003, NULL, 1, 'Inline'),
     (734520000000000004, 734500000000000001, 734510000000000004, NULL, 2, 'Inline'),
     (734570200000000001, 734500000000000001, 734570000000000001, NULL, 3, 'Flyout'),
-    (734520000000000001, 734500000000000001, 734510000000000001, 734570200000000001, 0, 'Inline'),
-    (734520000000000002, 734500000000000001, 734510000000000002, 734520000000000001, 0, 'Inline'),
-    (734560200000000002, 734500000000000001, 734560000000000002, 734520000000000001, 1, 'Inline'),
-    (734520000000000022, 734500000000000001, 734510000000000022, 734520000000000001, 2, 'Inline'),
-    (734520000000000005, 734500000000000001, 734510000000000005, 734570200000000001, 1, 'Inline'),
-    (734520000000000008, 734500000000000001, 734510000000000008, 734520000000000005, 0, 'Inline'),
-    (734520000000000012, 734500000000000001, 734510000000000012, 734570200000000001, 2, 'Inline'),
-    (734520000000000017, 734500000000000001, 734510000000000017, 734520000000000012, 0, 'Inline'),
-    (734520000000000018, 734500000000000001, 734510000000000018, 734520000000000017, 0, 'Inline'),
+    (734520000000000002, 734500000000000001, 734510000000000002, 734570200000000001, 0, 'Inline'),
+    (734560200000000002, 734500000000000001, 734560000000000002, 734570200000000001, 1, 'Inline'),
+    (734520000000000022, 734500000000000001, 734510000000000022, 734570200000000001, 2, 'Inline'),
+    (734520000000000008, 734500000000000001, 734510000000000008, 734570200000000001, 3, 'Inline'),
+    (734520000000000018, 734500000000000001, 734510000000000018, 734570200000000001, 4, 'Inline'),
     (734550200000000003, 734500000000000001, 734550000000000003, NULL, 4, 'Inline'),
     (734550200000000005, 734500000000000001, 734550000000000005, NULL, 5, 'Inline'),
     (734550200000000004, 734500000000000001, 734550000000000004, NULL, 6, 'Inline');

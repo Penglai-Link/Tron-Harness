@@ -14,7 +14,7 @@ export function ChatContextInspector({ session }: { session: ChatSession | null 
   const messages = useChatMessageListBySession(sessionCode, 0, { suppressErrorToast: true, dudeCode });
   return <div className="absolute inset-0 min-h-0 overflow-y-auto overscroll-y-contain">
     <div className="m-4">
-      <RightContextSidebar dudeCode={dudeCode} events={events} messages={messages} session={session ? { ...session, sourceType: session.sourceType ?? undefined } : undefined} />
+      <RightContextSidebar dudeCode={dudeCode} refreshInterval={visible ? 3_000 : undefined} events={events} messages={messages} session={session ? { ...session, sourceType: session.sourceType ?? undefined } : undefined} />
     </div>
   </div>;
 }

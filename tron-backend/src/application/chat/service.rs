@@ -1,4 +1,5 @@
 include!("service/foundation.inc");
+mod archives;
 mod knowledge_quality;
 include!("service/sessions.inc");
 include!("service/messages.inc");

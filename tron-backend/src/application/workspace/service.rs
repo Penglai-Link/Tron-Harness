@@ -136,8 +136,8 @@ impl WorkspaceService {
                 email: String::new(),
             },
             CreateWorkspaceCommand {
-                name: "默认工作空间".to_owned(),
-                description: Some("PersonAI 档案的默认工作空间".to_owned()),
+                name: "Defaults".to_owned(),
+                description: Some("Default workspace".to_owned()),
                 parent_workspace_code: None,
             },
         )

@@ -83,6 +83,11 @@ impl SqliteProjectRepositorySql<'_> {
         let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
             .connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| ProjectError::StorageFailure)?;
+        if active_name_exists(&tx, &project.workspace_code, &project.name, &project.project_code)
+            .map_err(storage_error)?
+        {
+            return Err(ProjectError::DuplicateName);
+        }
         tx.execute("INSERT INTO projects (id, project_code, workspace_code, name, status, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(project_code) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at", params![project.id, project.project_code, project.workspace_code, project.name, project_status_to_storage(project.status), timestamp_to_millis(&project.created_at), timestamp_to_millis(&project.updated_at), option_timestamp_to_millis(project.archived_at.as_deref())]).map_err(|_| ProjectError::StorageFailure)?;
         tx.execute(
             "DELETE FROM project_app_links WHERE project_code = ?1",
@@ -118,6 +123,20 @@ fn project_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
         updated_at: timestamp_from_millis(row.get(6)?),
         archived_at: row.get::<_, Option<i64>>(7)?.map(timestamp_from_millis),
     })
+}
+
+// The writer transaction serializes this check with saves and archive restores.
+pub(super) fn active_name_exists(
+    connection: &Connection,
+    workspace_code: &str,
+    name: &str,
+    excluding_code: &str,
+) -> rusqlite::Result<bool> {
+    connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM projects WHERE workspace_code=?1 AND name=?2 AND status='ACTIVE' AND project_code<>?3)",
+        params![workspace_code, name, excluding_code],
+        |row| row.get(0),
+    )
 }
 
 fn storage_error(_: rusqlite::Error) -> ProjectError {

@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { WorkspaceTree } from "../components/WorkspaceTree";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
@@ -29,6 +28,10 @@ import {
 } from "@/domain/admin/mock";
 import type { WorkspaceDetailRecord, WorkspaceStatus, WorkspaceTreeNodeRecord } from "@/domain/admin/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { fetchTaskFlows, fetchWorkspaceTaskFlow, switchWorkspaceTaskFlow } from "@/domain/task/api";
+import { getMockWorkspaceTaskFlow, listMockTaskFlows, switchMockWorkspaceTaskFlow } from "@/domain/task/mock/data";
+import { taskFlowDisplayName, taskFlowErrorMessage, type TaskFlow } from "@/domain/task/model";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 type StatusFilter = WorkspaceStatus | "All";
 
@@ -52,6 +55,8 @@ export function WorkspaceManagementPage() {
   const { t } = useTranslation("pages");
   const toast = useToast();
   const isApiMode = getServiceDataSource("admin") === "api";
+  const taskApiMode = getServiceDataSource("task") === "api";
+  const flowT = (key: string, defaultValue: string) => t(`tasks.taskFlows.${key}`, { defaultValue });
   const [tree, setTree] = useState<WorkspaceTreeNodeRecord[]>([]);
   const [detail, setDetail] = useState<WorkspaceDetailRecord | null>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -64,6 +69,31 @@ export function WorkspaceManagementPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [parentCode, setParentCode] = useState(ROOT_PARENT);
+  const [flows, setFlows] = useState<TaskFlow[]>([]);
+  const [flowCode, setFlowCode] = useState("DEFAULT");
+  const [boundFlowCode, setBoundFlowCode] = useState("");
+  const [flowLoading, setFlowLoading] = useState(false);
+  const [flowConfirmOpen, setFlowConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    (taskApiMode ? fetchTaskFlows(controller.signal) : Promise.resolve(listMockTaskFlows()))
+      .then((items) => { if (!controller.signal.aborted) setFlows(items); })
+      .catch((error: unknown) => { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : t("workspaceManagement.requestFailed")); });
+    return () => controller.abort();
+  }, [taskApiMode, t, toast]);
+
+  useEffect(() => {
+    if (!selectedCode || mode !== "edit") return;
+    const controller = new AbortController();
+    setFlowLoading(true);
+    setBoundFlowCode("");
+    (taskApiMode ? fetchWorkspaceTaskFlow(selectedCode, controller.signal) : Promise.resolve(getMockWorkspaceTaskFlow(selectedCode)))
+      .then(({ flow }) => { if (!controller.signal.aborted) { setFlowCode(flow.flowCode); setBoundFlowCode(flow.flowCode); } })
+      .catch((error: unknown) => { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : t("workspaceManagement.requestFailed")); })
+      .finally(() => { if (!controller.signal.aborted) setFlowLoading(false); });
+    return () => controller.abort();
+  }, [mode, selectedCode, t, taskApiMode, toast]);
 
   const visibleTree = useMemo(() => filterTree(tree, search, status), [tree, search, status]);
   const workspaceOptions = useMemo(() => flatten(tree).filter((record) => record.status === "Active"), [tree]);
@@ -122,6 +152,7 @@ export function WorkspaceManagementPage() {
     setName("");
     setDescription("");
     setParentCode(parentWorkspaceCode ?? ROOT_PARENT);
+    setFlowCode("DEFAULT");
   };
 
   const runMutation = async (action: () => Promise<WorkspaceDetailRecord | unknown>) => {
@@ -153,9 +184,20 @@ export function WorkspaceManagementPage() {
       return;
     }
     if (mode === "create") {
-      void runMutation(() => isApiMode
-        ? createWorkspace({ name, description, parentWorkspaceCode: parentCode === ROOT_PARENT ? null : parentCode })
-        : Promise.resolve(createWorkspaceRecord({ name, description, parentWorkspaceCode: parentCode === ROOT_PARENT ? null : parentCode })));
+      if (!flowCode || !flows.some((flow) => flow.flowCode === flowCode)) return;
+      void runMutation(async () => {
+        const created = isApiMode
+          ? await createWorkspace({ name, description, parentWorkspaceCode: parentCode === ROOT_PARENT ? null : parentCode })
+          : createWorkspaceRecord({ name, description, parentWorkspaceCode: parentCode === ROOT_PARENT ? null : parentCode });
+        try {
+          if (taskApiMode) await switchWorkspaceTaskFlow(created.workspaceCode, flowCode);
+          else switchMockWorkspaceTaskFlow(created.workspaceCode, flowCode);
+        } catch (error) {
+          setMode("edit"); setSelectedCode(created.workspaceCode); await loadTree();
+          throw new Error(t("workspaceManagement.flowBindingFailed", { defaultValue: "Workspace created, but workflow binding failed. Select the workspace and try again." }) + ` ${error instanceof Error ? error.message : ""}`);
+        }
+        return created;
+      });
       return;
     }
     if (!detail) return;
@@ -179,13 +221,25 @@ export function WorkspaceManagementPage() {
     void runMutation(action);
   };
 
+  const switchFlow = async () => {
+    if (!detail || !flowCode || flowCode === boundFlowCode) return;
+    setSaving(true);
+    try {
+      const result = taskApiMode ? await switchWorkspaceTaskFlow(detail.workspaceCode, flowCode) : switchMockWorkspaceTaskFlow(detail.workspaceCode, flowCode);
+      setBoundFlowCode(result.flow.flowCode);
+      setFlowConfirmOpen(false);
+      toast.success(flowT("messages.switched", "Workflow switched"));
+    } catch (error) {
+      toast.error(taskFlowErrorMessage(error, flowT, "errors.switch", "Workflow could not be switched"));
+    } finally { setSaving(false); }
+  };
+
   return (
     <div className="grid h-full min-h-0 min-w-0 grid-cols-1 overflow-auto lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
-        <aside aria-label={t("workspaceManagement.hierarchy")} className="flex min-h-0 min-w-0 flex-col border-b border-[var(--color-outline-variant)] lg:row-span-2 lg:grid lg:grid-rows-subgrid lg:border-r lg:border-b-0">
+        <aside aria-label={t("workspaceManagement.hierarchy")} className="flex min-h-0 min-w-0 flex-col border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] lg:row-span-2 lg:grid lg:grid-rows-subgrid lg:border-r lg:border-b-0">
           <div className="shrink-0 space-y-4 border-b border-[var(--color-outline-variant)] p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold">{t("workspaceManagement.hierarchy")}</h2>
-              <Badge variant="secondary" className="tabular-nums">{flatten(visibleTree).length}</Badge>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2">
               <TextInput className="min-w-0" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("workspaceManagement.searchPlaceholder")} aria-label={t("workspaceManagement.searchPlaceholder")} />
@@ -220,6 +274,16 @@ export function WorkspaceManagementPage() {
           {mode === "create" || detail ? (
             <>
               <div className="p-5 sm:p-6">
+              {detail ? (
+                <>
+                  <dl className="grid grid-cols-[minmax(0,1.4fr)_minmax(4rem,0.6fr)_minmax(5rem,0.8fr)] gap-4 text-sm">
+                    <div className="min-w-0"><dt className="mb-1 text-xs text-[var(--color-on-surface-variant)]">{t("workspaceManagement.code")}</dt><dd className="truncate font-mono text-xs" title={detail.workspaceCode}>{detail.workspaceCode}</dd></div>
+                    <div><dt className="mb-1 text-xs text-[var(--color-on-surface-variant)]">{t("workspaceManagement.depth")}</dt><dd className="tabular-nums">{detail.depth}</dd></div>
+                    <div><dt className="mb-1 text-xs text-[var(--color-on-surface-variant)]">{t("workspaceManagement.children")}</dt><dd className="tabular-nums">{detail.children.length}</dd></div>
+                  </dl>
+                  <Separator className="my-5" />
+                </>
+              ) : null}
               <div className="grid gap-x-5 gap-y-4 xl:grid-cols-2">
                 <Field className="min-w-0" label={t("workspaceManagement.name")} required>
                   <TextInput aria-label={t("workspaceManagement.name")} autoFocus={mode === "create"} value={name} onChange={(event) => setName(event.target.value)} />
@@ -232,31 +296,28 @@ export function WorkspaceManagementPage() {
                     ))}
                   </SelectInput>
                 </Field>
+                <Field className="min-w-0 xl:col-span-2" label={flowT("aria.flow", "Workflow")} required>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SelectInput className="min-w-0 max-w-sm" aria-label={flowT("aria.flow", "Workflow")} value={flowCode} disabled={flowLoading || saving || flows.length === 0 || (mode === "edit" && !boundFlowCode)} onValueChange={(value) => { if (value) setFlowCode(value); }}>
+                      {flows.map((flow) => <SelectItem key={flow.flowCode} value={flow.flowCode}>{taskFlowDisplayName(flow, flowT)}</SelectItem>)}
+                    </SelectInput>
+                    {mode === "edit" && detail && flowCode !== boundFlowCode ? <Button variant="outline" disabled={saving || flowLoading || !boundFlowCode} onClick={() => setFlowConfirmOpen(true)}>{flowT("actions.switch", "Switch")}</Button> : null}
+                  </div>
+                </Field>
                 <Field className="min-w-0 xl:col-span-2" label={t("workspaceManagement.descriptionField")}>
                   <TextArea aria-label={t("workspaceManagement.descriptionField")} className="min-h-28 resize-y" value={description} onChange={(event) => setDescription(event.target.value)} />
                 </Field>
               </div>
 
-              {detail ? (
-                <>
-                  <Separator className="my-5" />
-                  <dl className="grid grid-cols-[minmax(0,1.4fr)_minmax(4rem,0.6fr)_minmax(5rem,0.8fr)] gap-4 text-sm">
-                    <div className="min-w-0"><dt className="mb-1 text-xs text-[var(--color-on-surface-variant)]">{t("workspaceManagement.code")}</dt><dd className="truncate font-mono text-xs" title={detail.workspaceCode}>{detail.workspaceCode}</dd></div>
-                    <div><dt className="mb-1 text-xs text-[var(--color-on-surface-variant)]">{t("workspaceManagement.depth")}</dt><dd className="tabular-nums">{detail.depth}</dd></div>
-                    <div><dt className="mb-1 text-xs text-[var(--color-on-surface-variant)]">{t("workspaceManagement.children")}</dt><dd className="tabular-nums">{detail.children.length}</dd></div>
-                  </dl>
-                </>
-              ) : null}
-
               </div>
-              <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-outline-variant)] px-5 py-4 sm:px-6">
-                <Button onClick={save} disabled={saving}>{mode === "create" ? t("workspaceManagement.create") : t("workspaceManagement.save")}</Button>
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--color-outline-variant)] px-5 py-4 sm:px-6">
                 {mode === "edit" && detail && (detail.parentWorkspaceCode ?? ROOT_PARENT) !== parentCode ? <Button variant="outline" onClick={move} disabled={saving}>{t("workspaceManagement.move")}</Button> : null}
                 {mode === "edit" && detail ? (
-                  <Button className="ml-auto" variant={detail.status === "Active" ? "destructive" : "outline"} onClick={changeStatus} disabled={saving}>
+                  <Button variant={detail.status === "Active" ? "destructive" : "outline"} onClick={changeStatus} disabled={saving}>
                     {detail.status === "Active" ? <>{t("workspaceManagement.archive")}</> : <>{t("workspaceManagement.restore")}</>}
                   </Button>
                 ) : null}
+                <Button onClick={save} disabled={saving || (mode === "create" && !flows.some((flow) => flow.flowCode === flowCode))}>{mode === "create" ? t("workspaceManagement.create") : t("workspaceManagement.save")}</Button>
               </div>
             </>
           ) : (
@@ -270,6 +331,7 @@ export function WorkspaceManagementPage() {
           )}
           </div>
         </section>
+        <ConfirmDialog open={flowConfirmOpen} title={flowT("confirm.switchTitle", "Switch workflow")} description={flowT("confirm.switchDescription", "Every task in the current workspace must be closed.")} cancelText={flowT("actions.cancel", "Cancel")} confirmText={flowT("actions.switch", "Switch")} pending={saving} onCancel={() => setFlowConfirmOpen(false)} onConfirm={() => void switchFlow()} />
     </div>
   );
 }

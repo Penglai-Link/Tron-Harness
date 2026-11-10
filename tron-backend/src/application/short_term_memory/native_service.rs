@@ -818,7 +818,7 @@ impl ShortTermMemoryService {
         note: Option<String>,
     ) -> Result<Value, ShortTermMemoryError> {
         self.ensure_session_async(session).await?;
-        let framework = self.framework().await?;
+        let framework = self.host.runtime_framework().await.map_err(|_| ShortTermMemoryError::StorageFailure)?;
         let services = framework
             .services()
             .map_err(|_| ShortTermMemoryError::StorageFailure)?;

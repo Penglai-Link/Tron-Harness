@@ -13,12 +13,9 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SelectInput } from "@/components/forms";
 import { SearchField } from "@/components/search-field";
 import {
-  PageHeader,
-  SurfaceCard,
   useWorkspaceSpaces,
 } from "@/shared";
 import { useToast } from "@/components/ui/toast";
@@ -29,7 +26,6 @@ import {
 } from "@/domain/task/hooks";
 import type {
   KanbanColumn,
-  TaskFlow,
   TaskListItem,
   TaskPriority,
   TaskStatus,
@@ -37,12 +33,11 @@ import type {
 } from "@/domain/task/model";
 import {
   compareTaskListItems,
-  taskFlowDisplayName,
   taskFlowErrorMessage,
   taskFlowStatusDisplayName,
 } from "@/domain/task/model";
-import { fetchTaskFlows, fetchWorkspaceTaskFlow, switchWorkspaceTaskFlow, updateTaskStatus } from "@/domain/task/api";
-import { getMockWorkspaceTaskFlow, listMockTaskFlows, switchMockWorkspaceTaskFlow, updateMockTaskStatus } from "@/domain/task/mock/data";
+import { fetchWorkspaceTaskFlow, updateTaskStatus } from "@/domain/task/api";
+import { getMockWorkspaceTaskFlow, updateMockTaskStatus } from "@/domain/task/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { cn } from "@/shared/lib/utils";
 import { SelectItem } from "@/components/ui/select";
@@ -254,7 +249,7 @@ export function TasksKanbanPage() {
   );
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [taskType, setTaskType] = useState<TaskType>("Feature");
+  const [taskType, setTaskType] = useState<TaskType | "">("");
   const [priority, setPriority] = useState("");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
   const [draggedTask, setDraggedTask] = useState<TaskListItem | null>(null);
@@ -276,10 +271,7 @@ export function TasksKanbanPage() {
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const workspaceCode = activeWorkspace?.workspaceCode ?? "";
   const options = useTaskOptions(workspaceCode);
-  const [taskFlows, setTaskFlows] = useState<TaskFlow[]>([]);
   const [workspaceFlowCode, setWorkspaceFlowCode] = useState("");
-  const [nextFlowCode, setNextFlowCode] = useState<string | null>(null);
-  const [switchingFlow, setSwitchingFlow] = useState(false);
 
   useEffect(() => {
     if (!workspaceCode) {
@@ -307,18 +299,17 @@ export function TasksKanbanPage() {
 
   useEffect(() => {
     if (!workspaceCode) {
-      setTaskFlows([]);
       setWorkspaceFlowCode("");
       return;
     }
     const controller = new AbortController();
     const loadFlows = async () => {
       try {
-        const [flows, workspaceFlow] = dataSource === "api"
-          ? await Promise.all([fetchTaskFlows(controller.signal), fetchWorkspaceTaskFlow(workspaceCode, controller.signal)])
-          : [listMockTaskFlows(), getMockWorkspaceTaskFlow(workspaceCode)];
+        setWorkspaceFlowCode("");
+        const workspaceFlow = dataSource === "api"
+          ? await fetchWorkspaceTaskFlow(workspaceCode, controller.signal)
+          : getMockWorkspaceTaskFlow(workspaceCode);
         if (controller.signal.aborted) return;
-        setTaskFlows(flows);
         setWorkspaceFlowCode(workspaceFlow.flow.flowCode);
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -342,7 +333,7 @@ export function TasksKanbanPage() {
     parentTaskCode: ROOT_PARENT_TASK_FILTER,
     priority: priority || undefined,
     search: debouncedSearch,
-    taskType,
+    taskType: taskType || undefined,
     workspaceCode,
   }), [debouncedSearch, priority, taskType, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
@@ -504,71 +495,37 @@ export function TasksKanbanPage() {
     }
   }, [canMoveTaskToStatus, cleanupDragPreview, dataSource, displayedColumns, flowT, parseDraggedTask, pendingTaskCode, refresh, t, toast]);
 
-  async function confirmFlowSwitch() {
-    if (!nextFlowCode || !workspaceCode || nextFlowCode === workspaceFlowCode) {
-      setNextFlowCode(null);
-      return;
-    }
-    setSwitchingFlow(true);
-    try {
-      const result = dataSource === "api"
-        ? await switchWorkspaceTaskFlow(workspaceCode, nextFlowCode)
-        : switchMockWorkspaceTaskFlow(workspaceCode, nextFlowCode);
-      setWorkspaceFlowCode(result.flow.flowCode);
-      setNextFlowCode(null);
-      refresh();
-      toast.success(flowT("messages.switched", "Workflow switched"));
-    } catch (error) {
-      toast.error(taskFlowErrorMessage(error, flowT, "errors.switch", "Workflow could not be switched"));
-    } finally {
-      setSwitchingFlow(false);
-    }
-  }
-
   return (
     <div className="@container flex min-h-full min-w-0 flex-col">
-      <PageHeader
-        title={t("pages:tasks.kanban.title", "Task Management")}
-        actions={
-          <>
-            <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="w-auto min-w-40 max-w-full bg-[var(--color-elevated-surface)]" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
-              <SelectItem value="fit">{t("pages:tasks.taskFlows.fit", "Fit ({{percent}}%)", { percent: boardScalePercent })}</SelectItem>
-              {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
-            </SelectInput>
-            <Button size="lg" variant="outline" onClick={() => {
-              refresh();
-            }}>{flowT("actions.refresh", "Refresh")}</Button>
-            <Button size="lg" onClick={() => navigate("/tasks/new")}>{t("pages:tasks.actions.new", "New")}</Button>
-          </>
-        }
-      />
-      <SurfaceCard className="mb-4 grid min-w-0 grid-cols-1 items-center gap-3 p-4 @min-[32rem]:grid-cols-2 @min-[64rem]:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))]">
-        <div className="min-w-0">
+      <div className="mb-4 flex min-w-0 items-center gap-3 overflow-x-auto pb-1">
+        <div className="min-w-48 flex-1">
           <SearchField ariaLabel={t("pages:tasks.kanban.search", "Search")} placeholder={t("pages:tasks.kanban.searchPlaceholder", "Filter task code, title, or description...")} value={searchInput} onChange={setSearchInput} />
         </div>
-        <div className="min-w-0">
-          <SelectInput aria-label={t("pages:tasks.kanban.taskTypeFilter", "Task type filter")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
+        <div className="w-40 shrink-0">
+          <SelectInput aria-label={t("pages:tasks.kanban.taskTypeFilter", "Task type filter")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType | "")}>
+            <SelectItem value="">{t("pages:tasks.kanban.allTypes", "All")}</SelectItem>
             {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{t(`pages:tasks.types.${item}`, item)}</SelectItem>)}
           </SelectInput>
         </div>
-        <div className="min-w-0">
+        <div className="w-40 shrink-0">
           <SelectInput aria-label={t("pages:tasks.kanban.priorityFilter", "Task priority filter")} value={priority} onValueChange={(event) => setPriority(event!)}>
             <SelectItem value="">{t("pages:tasks.kanban.allPriorities", "All priorities")}</SelectItem>
             {options.priorities.map((item) => <SelectItem key={item} value={item}>{t(`pages:tasks.priorities.${item}`, item)}</SelectItem>)}
           </SelectInput>
         </div>
-        <div className="min-w-0">
-          <SelectInput aria-label={flowT("aria.flow", "Workflow")} value={workspaceFlowCode} onValueChange={(value) => setNextFlowCode(value)}>
-            {taskFlows.map((flow) => <SelectItem key={flow.flowCode} value={flow.flowCode}>{taskFlowDisplayName(flow, flowT)}</SelectItem>)}
-          </SelectInput>
-        </div>
-      </SurfaceCard>
+        <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="ml-auto w-40 shrink-0 bg-[var(--color-elevated-surface)]" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
+          <SelectItem value="fit">{t("pages:tasks.taskFlows.fit", "Fit ({{percent}}%)", { percent: boardScalePercent })}</SelectItem>
+          {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
+        </SelectInput>
+        <Button size="lg" variant="outline" className="shrink-0" onClick={() => refresh()}>{flowT("actions.refresh", "Refresh")}</Button>
+        <Button size="lg" className="shrink-0" onClick={() => navigate("/tasks/new")}>{t("pages:tasks.actions.new", "New")}</Button>
+      </div>
       <div className="flex min-h-64 min-w-0 flex-1 overflow-x-auto overscroll-x-contain pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
         {rootTaskColumns.map((column) => (
           <section
             aria-label={t("pages:tasks.taskFlows.aria.taskColumn", "{{name}} task column", { name: column.title })}
             className={cn(
-              "flex shrink-0 flex-col rounded-2xl bg-[var(--color-surface-container)] transition-[background-color,box-shadow,border-color] duration-150",
+              "flex shrink-0 grow flex-col rounded-2xl bg-[var(--color-surface-container)] transition-[background-color,box-shadow,border-color] duration-150",
               dragOverState?.status === column.status
                 ? dragOverState.allowed
                   ? "bg-[var(--color-primary)]/6 ring-1 ring-inset ring-[var(--color-primary)]/20"
@@ -654,17 +611,6 @@ export function TasksKanbanPage() {
           </section>
         ))}
       </div>
-      <ConfirmDialog
-        cancelText={flowT("actions.cancel", "Cancel")}
-        confirmText={flowT("actions.switch", "Switch")}
-        description={flowT("confirm.switchDescription", "Every task in the current workspace must be closed.")}
-        onCancel={() => setNextFlowCode(null)}
-        onConfirm={() => void confirmFlowSwitch()}
-        open={Boolean(nextFlowCode && nextFlowCode !== workspaceFlowCode)}
-        pending={switchingFlow}
-        title={flowT("confirm.switchTitle", "Switch workflow")}
-        tone="default"
-      />
     </div>
   );
 }

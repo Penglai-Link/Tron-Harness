@@ -1,4 +1,4 @@
-import { Eye, RefreshCcw, RotateCcw, Trash2 } from "lucide-react";
+import { Eye, RotateCcw, Trash2 } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +25,8 @@ import {
   type ArchivedChatSessionDeleteItem,
 } from "@/domain/admin/api/archivedChatsApi";
 import { useToast } from "@/components/ui/toast";
+import { SegmentedTabs } from "@/components/inspector";
+import { ArchivedContainers } from "./ArchivedContainers";
 
 const PAGE_SIZE = 25;
 
@@ -41,6 +43,7 @@ export function ArchivedChatsPage() {
   const toast = useToast();
   const [workspaceOptions, setWorkspaceOptions] = useState<WorkspaceOption[]>([]);
   const [workspaceCode, setWorkspaceCode] = useState("");
+  const [archiveKind, setArchiveKind] = useState<"Chat" | "Topic" | "Project">("Chat");
   const [sessions, setSessions] = useState<ArchivedSession[]>([]);
   const [total, setTotal] = useState(0);
   const [current, setCurrent] = useState(1);
@@ -217,6 +220,15 @@ export function ArchivedChatsPage() {
   return (
     <>
       <PageHeader title={t("pages:archivedChats.title")} />
+      <div className="space-y-4">
+        <SegmentedTabs value={archiveKind} onValueChange={value => {
+          if (!busy && (value === "Chat" || value === "Topic" || value === "Project")) setArchiveKind(value);
+        }} items={[
+          { value: "Chat", label: t("pages:archivedChats.chats") },
+          { value: "Topic", label: t("pages:archivedChats.topics") },
+          { value: "Project", label: t("pages:archivedChats.projects") },
+        ]} />
+        {archiveKind === "Chat" ? <div role="tabpanel" aria-label={t("pages:archivedChats.chats")}>
       <DataTable<ArchivedSession>
         rows={loading ? [] : sessions}
         rowKey={(session) => session.sessionCode}
@@ -237,7 +249,7 @@ export function ArchivedChatsPage() {
             <div className="ml-auto flex items-center gap-2">
               {failedCodes.length > 0 && <Button variant="secondary" disabled={busy} onClick={() => void deleteSelected(failedCodes)}>{t("pages:archivedChats.retryFailures", { count: failedCodes.length })}</Button>}
               {selectedCodes.size > 0 && <Button variant="destructive" disabled={busy} onClick={() => void deleteSelected([...selectedCodes])}>{t("pages:archivedChats.deleteSelected", { count: selectedCodes.size })}</Button>}
-              <Button variant="ghost" size="icon" aria-label={t("pages:archivedChats.refresh")} title={t("pages:archivedChats.refresh")} disabled={loading || busy} onClick={() => void loadSessions(current)}><RefreshCcw /></Button>
+              <Button variant="outline" size="sm" disabled={loading || busy} onClick={() => void loadSessions(current)}>{t("pages:archivedChats.refresh")}</Button>
             </div>
           </>
         )}
@@ -273,6 +285,8 @@ export function ArchivedChatsPage() {
             ))}
           </ul>
         )}
+        </div> : <ArchivedContainers key={archiveKind} kind={archiveKind} workspaceCode={workspaceCode} onWorkspaceChange={setWorkspaceCode} workspaces={workspaceOptions} />}
+      </div>
 
       {viewing && (
         <Dialog open onOpenChange={(open) => { if (!open) { ++detailRequest.current; setViewing(null); } }}>

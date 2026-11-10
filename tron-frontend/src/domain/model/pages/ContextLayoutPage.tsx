@@ -88,9 +88,9 @@ export function ContextLayoutPage() {
   return (
     <div className="@container min-w-0 pb-8">
       <PageHeader title={t("contextLayout.title")} actions={<>
+        <Button variant="outline" disabled={loading || saving || !canReset} onClick={() => setResetOpen(true)}>{t("contextLayout.reset")}</Button>
+        <Button variant="outline" disabled={loading || saving} onClick={() => setRefreshKey(value => value + 1)}>{t("contextLayout.refresh")}</Button>
         <Button disabled={loading || saving || !changed || !valid} onClick={() => void save()}>{saving ? t("contextLayout.saving") : t("contextLayout.save")}</Button>
-        <Button variant="secondary" disabled={loading || saving || !canReset} onClick={() => setResetOpen(true)}>{t("contextLayout.reset")}</Button>
-        <Button variant="secondary" disabled={loading || saving} onClick={() => setRefreshKey(value => value + 1)}>{t("contextLayout.refresh")}</Button>
       </>} />
       {error ? <p role="alert" className="mb-4 text-sm text-[var(--color-error)]">{error}</p> : null}
       {notice ? <p role="status" className="mb-4 text-sm text-[var(--color-success)]">{notice}</p> : null}

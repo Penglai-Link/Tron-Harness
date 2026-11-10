@@ -1,5 +1,6 @@
 import { useAppShellStore } from "@/store/appShellStore";
-import { formatShortcut, type ShellShortcutAction } from "@/shared/lib/keyboardShortcuts";
+import { type ShellShortcutAction } from "@/shared/lib/keyboardShortcuts";
+import { ShortcutHint } from "@/shared/shortcuts/ShortcutHints";
 import { cn } from "@/lib/utils";
 
 interface ActionButtonProps {
@@ -23,12 +24,11 @@ const ActionButton = ({
 }: ActionButtonProps) => {
   const binding = useAppShellStore((state) => shortcutAction ? state.shortcutBindings[shortcutAction] : null);
   const mac = /Mac|iPhone|iPad/i.test(navigator.userAgent);
-  const shortcut = formatShortcut(binding, mac);
   const label = rest["aria-label"];
   return (
     <button
       type="button"
-      title={shortcut ? `${label} (${shortcut})` : label}
+      title={label}
       aria-keyshortcuts={binding ? [binding.modKey ? (mac ? "Meta" : "Control") : "", binding.altKey ? "Alt" : "", binding.shiftKey ? "Shift" : "", binding.key].filter(Boolean).join("+") : undefined}
       disabled={disabled}
       onClick={onClick}
@@ -36,6 +36,7 @@ const ActionButton = ({
       {...rest}
     >
       {children ?? rest["aria-label"]}
+      {shortcutAction ? <ShortcutHint action={shortcutAction} compact /> : null}
     </button>
   );
 };

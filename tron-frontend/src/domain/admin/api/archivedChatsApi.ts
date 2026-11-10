@@ -23,6 +23,18 @@ export interface ArchivedChatSessionDeleteItem { sessionCode: string; success: b
 export interface ArchivedChatSessionBatchDeleteResult { succeeded: number; failed: number; items: ArchivedChatSessionDeleteItem[] }
 
 const root = "/api/v1/admin/archived-sessions";
+export type ArchivedContainerKind = "Topic" | "Project";
+export interface ArchivedContainer { code: string; workspaceCode: string; name: string; path: string | null; chatCount: number }
+export function fetchArchivedContainers(query: { kind: ArchivedContainerKind; workspaceCode: string | null; current: number; size: number }, signal?: AbortSignal) {
+  return requestApi<{ records: ArchivedContainer[]; total: number; current: number; size: number }>("POST /api/v1/admin/archived-containers/query", { body: query, signal });
+}
+export async function restoreArchivedContainer(kind: ArchivedContainerKind, code: string) {
+  const result = await requestApi<{ code: string }>("POST /api/v1/admin/archived-containers/{kind}/{code}/restore", { pathParams: { kind, code } });
+  window.dispatchEvent(new Event("tron:project-created"));
+  window.dispatchEvent(new Event("tron:directories-changed"));
+  return result;
+}
+
 export function fetchArchivedChatSessions(query: { workspaceCode?: string; current: number; size: number }, signal?: AbortSignal) {
   return requestApi<ArchivedChatSessionPage>(`GET ${root}`, { queryParams: query, signal });
 }

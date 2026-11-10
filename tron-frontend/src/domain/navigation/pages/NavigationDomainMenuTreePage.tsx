@@ -485,7 +485,7 @@ export function NavigationDomainMenuTreePage() {
         </div>
       </SurfaceCard>
 
-      <ModalDialog open={addMenuOpen} title={text("tree.addTitle", "加入菜单", "Add menu")} className="max-h-[88vh] max-w-xl overflow-y-auto">
+      <ModalDialog open={addMenuOpen} onClose={() => { if (!saving) setAddMenuOpen(false); }} title={text("tree.addTitle", "加入菜单", "Add menu")} className="max-h-[88vh] sm:max-w-xl overflow-y-auto">
           <form className="space-y-4" onSubmit={(event) => void addMenu(event)}>
             <Field label={text("fields.menu", "菜单", "Menu")} required><SelectInput value={newMenuCode} placeholder={text("tree.selectMenu", "选择菜单定义", "Select a menu definition")} onValueChange={(value) => { if (value) setNewMenuCode(value); }}>{availableMenus.length ? availableMenus.map((menu) => <SelectItem key={menu.menuCode} value={menu.menuCode}>{menu.translations[locale]} · {menu.menuCode}</SelectItem>) : <SelectItem disabled value="__NO_AVAILABLE_MENU__">{text("tree.noAvailableMenus", "暂无可加入的菜单", "No menus available")}</SelectItem>}</SelectInput></Field>
             <Field label={text("fields.parent", "父级分组", "Parent group")}><SelectInput value={newParentMenuCode} onValueChange={(value) => { if (value) setNewParentMenuCode(value); }}><SelectItem value={ROOT_VALUE}>{text("tree.root", "根节点", "Root")}</SelectItem>{groupOptions.map((item) => <SelectItem key={item.menuCode} value={item.menuCode}>{item.translations[locale]}</SelectItem>)}</SelectInput></Field>
@@ -494,7 +494,7 @@ export function NavigationDomainMenuTreePage() {
           </form>
       </ModalDialog>
 
-      <ModalDialog open={copyMenuOpen} title={text("tree.copyTitle", "跨菜单树复制", "Copy across menu trees")} className="max-h-[88vh] max-w-xl overflow-y-auto">
+      <ModalDialog open={copyMenuOpen} onClose={() => { if (!saving) setCopyMenuOpen(false); }} title={text("tree.copyTitle", "跨菜单树复制", "Copy across menu trees")} className="max-h-[88vh] sm:max-w-xl overflow-y-auto">
           <form className="space-y-4" onSubmit={(event) => void copyMenuTree(event)}>
             <Field label={text("fields.sourceTree", "源菜单树", "Source menu tree")} required><SelectInput value={sourceTreeCode} onValueChange={(value) => { if (value) setSourceTreeCode(value); }}>{menuTrees.map((menuTree) => <SelectItem key={menuTree.treeCode} value={menuTree.treeCode}>{menuTree.name[locale]}</SelectItem>)}</SelectInput></Field>
             <Field label={text("fields.sourceMenu", "源菜单", "Source menu")} hint={text("tree.copyHint", "目标菜单树存在同编码菜单时，整个复制操作会失败并回滚。", "If any menu code already exists in the target menu tree, the whole copy is rejected and rolled back.")}><SelectInput value={sourceMenuCode} onValueChange={(value) => { if (value) setSourceMenuCode(value); }}><SelectItem value={ROOT_VALUE}>{text("tree.wholeTree", "完整菜单树", "Entire menu tree")}</SelectItem>{sourceOptions.map((item) => <SelectItem key={item.menuCode} value={item.menuCode}>{item.translations[locale]} · {item.menuCode}</SelectItem>)}</SelectInput></Field>

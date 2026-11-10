@@ -57,6 +57,10 @@ pub(super) fn message(code: &str, detail: &str) -> String {
             "The workspace is unavailable. Select an active workspace.",
         ),
         "CHAT_PROJECT_REQUIRED" => ("请先选择主题。", "Select a topic first."),
+        "101045005" => (
+            "当前工作空间已有同名的未归档主题，请先重命名该主题，再恢复归档会话。",
+            "An active topic with this name already exists. Rename it before restoring this archived conversation.",
+        ),
         "CHAT_PROJECT_INVALID" => (
             "主题不属于当前工作空间或已不可用，请重新选择。",
             "The topic is unavailable in this workspace. Select another topic.",

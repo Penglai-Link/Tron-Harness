@@ -7,7 +7,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from "react";
-import { createPortal } from "react-dom";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -80,11 +80,7 @@ export function QuickResourceUploadDialog({
 }: QuickResourceUploadDialogProps) {
   const { i18n, t } = useTranslation("pages");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const hasSelectedFileRef = useRef(false);
   const editorHandoffStartedRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const submittingRef = useRef(false);
   const [allowInheritance, setAllowInheritance] = useState(false);
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
@@ -121,9 +117,6 @@ export function QuickResourceUploadDialog({
   const waitingForPdf = type === "PDF" && (
     pdfReadState.status === "IDLE" || pdfReadState.status === "LOADING"
   );
-  hasSelectedFileRef.current = Boolean(file);
-  onCloseRef.current = onClose;
-  submittingRef.current = submitting;
 
   function reset() {
     editorHandoffStartedRef.current = false;
@@ -141,19 +134,9 @@ export function QuickResourceUploadDialog({
 
   useEffect(() => {
     if (!open) return;
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     reset();
     const focusTimer = window.setTimeout(() => fileInputRef.current?.focus(), 0);
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || submittingRef.current || hasSelectedFileRef.current) return;
-      onCloseRef.current();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      window.removeEventListener("keydown", handleKeyDown);
-      previousFocusRef.current?.focus();
-    };
+    return () => window.clearTimeout(focusTimer);
   // Reset only when the dialog opens. File/type changes must keep the user's
   // in-progress selection intact while the PDF preflight runs.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -276,13 +259,12 @@ export function QuickResourceUploadDialog({
 
   if (!open || typeof document === "undefined") return null;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-      <section
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) close(); }}>
+      <DialogContent showCloseButton={false}
         aria-label={quickT("aria")}
         aria-modal="true"
-        className="flex max-h-[min(46rem,calc(100vh-2rem))] w-[min(94vw,38rem)] flex-col overflow-hidden rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-        role="dialog" data-theme-anchor="dialog"
+        className="flex gap-0 p-0 sm:max-w-[38rem] max-h-[min(46rem,calc(100vh-2rem))] w-[min(94vw,38rem)] flex-col overflow-hidden rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
       >
         <header className="flex items-start gap-4 border-b border-[var(--color-outline-variant)] px-5 py-4">
           <div className="min-w-0 flex-1">
@@ -438,8 +420,7 @@ export function QuickResourceUploadDialog({
             {submitting ? quickT("actions.creating") : requiresEditor && onContinueInEditor ? quickT("actions.continue") : quickT("actions.create")}
           </Button>
         </footer>
-      </section>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

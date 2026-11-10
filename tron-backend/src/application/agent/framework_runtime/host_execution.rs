@@ -49,6 +49,7 @@ impl FrameworkHost {
             super::super::onboarding::narrow(&mut context);
         }
         let admission = self.0.config_lock.lock().await;
+        let _runtime_lease = self.0.runtime_access.read().await;
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
         registration.ensure_active()?;
