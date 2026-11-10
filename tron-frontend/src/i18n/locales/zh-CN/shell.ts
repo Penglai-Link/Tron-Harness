@@ -257,6 +257,11 @@ export const shell = {
     workspace: "工作区",
   },
   navigation: {
+    scopeLabel: "领域",
+    switchTitle: "切换领域",
+    search: "搜索领域…",
+    workspaceContext: "当前空间：{{name}}",
+
     emptyGroup: "暂无菜单，可在菜单编排中加入。",
     defaultDescription: "日常工作",
     defaultName: "日常工作",
@@ -278,6 +283,11 @@ export const shell = {
     options: { default: "默认", light: "浅色", matrixDark: "矩阵深色" },
   },
   workspace: {
+    scopeLabel: "工作空间",
+    switchTitle: "切换工作空间",
+    search: "搜索工作空间…",
+    noSearchResults: "没有匹配的结果。",
+
     current: "工作区",
     inherited: "继承 {{count}} 项",
     localOverrides: "本地覆盖 {{count}} 项",

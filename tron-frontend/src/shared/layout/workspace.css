@@ -8,6 +8,7 @@
   --tron-navigation-width: clamp(10rem, 12vw, 11rem);
 }
 .tron-shell-frame {
+  --tron-navigation-width: 18rem;
   --tron-control-radius: 0.7rem;
   --agent-ui-composer-radius: 1rem;
   --agent-ui-chat-transcript-bg: var(--color-elevated-surface);
@@ -32,6 +33,44 @@
   height: var(--tron-shell-toolbar-height);
   min-width: 0;
   padding-inline: calc(var(--tron-shell-gutter) + 0.5rem) var(--tron-shell-right-gap);
+}
+/* Native controls share the existing toolbar instead of a second title row. */
+html[data-tron-window-chrome] :is(.tron-shell-frame, .tron-settings-frame) {
+  --tron-shell-toolbar-height: max(2.5rem, 40px);
+  --tron-window-controls-left: 0px;
+  --tron-window-controls-right: 0px;
+}
+html[data-tron-window-chrome="macos"] :is(.tron-shell-frame, .tron-settings-frame) {
+  --tron-window-controls-left: 88px;
+}
+html:is([data-tron-window-chrome="windows"], [data-tron-window-chrome="linux"]) :is(.tron-shell-frame, .tron-settings-frame) {
+  --tron-window-controls-left: env(titlebar-area-x, 0px);
+  --tron-window-controls-right: max(0px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px))));
+}
+html[data-tron-window-fullscreen="true"] :is(.tron-shell-frame, .tron-settings-frame) {
+  --tron-window-controls-left: 0px;
+  --tron-window-controls-right: 0px;
+}
+html[data-tron-window-chrome] :is(.tron-shell-toolbar, .tron-settings-frame > header) {
+  -webkit-app-region: drag;
+  padding-inline-end: max(var(--tron-shell-right-gap), var(--tron-window-controls-right));
+}
+html[data-tron-window-chrome] .tron-shell-toolbar {
+  padding-inline-start: max(calc(var(--tron-shell-gutter) + 0.5rem), calc(var(--tron-window-controls-left) - var(--tron-navigation-width)));
+}
+html[data-tron-window-chrome] .tron-settings-frame > header {
+  padding-inline-start: max(1.5rem, var(--tron-window-controls-left));
+}
+html[data-tron-window-chrome] .tron-shell-navigation[data-position="flow"]::before {
+  content: "";
+  flex: 0 0 var(--tron-shell-toolbar-height);
+  -webkit-app-region: drag;
+}
+html[data-tron-window-fullscreen="true"] .tron-shell-navigation[data-position="flow"]::before {
+  content: none;
+}
+html[data-tron-window-chrome] :is(.tron-shell-toolbar, .tron-settings-frame > header) :is(a, button, input, textarea, select, [role="button"], [role="tab"], [role="combobox"], [contenteditable="true"]) {
+  -webkit-app-region: no-drag;
 }
 /* Quiet window controls; reserve contrast for the working content. */
 .tron-shell-tool {
@@ -109,22 +148,50 @@
 @media (pointer: coarse) {
   .tron-shell-base .tron-navigation-resizer::before { left: -6px; width: 24px; }
 }
-.tron-workspace-selector {
+.tron-scope-switcher {
+  border-radius: 0.75rem;
+  padding: 0.25rem;
+  background: color-mix(in srgb, var(--color-on-surface) 4%, var(--color-elevated-surface));
+}
+.tron-scope-selector-row + .tron-scope-selector-row::before {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-inline: 0.75rem;
+  background: var(--color-card-border);
+}
+.tron-scope-selector {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   min-width: 0;
   width: 100%;
-  min-height: 2.5rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.5rem;
-  background: transparent;
-  font-size: 1rem;
-  font-weight: 500;
+  min-height: 3.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
+  color: var(--color-on-surface);
+  text-align: left;
   cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
 }
-.tron-workspace-selector:hover { background: var(--color-surface-container-high); }
-.tron-workspace-selector:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.tron-scope-selector:hover { background: var(--color-menu-hover-surface); }
+.tron-scope-selector[aria-expanded="true"] {
+  background: var(--color-menu-selected-surface);
+  color: var(--color-accent);
+}
+.tron-scope-selector:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.tron-scope-selector-copy { display: flex; flex: 1; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.tron-scope-selector-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-on-surface-variant); font-size: 0.75rem; line-height: 1rem; }
+.tron-scope-selector-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1rem; font-weight: 500; line-height: 1.375rem; }
+.tron-workspace-selector .tron-scope-selector-name { font-weight: 600; }
+.tron-scope-selector-chevron { flex-shrink: 0; transition: transform 140ms ease; }
+.tron-scope-selector[aria-expanded="true"] .tron-scope-selector-chevron { transform: rotate(180deg); }
+.tron-scope-switcher-compact { padding: 0; background: transparent; }
+.tron-scope-switcher-compact .tron-scope-selector { justify-content: center; min-height: 2.5rem; padding: 0.5rem; }
+.tron-scope-switcher-compact .tron-scope-selector-row + .tron-scope-selector-row::before { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .tron-scope-selector, .tron-scope-selector-chevron { transition: none; }
+}
 .tron-scope-icon {
   display: grid;
   place-items: center;
@@ -144,7 +211,7 @@
 .tron-shell-navigation[data-collapsible="icon"] [data-slot="sidebar-menu-button"] {
   margin-inline: auto;
 }
-.tron-shell-navigation[data-collapsible="icon"] .tron-workspace-selector { justify-content: center; padding-inline: 0; background: transparent; }
+.tron-shell-navigation[data-collapsible="icon"] .tron-scope-selector { justify-content: center; padding-inline: 0; }
 .tron-shell-workspace {
   position: absolute;
   inset: 0;

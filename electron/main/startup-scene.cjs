@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 // Presentation only: retain the live startup scene while the main document loads.
-function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
+function createStartupScene({ window, WebContentsView, ipcMain, dataDir, onBeforeInput }) {
   const themePath = path.join(dataDir, "startup-theme.json");
   let theme = "matrix-dark";
   let firstStartup = true;
@@ -14,7 +14,13 @@ function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
       firstStartup = false;
     }
   } catch {}
-  window.setBackgroundColor(theme === "light" ? "#ffffff" : "#020305");
+  const syncWindowTheme = () => {
+    window.setBackgroundColor(theme === "light" ? "#ffffff" : "#020305");
+    if (process.platform !== "darwin") {
+      window.setTitleBarOverlay({ color: "#00000000", symbolColor: theme === "light" ? "#202124" : "#f3f1eb" });
+    }
+  };
+  syncWindowTheme();
   let view = null;
   let fallbackTimer = null;
   const resize = () => {
@@ -38,7 +44,7 @@ function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
   const applyTheme = (value) => {
     const changed = theme !== value;
     theme = value;
-    window.setBackgroundColor(theme === "light" ? "#ffffff" : "#020305");
+    syncWindowTheme();
     if (changed && view) {
       view.setBackgroundColor(theme === "light" ? "#ffffff" : "#020305");
       void view.webContents.executeJavaScript(`document.documentElement.dataset.theme = ${JSON.stringify(theme)}`).catch(() => {});
@@ -69,6 +75,7 @@ function createStartupScene({ window, WebContentsView, ipcMain, dataDir }) {
     async show(html) {
       if (!view) {
         view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+        if (onBeforeInput) view.webContents.on("before-input-event", onBeforeInput);
         view.setBackgroundColor(theme === "light" ? "#ffffff" : "#020305");
         window.contentView.addChildView(view);
         resize();

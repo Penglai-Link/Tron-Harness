@@ -223,6 +223,10 @@ function createMainWindow() {
     backgroundColor: "#020305",
     title: "Tron",
     width: 1440,
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+    ...(process.platform === "darwin"
+      ? { trafficLightPosition: { x: 12, y: 13 } }
+      : { titleBarOverlay: { height: 40, color: "#00000000", symbolColor: "#f3f1eb" } }),
     ...(["win32", "linux"].includes(process.platform) ? { icon: ICON_PATH } : {}),
     webPreferences: {
       webviewTag: true,
@@ -237,7 +241,20 @@ function createMainWindow() {
   });
 
   state.mainWindow = window;
-  startupScene = require("./startup-scene.cjs").createStartupScene({ window, WebContentsView, ipcMain, dataDir: desktopDataDir });
+  const sendWindowChrome = () => {
+    window.webContents.send("tron-desktop:window-chrome", { fullscreen: window.isFullScreen() });
+  };
+  window.webContents.on("dom-ready", sendWindowChrome);
+  window.on("enter-full-screen", sendWindowChrome);
+  window.on("leave-full-screen", sendWindowChrome);
+  const onBeforeInput = (event, input) => {
+    if (process.platform === "darwin" || input.type !== "keyDown" || input.isAutoRepeat
+      || input.alt || input.meta || input.control || input.shift || input.key !== "F11") return;
+    event.preventDefault();
+    window.setFullScreen(!window.isFullScreen());
+  };
+  window.webContents.on("before-input-event", onBeforeInput);
+  startupScene = require("./startup-scene.cjs").createStartupScene({ window, WebContentsView, ipcMain, dataDir: desktopDataDir, onBeforeInput });
 
   window.on("close", (event) => {
     if (isQuitting || (process.platform !== "darwin" && !residentDesktop?.isResident())) {
@@ -417,6 +434,7 @@ async function bootstrapRuntime() {
   state.backendLogPath = resolveBackendLogPath(appDataDir);
   state.graphPath = resolveSharedGraphStoragePath(appDataDir);
   state.frontendDistDir = resolveFrontendDistDir(resourcesDir);
+  if (process.platform !== "darwin") Menu.setApplicationMenu(null);
   if (process.platform === "win32") {
     const { WslBackend } = require("./wsl-backend.cjs");
     state.wsl = new WslBackend({
@@ -434,16 +452,6 @@ async function bootstrapRuntime() {
         }
       }
     });
-    const zh = app.getLocale().startsWith("zh");
-    Menu.setApplicationMenu?.(Menu.buildFromTemplate([
-      { label: "Tron", submenu: [
-        { label: zh ? "后端环境…" : "Backend environment…", accelerator: "Ctrl+Shift+E", click: () => {
-          void chooseBackendEnvironment().catch((error) => dialog.showErrorBox("Tron", describeError(error)));
-        } },
-        { type: "separator" }, { role: "quit" }
-      ] },
-      { role: "editMenu" }, { role: "viewMenu" }, { role: "windowMenu" }
-    ]));
     try { state.environment = state.wsl.selection(); }
     catch (error) { await handleBackendFailure(error); return; }
   }

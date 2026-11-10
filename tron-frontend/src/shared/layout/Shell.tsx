@@ -3,6 +3,8 @@ import { TabBar } from "./content/TabBar";
 import { CREATE_TOPIC_SHORTCUT_EVENT, ADD_DIRECTORY_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import {
   Settings,
+  Check,
+  Search,
   Bot,
   ChevronDown,
   PanelBottomClose,
@@ -61,6 +63,7 @@ import { tronNavigation } from "@/shared/constants/shellNavigation";
 import { getEmptyWorkspaceSwitcher, getWorkspaceSwitcherMock } from "@/shared/constants/workspaceSpaces";
 import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLocale } from "@/i18n";
 import { useAppShellStore } from "@/store/appShellStore";
@@ -339,6 +342,8 @@ export function TronShell({
     return () => window.removeEventListener(OPEN_CHAT_CONTEXT_EVENT, handleOpenContext);
   }, [activeTabId, activePanelId, tabPanelRegistry, t, updateRightPanelState]);
 
+  const [workspaceSearch, setWorkspaceSearch] = useState("");
+  const [domainSearch, setDomainSearch] = useState("");
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
   const [navigationLoading, setNavigationLoading] = useState(false);
   const [mainAgentWindowState, setMainAgentWindowState] = useState<ChatFloatingState>(() => ({
@@ -935,6 +940,7 @@ export function TronShell({
   }
 
   function handleWorkspaceSwitcherClick() {
+    setWorkspaceSearch("");
     setAgentOpen(false);
     if (utilityPanel !== "workspace") {
       void refreshWorkspaceSwitcher();
@@ -943,6 +949,7 @@ export function TronShell({
   }
 
   function handleNavigationDomainSwitcherClick() {
+    setDomainSearch("");
     setAgentOpen(false);
     toggleUtilityPanel("domain");
   }
@@ -983,6 +990,8 @@ export function TronShell({
     selectPrimarySpaceInStore(space.primaryWorkspaceCode, nextSecondarySpaceId);
     setBottomPanel(false);
     if (path) navigate(path, { replace: true });
+    toggleUtilityPanel("workspace");
+    workspaceTriggerRef.current?.focus();
   }
 
   function toggleWorkspaceExpanded(workspaceCode: string) {
@@ -997,17 +1006,19 @@ export function TronShell({
     const { space } = node;
     const workspacePathLabel = compactWorkspacePath(space.label);
     const hasChildren = node.children.length > 0;
-    const expanded = hasChildren && expandedWorkspaceCodes.includes(space.workspaceCode);
+    const expanded = hasChildren && (Boolean(workspaceSearch.trim()) || expandedWorkspaceCodes.includes(space.workspaceCode));
     const selected = space.workspaceCode === selectedWorkspaceNode?.workspaceCode;
     const rowClassName = cn(
-      "flex min-w-0 flex-1 cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-left transition-colors",
+      "flex min-h-10 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)]",
       selected
-        ? "bg-[var(--color-menu-selected-surface)]"
+        ? "bg-[var(--color-menu-selected-surface)] text-[var(--color-accent)]"
         : "hover:bg-[var(--color-menu-hover-surface)]",
     );
     const content = (
       <>
-        <span className="truncate text-sm font-medium">{space.name}</span>
+        <span className="tron-scope-icon"><WorkspaceIcon /></span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{space.name}</span>
+        {selected ? <Check size={16} className="shrink-0" aria-hidden="true" /> : null}
       </>
     );
 
@@ -1046,56 +1057,79 @@ export function TronShell({
     );
   }
 
+  function renderSwitcherSearch(value: string, onChange: (value: string) => void, label: string) {
+    return (
+      <div className="relative mb-2">
+        <Search className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
+        <Input autoFocus type="search" className="h-10 rounded-lg pl-9" aria-label={label} placeholder={label} value={value} onChange={(event) => onChange(event.target.value)} />
+      </div>
+    );
+  }
+
   function renderWorkspaceSwitcherContent() {
+    const query = workspaceSearch.trim().toLocaleLowerCase();
+    function filterNodes(nodes: WorkspaceSwitcherTreeNode[]): WorkspaceSwitcherTreeNode[] {
+      return nodes.flatMap((node) => {
+        if (node.space.name.toLocaleLowerCase().includes(query) || node.space.label.toLocaleLowerCase().includes(query)) return [node];
+        const children = filterNodes(node.children);
+        return children.length ? [{ ...node, children }] : [];
+      });
+    }
+    const visibleTree = query ? filterNodes(workspaceTree) : workspaceTree;
     return (
       <>
-        <div>
-          {workspaceSwitcherLoading ? <p role="status" className="mb-2 text-xs text-[var(--color-on-surface-variant)]"><ShinyText>{t("shell:workspace.refreshing")}</ShinyText></p> : null}
-          {workspaceTree.length ? (
-            <div className="max-h-[min(60vh,24rem)] space-y-1 overflow-y-auto pr-1" role="tree" aria-label={t("shell:workspace.selectorTitle")}>
-              {workspaceTree.map((root) => renderWorkspaceTreeNode(root))}
-            </div>
-          ) : (
-            <p className="text-[0.8125rem] text-[var(--color-on-surface-variant)]">{t("shell:workspace.noPrimarySpaces")}</p>
-          )}
-        </div>
+        <h2 className="mb-3 px-1 text-sm font-semibold">{t("shell:workspace.switchTitle")}</h2>
+        {renderSwitcherSearch(workspaceSearch, setWorkspaceSearch, t("shell:workspace.search"))}
+        {workspaceSwitcherLoading ? <p role="status" className="mb-2 px-1 text-xs text-[var(--color-on-surface-variant)]"><ShinyText>{t("shell:workspace.refreshing")}</ShinyText></p> : null}
+        {visibleTree.length ? (
+          <div className="max-h-[min(50vh,24rem)] space-y-1 overflow-y-auto" role="group" aria-label={t("shell:workspace.selectorTitle")}>
+            {visibleTree.map((root) => renderWorkspaceTreeNode(root))}
+          </div>
+        ) : (
+          <p role="status" className="px-2 py-3 text-sm text-[var(--color-on-surface-variant)]">{t(query ? "shell:workspace.noSearchResults" : "shell:workspace.noPrimarySpaces")}</p>
+        )}
       </>
     );
   }
 
   function renderNavigationDomainSwitcherContent() {
+    const query = domainSearch.trim().toLocaleLowerCase();
+    const domains = navigationDomains.filter((domain) => `${domain.name} ${domain.description ?? ""}`.toLocaleLowerCase().includes(query));
     return (
-      <div className="space-y-1" role="listbox" aria-label={t("shell:navigation.selectorTitle")}>
-        {navigationLoading ? <p role="status" className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]"><ShinyText>{t("shell:navigation.refreshing")}</ShinyText></p> : null}
-        {navigationDomains.length ? navigationDomains.map((domain) => {
-          const selected = domain.domainCode === selectedDomainCode;
-          return (
-            <button
-              aria-selected={selected}
-              className={cn(
-                "flex w-full min-w-0 items-start rounded-lg px-2.5 py-2 text-left transition-colors",
-                selected
-                  ? "bg-[var(--color-menu-selected-surface)]"
-                  : "hover:bg-[var(--color-menu-hover-surface)]",
-              )}
-              key={domain.domainCode}
-              role="option"
-              type="button"
-              onClick={() => {
-                setSelectedDomainCode(domain.domainCode);
-                toggleUtilityPanel("domain");
-              }}
-            >
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">{domain.name}</span>
-                {domain.description ? <span className="mt-0.5 block truncate text-xs text-[var(--color-on-surface-variant)]">{domain.description}</span> : null}
-              </span>
-            </button>
-          );
-        }) : (
-          <p className="px-2 py-1 text-[0.8125rem] text-[var(--color-on-surface-variant)]">{t("shell:navigation.noDomains")}</p>
-        )}
-      </div>
+      <>
+        <h2 className="px-1 text-sm font-semibold">{t("shell:navigation.switchTitle")}</h2>
+        <p className="mb-3 mt-1 truncate px-1 text-xs text-[var(--color-on-surface-variant)]">{t("shell:navigation.workspaceContext", { name: selectedWorkspaceName })}</p>
+        {renderSwitcherSearch(domainSearch, setDomainSearch, t("shell:navigation.search"))}
+        <div className="max-h-[min(50vh,24rem)] space-y-1 overflow-y-auto" role="group" aria-label={t("shell:navigation.selectorTitle")}>
+          {navigationLoading ? <p role="status" className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]"><ShinyText>{t("shell:navigation.refreshing")}</ShinyText></p> : null}
+          {domains.length ? domains.map((domain) => {
+            const selected = domain.domainCode === selectedDomainCode;
+            return (
+              <button
+                aria-pressed={selected}
+                className={cn(
+                  "flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)]",
+                  selected ? "bg-[var(--color-menu-selected-surface)] text-[var(--color-accent)]" : "hover:bg-[var(--color-menu-hover-surface)]",
+                )}
+                key={domain.domainCode}
+                type="button"
+                onClick={() => {
+                  setSelectedDomainCode(domain.domainCode);
+                  toggleUtilityPanel("domain");
+                  domainTriggerRef.current?.focus();
+                }}
+              >
+                <span className="tron-scope-icon"><DomainIcon /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{domain.name}</span>
+                  {domain.description ? <span className="mt-0.5 block truncate text-xs text-[var(--color-on-surface-variant)]">{domain.description}</span> : null}
+                </span>
+                {selected ? <Check size={16} className="shrink-0" aria-hidden="true" /> : null}
+              </button>
+            );
+          }) : <p role="status" className="px-2 py-3 text-sm text-[var(--color-on-surface-variant)]">{t(query ? "shell:workspace.noSearchResults" : "shell:navigation.noDomains")}</p>}
+        </div>
+      </>
     );
   }
 
@@ -1207,15 +1241,13 @@ export function TronShell({
   function renderNavigationDomainSelector(compact: boolean, mobile: boolean) {
     const domainName = selectedNavigationDomain?.name ?? t("shell:navigation.defaultName");
     return (
-      <div className="relative">
+      <div className="tron-scope-selector-row relative">
         <button
           ref={domainTriggerRef}
-          className={cn(
-            "group/domain-trigger flex h-8 w-full min-w-0 items-center rounded-lg text-left text-base font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
-            compact ? "justify-center px-1.5" : "gap-2 px-2",
-          )}
+          className="tron-scope-selector tron-domain-selector"
           type="button"
           id="tron-domain-trigger"
+          aria-controls={utilityPanel === "domain" ? "tron-domain-selector-panel" : undefined}
           aria-busy={navigationLoading}
           aria-expanded={utilityPanel === "domain"}
           aria-haspopup="dialog"
@@ -1224,15 +1256,15 @@ export function TronShell({
           title={domainName}
         >
           <span className="tron-scope-icon"><DomainIcon /></span>
-          {!compact ? <span className="min-w-0 flex-1 truncate">{domainName}</span> : null}
-          <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)] transition-opacity [@media(hover:hover)]:opacity-0 group-hover/domain-trigger:opacity-60 group-focus-visible/domain-trigger:opacity-60 group-aria-expanded/domain-trigger:opacity-60", compact ? "hidden" : "")} size={16} aria-hidden="true" />
+          {!compact ? <span className="tron-scope-selector-copy"><span className="tron-scope-selector-label">{t("shell:navigation.scopeLabel")}</span><span className="tron-scope-selector-name">{domainName}</span></span> : null}
+          {!compact ? <ChevronDown className="tron-scope-selector-chevron" size={16} aria-hidden="true" /> : null}
         </button>
         {utilityPanel === "domain" ? (
           <div
             ref={utilityPanelRef}
             id="tron-domain-selector-panel"
             className={cn(
-              "absolute z-[70] w-[min(260px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+              "tron-scope-popover absolute z-[70] w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
               compact && !mobile ? "left-[calc(100%+8px)] top-0" : "left-0 top-[calc(100%+8px)]",
             )}
             role="dialog" data-theme-anchor="dialog" data-tron-sidebar-surface
@@ -1247,12 +1279,13 @@ export function TronShell({
 
   function renderWorkspaceSelector(compact: boolean) {
     return (
-      <div className="relative min-w-0">
+      <div className="tron-scope-selector-row relative min-w-0">
         <button
           ref={workspaceTriggerRef}
-          className="tron-workspace-selector"
+          className="tron-scope-selector tron-workspace-selector"
           type="button"
           id="tron-workspace-trigger"
+          aria-controls={utilityPanel === "workspace" ? "tron-workspace-selector-panel" : undefined}
           aria-busy={workspaceSwitcherLoading}
           aria-expanded={utilityPanel === "workspace"}
           aria-haspopup="dialog"
@@ -1261,14 +1294,14 @@ export function TronShell({
           title={selectedWorkspacePathLabel}
         >
           <span className="tron-scope-icon"><WorkspaceIcon /></span>
-          {!compact ? <span className="min-w-0 flex-1 truncate text-left">{selectedWorkspaceName}</span> : null}
-          {!compact ? <ChevronDown className="shrink-0" size={15} aria-hidden="true" /> : null}
+          {!compact ? <span className="tron-scope-selector-copy"><span className="tron-scope-selector-label">{t("shell:workspace.scopeLabel")}</span><span className="tron-scope-selector-name">{selectedWorkspaceName}</span></span> : null}
+          {!compact ? <ChevronDown className="tron-scope-selector-chevron" size={16} aria-hidden="true" /> : null}
         </button>
         {utilityPanel === "workspace" ? (
           <div
             ref={utilityPanelRef}
             id="tron-workspace-selector-panel"
-            className="absolute left-0 top-[calc(100%+8px)] z-[80] w-[min(22rem,calc(100vw-1rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-2 py-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]"
+            className={cn("tron-scope-popover absolute z-[80] w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]", compact ? "left-[calc(100%+8px)] top-0" : "left-0 top-[calc(100%+8px)]")}
             role="dialog" data-theme-anchor="dialog"
             aria-label={t("shell:workspace.selectorTitle")}
           >

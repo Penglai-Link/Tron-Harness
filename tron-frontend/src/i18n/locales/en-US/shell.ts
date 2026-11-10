@@ -256,6 +256,11 @@ export const shell = {
     user: "User",
   },
   navigation: {
+    scopeLabel: "Domain",
+    switchTitle: "Switch domain",
+    search: "Search domains…",
+    workspaceContext: "Workspace: {{name}}",
+
     emptyGroup: "No menus yet. Add items in menu arrangement.",
     defaultDescription: "Daily Work",
     defaultName: "Daily Work",
@@ -277,6 +282,11 @@ export const shell = {
     options: { default: "Default", light: "Light", matrixDark: "Matrix Dark" },
   },
   workspace: {
+    scopeLabel: "Workspace",
+    switchTitle: "Switch workspace",
+    search: "Search workspaces…",
+    noSearchResults: "No matching results.",
+
     current: "Workspace",
     inherited: "{{count}} inherited",
     localOverrides: "{{count}} local overrides",

@@ -25,6 +25,7 @@ body { display:flex; align-items:center; padding:40px clamp(24px,8vw,150px); ove
 details { color:#687486; font-size:11px; }
 summary { cursor:pointer; width:fit-content; padding:5px 0; }
 summary:focus-visible { outline:1px solid #b8c6d9; outline-offset:5px; }
+body::before { content:''; position:fixed; inset:0 0 auto; height:40px; -webkit-app-region:drag; }
 .meta { margin-top:14px; display:grid; gap:10px; }
 .meta span { display:block; margin-bottom:3px; color:#8f98a7; }
 code { font-size:10px; overflow-wrap:anywhere; color:#a6b0c0; }
