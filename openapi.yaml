@@ -4,7 +4,7 @@ info:
   description: Tron backend HTTP API. Coverage is added progressively by bounded context.
   license:
     name: AGPL-3.0-only
-  version: 0.1.0-SNAPSHOT
+  version: 1.0.0
 paths:
   /api/v1/health:
     get:

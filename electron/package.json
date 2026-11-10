@@ -1,7 +1,7 @@
 {
   "license": "AGPL-3.0-only",
   "name": "tron-desktop-electron",
-  "version": "0.1.0-SNAPSHOT",
+  "version": "1.0.0",
   "private": true,
   "main": "main/index.cjs",
   "scripts": {
