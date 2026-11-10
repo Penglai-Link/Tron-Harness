@@ -58,6 +58,16 @@ modelInvocation:
     callTimeoutSeconds: 3600
     operationTimeoutSeconds: 3600
 
+# Minimum relevance, not a request to fill the result limit. null disables a gate.
+# Vector cosine similarity: 0..1. Rerank scores use the selected model's scale.
+# If reranking is unavailable, only candidates passing the vector gate are returned;
+# unscored fulltext/graph candidates are skipped while that gate is enabled.
+ragRetrieval:
+  # Initial cutoff from isolated samples; recalibrate for the deployed model and data.
+  minVectorSimilarity: 0.55
+  # Provisional: confirm the provider score scale and calibrate before relying on it.
+  minRerankScore: 0.5
+
 httpClients:
   default:
     connectTimeoutMs: 1500
@@ -131,7 +141,9 @@ shortTermMemory:
         - skills.catalog
         - page_context
         - application_context
+        - topic_memo
         - current_session_working_state
+        - long_term_memory
         - knowledge_base
         - dude_environment
         - dude_wakeup
@@ -150,6 +162,12 @@ shortTermMemory:
           minGainTokens: 1
         application_context:
           maxTokens: 16000
+          strategy: bound
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        long_term_memory:
+          maxTokens: null
           strategy: bound
           triggerRatio: "100%"
           targetRatio: "80%"

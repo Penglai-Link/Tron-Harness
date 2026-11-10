@@ -101,6 +101,12 @@ impl RagIngestRepository for SqliteRagRepositorySql<'_> {
                 return Err(RagError::IngestRequestInvalid);
             }
         }
+        if command.corpus_id == "memory-card" {
+            let valid: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM memory_records WHERE memory_code=?1 AND user_code=?2 AND enabled=1 AND version=?3 AND (expires_at IS NULL OR expires_at>?4) AND scope_type=?5 AND scope_code=?6 AND text=(SELECT json_extract(payload_json,'$.payload.text') FROM rag_record_tasks WHERE id=?7))",params![command.source_code,command.user_code,command.metadata["recordVersion"].as_u64(),chrono::Utc::now().timestamp_millis(),command.scope.scope_type,command.scope.scope_code,command.task_id],|r|r.get(0)).map_err(storage_error)?;
+            if !valid {
+                return Err(RagError::IngestRequestInvalid);
+            }
+        }
         delete_text_unit_indexes_for_source(
             &tx,
             &plan,

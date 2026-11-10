@@ -1,5 +1,8 @@
 // Help is scoped to full configuration paths; dynamic profile names use "profile".
 export const systemConfigDescriptions = {
+
+  "ragRetrieval_minVectorSimilarity": "向量召回的最低余弦相似度，范围为 0 到 1，初始值 0.55。重排不可用时也使用此门槛筛选；留空关闭。应按实际模型和业务样本校准。",
+  "ragRetrieval_minRerankScore": "重排结果的最低相关分，要求非负数。初始值 0.5 尚未校准，应先确认模型的分数含义；留空关闭。结果不足时不会补满召回上限。",
   "shortTermMemory_context_providers_historyRecentTurns": "压缩较早对话时，保留近期完整对话原文的轮数。",
   "shortTermMemory_context_providers_dataBlocks_block_maxTokens": "此上下文块的 token 上限；所有块分配的预算之和必须在模型输入窗口内。",
   "shortTermMemory_context_providers_dataBlocks_block_strategy": "块缩减策略：keep 保留原文，bound 将过大的数据替换为受限的当前快照，summarize 生成摘要。",
@@ -30,8 +33,8 @@ export const systemConfigDescriptions = {
   "terminalWorkingDirectory": "新建终端的初始工作目录，影响终端中相对路径和命令的执行位置。",
   "skillsRegistryRoot": "本地技能注册中心的文件根目录，用于保存和加载技能包。",
   "navigation_maxDepth": "侧边栏菜单允许的最大嵌套层数；创建、移动菜单时会检查该限制。",
-  "systemAgents_codexCommand": "启动 Codex 外部智能体时执行的命令或可执行文件路径。需在后端运行环境中可用。",
-  "systemAgents_opencodeCommand": "启动 OpenCode 外部智能体时执行的命令或可执行文件路径。需在后端运行环境中可用。",
+  "systemAgents_codexCommand": "启动 Codex 外部智能体的命令或可执行文件路径，默认为 codex。需在后端运行环境中可用；留空停止扫描。",
+  "systemAgents_opencodeCommand": "启动 OpenCode 外部智能体的命令或可执行文件路径，默认为 opencode。需在后端运行环境中可用；留空停止扫描。",
   "systemAgents_dshCommand": "启动 DeepSeek Harness 外部智能体的命令或可执行文件路径，默认为 dsh。macOS 上默认命令不在 PATH 时会查找桌面安装包；留空停止扫描。登录凭据由 dsh 自身管理。",
   "variableCrypto_keyBase64": "公共变量敏感值的加密密钥，使用 Base64 编码。更换密钥前需迁移已有密文，否则旧值无法解密。",
   "resource_storage_defaultProfile": "新建文件资源默认使用的存储配置名称，必须对应 profiles 中已配置的项。",

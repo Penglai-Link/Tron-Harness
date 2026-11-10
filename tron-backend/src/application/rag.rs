@@ -10,9 +10,10 @@ mod indexing;
 mod ingest;
 mod lifecycle;
 mod management;
-mod memory_retrieval;
+
 mod record_ingestion;
 mod retrieval;
+mod relevance;
 mod retrieval_warnings;
 
 mod runtime;
@@ -33,6 +34,7 @@ pub use ingest::*;
 pub use lifecycle::*;
 pub use management::*;
 pub use retrieval::*;
+pub use relevance::RagRetrievalConfig;
 
 pub use runtime::*;
 pub use search::*;

@@ -35,6 +35,15 @@ where
         request: RagIngestRequest,
         resume: Option<super::RagRecordCheckpoint>,
     ) -> Result<RagRecordTask, RagError> {
+        let task = self.build_record_task(request, resume)?;
+        self.repository.save_record_task(&task)?;
+        Ok(task)
+    }
+    pub(crate) fn build_record_task(
+        &self,
+        request: RagIngestRequest,
+        resume: Option<super::RagRecordCheckpoint>,
+    ) -> Result<RagRecordTask, RagError> {
         validate_direct_scope(&request.access_context, &request.target_scope)?;
         if !matches!(request.corpus_id.as_str(), "memory-card" | "skill") {
             return Err(RagError::IngestRequestInvalid);
@@ -84,7 +93,6 @@ where
             created_at: now,
             updated_at: now,
         };
-        self.repository.save_record_task(&task)?;
         Ok(task)
     }
     pub async fn execute_record_task(
@@ -157,6 +165,22 @@ where
             .repository
             .record_task(user, id)?
             .ok_or(RagError::SourceNotFound)?;
+        if task.corpus_id == "memory-card" {
+            let valid = self
+                .memories
+                .as_ref()
+                .ok_or(RagError::IngestRequestInvalid)?
+                .get(user, &task.source_code)
+                .map_err(|_| RagError::StorageFailure)?
+                .is_some_and(|r| {
+                    r.enabled
+                        && Some(r.version as u64)
+                            == task.payload["metadata"]["recordVersion"].as_u64()
+                });
+            if !valid {
+                return Err(RagError::IngestRequestInvalid);
+            }
+        }
         if matches!(task.state.as_str(), "RUNNING" | "QUEUED")
             || !self.repository.record_task_is_latest(&task)?
         {

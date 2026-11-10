@@ -52,6 +52,9 @@ impl DudeMemoryService {
             status: MemoryBatchStatus::Prepared,
             sources,
             memory_receipts: Vec::new(),
+            saved_count: 0,
+            duplicate_skipped_count: 0,
+            unreliable_skipped_count: 0,
             consolidation_plan: None,
             summary: None,
             revision: 1,
@@ -149,7 +152,7 @@ impl DudeMemoryService {
             return Err(DudeMemoryError::Conflict);
         }
         if previous.memory_receipts.iter().any(|old| {
-            old.semantic_key == receipt.semantic_key && old.workspace_code == receipt.workspace_code
+            old.proposal_key == receipt.proposal_key
         }) {
             return Ok(previous);
         }
@@ -187,8 +190,12 @@ impl DudeMemoryService {
             return Err(DudeMemoryError::Conflict);
         }
         for receipt in &receipts {
+            if receipt.outcome == MemoryWriteOutcome::UnreliableSkipped {
+                continue;
+            }
             if receipt.semantic_key.trim().is_empty()
-                || receipt.memory_code.trim().is_empty()
+                || (receipt.outcome == MemoryWriteOutcome::Saved
+                    && receipt.memory_code.trim().is_empty())
                 || receipt.source_codes.is_empty()
                 || receipt.source_codes.iter().any(|code| {
                     !previous.sources.iter().any(|source| {
@@ -204,6 +211,18 @@ impl DudeMemoryService {
         }
         let mut batch = previous.clone();
         batch.status = MemoryBatchStatus::Completed;
+        batch.saved_count = receipts
+            .iter()
+            .filter(|r| r.outcome == MemoryWriteOutcome::Saved)
+            .count();
+        batch.duplicate_skipped_count = receipts
+            .iter()
+            .filter(|r| r.outcome == MemoryWriteOutcome::DuplicateSkipped)
+            .count();
+        batch.unreliable_skipped_count = receipts
+            .iter()
+            .filter(|r| r.outcome == MemoryWriteOutcome::UnreliableSkipped)
+            .count();
         batch.memory_receipts = receipts;
         batch.summary = Some(summary);
         batch.revision += 1;

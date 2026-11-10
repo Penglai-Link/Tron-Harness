@@ -211,6 +211,7 @@ pub(super) fn authorize_originals(
             .map(|row| RagEvidence {
                 row,
                 score: 0.,
+                vector_similarity: None,
                 context_text: None,
                 recall_ranks: Default::default(),
                 bundle: None,

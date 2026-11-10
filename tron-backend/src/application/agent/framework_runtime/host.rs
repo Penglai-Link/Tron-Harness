@@ -112,6 +112,7 @@ struct Host {
     resources: Option<crate::application::resource::ResourceService>,
     agent_management: OnceCell<crate::application::agent::AgentManagementService>,
     dudes: OnceCell<crate::application::dude::DudeService>,
+    memories: OnceCell<crate::app::AppMemoryService>,
     knowledge_bases: OnceCell<crate::application::knowledge_base::KnowledgeBaseService>,
     topics: OnceCell<crate::application::topic::TopicService>,
     integrations: OnceCell<crate::application::connector::IntegrationService>,
@@ -243,6 +244,36 @@ impl FrameworkHost {
     }
     pub(crate) fn dudes(&self) -> Option<crate::application::dude::DudeService> {
         self.0.dudes.get().cloned()
+    }
+    pub(crate) fn attach_memory_backend(
+        &self,
+        context: &crate::domain::agent::AgentRunContext,
+        extensions: &mut eliteforge_agent_core::Extensions,
+    ) {
+        if let (Some(memory), Some(user)) = (self.memories(), context.user_code.as_deref()) {
+            let binding = memory.bind_backend(
+                crate::application::memory::MemoryRunContext::new(
+                    user,
+                    if context.is_owning_dude() {
+                        ""
+                    } else {
+                        context.execution_workspace_code()
+                    },
+                ),
+                None,
+                None,
+            );
+            extensions.insert(eliteforge_agent_core::LongTermMemoryService(
+                binding.backend.clone(),
+            ));
+            extensions.insert(binding);
+        }
+    }
+    pub(crate) fn bind_memories(&self, service: crate::app::AppMemoryService) {
+        self.0.memories.set(service).ok();
+    }
+    pub(crate) fn memories(&self) -> Option<crate::app::AppMemoryService> {
+        self.0.memories.get().cloned()
     }
     pub fn bind_knowledge_bases(
         &self,
@@ -776,6 +807,7 @@ impl FrameworkHost {
             pty: Default::default(),
             resources,
             dudes: OnceCell::new(),
+            memories: OnceCell::new(),
             knowledge_bases: OnceCell::new(),
             topics: OnceCell::new(),
             integrations: OnceCell::new(),
@@ -829,6 +861,7 @@ impl FrameworkHost {
             pty: Default::default(),
             resources,
             dudes: OnceCell::new(),
+            memories: OnceCell::new(),
             knowledge_bases: OnceCell::new(),
             topics: OnceCell::new(),
             integrations: OnceCell::new(),

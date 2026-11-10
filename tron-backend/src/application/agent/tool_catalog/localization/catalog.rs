@@ -40,13 +40,19 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.domains.dude.name" => "Dude",
         "agent.toolCatalog.domains.dude_memory.name" => "Dude memory",
-        "agent.toolCatalog.domains.dude_memory.description" => "Search and maintain user and work-domain memories for the Dude.",
+        "agent.toolCatalog.domains.dude_memory.description" => {
+            "Search and maintain user and work-domain memories for the Dude."
+        }
         "agent.toolCatalog.domains.dude_task.name" => "Dude tasks",
         "agent.toolCatalog.domains.dude_task.description" => "Manage tasks owned by the Dude.",
         "agent.toolCatalog.domains.dude_work.name" => "Dude work changes",
-        "agent.toolCatalog.domains.dude_work.description" => "Record and resolve Dude work changes.",
+        "agent.toolCatalog.domains.dude_work.description" => {
+            "Record and resolve Dude work changes."
+        }
         "agent.toolCatalog.domains.dude_notification.name" => "Dude notifications",
-        "agent.toolCatalog.domains.dude_notification.description" => "Notify the user about Dude work changes.",
+        "agent.toolCatalog.domains.dude_notification.description" => {
+            "Notify the user about Dude work changes."
+        }
         "agent.toolCatalog.domains.dude.description" => {
             "Dude-owned background work and platform notifications."
         }
@@ -59,13 +65,26 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.dude.notification_page.name" => "List my notifications",
         "agent.toolCatalog.tools.dude.notification_get.name" => "Read my notification",
-        "agent.toolCatalog.tools.dude.notification_page.description" => "Page current notification records for this Dude and bound user. Returns actual readAt, resolvedAt and archivedAt. delivery.persisted means stored; received/pushed are null because no browser or push receipt exists. includeArchived defaults to false. Deleted notifications are not returned.",
-        "agent.toolCatalog.tools.dude.notification_get.description" => "Read a notification by notificationId within this Dude and bound user. Returns current stored status, not the original work-change snapshot. received/pushed=null means unknown, not delivered. Deleted or inaccessible records return not found.",
-        "agent.toolCatalog.tools.dude.notification_page.sampleResultSummary" | "agent.toolCatalog.tools.dude.notification_get.sampleResultSummary" => "Current authorized notification status and unknown push/receipt state.",
+        "agent.toolCatalog.tools.dude.notification_page.description" => {
+            "Page current notification records for this Dude and bound user. Returns actual readAt, resolvedAt and archivedAt. delivery.persisted means stored; received/pushed are null because no browser or push receipt exists. includeArchived defaults to false. Deleted notifications are not returned."
+        }
+        "agent.toolCatalog.tools.dude.notification_get.description" => {
+            "Read a notification by notificationId within this Dude and bound user. Returns current stored status, not the original work-change snapshot. received/pushed=null means unknown, not delivered. Deleted or inaccessible records return not found."
+        }
+        "agent.toolCatalog.tools.dude.notification_page.sampleResultSummary"
+        | "agent.toolCatalog.tools.dude.notification_get.sampleResultSummary" => {
+            "Current authorized notification status and unknown push/receipt state."
+        }
         "agent.toolCatalog.tools.task.get.name" => "Read task and flow",
-        "agent.toolCatalog.tools.task.common.params.status" => "Exact statusCode in the task's flow. DEFAULT: NOT_STARTED, IN_PROGRESS, REOPEN, CLOSED. Read task_get (Dude: dude_task_get) for custom flows. CLOSED completes the task; use a valid non-CLOSED status to reopen (omitted progress resets to 0).",
-        "agent.toolCatalog.tools.task.get.description" => "Read an authorized task and its taskFlow.statuses with exact statusCode values. CLOSED means completed; to reopen, task_update with a valid non-CLOSED status and optional progress (defaults to 0 on reopen). Restore an archived task before reopening. No transition graph is enforced beyond flow membership.",
-        "agent.toolCatalog.tools.task.get.sampleResultSummary" => "Task detail, current state and legal statuses for its flow.",
+        "agent.toolCatalog.tools.task.common.params.status" => {
+            "Exact statusCode in the task's flow. DEFAULT: NOT_STARTED, IN_PROGRESS, REOPEN, CLOSED. Read task_get (Dude: dude_task_get) for custom flows. CLOSED completes the task; use a valid non-CLOSED status to reopen (omitted progress resets to 0)."
+        }
+        "agent.toolCatalog.tools.task.get.description" => {
+            "Read an authorized task and its taskFlow.statuses with exact statusCode values. CLOSED means completed; to reopen, task_update with a valid non-CLOSED status and optional progress (defaults to 0 on reopen). Restore an archived task before reopening. No transition graph is enforced beyond flow membership."
+        }
+        "agent.toolCatalog.tools.task.get.sampleResultSummary" => {
+            "Task detail, current state and legal statuses for its flow."
+        }
         "agent.toolCatalog.tools.dude.notify.name" => "Notify the user",
         "agent.toolCatalog.tools.dude.soul_read.name" => "Read soul",
         "agent.toolCatalog.tools.dude.soul_update.name" => "Update soul",
@@ -107,7 +126,7 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.domains.memory.name" => "Memory Tools",
         "agent.toolCatalog.domains.memory.description" => {
-            "Search, save, and soft-delete scoped memories."
+            "Search, read, save, enable, disable and delete reliable memories."
         }
         "agent.toolCatalog.domains.resource.name" => "Resource Tools",
         "agent.toolCatalog.domains.resource.description" => {
@@ -177,29 +196,27 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.workspace.get.params.workspaceCode" => "Workspace code to load.",
         "agent.toolCatalog.tools.memory.search.name" => "Search memories",
         "agent.toolCatalog.tools.memory.search.description" => {
-            "Search scoped memories or build a context pack for the current agent run. USER/WORK_DOMAIN work without a workspace; SPACE requires a bound workspace."
+            "Search relevant enabled memories in the host-resolved user, workspace and all enabled domains. Parameters may only narrow access."
         }
         "agent.toolCatalog.tools.memory.search.sampleResultSummary" => {
-            "Returns matching memory items and an optional context pack."
+            "Returns relevant memory excerpts with their original sources and versions."
         }
         "agent.toolCatalog.tools.memory.search.params.query" => {
-            "Search text. Optional when memoryCode is set or when searching accessible scoped memories with an empty query."
-        }
-        "agent.toolCatalog.tools.memory.search.params.mode" => {
-            "SEARCH returns results; CONTEXT_PACK returns baseline injectable memories plus query-related memories."
+            "Required question or search text."
         }
         "agent.toolCatalog.tools.memory.search.params.limit" => {
-            "Maximum number of memories to return. Defaults to 10."
+            "Maximum number of memories to return. Defaults to 8."
         }
-        "agent.toolCatalog.tools.memory.search.params.tokenBudget" => {
-            "Maximum context-pack token budget. Defaults to 1200."
+        "agent.toolCatalog.tools.memory.get.name" => "Get memory",
+        "agent.toolCatalog.tools.memory.get.description" => {
+            "Read the complete original record, sources and version before editing."
         }
-        "agent.toolCatalog.tools.memory.search.params.trace" => {
-            "Whether to persist a RAG search trace for diagnostics."
+        "agent.toolCatalog.tools.memory.get.sampleResultSummary" => {
+            "Returns the complete original record."
         }
         "agent.toolCatalog.tools.memory.save.name" => "Save memory",
         "agent.toolCatalog.tools.memory.save.description" => {
-            "Create or update a scoped memory card. Defaults to USER, which works without a workspace; SPACE requires a bound workspace. scopeCode cannot supply a missing workspace binding."
+            "Save reliable information. Defaults to User and enabled. Edits require memoryCode and the current version; host resolves scope and source."
         }
         "agent.toolCatalog.tools.memory.save.sampleResultSummary" => {
             "Returns the saved memory code and write status."
@@ -208,43 +225,18 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
             "Memory text to store. Required for new memories."
         }
         "agent.toolCatalog.tools.memory.save.params.title" => "Optional memory title.",
-        "agent.toolCatalog.tools.memory.save.params.semanticKey" => {
-            "Stable semantic key used to derive the memory identity when memoryCode is omitted."
-        }
-        "agent.toolCatalog.tools.memory.save.params.injectable" => {
-            "Whether the memory may be included in context packs."
-        }
-        "agent.toolCatalog.tools.memory.save.params.importanceScore" => {
-            "Optional importance score."
-        }
-        "agent.toolCatalog.tools.memory.save.params.confidenceScore" => {
-            "Optional confidence score."
-        }
-        "agent.toolCatalog.tools.memory.save.params.qualityScore" => "Optional quality score.",
         "agent.toolCatalog.tools.memory.save.params.expiresAt" => {
             "Optional expiration timestamp in milliseconds."
         }
-        "agent.toolCatalog.tools.memory.save.params.derivedSourceType" => {
-            "Optional upstream source type for derived memories."
-        }
-        "agent.toolCatalog.tools.memory.save.params.derivedSourceCode" => {
-            "Optional upstream source code for derived memories."
-        }
-        "agent.toolCatalog.tools.memory.save.params.sourceRefs" => {
-            "Optional array of source reference objects."
-        }
         "agent.toolCatalog.tools.memory.delete.name" => "Delete memory",
         "agent.toolCatalog.tools.memory.delete.description" => {
-            "Soft-delete a memory by archiving or disabling it."
+            "Delete a memory using its code and current version."
         }
         "agent.toolCatalog.tools.memory.delete.sampleResultSummary" => {
             "Returns the memory code and delete action."
         }
         "agent.toolCatalog.tools.memory.delete.params.reason" => {
             "Human-readable reason for deleting the memory."
-        }
-        "agent.toolCatalog.tools.memory.delete.params.deleteMode" => {
-            "ARCHIVE marks the memory archived; DISABLE marks it disabled."
         }
         "agent.toolCatalog.tools.todo.update.name" => "Update session todos",
         "agent.toolCatalog.tools.todo.update.description" => {
@@ -265,25 +257,13 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.todo.update.params.priority" => "Todo priority.",
         "agent.toolCatalog.tools.memory.common.params.memoryCode" => {
-            "Memory code in U/D/S:scopeCode:sourceCode:sourceVersion format."
+            "Opaque memory code returned by search or save."
         }
         "agent.toolCatalog.tools.memory.common.params.scope" => {
-            "Memory scope. USER uses the current user, WORK_DOMAIN uses the current work domain, SPACE uses the current workspace."
+            "User, Space or WorkDomain; narrowing only. Without a workspace, Space is unavailable."
         }
         "agent.toolCatalog.tools.memory.common.params.scopeCode" => {
             "Optional explicit scope code. It must belong to the current run context."
-        }
-        "agent.toolCatalog.tools.memory.common.params.memoryType" => {
-            "Optional memory type filter or value."
-        }
-        "agent.toolCatalog.tools.memory.common.params.memoryStatus" => {
-            "Memory status. Searches default to ACTIVE."
-        }
-        "agent.toolCatalog.tools.memory.common.params.reviewStatus" => {
-            "Review status. Searches default to APPROVED."
-        }
-        "agent.toolCatalog.tools.memory.common.params.metadata" => {
-            "Optional memory metadata object."
         }
         "agent.toolCatalog.tools.task.create.name" => "Create task",
         "agent.toolCatalog.tools.task.create.description" => {
@@ -400,13 +380,26 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.dude.notification_page.name" => "查询本人通知",
         "agent.toolCatalog.tools.dude.notification_get.name" => "读取本人通知",
-        "agent.toolCatalog.tools.dude.notification_page.description" => "分页查询当前 Dude 和当前用户有权访问的通知，返回实时 readAt、resolvedAt、archivedAt。delivery.persisted 仅表示已落库；未采集浏览器或推送回执，received/pushed 为 null（未知）。默认不含归档，已删除通知不返回。",
-        "agent.toolCatalog.tools.dude.notification_get.description" => "按 notificationId 查询当前 Dude、当前用户的通知。返回当前存储状态，不使用事项里的旧快照。received/pushed=null 表示未知，不能解释为用户已收到。已删除或无权访问时返回未找到。",
-        "agent.toolCatalog.tools.dude.notification_page.sampleResultSummary" | "agent.toolCatalog.tools.dude.notification_get.sampleResultSummary" => "当前有权访问的通知状态，推送与接收回执为未知。",
+        "agent.toolCatalog.tools.dude.notification_page.description" => {
+            "分页查询当前 Dude 和当前用户有权访问的通知，返回实时 readAt、resolvedAt、archivedAt。delivery.persisted 仅表示已落库；未采集浏览器或推送回执，received/pushed 为 null（未知）。默认不含归档，已删除通知不返回。"
+        }
+        "agent.toolCatalog.tools.dude.notification_get.description" => {
+            "按 notificationId 查询当前 Dude、当前用户的通知。返回当前存储状态，不使用事项里的旧快照。received/pushed=null 表示未知，不能解释为用户已收到。已删除或无权访问时返回未找到。"
+        }
+        "agent.toolCatalog.tools.dude.notification_page.sampleResultSummary"
+        | "agent.toolCatalog.tools.dude.notification_get.sampleResultSummary" => {
+            "当前有权访问的通知状态，推送与接收回执为未知。"
+        }
         "agent.toolCatalog.tools.task.get.name" => "读取任务及状态流程",
-        "agent.toolCatalog.tools.task.common.params.status" => "任务流程中精确的 statusCode。DEFAULT：NOT_STARTED、IN_PROGRESS、REOPEN、CLOSED。自定义流程先读取 task_get（Dude 使用 dude_task_get）。CLOSED 关闭任务；合法的非 CLOSED 状态可重开（省略 progress 时重置为 0）。",
-        "agent.toolCatalog.tools.task.get.description" => "读取授权范围内的任务，以及 taskFlow.statuses 中精确的 statusCode。CLOSED 表示已关闭；重开时调用 task_update，指定合法的非 CLOSED 状态，可选 progress（重开省略时重置为 0）。归档任务先恢复再重开。当前只校验流程状态成员，不提供虚构的迁移图。",
-        "agent.toolCatalog.tools.task.get.sampleResultSummary" => "任务详情、当前状态及所属流程的合法状态。",
+        "agent.toolCatalog.tools.task.common.params.status" => {
+            "任务流程中精确的 statusCode。DEFAULT：NOT_STARTED、IN_PROGRESS、REOPEN、CLOSED。自定义流程先读取 task_get（Dude 使用 dude_task_get）。CLOSED 关闭任务；合法的非 CLOSED 状态可重开（省略 progress 时重置为 0）。"
+        }
+        "agent.toolCatalog.tools.task.get.description" => {
+            "读取授权范围内的任务，以及 taskFlow.statuses 中精确的 statusCode。CLOSED 表示已关闭；重开时调用 task_update，指定合法的非 CLOSED 状态，可选 progress（重开省略时重置为 0）。归档任务先恢复再重开。当前只校验流程状态成员，不提供虚构的迁移图。"
+        }
+        "agent.toolCatalog.tools.task.get.sampleResultSummary" => {
+            "任务详情、当前状态及所属流程的合法状态。"
+        }
         "agent.toolCatalog.tools.dude.notify.name" => "通知用户",
         "agent.toolCatalog.tools.dude.soul_read.name" => "读取灵魂",
         "agent.toolCatalog.tools.dude.soul_update.name" => "更新灵魂",
@@ -486,49 +479,36 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.workspace.get.params.workspaceCode" => "要读取的工作区编码。",
         "agent.toolCatalog.tools.memory.search.name" => "检索记忆",
         "agent.toolCatalog.tools.memory.search.description" => {
-            "检索当前运行上下文可访问的记忆，或生成可注入上下文包。USER/WORK_DOMAIN 无需工作区；SPACE 须绑定工作区。"
+            "按相关性检索当前用户、当前工作区及全部启用领域中的有效记忆；参数只能缩小宿主范围。"
         }
         "agent.toolCatalog.tools.memory.search.sampleResultSummary" => {
-            "返回匹配的记忆条目和可选上下文包。"
+            "返回相关记忆片段、原始来源和版本。"
         }
         "agent.toolCatalog.tools.memory.search.params.query" => {
-            "检索文本；提供 memoryCode 或使用空查询检索可访问记忆时可省略。"
+            "必填的问题或检索文本。"
         }
-        "agent.toolCatalog.tools.memory.search.params.mode" => {
-            "SEARCH 返回结果列表；CONTEXT_PACK 返回默认可注入记忆和当前 query 相关记忆。"
+        "agent.toolCatalog.tools.memory.search.params.limit" => "最多返回的记忆数量，默认 8。",
+        "agent.toolCatalog.tools.memory.get.name" => "读取记忆",
+        "agent.toolCatalog.tools.memory.get.description" => {
+            "按编码读取完整原文、来源和版本，编辑前先读取。"
         }
-        "agent.toolCatalog.tools.memory.search.params.limit" => "最多返回的记忆数量，默认 10。",
-        "agent.toolCatalog.tools.memory.search.params.tokenBudget" => {
-            "上下文包 token 预算上限，默认 1200。"
-        }
-        "agent.toolCatalog.tools.memory.search.params.trace" => "是否记录 RAG 检索诊断轨迹。",
+        "agent.toolCatalog.tools.memory.get.sampleResultSummary" => "返回完整记忆记录。",
         "agent.toolCatalog.tools.memory.save.name" => "保存记忆",
-        "agent.toolCatalog.tools.memory.save.description" => "创建或更新有作用域的记忆卡片。默认 USER，无需工作区；SPACE 须绑定工作区，scopeCode 不能补充工作区绑定。",
+        "agent.toolCatalog.tools.memory.save.description" => {
+            "保存可靠信息，默认个人范围并启用；编辑必须携带 memoryCode 和当前 version，范围与来源由宿主解析。"
+        }
         "agent.toolCatalog.tools.memory.save.sampleResultSummary" => {
             "返回保存后的 memoryCode 和写入状态。"
         }
         "agent.toolCatalog.tools.memory.save.params.text" => "要保存的记忆正文；新建记忆时必填。",
         "agent.toolCatalog.tools.memory.save.params.title" => "可选的记忆标题。",
-        "agent.toolCatalog.tools.memory.save.params.semanticKey" => {
-            "稳定语义键；未传 memoryCode 时用于派生记忆身份。"
-        }
-        "agent.toolCatalog.tools.memory.save.params.injectable" => "该记忆是否可进入上下文包。",
-        "agent.toolCatalog.tools.memory.save.params.importanceScore" => "可选的重要性评分。",
-        "agent.toolCatalog.tools.memory.save.params.confidenceScore" => "可选的置信度评分。",
-        "agent.toolCatalog.tools.memory.save.params.qualityScore" => "可选的质量评分。",
         "agent.toolCatalog.tools.memory.save.params.expiresAt" => "可选的过期时间戳，单位毫秒。",
-        "agent.toolCatalog.tools.memory.save.params.derivedSourceType" => "可选的派生来源类型。",
-        "agent.toolCatalog.tools.memory.save.params.derivedSourceCode" => "可选的派生来源编码。",
-        "agent.toolCatalog.tools.memory.save.params.sourceRefs" => "可选的来源引用对象数组。",
         "agent.toolCatalog.tools.memory.delete.name" => "删除记忆",
-        "agent.toolCatalog.tools.memory.delete.description" => "通过归档或禁用来软删除记忆。",
+        "agent.toolCatalog.tools.memory.delete.description" => "按记忆编码和当前版本删除记忆。",
         "agent.toolCatalog.tools.memory.delete.sampleResultSummary" => {
             "返回 memoryCode 和删除动作。"
         }
         "agent.toolCatalog.tools.memory.delete.params.reason" => "删除记忆的人类可读原因。",
-        "agent.toolCatalog.tools.memory.delete.params.deleteMode" => {
-            "ARCHIVE 表示归档；DISABLE 表示禁用。"
-        }
         "agent.toolCatalog.tools.todo.update.name" => "更新会话待办",
         "agent.toolCatalog.tools.todo.update.description" => "替换当前聊天会话的工作状态待办列表。",
         "agent.toolCatalog.tools.todo.update.sampleResultSummary" => {
@@ -544,22 +524,14 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.todo.update.params.priority" => "待办优先级。",
         "agent.toolCatalog.tools.memory.common.params.memoryCode" => {
-            "记忆编码，格式为 U/D/S:scopeCode:sourceCode:sourceVersion。"
+            "检索或保存返回的记忆编码，不猜测其格式。"
         }
         "agent.toolCatalog.tools.memory.common.params.scope" => {
-            "记忆作用域：USER 使用当前用户，WORK_DOMAIN 使用当前工作域，SPACE 使用当前工作区。"
+            "范围协议值为 User、Space、WorkDomain，只能缩小宿主范围；没有工作区时不能使用 Space。"
         }
         "agent.toolCatalog.tools.memory.common.params.scopeCode" => {
             "可选的显式作用域编码，必须属于当前运行上下文。"
         }
-        "agent.toolCatalog.tools.memory.common.params.memoryType" => "可选的记忆类型筛选或取值。",
-        "agent.toolCatalog.tools.memory.common.params.memoryStatus" => {
-            "记忆状态；检索默认使用 ACTIVE。"
-        }
-        "agent.toolCatalog.tools.memory.common.params.reviewStatus" => {
-            "审核状态；检索默认使用 APPROVED。"
-        }
-        "agent.toolCatalog.tools.memory.common.params.metadata" => "可选的记忆元数据对象。",
         "agent.toolCatalog.tools.task.create.name" => "创建任务",
         "agent.toolCatalog.tools.task.create.description" => "在当前或指定工作区中创建任务。",
         "agent.toolCatalog.tools.task.create.sampleResultSummary" => "返回新创建任务的详情。",

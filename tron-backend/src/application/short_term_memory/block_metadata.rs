@@ -208,6 +208,14 @@ const HOST_BLOCKS: &[(&str, &str, &str, &str, &str, CompressionSource)] = &[
         CompressionSource::Keep,
     ),
     (
+        "long_term_memory",
+        "Long-term memory",
+        "Relevant enabled memories, with original sources and retrieval diagnostics.",
+        "长期记忆",
+        "按相关性召回的启用记忆，展示原始来源、实际用量和检索异常。",
+        CompressionSource::DataPolicy,
+    ),
+    (
         "knowledge_base",
         "Knowledge-base information",
         "Knowledge-base information and retrieved reference material available within the current agent's authorization scope.",

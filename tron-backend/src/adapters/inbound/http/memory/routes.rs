@@ -1,14 +1,15 @@
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, patch, post},
 };
 
 use crate::app::AppState;
 
 use super::handler::{
-    archive_memory_record, create_memory_record, create_work_domain, disable_memory_record,
-    disable_work_domain, enable_work_domain, get_memory_record, list_memory_records,
-    list_work_domains, patch_memory_record, patch_work_domain,
+    create_memory_record, create_work_domain, delete_memory_record, disable_work_domain,
+    enable_work_domain, get_memory_record, list_work_domains, patch_memory_record,
+    patch_work_domain, query_memory_records,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -29,20 +30,13 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/memory/domains/{domain_code}/disable",
             post(disable_work_domain),
         )
+        .route("/api/v1/memory/records/query", post(query_memory_records))
+        .route("/api/v1/memory/records", post(create_memory_record))
         .route(
-            "/api/v1/memory/workspaces/{workspace_code}/records",
-            get(list_memory_records).post(create_memory_record),
+            "/api/v1/memory/records/{memory_code}",
+            get(get_memory_record)
+                .patch(patch_memory_record)
+                .delete(delete_memory_record),
         )
-        .route(
-            "/api/v1/memory/workspaces/{workspace_code}/records/{memory_code}",
-            get(get_memory_record).patch(patch_memory_record),
-        )
-        .route(
-            "/api/v1/memory/workspaces/{workspace_code}/records/{memory_code}/archive",
-            post(archive_memory_record),
-        )
-        .route(
-            "/api/v1/memory/workspaces/{workspace_code}/records/{memory_code}/disable",
-            post(disable_memory_record),
-        )
+        .layer(DefaultBodyLimit::max(3 * 1024 * 1024))
 }

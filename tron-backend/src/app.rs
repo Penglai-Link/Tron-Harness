@@ -396,6 +396,8 @@ impl AppState {
                     source: crate::domain::rag::RagError::StorageFailure,
                 })?;
         }
+        let memory_repository = rag.repository_handle().lock().expect("RAG repository").memory_repository();
+        let rag = rag.with_memory_repository(memory_repository);
         let knowledge_bases = crate::application::knowledge_base::KnowledgeBaseService::new(
             knowledge_base_repository,
             rag.clone(),
@@ -431,6 +433,7 @@ impl AppState {
         )
         .expect("initialize Framework storage configuration");
         agent_framework.bind_runtime_config(runtime_config.clone());
+        agent_framework.bind_memories(memory.clone());
         agent_framework.bind_navigation(navigation.clone()).expect("capability navigation catalog");
         agent_framework.bind_prompt_service(prompts.clone());
         agent_framework

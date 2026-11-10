@@ -25,7 +25,6 @@ export function useSystemConfig() {
     return () => controller.abort();
   }, [refreshKey]);
 
-  const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
   const save = useCallback(async (changes: SystemConfigChange[], confirmMigration: boolean) => {
     if (!document) return null;
     setSaving(true);
@@ -42,5 +41,5 @@ export function useSystemConfig() {
     }
   }, [document]);
 
-  return { document, error, loading, refresh, save, saving };
+  return { document, error, loading, save, saving };
 }

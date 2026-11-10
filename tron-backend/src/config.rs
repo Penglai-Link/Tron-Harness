@@ -46,7 +46,7 @@ const DEFAULT_HTTP_POOL_IDLE_TIMEOUT_MS: u64 = 90_000;
 const DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST: usize = 32;
 const DEFAULT_HTTP_TCP_KEEPALIVE_MS: u64 = 30_000;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AppConfig {
     pub application_config_path: String,
     pub bind_address: String,
@@ -62,6 +62,7 @@ pub struct AppConfig {
     pub http_clients: HttpClientProfilesConfig,
     pub mineru: MineruConfig,
     pub model_invocation: ModelInvocationConfig,
+    pub rag_retrieval: crate::application::rag::RagRetrievalConfig,
     pub short_term_memory: ShortTermMemoryConfig,
     pub event_bus: EventBusConfig,
     pub navigation: NavigationConfig,
@@ -133,6 +134,7 @@ impl AppConfig {
             http_clients: HttpClientProfilesConfig::default_profiles(),
             mineru: MineruConfig::default(),
             model_invocation: ModelInvocationConfig::default(),
+            rag_retrieval: crate::application::rag::RagRetrievalConfig::default(),
             short_term_memory: ShortTermMemoryConfig::default(),
             event_bus: EventBusConfig::default(),
             navigation: NavigationConfig { max_depth: 16 },

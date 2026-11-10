@@ -11,6 +11,7 @@ pub(crate) type QueryEmbeddingCache = BTreeMap<
         Option<usize>,
         Option<String>,
         Option<String>,
+        String,
     ),
     Result<Vec<f32>, String>,
 >;

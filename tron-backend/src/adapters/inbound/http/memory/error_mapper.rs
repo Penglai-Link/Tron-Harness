@@ -1,30 +1,47 @@
+use crate::{
+    application::memory::MemoryError, response::ApiResponse, shared::locale::SupportedLocale,
+};
 use axum::{
     Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-
-use crate::{application::memory::MemoryError, response::ApiResponse};
-
-pub fn memory_error_response(error: MemoryError) -> Response {
-    let (status, code, message) = match error {
-        MemoryError::Validation(message) => {
-            (StatusCode::BAD_REQUEST, "MEMORY_REQUEST_INVALID", message)
-        }
-        MemoryError::NotFound(message) => (StatusCode::NOT_FOUND, "MEMORY_NOT_FOUND", message),
-        MemoryError::Forbidden(message) => (StatusCode::FORBIDDEN, "MEMORY_FORBIDDEN", message),
-        MemoryError::Conflict(message) => (StatusCode::CONFLICT, "MEMORY_CONFLICT", message),
-        MemoryError::Storage(message) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "MEMORY_STORAGE_FAILED",
-            message,
-        ),
-        MemoryError::Rag(message) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "MEMORY_RAG_FAILED",
-            message,
-        ),
-    };
-
-    (status, Json(ApiResponse::error(code, message))).into_response()
+pub struct ApiError(pub MemoryError, pub SupportedLocale);
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let d = self.0.descriptor();
+        let status = match self.0 {
+            MemoryError::Validation(_) => StatusCode::BAD_REQUEST,
+            MemoryError::NotFound(_) => StatusCode::NOT_FOUND,
+            MemoryError::Forbidden(_) => StatusCode::FORBIDDEN,
+            MemoryError::Conflict(_) => StatusCode::CONFLICT,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let (zh, en) = match d.message_key {
+            "tron.memory.invalid" => (
+                "记忆内容、范围或分页参数无效",
+                "Invalid memory content, scope or pagination",
+            ),
+            "tron.memory.not_found" => ("记忆不存在", "Memory not found"),
+            "tron.memory.forbidden" => ("无权访问此记忆范围", "Memory scope is not accessible"),
+            "tron.memory.conflict" => (
+                "记忆已变更或存在不同内容，请刷新后重新编辑",
+                "Memory changed or contains conflicting content; refresh before editing",
+            ),
+            "tron.memory.index" => ("记忆索引暂不可用", "Memory index is unavailable"),
+            _ => ("记忆存储失败", "Could not access memory storage"),
+        };
+        (
+            status,
+            Json(ApiResponse::protocol_error(
+                d.code,
+                if self.1 == SupportedLocale::EnUs {
+                    en
+                } else {
+                    zh
+                },
+            )),
+        )
+            .into_response()
+    }
 }

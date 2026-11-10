@@ -1416,55 +1416,23 @@ impl RagAccessResolver for KnowledgeBaseService {
                 &identity.agent_code,
             )
             .map_err(|_| RagError::SearchScopeInvalid)?;
-        for corpus in ["memory-card", "skill"] {
-            let settings = self.rag.settings_for_corpus(corpus)?;
-            let skill_sources = if corpus == "skill" {
-                self.allowed_skill_sources(&identity.agent_code)?
-            } else {
-                vec![]
-            };
-            if corpus == "skill" && skill_sources.is_empty() {
-                continue;
-            }
-            let scopes = if corpus == "skill" {
-                vec![RagSearchScope {
-                    scope_type: "SPACE".into(),
-                    scope_code: "PLATFORM".into(),
-                }]
-            } else {
-                vec![
-                    RagSearchScope {
-                        scope_type: "USER".into(),
-                        scope_code: identity.user_code.clone(),
-                    },
-                    RagSearchScope {
-                        scope_type: "SPACE".into(),
-                        scope_code: identity.workspace_code.clone(),
-                    },
-                    RagSearchScope {
-                        scope_type: "AGENT".into(),
-                        scope_code: crate::application::memory::MemoryRunContext::new(
-                            &identity.user_code,
-                            &identity.workspace_code,
-                        )
-                        .work_domain_code,
-                    },
-                ]
-            };
+        let corpus = "skill";
+        let settings = self.rag.settings_for_corpus(corpus)?;
+            let sources = self.allowed_skill_sources(&identity.agent_code)?;
+            if !sources.is_empty() {
             ranges.extend(self.rag.partition_ranges(AuthorizedRagRange {
                 corpus_id: corpus.into(),
-                scopes,
+                scopes: vec![RagSearchScope {
+                    scope_type: "SPACE".into(),
+                    scope_code: "PLATFORM".into(),
+                }],
                 source_version: "v1".into(),
-                filters: if corpus == "memory-card" {
-                    json!({"memoryStatus":"ACTIVE","reviewStatus":"APPROVED","injectable":true,"expiresAt":{"op":"gtOrNull","value":chrono::Utc::now().timestamp_millis()}})
-                } else {
-                    json!({"sourceCode":{"op":"in","value":skill_sources}})
-                },
+                filters: json!({"sourceCode":{"op":"in","value":sources}}),
                 embedding_model_code: settings.embedding_model_code,
                 embedding_dimension: Some(TRON_VECTOR_INDEX_DIMENSION),
                 provider_model: None,
                 embedding_fingerprint: None,
-                return_fields: if corpus=="memory-card" {vec!["expiresAt".into(),"injectable".into(),"memoryStatus".into(),"reviewStatus".into()]} else {vec![]},
+                return_fields: vec![],
                 fulltext: settings.fulltext,
                 vector: settings.vector,
                 graph: settings.graph,

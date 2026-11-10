@@ -90,6 +90,7 @@ impl Default for ContextProvidersConfig {
                 "application_context",
                 "topic_memo",
                 "current_session_working_state",
+                "long_term_memory",
                 "knowledge_base",
                 "dude_environment",
                 "dude_wakeup",
@@ -98,7 +99,7 @@ impl Default for ContextProvidersConfig {
             .to_vec(),
             shares: [
                 ("seed_prompt_prefix", 300),
-                ("current_session_history", 7300),
+                ("current_session_history", 6900),
                 ("conversation_history_summary", 200),
                 ("runtime_identity", 200),
                 ("dude_onboarding", 100),
@@ -109,6 +110,7 @@ impl Default for ContextProvidersConfig {
                 ("application_context", 400),
                 ("topic_memo", 200),
                 ("current_session_working_state", 200),
+                ("long_term_memory", 400),
                 ("knowledge_base", 400),
                 ("dude_environment", 50),
                 ("dude_wakeup", 50),
@@ -116,6 +118,7 @@ impl Default for ContextProvidersConfig {
             data_blocks: [
                 ("page_context", Some(2048)),
                 ("application_context", Some(16_000)),
+                ("long_term_memory", None),
                 ("knowledge_base", Some(1200)),
                 ("agent_directory", Some(2048)),
                 ("runtime_identity", Some(8192)),

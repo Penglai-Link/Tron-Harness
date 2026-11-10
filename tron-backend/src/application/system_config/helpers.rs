@@ -311,6 +311,7 @@ pub(super) fn effective_context_value(
     let effective = AppConfig::effective_config(content, path)
         .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
     set_value_at_path(&mut value, "modelInvocation", json!(effective.model_invocation))?;
+    set_value_at_path(&mut value, "ragRetrieval", json!(effective.rag_retrieval))?;
     for (field, command) in [
         ("systemAgents.codexCommand", effective.system_agents.codex_command),
         ("systemAgents.opencodeCommand", effective.system_agents.opencode_command),

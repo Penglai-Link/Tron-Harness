@@ -1,5 +1,8 @@
 // Help is scoped to full configuration paths; dynamic profile names use "profile".
 export const systemConfigDescriptions = {
+
+  "ragRetrieval_minVectorSimilarity": "Minimum cosine similarity for vector candidates, from 0 to 1. Initial value: 0.55. This also filters fallback results when reranking is unavailable. Leave blank to disable. Calibrate for your model and business data.",
+  "ragRetrieval_minRerankScore": "Minimum nonnegative relevance score for reranked results. The initial value of 0.5 is not calibrated; first confirm the model score scale. Leave blank to disable. Only qualifying results are returned, up to the requested limit.",
   "shortTermMemory_context_providers_historyRecentTurns": "Number of recent complete conversation turns kept verbatim when older history is summarized.",
   "shortTermMemory_context_providers_dataBlocks_block_maxTokens": "Token cap for this context block. All allocated block budgets must fit the model input window.",
   "shortTermMemory_context_providers_dataBlocks_block_strategy": "Block reduction strategy: keep preserves content, bound replaces oversized data with a bounded current snapshot, summarize produces a summary.",
@@ -30,8 +33,8 @@ export const systemConfigDescriptions = {
   "terminalWorkingDirectory": "Initial working directory of new terminals; determines where relative paths and terminal commands run.",
   "skillsRegistryRoot": "Filesystem root of the local skill registry, used to store and load skill packages.",
   "navigation_maxDepth": "Maximum nesting depth of sidebar menus, checked when menus are created or moved.",
-  "systemAgents_codexCommand": "Command or executable path used to launch the Codex external agent. It must be available to the backend process.",
-  "systemAgents_opencodeCommand": "Command or executable path used to launch the OpenCode external agent. It must be available to the backend process.",
+  "systemAgents_codexCommand": "Command or executable path for the Codex external agent; defaults to codex. It must be available to the backend process. Leave blank to disable scanning.",
+  "systemAgents_opencodeCommand": "Command or executable path for the OpenCode external agent; defaults to opencode. It must be available to the backend process. Leave blank to disable scanning.",
   "systemAgents_dshCommand": "Command or executable path for the DeepSeek Harness external agent; defaults to dsh. On macOS, the desktop bundle is checked if the default command is not on PATH. Leave empty to stop scanning. Login credentials are managed by dsh.",
   "variableCrypto_keyBase64": "Base64 encryption key for sensitive public-variable values. Migrate existing encrypted values before changing the key, or old values cannot be decrypted.",
   "resource_storage_defaultProfile": "Storage profile used by default for new file resources. It must reference a configured entry in profiles.",

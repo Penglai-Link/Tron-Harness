@@ -21,6 +21,7 @@ pub(crate) const HARNESS_TOOL_PROVIDER_ID: &str = "HarnessTools";
 /// Legacy workspace tool assignments resolve to Dude-specific implementations.
 pub(crate) fn dude_tool_replacement(code: &str) -> Option<&'static str> {
     match code {
+        "memory.get" => Some("dude.memory_get"),
         "memory.search" => Some("dude.memory_search"),
         "memory.save" => Some("dude.memory_save"),
         "memory.delete" => Some("dude.memory_delete"),
@@ -36,7 +37,7 @@ pub(crate) fn dude_tool_replacement(code: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn dude_workspace_tool(tool: &ToolCatalogRecord) -> bool {
-    matches!(tool.tool_code.as_str(), "memory.search" | "memory.save" | "memory.delete")
+    matches!(tool.tool_code.as_str(), "memory.search" | "memory.get" | "memory.save" | "memory.delete")
         || tool.input_schema.pointer("/properties/workspaceCode").is_some()
         || matches!(tool.domain_code.as_str(), "harness_rag" | "harness_app" | "harness_resource" | "harness_variable" | "harness_automation" | "harness_workspace" | "harness_prompt" | "harness_mcp" | "harness_worktree" | "chat_attachment" | "word" | "excel" | "fs" | "search" | "terminal" | "command")
 }

@@ -20,7 +20,8 @@ impl BackendRuntimeConfig {
 }
 
 pub(super) fn supports_hot_update(path: &str) -> bool {
-    path.starts_with("modelInvocation.")
+    path.starts_with("ragRetrieval.")
+        || path.starts_with("modelInvocation.")
         || path.starts_with("shortTermMemory.")
         || path.starts_with("mineru.imageDescription.")
         || matches!(
@@ -61,6 +62,9 @@ pub(super) fn apply_hot_settings(current: &mut AppConfig, next: AppConfig, paths
         current.mineru = next.mineru;
         current.mineru.ingestion.parse_capacity = parse_capacity;
         current.mineru.ingestion.embedding_capacity = embedding_capacity;
+    }
+    if changed("ragRetrieval.") {
+        current.rag_retrieval = next.rag_retrieval;
     }
     if changed("modelInvocation.") {
         current.model_invocation = next.model_invocation;

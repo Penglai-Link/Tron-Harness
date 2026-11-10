@@ -132,7 +132,11 @@ impl DudeMemorySourceCollector {
                             &workspace,
                             &owner,
                             &lineage,
-                            MemorySourceKind::Conversation,
+                            if message.role == eliteforge_agent_core::Role::User {
+                                MemorySourceKind::UserStatement
+                            } else {
+                                MemorySourceKind::Conversation
+                            },
                             &format!("{} {:?}: {}", message.created_at_ms, message.role, text),
                             cursors,
                         );

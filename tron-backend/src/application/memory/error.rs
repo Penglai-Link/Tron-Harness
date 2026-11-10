@@ -32,3 +32,21 @@ impl From<RagError> for MemoryError {
         Self::Rag(error.to_string())
     }
 }
+
+pub struct ApplicationErrorDescriptor {
+    pub code: &'static str,
+    pub message_key: &'static str,
+}
+impl MemoryError {
+    pub fn descriptor(&self) -> ApplicationErrorDescriptor {
+        let (code, message_key) = match self {
+            Self::Validation(_) => ("101042001", "tron.memory.invalid"),
+            Self::NotFound(_) => ("101042002", "tron.memory.not_found"),
+            Self::Forbidden(_) => ("101042003", "tron.memory.forbidden"),
+            Self::Conflict(_) => ("101042004", "tron.memory.conflict"),
+            Self::Storage(_) => ("101042005", "tron.memory.storage"),
+            Self::Rag(_) => ("101042006", "tron.memory.index"),
+        };
+        ApplicationErrorDescriptor { code, message_key }
+    }
+}

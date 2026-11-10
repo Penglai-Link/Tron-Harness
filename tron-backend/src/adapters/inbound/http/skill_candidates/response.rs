@@ -69,6 +69,9 @@ pub struct ListMemoryBatchVo {
     summary: Option<String>,
     source_count: usize,
     memory_count: usize,
+    saved_count: usize,
+    duplicate_skipped_count: usize,
+    unreliable_skipped_count: usize,
     created_at: i64,
     updated_at: i64,
 }
@@ -81,7 +84,10 @@ impl From<MemoryBatch> for ListMemoryBatchVo {
             status: b.status,
             summary: b.summary,
             source_count: b.sources.len(),
-            memory_count: b.memory_receipts.len(),
+            memory_count: b.saved_count,
+            saved_count: b.saved_count,
+            duplicate_skipped_count: b.duplicate_skipped_count,
+            unreliable_skipped_count: b.unreliable_skipped_count,
             created_at: b.created_at,
             updated_at: b.updated_at,
         }

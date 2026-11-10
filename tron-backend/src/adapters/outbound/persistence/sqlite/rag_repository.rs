@@ -5,6 +5,7 @@ mod indexes;
 mod ingest;
 mod ingest_values;
 mod lifecycle;
+mod memory_records;
 mod operations;
 
 mod search;

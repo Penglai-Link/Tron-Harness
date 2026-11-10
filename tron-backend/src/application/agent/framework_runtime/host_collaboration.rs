@@ -656,6 +656,7 @@ impl Runtime {
         request
             .extensions
             .insert(super::super::tools::tool_group_labels(context));
+        host.attach_memory_backend(context, &mut request.extensions);
         request.extensions.insert(HostExecution {
             harness: harness.clone(),
             state: Arc::new(Mutex::new(HostRunState::new(context.clone()))),

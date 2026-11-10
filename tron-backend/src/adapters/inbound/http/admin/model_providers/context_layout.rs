@@ -27,6 +27,8 @@ const NATIVE_IDS: &[&str] = &[
     "skills.catalog",
     "page_context",
     "application_context",
+    "topic_memo",
+    "long_term_memory",
     "knowledge_base",
     "dude_environment",
     "dude_wakeup",

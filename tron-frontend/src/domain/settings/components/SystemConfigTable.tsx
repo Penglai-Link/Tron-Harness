@@ -12,18 +12,24 @@ import { SelectItem } from "@/components/ui/select";
 import { useSystemConfig } from "@/domain/settings/hooks/useSystemConfig";
 import type { SystemConfigValue } from "@/domain/settings/model/SystemConfig";
 import { systemConfigHelp } from "../model/systemConfigHelp";
-import { userSystemConfigGroups } from "../model/userSystemConfig";
+import { defaultExternalAgentCommand, externalAgentCommandDefaults, isRetrievalThreshold, retrievalThresholdError, userSystemConfigGroups } from "../model/userSystemConfig";
 
-function NumericConfigInput({ label, value, disabled, onChange }: { label: string; value: SystemConfigValue; disabled: boolean; onChange: (value: number | null) => void }) {
+function NumericConfigInput({ label, value, disabled, onChange, draftValue, onDraftChange, invalid, describedBy, placeholder }: {
+  label: string; value: SystemConfigValue; disabled: boolean;
+  onChange: (value: number | null) => void;
+  draftValue?: string; onDraftChange?: (draft: string) => void;
+  invalid?: boolean; describedBy?: string; placeholder?: string;
+}) {
   const [draft, setDraft] = useState(value == null ? "" : String(value));
   useEffect(() => {
     const next = value == null ? "" : String(value);
     setDraft((current) => next === "" && (current === "-" || current.endsWith(".")) ? current : current && next !== "" && Number(current) === Number(next) ? current : next);
   }, [value]);
-  return <TextInput aria-label={label} disabled={disabled} type="text" inputMode="decimal" value={draft} onChange={(event) => {
+  return <TextInput aria-label={label} aria-invalid={invalid || undefined} aria-describedby={describedBy} placeholder={placeholder} disabled={disabled} type="text" inputMode="decimal" value={draftValue ?? draft} onChange={(event) => {
     const raw = event.target.value;
     if (!/^-?\d*(?:\.\d*)?$/.test(raw)) return;
     setDraft(raw);
+    onDraftChange?.(raw);
     onChange(raw && /\d$/.test(raw) && Number.isFinite(Number(raw)) ? Number(raw) : null);
   }} />;
 }
@@ -31,8 +37,9 @@ function NumericConfigInput({ label, value, disabled, onChange }: { label: strin
 export function SystemConfigTable() {
   const { t } = useTranslation("pages");
   const toast = useToast();
-  const { document, error, loading, refresh, save, saving } = useSystemConfig();
+  const { document, error, loading, save, saving } = useSystemConfig();
   const [changes, setChanges] = useState<Record<string, SystemConfigValue>>({});
+  const [numericDrafts, setNumericDrafts] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const groups = useMemo(() => {
@@ -46,6 +53,10 @@ export function SystemConfigTable() {
     })).filter(({ items }) => items.length > 0);
   }, [document]);
   const dirtyItems = groups.flatMap(({ items }) => items).filter((item) => Object.hasOwn(changes, item.path));
+
+  const hasInvalidThreshold = dirtyItems.some((item) => retrievalThresholdError(
+    item.path, numericDrafts[item.path] ?? (changes[item.path] == null ? "" : String(changes[item.path])),
+  ) !== null);
 
   function update(path: string, value: SystemConfigValue) {
     setChanges((current) => ({ ...current, [path]: value }));
@@ -61,10 +72,11 @@ export function SystemConfigTable() {
   }
 
   async function handleSave() {
-    if (!document || dirtyItems.length === 0) return;
+    if (!document || dirtyItems.length === 0 || hasInvalidThreshold) return;
     try {
       const result = await save(dirtyItems.map((item) => ({ path: item.path, value: changes[item.path] })), false);
       setChanges({});
+      setNumericDrafts({});
       const message = result?.migrationPaths.length ? "savedMigration" : result?.hotUpdatePaths.length
         ? result.restartPaths.length ? "savedMixed" : "savedHot"
         : result?.restartPaths.length ? "savedRestart" : "saved";
@@ -78,28 +90,31 @@ export function SystemConfigTable() {
     <SurfaceCard className="space-y-4 xl:col-span-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          <button
-            aria-controls="system-config-groups"
-            aria-expanded={expanded}
-            className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-left text-sm font-semibold text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            type="button"
-            onClick={() => setExpanded((current) => !current)}
-          >
-            <ChevronRight aria-hidden="true" className={`size-4 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
-            <span>{t("settingsGeneral.systemConfig.title")}</span>
-          </button>
+          <h2 id="system-config-title" className="text-sm font-semibold text-[var(--color-on-surface)]">
+            {t("settingsGeneral.systemConfig.title")}
+          </h2>
           <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.help")}>{t("settingsGeneral.systemConfig.description")}</InfoTooltip>
         </div>
-        <div className="flex gap-[12px]">
-          <Button disabled={loading || saving} onClick={refresh} variant="secondary">{t("settingsGeneral.systemConfig.actions.refresh")}</Button>
-          {dirtyItems.length > 0 && <Button disabled={saving} onClick={() => void handleSave()}>
+        <div className="flex flex-wrap items-center gap-3">
+          {dirtyItems.length > 0 && <Button disabled={saving || hasInvalidThreshold} onClick={() => void handleSave()}>
             {saving ? t("settingsGeneral.systemConfig.actions.saving") : t("settingsGeneral.systemConfig.actions.save", { count: dirtyItems.length })}
           </Button>}
+          <Button
+            aria-controls="system-config-groups"
+            aria-expanded={expanded}
+            aria-label={t(`settingsGeneral.systemConfig.actions.${expanded ? "collapseLabel" : "expandLabel"}`)}
+            size="sm"
+            type="button"
+            variant="ghost"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            {t(`settingsGeneral.systemConfig.actions.${expanded ? "collapse" : "expand"}`)}
+            <ChevronRight aria-hidden="true" data-icon="inline-end" className={`size-4 transition-transform motion-reduce:transition-none ${expanded ? "-rotate-90" : "rotate-90"}`} />
+          </Button>
         </div>
       </div>
 
-      {expanded && (
-        <div id="system-config-groups">
+        <div aria-labelledby="system-config-title" hidden={!expanded} id="system-config-groups" role="region">
           {loading && <p className="text-sm text-[var(--color-on-surface-variant)]">{t("settingsGeneral.systemConfig.loading")}</p>}
           {Boolean(error) && !loading && <p className="rounded-lg bg-[var(--color-error-container)] p-3 text-sm text-[var(--color-on-error-container)]">{error instanceof Error ? error.message : t("settingsGeneral.systemConfig.messages.loadFailed")}</p>}
 
@@ -121,10 +136,19 @@ export function SystemConfigTable() {
                 </button>
               </h3>
               {expandedGroups.has(group) && <div className="divide-y divide-[var(--color-outline-variant)]" id={`system-config-group-${group}`}>
+                {group === "systemAgents" && <div className="flex justify-end px-4 py-2">
+                  <Button variant="outline" disabled={saving} onClick={() => setChanges((current) => ({ ...current, ...externalAgentCommandDefaults }))}>
+                    {t("settingsGeneral.systemConfig.actions.restoreAgentDefaults")}
+                  </Button>
+                </div>}
                 {items.map((item) => {
                   const value = Object.hasOwn(changes, item.path) ? changes[item.path] : item.value;
                   const description = systemConfigHelp(item.path, t);
                   const label = t(`settingsGeneral.systemConfig.fields.${item.path.replaceAll(".", "_")}`);
+                  const defaultCommand = defaultExternalAgentCommand(item.path);
+                  const threshold = isRetrievalThreshold(item.path);
+                  const fieldError = retrievalThresholdError(item.path, numericDrafts[item.path] ?? (value == null ? "" : String(value)));
+                  const errorId = `system-config-error-${item.path.replaceAll(".", "-")}`;
                   return (
                     <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(300px,1fr)_minmax(260px,1.5fr)] lg:items-center" key={item.path}>
                       <div className="min-w-0">
@@ -144,17 +168,31 @@ export function SystemConfigTable() {
                           <SelectItem value="true">{t("settingsGeneral.systemConfig.values.true")}</SelectItem>
                           <SelectItem value="false">{t("settingsGeneral.systemConfig.values.false")}</SelectItem>
                         </SelectInput>
-                      ) : item.valueType === "number" && !item.sensitive ? (
-                        <NumericConfigInput label={label} value={value} disabled={saving} onChange={(next) => update(item.path, next)} />
+                      ) : (item.valueType === "number" || threshold) && !item.sensitive ? (
+                        <div className="space-y-1">
+                          <NumericConfigInput label={label} value={value} disabled={saving}
+                            draftValue={threshold ? numericDrafts[item.path] : undefined}
+                            onDraftChange={threshold ? (draft) => setNumericDrafts((current) => ({ ...current, [item.path]: draft })) : undefined}
+                            invalid={Boolean(fieldError)} describedBy={fieldError ? errorId : undefined}
+                            placeholder={threshold ? t("settingsGeneral.systemConfig.thresholdPlaceholder") : undefined}
+                            onChange={(next) => update(item.path, next)} />
+                          {fieldError && <p id={errorId} role="alert" className="text-sm text-destructive">{t(`settingsGeneral.systemConfig.validation.${fieldError}`)}</p>}
+                        </div>
                       ) : (
+                        <div className="space-y-1">
                         <TextInput
                           aria-label={label}
+                          aria-describedby={defaultCommand ? `system-config-default-${item.path.replaceAll(".", "-")}` : undefined}
                           disabled={saving}
-                          placeholder={item.sensitive ? t("settingsGeneral.systemConfig.sensitivePlaceholder") : undefined}
+                          placeholder={item.sensitive ? t("settingsGeneral.systemConfig.sensitivePlaceholder") : defaultCommand}
                           type={item.sensitive ? "password" : "text"}
                           value={value === null ? "" : String(value)}
                           onChange={(event) => update(item.path, item.valueType === "number" ? (event.target.value === "" ? null : Number(event.target.value)) : (item.path.includes(".prices.") && event.target.value === "" ? null : event.target.value))}
                         />
+                        {defaultCommand && <p id={`system-config-default-${item.path.replaceAll(".", "-")}`} className="text-xs text-[var(--color-on-surface-variant)]">
+                          {t("settingsGeneral.systemConfig.defaultCommand", { command: defaultCommand })}
+                        </p>}
+                        </div>
                       )}
                     </div>
                   );
@@ -163,7 +201,6 @@ export function SystemConfigTable() {
             </section>
           ))}
         </div>
-      )}
 
     </SurfaceCard>
   );

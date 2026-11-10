@@ -14,6 +14,7 @@ pub struct MemorySource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MemorySourceKind {
     Conversation,
+    UserStatement,
     TaskResult,
     MemoryReport,
     RuntimeLog,
@@ -24,7 +25,9 @@ impl MemorySource {
             && !self.lineage_dude_codes.iter().any(|code| code == dude)
             && matches!(
                 self.kind,
-                MemorySourceKind::Conversation | MemorySourceKind::TaskResult
+                MemorySourceKind::Conversation
+                    | MemorySourceKind::UserStatement
+                    | MemorySourceKind::TaskResult
             )
             && !self.excerpt.trim().is_empty()
     }
@@ -49,6 +52,9 @@ pub struct MemoryBatch {
     pub status: MemoryBatchStatus,
     pub sources: Vec<MemorySource>,
     pub memory_receipts: Vec<MemoryWriteReceipt>,
+    pub saved_count: usize,
+    pub duplicate_skipped_count: usize,
+    pub unreliable_skipped_count: usize,
     #[serde(default)]
     pub consolidation_plan: Option<serde_json::Value>,
     pub summary: Option<String>,
@@ -59,12 +65,20 @@ pub struct MemoryBatch {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryWriteReceipt {
+    pub proposal_key: String,
     pub semantic_key: String,
     pub workspace_code: String,
     pub memory_code: String,
     pub source_codes: Vec<String>,
     pub claim_kind: MemoryClaimKind,
     pub conflict_with_memory_code: Option<String>,
+    pub outcome: MemoryWriteOutcome,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MemoryWriteOutcome {
+    Saved,
+    DuplicateSkipped,
+    UnreliableSkipped,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MemoryClaimKind {

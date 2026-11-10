@@ -43,6 +43,8 @@ pub struct RagEvidence {
     pub row: RagSearchRow,
     pub channels: BTreeSet<String>,
     pub score: f64,
+    /// Native cosine score survives fusion even when the row came from fulltext.
+    pub vector_similarity: Option<f64>,
     /// Assembled source text; the matched publication row remains immutable.
     pub context_text: Option<String>,
     pub recall_ranks: BTreeMap<String, usize>,
@@ -66,6 +68,7 @@ impl RagEvidence {
             row,
             channels: BTreeSet::new(),
             score: 0.,
+            vector_similarity: None,
             context_text: None,
             recall_ranks: BTreeMap::new(),
             bundle: None,
@@ -152,6 +155,7 @@ where
         if !(1..=100).contains(&limit) {
             return Err(RagError::SearchRequestInvalid);
         }
+        let relevance = self.retrieval_config();
         let mut result = RagEvidenceResult::default();
         let mut merged = BTreeMap::<String, RagEvidence>::new();
         let mut embeddings = BTreeMap::<
@@ -160,22 +164,33 @@ where
                 Option<usize>,
                 Option<String>,
                 Option<String>,
+                String,
             ),
             Result<Vec<f32>, String>,
         >::new();
         for range in ranges {
-            if range.scopes.is_empty() {
+            if range.scopes.is_empty()
+                || range.filters["sourceCode"]["value"]
+                    .as_array()
+                    .is_some_and(|v| v.is_empty())
+            {
                 continue;
             }
+            let model_workspace = if range.corpus_id == "memory-card" {
+                super::MEMORY_MODEL_WORKSPACE
+            } else {
+                workspace
+            };
             let geometry = (
                 range.embedding_model_code.clone(),
                 range.embedding_dimension,
                 range.provider_model.clone(),
                 range.embedding_fingerprint.clone(),
+                model_workspace.to_owned(),
             );
             if range.vector && !query.trim().is_empty() && !embeddings.contains_key(&geometry) {
                 let before = self.runtime.embedding_fingerprint(
-                    workspace,
+                    model_workspace,
                     geometry.0.as_deref(),
                     geometry.1.unwrap_or(1024),
                 );
@@ -193,7 +208,7 @@ where
                     self.runtime
                         .embed_for_retrieval(
                             RagEmbeddingCall {
-                                workspace_code: workspace.into(),
+                                workspace_code: model_workspace.into(),
                                 model_code: geometry.0.clone(),
                                 input: query.into(),
                             },
@@ -234,7 +249,7 @@ where
                         })
                         .and_then(|values| {
                             let after = self.runtime.embedding_fingerprint(
-                                workspace,
+                                model_workspace,
                                 geometry.0.as_deref(),
                                 geometry.1.unwrap_or(1024),
                             );
@@ -293,10 +308,14 @@ where
                     limit: limit.saturating_mul(3).min(100),
                 });
                 match rows {
-                    Ok(rows) => {
+                    Ok(mut rows) => {
                         result
                             .stages
                             .push(stage(range, channel, started, rows.len(), None));
+                        if channel == "vector" {
+                            rows.retain(|row| relevance.accepts_vector(row.storage_score));
+                            result.stages.push(stage(range, "vector_relevance", started, rows.len(), None));
+                        }
                         merge_rrf(&mut merged, rows, channel);
                     }
                     Err(error) => {
@@ -316,7 +335,7 @@ where
             if range.graph && !query.trim().is_empty() {
                 let started = std::time::Instant::now();
                 match self
-                    .recall_graph_range(workspace, query, range, run, &mut embeddings)
+                    .recall_graph_range(model_workspace, query, range, run, &mut embeddings)
                     .await
                 {
                     Ok(graph) => {
@@ -372,9 +391,18 @@ where
         // order; never send an invalid empty query to a remote reranker.
         if query.trim().is_empty() {
             result.hits.truncate(limit);
-            result.stages.push(RagRetrievalStage { corpus_id: String::new(), channel: "rerank".into(), status: "SKIPPED".into(), hit_count: result.hits.len(), duration_ms: 0, error: None });
+            result.stages.push(RagRetrievalStage {
+                corpus_id: String::new(),
+                channel: "rerank".into(),
+                status: "SKIPPED".into(),
+                hit_count: result.hits.len(),
+                duration_ms: 0,
+                error: None,
+            });
             return Ok(result);
         }
+        let relevance = self.retrieval_config();
+        let mut reranked = false;
         if let Some(model) = rerank_model.filter(|model| !model.trim().is_empty()) {
             let rerank_started = std::time::Instant::now();
             let order = self
@@ -390,8 +418,7 @@ where
             let mut rerank_error = None;
             match order {
                 Ok(order)
-                    if !order.is_empty()
-                        && order.iter().all(|(index, score)| {
+                    if order.iter().all(|(index, score)| {
                             *index < result.hits.len() && score.is_finite()
                         })
                         && order
@@ -401,8 +428,10 @@ where
                             .len()
                             == order.len() =>
                 {
+                    reranked = true;
                     result.hits = order
                         .into_iter()
+                        .filter(|(_, score)| relevance.accepts_rerank(*score))
                         .map(|(index, score)| {
                             let mut hit = result.hits[index].clone();
                             hit.score = score;
@@ -411,14 +440,14 @@ where
                         .collect();
                 }
                 Ok(_) => {
-                    let error = "重排返回了无效结果，已保留融合排序".to_string();
+                    let error = "Reranker returned invalid results; fallback recall filters applied / 重排返回无效结果，已按召回阈值降级筛选".to_string();
                     result.warnings.push(error.clone());
                     rerank_error = Some(error);
                 }
                 Err(error) => {
                     result
                         .warnings
-                        .push(format!("重排失败，已保留融合排序: {error}"));
+                        .push(format!("Rerank failed; fallback recall filters applied / 重排失败，已按召回阈值降级筛选: {error}"));
                     rerank_error = Some(error);
                 }
             }
@@ -436,6 +465,17 @@ where
                 error: rerank_error,
             });
         }
+        if !reranked {
+            relevance.filter_fallback(&mut result.hits);
+        } else {
+            result.hits.sort_by(|a, b| b.score.total_cmp(&a.score)
+                .then_with(|| a.row.target_code.cmp(&b.row.target_code)));
+        }
+        result.stages.push(RagRetrievalStage {
+            corpus_id: String::new(), channel: "relevance_filter".into(),
+            status: "COMPLETED".into(), hit_count: result.hits.len(),
+            duration_ms: 0, error: None,
+        });
         result.hits.truncate(limit);
         Ok(result)
     }
@@ -478,15 +518,21 @@ fn merge_rrf(merged: &mut BTreeMap<String, RagEvidence>, rows: Vec<RagSearchRow>
         if !seen.insert(key.clone()) {
             continue;
         }
+        let vector_similarity = (channel == "vector").then_some(row.storage_score).flatten()
+            .filter(|score| score.is_finite());
         let evidence = merged.entry(key).or_insert_with(|| RagEvidence {
             row,
             channels: BTreeSet::new(),
             score: 0.0,
+            vector_similarity: None,
             context_text: None,
             recall_ranks: BTreeMap::new(),
             bundle: None,
             selected_blocks: BTreeSet::new(),
         });
+        if let Some(score) = vector_similarity {
+            evidence.vector_similarity = Some(evidence.vector_similarity.map_or(score, |current| current.max(score)));
+        }
         evidence.score += 1.0 / (60.0 + rank as f64 + 1.0);
         evidence.channels.insert(channel.into());
         evidence.recall_ranks.insert(channel.into(), rank);

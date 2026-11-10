@@ -412,6 +412,7 @@ impl FrameworkHost {
         request
             .extensions
             .insert(super::super::tools::tool_group_labels(&context));
+        self.attach_memory_backend(&context, &mut request.extensions);
         request.extensions.insert(HostExecution {
             harness: harness.clone(),
             state: state.clone(),

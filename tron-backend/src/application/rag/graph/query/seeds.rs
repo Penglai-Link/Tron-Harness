@@ -122,6 +122,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
                     Some(dimension),
                     provider.clone(),
                     Some(fingerprint.clone()),
+                    workspace.to_owned(),
                 );
                 if !cache.contains_key(&key) {
                     let embedded = self

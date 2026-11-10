@@ -14,6 +14,7 @@ const colors: Record<string, string> = {
   page_context: blend(1, 2),
   application_context: blend(4, 5),
   current_session_working_state: blend(3, 5),
+  long_term_memory: blend(3, 4),
   knowledge_base: blend(2, 3),
   dude_environment: blend(1, 3),
   dude_wakeup: blend(1, 5),

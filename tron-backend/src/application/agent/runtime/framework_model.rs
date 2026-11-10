@@ -14,6 +14,12 @@ impl ReactAgent {
         self.framework_host.as_ref().and_then(|h|h.dudes())
     }
 
+    pub(crate) fn framework_memories(&self) -> Option<crate::app::AppMemoryService> {
+        self.framework_host
+            .as_ref()
+            .and_then(|host| host.memories())
+    }
+
     pub(crate) fn framework_knowledge_bases(
         &self,
     ) -> Option<crate::application::knowledge_base::KnowledgeBaseService> {

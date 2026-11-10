@@ -17,6 +17,8 @@ use std::sync::Arc;
 mod agent_directory_context;
 #[path = "knowledge_base_context.rs"]
 mod knowledge_base_context;
+#[path = "long_term_memory_context.rs"]
+mod long_term_memory_context;
 #[path = "page_context.rs"]
 mod page_context;
 #[path = "topic_context.rs"]
@@ -172,7 +174,15 @@ pub(super) async fn assemble(
         if let Some(topic) = shares.get_mut("topic_memo") { *topic += extra; }
     }
     let quotas = memory::ContextShareAllocation::new(shares)?.allocate(available.max_tokens);
-    let quota = |id: &str| quotas.get(id).copied().unwrap_or(0);
+    let quota = |id: &str| {
+        let allocated = quotas.get(id).copied().unwrap_or(0);
+        if id == "long_term_memory" {
+            allocated.min(config.context.providers.data_blocks.get(id)
+                .and_then(|block| block.max_tokens).map(|cap| cap as usize).unwrap_or(usize::MAX))
+        } else {
+            allocated
+        }
+    };
     let seed = fw::ContextBlockConfig::new(fw::INSTRUCTIONS_BLOCK, fw::BlockBudget::tokens(quota("seed_prompt_prefix")));
     let knowledge_cap = quota("knowledge_base");
     let mut contributors: Vec<Arc<dyn fw::ContextContributor>> = Vec::new();
@@ -183,6 +193,24 @@ pub(super) async fn assemble(
         project_code: context.execution_scope.project_code.clone(),
         user_code: context.user_code.clone(),
     }));
+    contributors.push(Arc::new(
+        long_term_memory_context::LongTermMemoryContributor {
+            service: (!onboarding)
+                .then(|| host.harness.framework_memories())
+                .flatten(),
+            user: context.user_code.clone(),
+            workspace: if context.is_owning_dude() {
+                String::new()
+            } else {
+                context.execution_workspace_code().to_owned()
+            },
+            locale: context.locale.clone(),
+            allowance: crate::application::llm::ContextQueryAllowance {
+                calls: calls.clone(),
+                limit: config.context.providers.max_auxiliary_calls_per_step,
+            },
+        },
+    ));
     contributors.push(Arc::new(knowledge_base_context::KnowledgeBaseContributor {
         service: (!onboarding)
             .then(|| host.harness.framework_knowledge_bases())
@@ -327,6 +355,8 @@ pub(super) async fn assemble(
     let knowledge =
         fw::ContextBlockConfig::new("knowledge_base", fw::BlockBudget::tokens(knowledge_cap));
     configs.insert("knowledge_base".into(), knowledge);
+    let memory_cap = quota("long_term_memory");
+    configs.insert("long_term_memory".into(), fw::ContextBlockConfig::new("long_term_memory", fw::BlockBudget::tokens(memory_cap)));
     configs.insert("topic_memo".into(), fw::ContextBlockConfig::new("topic_memo", fw::BlockBudget::tokens(quota("topic_memo"))));
     let mut block = fw::ContextBlockConfig::new(
         fw::HISTORY_BLOCK,

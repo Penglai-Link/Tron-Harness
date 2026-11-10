@@ -252,6 +252,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     let mut dude_tools = Vec::new();
     for definition in &definitions {
         let (code, name, domain) = match definition.tool_code {
+            "memory.get" => ("dude.memory_get", "dude_memory_get", "dude_memory"),
             "memory.search" => ("dude.memory_search", "dude_memory_search", "dude_memory"),
             "memory.save" => ("dude.memory_save", "dude_memory_save", "dude_memory"),
             "memory.delete" => ("dude.memory_delete", "dude_memory_delete", "dude_memory"),
@@ -272,9 +273,9 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         tool.module_owner = "dude";
         if let Some(properties) = tool.input_schema.get_mut("properties").and_then(Value::as_object_mut) {
             properties.remove("workspaceCode");
-            properties.remove("scopeCode");
+            if !code.starts_with("dude.memory_"){properties.remove("scopeCode");}
             if let Some(scope) = properties.get_mut("scope") {
-                scope["enum"] = json!(["USER", "WORK_DOMAIN"]);
+                scope["enum"] = json!(["User", "WorkDomain"]);
             }
         }
         if let Some(required) = tool.input_schema.get_mut("required").and_then(Value::as_array_mut) {

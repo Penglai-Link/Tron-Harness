@@ -153,6 +153,12 @@ impl AppConfig {
         if let Some(value) = overrides.http_clients {
             self.http_clients.apply_overrides(value);
         }
+        if let Some(value) = overrides.rag_retrieval {
+            self.rag_retrieval = value;
+        }
+        self.rag_retrieval.validate().map_err(|value| ConfigError::InvalidConfigValue {
+            key: "ragRetrieval".into(), value,
+        })?;
         if let Some(value) = overrides.model_invocation {
             self.model_invocation.apply_overrides(value);
         }
@@ -295,6 +301,7 @@ struct AppConfigFile {
     http_clients: Option<HttpClientProfilesFileConfig>,
     mineru: Option<MineruFileConfig>,
     model_invocation: Option<super::model_invocation::ModelInvocationFileConfig>,
+    rag_retrieval: Option<crate::application::rag::RagRetrievalConfig>,
     short_term_memory: Option<ShortTermMemoryFileConfig>,
     event_bus: Option<EventBusFileConfig>,
     navigation: Option<NavigationFileConfig>,

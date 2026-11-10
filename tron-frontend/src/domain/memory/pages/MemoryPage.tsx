@@ -1,606 +1,344 @@
-import { MoreHorizontal } from "lucide-react";
-import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
-import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
-
-import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
-
-import { useAuthSession } from "@/domain/auth";
-import { MemoryRecordSummary } from "@/domain/memory/components";
-import {
-  defaultMemoryFilters,
-  memoryInjectableOptions,
-  memoryReviewOptions,
-  memoryStatusOptions,
-  type MemoryFilterState,
-} from "@/domain/memory/constants";
-import {
-  archiveMemoryRecord,
-  useMemoryFragmentList,
-  useMemoryTargets,
-} from "@/domain/memory";
-import type {
-  MemoryRecord,
-  MemoryScopeKind,
-  MemorySearchTarget,
-} from "@/domain/memory/model";
-import { archiveMemoryFragment } from "@/domain/memory/mock/data";
-import { SelectInput } from "@/components/forms";
-import { SearchField } from "@/components/search-field";
-import { useTabPanelConfig } from "@/shared";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  DataTable,
-  DataTableProps,
-  type TableColumnDef,
-} from "@/components/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
-
-import { SelectItem } from "@/components/ui/select";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
-
-const memoryScopes: MemoryScopeKind[] = ["space", "user", "domain"];
-
-function getTypeTone(memory: MemoryRecord) {
-  if (memory.memoryStatus === "DISABLED") return "error";
-  if (memory.scope === "space") return "success";
-  if (memory.scope === "domain") return "warning";
-  if (memory.scope === "user") return "info";
-  return "outline";
-}
-
-function normalizeSearchValue(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function recordMatchesQuery(memory: MemoryRecord, query: string) {
-  const normalizedQuery = normalizeSearchValue(query);
-  if (!normalizedQuery) return true;
-
-  return [
-    memory.title,
-    memory.text,
-    memory.memoryCode,
-    memory.memoryType,
-    memory.memoryStatus,
-    memory.reviewStatus,
-    memory.semanticKey,
-    memory.sourceLabel,
-    memory.targetLabel,
-    ...memory.tags,
-  ].some((value) => value.toLowerCase().includes(normalizedQuery));
-}
-
-function recordMatchesFilters(
-  memory: MemoryRecord,
-  filters: MemoryFilterState,
-) {
-  if (filters.status !== "all" && memory.memoryStatus !== filters.status)
-    return false;
-  if (
-    filters.reviewStatus !== "all" &&
-    memory.reviewStatus !== filters.reviewStatus
-  )
-    return false;
-  if (filters.injectable === "injectable" && !memory.injectable) return false;
-  if (filters.injectable === "not-injectable" && memory.injectable)
-    return false;
-  return true;
-}
-
-function buildDisplayTargets(
-  targets: MemorySearchTarget[],
-  workspaceLabel?: string,
-  workspaceCode?: string,
-  userLabel?: string,
-  userCode?: string,
-) {
-  return targets.map((target) => {
-    if (target.id === "space:current") {
-      return {
-        ...target,
-        code: workspaceCode || target.code,
-        label: workspaceLabel || target.label,
-      };
-    }
-
-    if (target.id === "user:current") {
-      return {
-        ...target,
-        code: userCode || target.code,
-        label: userLabel || target.label,
-      };
-    }
-
-    return target;
-  });
-}
-
-function MemoryFilterControls({
-  filters,
-  onFiltersChange,
-  onSearchChange,
-  query,
-}: {
-  filters: MemoryFilterState;
-  onFiltersChange: (filters: MemoryFilterState) => void;
-  onSearchChange: (value: string) => void;
-  query: string;
-}) {
-  const { t } = useTranslation(["pages"]);
-  return (
-    <>
-      <SearchField
-        ariaLabel={t("pages:memory.search", "Search memories")}
-        className="w-full sm:w-40"
-        placeholder={t("pages:memory.search", "Search memories")}
-        value={query}
-        onChange={onSearchChange}
-      />
-      <SelectInput
-        aria-label={t("pages:memory.filters.status", "Filter memories by status")}
-        className="w-full sm:w-40"
-        value={filters.status}
-        onValueChange={(event) =>
-          onFiltersChange({
-            ...filters,
-            status: event as MemoryFilterState["status"],
-          })
-        }
-      >
-        {memoryStatusOptions.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {t(`pages:memory.filters.statusOptions.${option.value}`, option.label)}
-          </SelectItem>
-        ))}
-      </SelectInput>
-      <SelectInput
-        aria-label={t("pages:memory.filters.review", "Filter memories by review status")}
-        className="w-full sm:w-40"
-        value={filters.reviewStatus}
-        onValueChange={(event) =>
-          onFiltersChange({
-            ...filters,
-            reviewStatus: event as MemoryFilterState["reviewStatus"],
-          })
-        }
-      >
-        {memoryReviewOptions.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {t(`pages:memory.filters.reviewOptions.${option.value}`, option.label)}
-          </SelectItem>
-        ))}
-      </SelectInput>
-      <SelectInput
-        aria-label={t("pages:memory.filters.injectable", "Filter memories by context use")}
-        className="w-full sm:w-40"
-        value={filters.injectable}
-        onValueChange={(event) =>
-          onFiltersChange({
-            ...filters,
-            injectable: event as MemoryFilterState["injectable"],
-          })
-        }
-      >
-        {memoryInjectableOptions.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {t(`pages:memory.filters.useOptions.${option.value}`, option.label)}
-          </SelectItem>
-        ))}
-      </SelectInput>
-    </>
-  );
-}
-
-function EmptyResults({
-  activeTarget,
-  query,
-}: {
-  activeTarget?: MemorySearchTarget;
-  query: string;
-}) {
-  const { t } = useTranslation(["pages"]);
-  const trimmedQuery = query.trim();
-
-  if (!activeTarget) return (
-    <section className="space-y-2 py-6 text-sm text-[var(--color-on-surface-variant)]">
-      <p className="font-medium text-[var(--color-on-surface)]">{t("pages:memory.empty.noDomains")}</p>
-      <p>{t("pages:memory.empty.noDomainsDescription")}</p>
-      <Button size="sm" variant="outline" nativeButton={false} render={<Link to="/settings/memory-domains" />}>
-        {t("pages:memory.actions.manageDomains")}
-      </Button>
-    </section>
-  );
-
-  return (
-    <section className="rounded-xl border border-dashed border-[var(--color-outline-variant)] px-5 py-8 text-sm leading-6 text-[var(--color-on-surface-variant)]">
-      <p className="font-medium text-[var(--color-on-surface)]">
-        {t("pages:memory.empty.title", "No memories found")}
-      </p>
-      <p className="mt-1">
-        {trimmedQuery
-          ? t("pages:memory.empty.withQuery", "No memories in {{target}} match \"{{query}}\".", { target: activeTarget.label, query: trimmedQuery })
-          : t("pages:memory.empty.withFilters", "No memories in {{target}} match the current filters.", { target: activeTarget.label })}
-      </p>
-    </section>
-  );
-}
-
-function MemoryRecordsTable({
-  activeTarget,
-  memories,
-  onArchive,
-  onEdit,
-  onOpen,
-  query,
-  title,
-  toolbar,
-}: {
-  activeTarget?: MemorySearchTarget;
-  memories: MemoryRecord[];
-  onArchive: (memory: MemoryRecord) => void;
-  onEdit: (memory: MemoryRecord) => void;
-  onOpen: (memory: MemoryRecord) => void;
-  query: string;
-} & Pick<DataTableProps<MemoryRecord>, "title" | "toolbar">) {
-  const { t } = useTranslation(["pages"]);
-  const columns = useMemo<TableColumnDef<MemoryRecord>[]>(
-    () => [
-      {
-        accessorKey: "title",
-        cell: ({ row }) => (
-          <MemoryRecordSummary
-            memory={row.original}
-            onOpen={() => onOpen(row.original)}
-          />
-        ),
-        header: t("pages:memory.columns.memory", "Memory"),
-        id: "memory",
-        meta: {
-          cellClassName: "min-w-0 py-4",
-          width: "330px",
-        },
-      },
-      {
-        cell: ({ row }) => (
-          <Badge
-            className="w-fit max-w-full font-bold"
-            variant={getTypeTone(row.original)}
-          >
-            {row.original.memoryType}
-          </Badge>
-        ),
-        header: t("pages:memory.columns.type", "Type"),
-        id: "type",
-        meta: {
-          cellClassName: "py-4",
-          width: "170px",
-        },
-      },
-      {
-        cell: ({ row }) => (
-          <div className="flex gap-1">
-            <Badge
-              variant={row.original.memoryStatus === "ACTIVE" ? "success" : "info"}
-            >
-              {t(`pages:memory.statusValue.${row.original.memoryStatus}`, row.original.memoryStatus)}
-            </Badge>
-            <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">
-              {t(`pages:memory.reviewValue.${row.original.reviewStatus}`, row.original.reviewStatus.replace("_", " "))}
-            </span>
-          </div>
-        ),
-        header: t("pages:memory.columns.status", "Status"),
-        id: "status",
-        meta: {
-          cellClassName: "py-4",
-          width: "150px",
-        },
-      },
-      {
-        cell: ({ row }) => {
-          const injectable = row.original.injectable;
-          return (
-            <div className="flex gap-1">
-              <Badge variant={injectable ? "success" : "info"}>
-                {injectable
-                  ? t("pages:memory.use.autoContext", "Auto context")
-                  : t("pages:memory.use.searchOnly", "Search only")}
-              </Badge>
-              <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">
-                {injectable
-                  ? t("pages:memory.use.autoContextDetail", "added automatically")
-                  : t("pages:memory.use.searchOnlyDetail", "manual lookup")}
-              </span>
-            </div>
-          );
-        },
-        header: t("pages:memory.columns.use", "Use"),
-        id: "use",
-        meta: {
-          cellClassName: "py-4",
-          width: "150px",
-        },
-      },
-      {
-        cell: ({ row }) => row.original.updatedAt.split(" ")[0],
-        header: t("pages:memory.columns.updated", "Updated"),
-        id: "updatedAt",
-        meta: {
-          width: "130px",
-        },
-      },
-      {
-        cell: ({ row }) => (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  aria-label={t("pages:memory.aria.actionsFor", "Open actions for {{title}}", { title: row.original.title })}
-                  size="icon"
-                  variant="ghost"
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                >
-                  <MoreHorizontal size={16} aria-hidden="true" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpen(row.original);
-                }}
-              >
-                {t("pages:memory.actions.open", "Open details")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onEdit(row.original);
-                }}
-              >
-                {t("pages:memory.actions.edit", "Edit")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onArchive(row.original);
-                }}
-              >
-                {t("pages:memory.actions.archive", "Archive")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ),
-        header: t("pages:memory.columns.actions", "Actions"),
-        id: "actions",
-        meta: {
-          align: "right",
-          width: "100px",
-        },
-      },
-    ],
-    [onArchive, onEdit, onOpen, t],
-  );
-  const table = useReactTable({
-    columns,
-    data: memories,
-    getCoreRowModel: getCoreRowModel(),
-    getRowId: (row) => row.id,
-  });
-
-  return (
-    <DataTable<MemoryRecord>
-      title={title}
-      toolbar={toolbar}
-      emptyState={<EmptyResults activeTarget={activeTarget} query={query} />}
-      table={table}
-      tableClassName="table-fixed min-w-[1018px]"
-    />
-  );
-}
-
-function MemoryRepository() {
-  const { t } = useTranslation(["pages"]);
+import { PageHeader } from "@/shared";
+import { DataTable } from "@/components/data-table";
+import { TablePagination } from "@/components/table-pagination";
+import { SearchField } from "@/components/search-field";
+import { SelectInput } from "@/components/forms";
+import { SelectItem } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
+import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
+import { useAuthSession } from "@/domain/auth";
+import { useMemoryTargets } from "../hooks";
+import {
+  fetchMemoryRecords,
+  updateMemoryRecord,
+  deleteMemoryRecord,
+} from "../api";
+import { memoryScopes } from "../constants";
+import { MemoryRecordSummary } from "../components";
+import type { MemoryRecord, MemoryScope } from "../model";
+export function MemoryPage() {
+  const { t, i18n } = useTranslation("pages");
   const navigate = usePlatformDataNavigate();
-  const [refreshKey, setRefreshKey] = useState(0);
-  const dataSource = getServiceDataSource("memory");
+  const toast = useToast();
+  const cache = useQueryClient();
   const { session } = useAuthSession();
-  const {
-    selectedPrimarySpace,
-    selectedPrimarySpaceId,
-    selectedSecondarySpace,
-    selectedSecondarySpaceId,
-  } = useWorkspaceSpaces();
+  const { targets, domains } = useMemoryTargets();
   const [params, setParams] = useSearchParams();
-  const activeTargetId = params.get("targetId") ?? "space:current";
-  const scope: MemoryScopeKind = activeTargetId === "user:current" ? "user"
-    : activeTargetId === "domain" || activeTargetId.startsWith("domain:") ? "domain" : "space";
-  const setActiveTargetId = (id: string) => {
-    const next = new URLSearchParams(params);
-    if (id === "space:current") next.delete("targetId");
-    else next.set("targetId", id);
-    setParams(next, { replace: true });
-  };
-  const [query, setQuery] = useState("");
-  const [filters, setFilters] =
-    useState<MemoryFilterState>(defaultMemoryFilters);
-  const [notice, setNotice] = useState("");
-  const [archiveTarget, setArchiveTarget] = useState<MemoryRecord | null>(null);
-
-  useTabPanelConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
-
-  const workspaceLabel =
-    selectedSecondarySpace?.name ?? selectedPrimarySpace?.name;
-  const workspaceCode = selectedSecondarySpaceId || selectedPrimarySpaceId;
-  const userLabel = session?.user.username || session?.user.displayName;
-  const userCode = session?.user.userCode;
-  const rawTargets = useMemoryTargets(workspaceCode, refreshKey);
-  const safeTargets = Array.isArray(rawTargets) ? rawTargets : [];
-  const targets = useMemo(
-    () =>
-      buildDisplayTargets(
-        safeTargets,
-        workspaceLabel,
-        workspaceCode,
-        userLabel,
-        userCode,
+  const scope = (memoryScopes as readonly string[]).includes(
+    params.get("scope") ?? "",
+  )
+    ? (params.get("scope") as MemoryScope)
+    : "User";
+  const available = targets.filter((v) => v.scope === scope);
+  const target =
+    available.find((v) => v.scopeCode === params.get("scopeCode")) ??
+    available[0];
+  const [keyword, setKeyword] = useState("");
+  const [status, setStatus] = useState("All");
+  const [current, setCurrent] = useState(1);
+  const [size, setSize] = useState(20);
+  const [deleting, setDeleting] = useState<MemoryRecord | null>(null);
+  const [busy, setBusy] = useState(false);
+  const query = useQuery({
+    queryKey: [
+      "memory-records",
+      session?.user.userCode,
+      target?.scope,
+      target?.scopeCode,
+      keyword,
+      status,
+      current,
+      size,
+    ],
+    queryFn: ({ signal }) =>
+      fetchMemoryRecords(
+        {
+          scope,
+          scopeCode: target!.scopeCode,
+          keyword,
+          enabled: status === "All" ? null : status === "Enabled",
+          current,
+          size,
+        },
+        signal,
       ),
-    [safeTargets, userCode, userLabel, workspaceCode, workspaceLabel],
-  );
-  const fallbackTarget = useMemo<MemorySearchTarget>(
-    () => ({
-      code: workspaceCode || "space:current",
-      description: t("pages:memory.form.currentSpace", "Current space"),
-      id: "space:current",
-      label: workspaceLabel || t("pages:memory.form.currentSpace", "Current space"),
-      resultCount: 0,
-      scope: "space",
-    }),
-    [workspaceCode, workspaceLabel, t],
-  );
-  const displayTargets = targets.length ? targets : [fallbackTarget];
-  const scopedTargets = displayTargets.filter((target) => target.scope === scope);
-  const domainTargets = displayTargets.filter((target) => target.scope === "domain");
-  const activeTarget =
-    scopedTargets.find((target) => target.id === activeTargetId) ?? scopedTargets[0];
-  const memories = useMemoryFragmentList({
-    activeTarget,
-    filters,
-    query,
-    refreshKey,
-    workspaceCode,
+    enabled: !!target?.scopeCode,
   });
-  const safeMemories = Array.isArray(memories) ? memories : [];
-  const visibleMemories = useMemo(
-    () =>
-      activeTarget
-        ? safeMemories.filter(
-            (memory) =>
-              memory.targetId === activeTarget.id &&
-              recordMatchesQuery(memory, query) &&
-              recordMatchesFilters(memory, filters),
-          )
-        : [],
-    [activeTarget, filters, query, safeMemories],
-  );
-
-  function openMemory(memory: MemoryRecord) {
-    navigate(`/memory/details?memoryId=${encodeURIComponent(memory.id)}`);
+  const data = query.data;
+  const total = data?.total ?? 0;
+  function changeScope(scope: MemoryScope, scopeCode?: string) {
+    const next = new URLSearchParams(params);
+    next.set("scope", scope);
+    if (scopeCode) next.set("scopeCode", scopeCode);
+    else next.delete("scopeCode");
+    setParams(next);
+    setCurrent(1);
   }
-
-  function editMemory(memory: MemoryRecord) {
+  function open(r: MemoryRecord, edit = false) {
     navigate(
-      `/memory/details?memoryId=${encodeURIComponent(memory.id)}&mode=edit`,
+      `/memory/details?memoryId=${encodeURIComponent(r.memoryCode)}${edit ? "&mode=edit" : ""}`,
     );
   }
-
-  async function confirmArchive() {
-    if (!archiveTarget) return;
+  async function toggle(r: MemoryRecord) {
+    if (busy) return;
+    setBusy(true);
     try {
-      const archived =
-        dataSource === "api" && workspaceCode
-          ? await archiveMemoryRecord(workspaceCode, archiveTarget.memoryCode)
-          : archiveMemoryFragment(archiveTarget.id);
-      setNotice(t("pages:memory.messages.archived", "{{title}} archived.", { title: archived.title }));
-      setRefreshKey((value) => value + 1);
-    } catch (error) {
-      setNotice(
-        error instanceof Error
-          ? error.message
-          : t("pages:memory.errors.archive", "Memory could not be archived."),
-      );
+      await updateMemoryRecord(r.memoryCode, {
+        version: r.version,
+        enabled: !r.enabled,
+      });
+      await cache.invalidateQueries({ queryKey: ["memory-records"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("memory.simple.failed"));
     } finally {
-      setArchiveTarget(null);
+      setBusy(false);
     }
   }
-
+  async function remove() {
+    if (!deleting || busy) return;
+    setBusy(true);
+    try {
+      await deleteMemoryRecord(deleting.memoryCode, deleting.version);
+      setDeleting(null);
+      if ((data?.records.length ?? 0) === 1 && current > 1)
+        setCurrent(current - 1);
+      await cache.invalidateQueries({ queryKey: ["memory-records"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("memory.simple.failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const empty =
+    domains.isError && scope === "WorkDomain" ? (
+      <p role="alert">
+        {domains.error.message}
+        <Button variant="outline" onClick={() => void domains.refetch()}>
+          {t("memory.simple.retry")}
+        </Button>
+      </p>
+    ) : !target ? (
+      <p role="status">
+        {t(
+          scope === "Space"
+            ? "memory.simple.selectWorkspace"
+            : "memory.simple.noDomains",
+        )}
+      </p>
+    ) : query.isLoading ? (
+      <p role="status">{t("memory.simple.loading")}</p>
+    ) : query.isError ? (
+      <p role="alert">
+        {query.error.message}
+        <Button variant="outline" onClick={() => void query.refetch()}>
+          {t("memory.simple.retry")}
+        </Button>
+      </p>
+    ) : (
+      t("memory.simple.empty")
+    );
   return (
-    <main className="text-[var(--color-on-surface)]">
-      <Tabs value={scope} onValueChange={(value) => setActiveTargetId(
-        value === "domain" ? domainTargets[0]?.id ?? "domain"
-          : value === "user" ? "user:current" : "space:current",
-      )} className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-          <TabsList aria-label={t("pages:memory.filters.scope")} className="max-w-full flex-wrap gap-1 box-border! group-data-horizontal/tabs:h-auto">
-            {memoryScopes.map((value) => <TabsTrigger key={value} value={value} className="flex-none px-3">
-              {t(`pages:memory.scopes.${value}`)}
-            </TabsTrigger>)}
-          </TabsList>
-          {scope === "domain" ? <SelectInput aria-label={t("pages:memory.filters.domain")} className="w-full sm:w-64"
-            disabled={domainTargets.length === 0} value={activeTarget?.id ?? ""}
-            onValueChange={(value) => { if (value) setActiveTargetId(value); }}>
-            {domainTargets.length === 0 ? <SelectItem value="">{t("pages:memory.empty.noDomains")}</SelectItem> : null}
-            {domainTargets.map((target) => <SelectItem key={target.id} value={target.id}>{target.label}</SelectItem>)}
-          </SelectInput> : null}
-        </div>
-        {memoryScopes.map((value) => <TabsContent key={value} value={value} className="min-w-0">
-        <MemoryRecordsTable
-          activeTarget={activeTarget}
-          memories={visibleMemories}
-          query={query}
-          onArchive={setArchiveTarget}
-          onEdit={editMemory}
-          onOpen={openMemory}
-          title={t("pages:memory.title", "Long-term Memory")}
-          toolbar={
-            <div className="flex flex-wrap items-center gap-3">
-              <MemoryFilterControls
-                filters={filters}
-                query={query}
-                onFiltersChange={setFilters}
-                onSearchChange={setQuery}
-              />
-              <Button
-                size="lg"
-                variant="outline"
-                disabled={!workspaceCode}
-                onClick={() => {
-                  setRefreshKey((value) => value + 1);
-                }}
-              >
-                {t("pages:memory.actions.refresh", "Refresh")}
-              </Button>
-              <Button size="lg" disabled={!workspaceCode || !activeTarget} onClick={() => {
-                if (activeTarget) navigate(`/memory/new?targetId=${encodeURIComponent(activeTarget.id)}`);
-              }}>
-                {t("pages:memory.actions.new", "New")}
-              </Button>
-            </div>
-          }
-        />
-        </TabsContent>)}
-      </Tabs>
-
-      <ConfirmDialog
-        open={archiveTarget !== null}
-        title={t("pages:memory.confirm.title", "Archive memory?")}
-        description={
-          archiveTarget
-            ? t("pages:memory.confirm.description", "{{title}} will stay available for later review.", { title: archiveTarget.title })
-            : undefined
+    <main className="space-y-5">
+      <PageHeader
+        title={t("memory.title")}
+        actions={
+          <Button
+            disabled={!target?.scopeCode}
+            onClick={() =>
+              navigate(
+                `/memory/new?scope=${scope}&scopeCode=${encodeURIComponent(target!.scopeCode)}`,
+              )
+            }
+          >
+            {t("memory.simple.new")}
+          </Button>
         }
-        confirmText={t("pages:memory.actions.archive", "Archive")}
-        onCancel={() => setArchiveTarget(null)}
-        onConfirm={confirmArchive}
+      />
+      <Tabs
+        value={scope}
+        onValueChange={(v) => changeScope(String(v) as MemoryScope)}
+      >
+        <TabsList>
+          {memoryScopes.map((v) => (
+            <TabsTrigger key={v} value={v}>
+              {t(`memory.simple.scope.${v}`)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      <DataTable<MemoryRecord>
+        rows={query.isFetching ? [] : (data?.records ?? [])}
+        rowKey={(r) => r.memoryCode}
+        tableClassName="min-w-[900px]"
+        emptyState={
+          query.isFetching ? (
+            <p role="status">{t("memory.simple.loading")}</p>
+          ) : (
+            empty
+          )
+        }
+        toolbar={
+          <>
+            <SearchField
+              ariaLabel={t("memory.simple.search")}
+              placeholder={t("memory.simple.search")}
+              value={keyword}
+              onChange={(v) => {
+                setKeyword(v);
+                setCurrent(1);
+              }}
+            />
+            <SelectInput
+              aria-label={t("memory.simple.status")}
+              value={status}
+              onValueChange={(v) => {
+                setStatus(String(v));
+                setCurrent(1);
+              }}
+            >
+              {["All", "Enabled", "Disabled"].map((v) => (
+                <SelectItem key={v} value={v}>
+                  {t(`memory.simple.statusValue.${v}`)}
+                </SelectItem>
+              ))}
+            </SelectInput>
+            {scope === "WorkDomain" && available.length > 0 ? (
+              <SelectInput
+                aria-label={t("memory.simple.domain")}
+                value={target?.scopeCode}
+                onValueChange={(v) => changeScope(scope, String(v))}
+              >
+                {available.map((v) => (
+                  <SelectItem key={v.scopeCode} value={v.scopeCode}>
+                    {v.label}
+                  </SelectItem>
+                ))}
+              </SelectInput>
+            ) : null}
+            <Button
+              variant="outline"
+              disabled={query.isFetching || !target}
+              onClick={() => void query.refetch()}
+            >
+              {t("memory.simple.refresh")}
+            </Button>
+          </>
+        }
+        columns={[
+          {
+            id: "memory",
+            header: t("memory.simple.content"),
+            width: "38%",
+            render: (r) => (
+              <MemoryRecordSummary memory={r} onOpen={() => open(r)} />
+            ),
+          },
+          {
+            id: "scope",
+            header: t("memory.simple.ownership"),
+            render: (r) =>
+              targets.find(
+                (v) => v.scope === r.scope && v.scopeCode === r.scopeCode,
+              )?.label ?? r.scopeCode,
+          },
+          {
+            id: "enabled",
+            header: t("memory.simple.status"),
+            render: (r) => (
+              <Badge variant={r.enabled ? "success" : "info"}>
+                {t(
+                  `memory.simple.statusValue.${r.enabled ? "Enabled" : "Disabled"}`,
+                )}
+              </Badge>
+            ),
+          },
+          {
+            id: "source",
+            header: t("memory.simple.source"),
+            render: (r) =>
+              t(`memory.simple.sourceValue.${r.sourceLabel}`, r.sourceLabel),
+          },
+          {
+            id: "updated",
+            header: t("memory.simple.updated"),
+            render: (r) =>
+              new Intl.DateTimeFormat(i18n.language, {
+                dateStyle: "short",
+                timeStyle: "short",
+              }).format(r.updatedAt),
+          },
+          {
+            id: "actions",
+            header: t("memory.simple.actions"),
+            render: (r) => (
+              <div className="flex flex-wrap gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => open(r, true)}
+                >
+                  {t("memory.simple.edit")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => void toggle(r)}
+                >
+                  {t(
+                    r.enabled
+                      ? "memory.simple.disable"
+                      : "memory.simple.enable",
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setDeleting(r)}
+                >
+                  {t("memory.simple.delete")}
+                </Button>
+              </div>
+            ),
+          },
+        ]}
+        pagination={
+          <TablePagination
+            page={current}
+            pageSize={size}
+            pageSizeOptions={[20, 50, 100]}
+            pageCount={Math.max(1, Math.ceil(total / size))}
+            totalItems={total}
+            startItem={total ? (current - 1) * size + 1 : 0}
+            endItem={Math.min(current * size, total)}
+            onPageChange={setCurrent}
+            onPageSizeChange={(v) => {
+              setSize(v);
+              setCurrent(1);
+            }}
+          />
+        }
+      />
+      <ConfirmDialog
+        open={!!deleting}
+        pending={busy}
+        title={t("memory.simple.deleteConfirm")}
+        description={deleting?.title}
+        confirmText={t("memory.simple.delete")}
+        cancelText={t("memory.simple.cancel")}
+        onCancel={() => !busy && setDeleting(null)}
+        onConfirm={() => void remove()}
       />
     </main>
   );
-}
-
-export function MemoryPage() {
-  return <MemoryRepository />;
 }

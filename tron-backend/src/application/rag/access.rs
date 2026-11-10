@@ -79,7 +79,7 @@ pub struct RagQueryResult {
     pub graph_context: Vec<super::graph::GraphEvidenceView>,
     pub duration_ms: u64,
 }
-impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
+impl<R: RagSearchRepository + Clone + Send + Sync, E: RagSearchRuntime> RagService<R, E> {
     pub async fn search(
         &self,
         access: &dyn RagAccessResolver,
@@ -94,6 +94,12 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
         {
             return Err(RagError::SearchRequestInvalid);
         }
+        let combined = crate::application::memory::rag_access::MemoryRagAccess {
+            base: access,
+            rag: self,
+            store: self.memories.as_deref(),
+        };
+        let access: &dyn RagAccessResolver = &combined;
         let started = std::time::Instant::now();
         let mut ranges = access.resolve(identity)?;
         let authorized_corpus_ids = ranges
@@ -134,14 +140,13 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
                 rerank = settings.rerank_model_code;
             }
         }
+        let model_workspace = if ranges.iter().all(|r| r.corpus_id == "memory-card") {
+            super::MEMORY_MODEL_WORKSPACE
+        } else {
+            &identity.workspace_code
+        };
         let mut result = self
-            .recall_authorized(
-                &identity.workspace_code,
-                &input.query,
-                &ranges,
-                input.limit,
-                run,
-            )
+            .recall_authorized(model_workspace, &input.query, &ranges, input.limit, run)
             .await?;
         let recalled_count = result.hits.len();
         self.recheck_published(&ranges, &mut result)?;
@@ -154,7 +159,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
         access.assemble_context(identity, &mut result)?;
         let mut result = self
             .rank_evidence(
-                &identity.workspace_code,
+                model_workspace,
                 &input.query,
                 result,
                 input.limit,
@@ -228,6 +233,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
                 .warnings
                 .push("当前授权及已发布范围内没有命中证据".into());
         }
+        let reranked = result.stages.iter().any(|stage| stage.channel == "rerank" && stage.status == "COMPLETED");
         let evidence = result
             .hits
             .into_iter()
@@ -267,6 +273,10 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
                 }
                 source["selectedSourceBlockIds"] = serde_json::json!(hit.selected_blocks);
                 source["publication"] = hit.row.source_metadata.clone();
+                source["relevance"] = serde_json::json!({
+                    "vectorSimilarity": hit.vector_similarity,
+                    "rerankScore": reranked.then_some(hit.score),
+                });
                 let location = source["location"].clone();
                 let row = hit.row;
                 let published_version = row.source_metadata["indexTaskId"]

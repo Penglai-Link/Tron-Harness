@@ -114,7 +114,7 @@ impl RagAccessResolver for ManagedRagAccess<'_> {
                     .filter(|task| task.corpus_id == "skill"),
             );
         }
-        for corpus in ["memory-card", "skill"] {
+        for corpus in ["skill"] {
             let metadata = repository
                 .get_corpus(corpus)?
                 .ok_or(RagError::CorpusNotFound)?;
@@ -131,14 +131,7 @@ impl RagAccessResolver for ManagedRagAccess<'_> {
                 scopes.insert(("USER".into(), identity.user_code.clone()), BTreeSet::new());
             }
             for ((scope_type, scope_code), sources) in scopes {
-                let mut filters = json!({"sourceCode":{"op":"in","value":sources}});
-                if corpus == "memory-card" {
-                    filters["memoryStatus"] = json!("ACTIVE");
-                    filters["reviewStatus"] = json!("APPROVED");
-                    filters["injectable"] = json!(true);
-                    filters["expiresAt"] =
-                        json!({"op":"gtOrNull","value":chrono::Utc::now().timestamp_millis()});
-                }
+                let filters = json!({"sourceCode":{"op":"in","value":sources}});
                 ranges.extend(self.0.rag.partition_ranges_for_corpus(
                     AuthorizedRagRange {
                         corpus_id: corpus.into(),
@@ -152,11 +145,7 @@ impl RagAccessResolver for ManagedRagAccess<'_> {
                         embedding_dimension: Some(TRON_VECTOR_INDEX_DIMENSION),
                         provider_model: None,
                         embedding_fingerprint: None,
-                        return_fields: if corpus == "memory-card" {
-                            vec!["expiresAt".into()]
-                        } else {
-                            vec![]
-                        },
+                        return_fields: vec![],
                         fulltext: settings.fulltext,
                         vector: settings.vector,
                         graph: settings.graph,

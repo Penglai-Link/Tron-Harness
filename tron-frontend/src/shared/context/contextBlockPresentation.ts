@@ -24,6 +24,7 @@ const contextBlockLabelKeys: Record<string, string> = {
   "agent.directory-guidance": "directoryGuidanceName",
   "dude.guidance": "dudeGuidanceName",
   "a2ui.guidance": "a2uiGuidanceName",
+  long_term_memory: "longTermMemoryName",
   knowledge_base: "knowledgeBaseName",
   agent_directory: "agentDirectoryName",
   dude_onboarding: "dudeOnboardingName",
