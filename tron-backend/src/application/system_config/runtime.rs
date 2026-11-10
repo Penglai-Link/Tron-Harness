@@ -50,10 +50,6 @@ pub(super) fn supports_hot_update(path: &str) -> bool {
                 | "mineru.defaultTier"
                 | "mineru.parserProfile"
                 | "mineru.expectedParserVersion"
-                | "mineru.parseEndpoint"
-                | "mineru.backend"
-                | "mineru.parseMethod"
-                | "mineru.returnContentList"
         )
 }
 

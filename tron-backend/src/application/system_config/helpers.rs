@@ -6,12 +6,16 @@ use serde_yaml::Value;
 use super::{SystemConfigError, SystemConfigItem};
 
 const REMOVED_CONFIG_SECTIONS: &[&str] = &["auth"];
-// Retained in YAML for compatibility; no runtime consumes these legacy limits.
-const INACTIVE_CONFIG_PATHS: &[&str] = &[
+// Removed settings have no runtime consumer and must not reappear from old YAML.
+const REMOVED_CONFIG_PATHS: &[&str] = &[
     "resource.limits.schemaMaxBytes",
     "resource.limits.maxDepth",
     "resource.limits.maxValidationErrors",
     "resource.limits.maxBinaries",
+    "mineru.parseEndpoint",
+    "mineru.backend",
+    "mineru.parseMethod",
+    "mineru.returnContentList",
 ];
 
 pub(super) fn parse_yaml(content: &str, path: &Path) -> Result<Value, SystemConfigError> {
@@ -67,11 +71,20 @@ pub(super) fn remove_removed_config_sections(value: &mut Value) -> bool {
             .remove(Value::String((*section).to_owned()))
             .is_some();
     }
+    for path in REMOVED_CONFIG_PATHS {
+        let (parent, key) = path.rsplit_once('.').expect("removed path has a parent");
+        let parent = parent
+            .split('.')
+            .try_fold(&mut *value, |current, segment| current.get_mut(segment));
+        if let Some(mapping) = parent.and_then(Value::as_mapping_mut) {
+            removed |= mapping.remove(Value::String(key.to_owned())).is_some();
+        }
+    }
     removed
 }
 
 pub(super) fn is_removed_config_path(path: &str) -> bool {
-    INACTIVE_CONFIG_PATHS.contains(&path)
+    REMOVED_CONFIG_PATHS.contains(&path)
         || REMOVED_CONFIG_SECTIONS
             .iter()
             .any(|section| path == *section || path.starts_with(&format!("{section}.")))
@@ -333,6 +346,7 @@ pub(super) fn effective_context_value(
                 "maxAuxiliaryCallsPerStep": providers.max_auxiliary_calls_per_step
             }),
         ),
+        ("shortTermMemory.goalLoop.maxRuns", json!(config.goal_loop.max_runs)),
         (
             "shortTermMemory.compaction.autoEnabled",
             json!(config.compaction.auto_enabled),

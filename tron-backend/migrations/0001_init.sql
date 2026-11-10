@@ -1289,8 +1289,8 @@ INSERT INTO navigation_domains (id, domain_code, built_in, enabled, is_default, 
     (734500000000000001, 'ADVANCED', 1, 1, 1, 0, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z');
 
 INSERT INTO navigation_domain_translations (id, domain_id, locale, name, description) VALUES
-    (734500100000000001, 734500000000000001, 'zh-CN', '高级模式', '高级模式'),
-    (734500100000000002, 734500000000000001, 'en-US', 'Advanced', 'Advanced');
+    (734500100000000001, 734500000000000001, 'zh-CN', '日常工作', '日常工作'),
+    (734500100000000002, 734500000000000001, 'en-US', 'Daily Work', 'Daily Work');
 
 INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, description_zh_cn, description_en_us, enabled, created_at, updated_at) VALUES
     (734510000000000001, 'CORE', 'BuiltIn', 'Group', NULL, NULL, 'LayoutDashboard', '常用工作入口，包括应用、任务和自动化。', 'Primary workspace shortcuts for apps, tasks, and automations.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
@@ -1352,21 +1352,21 @@ INSERT INTO navigation_menu_trees (id, tree_code, tree_type, domain_id, built_in
 
 INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) VALUES
     (734560200000000001, 734500000000000001, 734560000000000001, NULL, 0, 'Inline'),
-    (734570200000000001, 734500000000000001, 734570000000000001, NULL, 2, 'Flyout'),
-    (734560200000000002, 734500000000000001, 734560000000000002, 734570200000000001, 0, 'Inline'),
-    (734520000000000001, 734500000000000001, 734510000000000001, 734570200000000001, 1, 'Inline'),
+    (734520000000000003, 734500000000000001, 734510000000000003, NULL, 1, 'Inline'),
+    (734520000000000004, 734500000000000001, 734510000000000004, NULL, 2, 'Inline'),
+    (734570200000000001, 734500000000000001, 734570000000000001, NULL, 3, 'Flyout'),
+    (734520000000000001, 734500000000000001, 734510000000000001, 734570200000000001, 0, 'Inline'),
     (734520000000000002, 734500000000000001, 734510000000000002, 734520000000000001, 0, 'Inline'),
-    (734520000000000003, 734500000000000001, 734510000000000003, 734520000000000001, 1, 'Inline'),
-    (734520000000000004, 734500000000000001, 734510000000000004, 734520000000000001, 2, 'Inline'),
-    (734520000000000022, 734500000000000001, 734510000000000022, 734520000000000001, 3, 'Inline'),
-    (734520000000000005, 734500000000000001, 734510000000000005, 734570200000000001, 2, 'Inline'),
+    (734560200000000002, 734500000000000001, 734560000000000002, 734520000000000001, 1, 'Inline'),
+    (734520000000000022, 734500000000000001, 734510000000000022, 734520000000000001, 2, 'Inline'),
+    (734520000000000005, 734500000000000001, 734510000000000005, 734570200000000001, 1, 'Inline'),
     (734520000000000008, 734500000000000001, 734510000000000008, 734520000000000005, 0, 'Inline'),
-    (734520000000000012, 734500000000000001, 734510000000000012, 734570200000000001, 3, 'Inline'),
+    (734520000000000012, 734500000000000001, 734510000000000012, 734570200000000001, 2, 'Inline'),
     (734520000000000017, 734500000000000001, 734510000000000017, 734520000000000012, 0, 'Inline'),
     (734520000000000018, 734500000000000001, 734510000000000018, 734520000000000017, 0, 'Inline'),
-    (734550200000000003, 734500000000000001, 734550000000000003, NULL, 3, 'Inline'),
-    (734550200000000005, 734500000000000001, 734550000000000005, NULL, 4, 'Inline'),
-    (734550200000000004, 734500000000000001, 734550000000000004, NULL, 5, 'Inline');
+    (734550200000000003, 734500000000000001, 734550000000000003, NULL, 4, 'Inline'),
+    (734550200000000005, 734500000000000001, 734550000000000005, NULL, 5, 'Inline'),
+    (734550200000000004, 734500000000000001, 734550000000000004, NULL, 6, 'Inline');
 
 -- task_flows
 INSERT INTO task_flows (flow_code, name, created_at, updated_at) VALUES
@@ -1454,6 +1454,40 @@ CREATE TABLE dude_work_changes (
     UNIQUE(dude_code, task_code, fingerprint)
 );
 CREATE INDEX idx_dude_work_changes_task ON dude_work_changes(dude_code, task_code, created_at);
+
+-- tron:shortcut-defaults:start
+CREATE TABLE IF NOT EXISTS shell_shortcut_defaults (
+    action TEXT PRIMARY KEY,
+    key TEXT NOT NULL,
+    mod_key INTEGER NOT NULL CHECK(mod_key IN (0,1)),
+    alt_key INTEGER NOT NULL CHECK(alt_key IN (0,1)),
+    shift_key INTEGER NOT NULL CHECK(shift_key IN (0,1))
+);
+INSERT OR IGNORE INTO shell_shortcut_defaults(action,key,mod_key,alt_key,shift_key) VALUES
+    ('newTopic','1',1,0,1),
+    ('newDirectory','2',1,0,1),
+    ('newSession','N',1,0,0),
+    ('toggleAgentWindow','N',1,0,1),
+    ('toggleVoiceInput','T',1,0,0),
+    ('openNotifications','M',1,0,1),
+    ('closeCurrentTab','W',1,1,0),
+    ('previousTab','H',1,1,0),
+    ('nextTab','L',1,1,0),
+    ('activateTab1','1',1,0,0),
+    ('activateTab2','2',1,0,0),
+    ('activateTab3','3',1,0,0),
+    ('activateTab4','4',1,0,0),
+    ('activateTab5','5',1,0,0),
+    ('activateTab6','6',1,0,0),
+    ('activateTab7','7',1,0,0),
+    ('activateTab8','8',1,0,0),
+    ('activateTab9','9',1,0,0),
+    ('closeAllTabs','X',1,1,0),
+    ('closeOtherTabs','O',1,1,0),
+    ('toggleLeftSidebar','ArrowLeft',1,1,0),
+    ('toggleRightSidebar','ArrowRight',1,1,0),
+    ('toggleBottomPanel','ArrowDown',1,1,0);
+-- tron:shortcut-defaults:end
 
 -- tron:profiles
 

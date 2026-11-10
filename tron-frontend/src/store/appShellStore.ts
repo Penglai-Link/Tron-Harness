@@ -1,3 +1,4 @@
+import { requestApi } from "@/shared/api/httpClient";
 import { create } from "zustand";
 import {
   createJSONStorage,
@@ -9,6 +10,9 @@ import {
 } from "@/shared/constants/workspaceSpaces";
 import {
   createDefaultShellShortcutBindings,
+  isFixedShellShortcut,
+  isReservedTabShortcut,
+  shortcutEquals,
   migrateDefaultShellShortcutBindings,
   normalizeShellShortcutBindings,
   type ShellShortcutAction,
@@ -32,6 +36,7 @@ interface AppShellState {
   ensureSectionOpen: (sectionLabel?: string) => void;
   selectPrimarySpace: (primarySpaceId: string, secondarySpaceId: string) => void;
   syncSelectedWorkspace: (primarySpaceId: string, secondarySpaceId: string) => void;
+  loadShortcutDefaults: () => Promise<void>;
   setAgentOpen: (open: boolean) => void;
   setRightSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -106,12 +111,25 @@ export const useAppShellStore = create<AppShellState>()(
           selectedPrimarySpaceId: primarySpaceId,
           selectedSecondarySpaceId: secondarySpaceId,
         }),
+      loadShortcutDefaults: async () => {
+        const defaults = await requestApi<Partial<ShellShortcutBindings>>("GET /api/v1/system/shortcuts/defaults");
+        const previousDefaults = createDefaultShellShortcutBindings();
+        set((state) => {
+          const bindings = { ...state.shortcutBindings };
+          for (const action of Object.keys(defaults) as ShellShortcutAction[]) {
+            if (action in previousDefaults && shortcutEquals(bindings[action], previousDefaults[action])) {
+              bindings[action] = defaults[action] ?? null;
+            }
+          }
+          return { shortcutBindings: normalizeShellShortcutBindings(bindings) };
+        });
+      },
       setAgentOpen: (agentOpen) => set({ agentOpen }),
       setRightSidebarCollapsed: (rightSidebarCollapsed) => set({ rightSidebarCollapsed }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setShortcutBinding: (action, binding) =>
-        set((state) => ({
+        set((state) => isFixedShellShortcut(action) || isReservedTabShortcut(binding) ? state : ({
           shortcutBindings: {
             ...state.shortcutBindings,
             [action]: binding,
@@ -132,7 +150,7 @@ export const useAppShellStore = create<AppShellState>()(
         })),
     }),
     {
-      version: 9,
+      version: 10,
       name: "tron-app-shell",
       migrate: migrateAppShellState,
       merge: (persisted, current) => {

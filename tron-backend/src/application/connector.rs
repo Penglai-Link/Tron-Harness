@@ -25,7 +25,6 @@ pub trait ConnectionRepository: Send + Sync {
 struct HostResolver {
     repository: Arc<dyn ConnectionRepository>,
     cipher: Arc<dyn VariableCipher>,
-    workspaces: WorkspaceService,
 }
 
 fn credential_aad(workspace: &str, owner: &str, code: &str) -> String {
@@ -39,12 +38,7 @@ impl ConnectionResolver for HostResolver {
         principal: &Principal,
         connection_id: &str,
     ) -> Result<(Connection, Credential), ConnectorError> {
-        if principal.id.is_empty()
-            || !matches!(
-                self.workspaces.workspace_is_active(&principal.scope),
-                Ok(true)
-            )
-        {
+        if principal.id.is_empty() {
             return Err(ConnectorError::Forbidden);
         }
         let stored = self
@@ -54,9 +48,6 @@ impl ConnectionResolver for HostResolver {
                 ConnectionError::NotFound => ConnectorError::NotFound,
                 _ => ConnectorError::Unavailable,
             })?;
-        if stored.workspace_code != principal.scope || stored.owner_user_code != principal.id {
-            return Err(ConnectorError::Forbidden);
-        }
         let encrypted: EncryptedVariableValue = serde_json::from_str(&stored.encrypted_credential)
             .map_err(|_| ConnectorError::Configuration)?;
         let token = self
@@ -81,7 +72,6 @@ impl ConnectionResolver for HostResolver {
 pub struct IntegrationService {
     repository: Arc<dyn ConnectionRepository>,
     cipher: Arc<dyn VariableCipher>,
-    workspaces: WorkspaceService,
     connectors: Arc<ConnectorService>,
     ids: Arc<dyn IdGenerator>,
 }
@@ -91,31 +81,22 @@ impl IntegrationService {
     pub fn new(
         repository: impl ConnectionRepository + 'static,
         cipher: Arc<dyn VariableCipher>,
-        workspaces: WorkspaceService,
+        _workspaces: WorkspaceService,
         providers: Vec<Arc<dyn ConnectorProvider>>,
     ) -> Result<Self, ConnectionError> {
         let repository: Arc<dyn ConnectionRepository> = Arc::new(repository);
         let resolver = Arc::new(HostResolver {
             repository: repository.clone(),
             cipher: cipher.clone(),
-            workspaces: workspaces.clone(),
         });
         let connectors =
             ConnectorService::new(providers, resolver).map_err(ConnectionError::Remote)?;
         Ok(Self {
             repository,
             cipher,
-            workspaces,
             connectors: Arc::new(connectors),
             ids: Arc::new(SnowflakedSnowflakeIdProvider::default()),
         })
-    }
-
-    fn check_workspace(&self, workspace_code: &str) -> Result<(), ConnectionError> {
-        match self.workspaces.workspace_is_active(workspace_code) {
-            Ok(true) => Ok(()),
-            _ => Err(ConnectionError::WorkspaceInvalid),
-        }
     }
 
     pub fn providers(&self) -> Vec<ProviderDescriptor> {
@@ -123,7 +104,6 @@ impl IntegrationService {
     }
 
     pub fn list(&self, workspace_code: &str, user_code: &str) -> Result<Vec<ConnectionView>, ConnectionError> {
-        self.check_workspace(workspace_code)?;
         if user_code.is_empty() { return Err(ConnectionError::NotFound); }
         Ok(self
             .repository
@@ -134,9 +114,8 @@ impl IntegrationService {
     }
 
     pub fn contains(&self, workspace_code: &str, user_code: &str, code: &str) -> bool {
-        self.check_workspace(workspace_code).is_ok()
-            && !user_code.is_empty()
-            && self.repository.get(code).is_ok_and(|value| value.workspace_code == workspace_code && value.owner_user_code == user_code)
+        let _ = workspace_code;
+        !user_code.is_empty() && self.repository.get(code).is_ok()
     }
 
     pub fn save(
@@ -149,7 +128,6 @@ impl IntegrationService {
         endpoint: &str,
         token: Option<&str>,
     ) -> Result<ConnectionView, ConnectionError> {
-        self.check_workspace(workspace_code)?;
         if user_code.is_empty() { return Err(ConnectionError::NotFound); }
         let name = name.trim();
         let endpoint = endpoint.trim().trim_end_matches('/');
@@ -177,7 +155,7 @@ impl IntegrationService {
         let existing = match code {
             Some(code) => {
                 let value = self.repository.get(code)?;
-                if value.workspace_code != workspace_code || value.owner_user_code != user_code || value.provider_id != provider {
+                if value.provider_id != provider {
                     return Err(ConnectionError::NotFound);
                 }
                 Some(value)
@@ -194,13 +172,15 @@ impl IntegrationService {
                     .value()
             ),
         };
+        let stored_workspace = existing.as_ref().map(|value| value.workspace_code.as_str()).unwrap_or(workspace_code);
+        let stored_owner = existing.as_ref().map(|value| value.owner_user_code.as_str()).unwrap_or(user_code);
         let encrypted_credential = match token.filter(|token| !token.trim().is_empty()) {
             Some(token) => {
                 let encrypted = self
                     .cipher
                     .encrypt(
                         token,
-                        credential_aad(workspace_code, user_code, &connection_code).as_bytes(),
+                        credential_aad(stored_workspace, stored_owner, &connection_code).as_bytes(),
                     )
                     .map_err(|_| ConnectionError::EncryptionUnavailable)?;
                 serde_json::to_string(&encrypted).map_err(|_| ConnectionError::StorageFailure)?
@@ -212,8 +192,8 @@ impl IntegrationService {
         };
         let stored = StoredConnection {
             connection_code,
-            workspace_code: workspace_code.into(),
-            owner_user_code: user_code.into(),
+            workspace_code: stored_workspace.into(),
+            owner_user_code: stored_owner.into(),
             provider_id: provider.into(),
             name: name.into(),
             endpoint: endpoint.into(),
@@ -224,9 +204,8 @@ impl IntegrationService {
     }
 
     pub fn delete(&self, workspace_code: &str, user_code: &str, code: &str) -> Result<(), ConnectionError> {
-        self.check_workspace(workspace_code)?;
-        let connection = self.repository.get(code)?;
-        if user_code.is_empty() || connection.workspace_code != workspace_code || connection.owner_user_code != user_code {
+        let _ = workspace_code;
+        if user_code.is_empty() {
             return Err(ConnectionError::NotFound);
         }
         self.repository.delete(code)
@@ -281,7 +260,7 @@ impl IntegrationService {
     }
 
     /// Fetch current provider metadata instead of trusting a client-supplied
-    /// clone URL. Connection resolution is scoped to the requesting user.
+    /// clone URL. Global connection use requires an authenticated user.
     pub async fn repository(
         &self,
         workspace_code: &str,
@@ -298,17 +277,17 @@ impl IntegrationService {
             .map_err(ConnectionError::Remote)
     }
 
-    /// Only the host may obtain a credential, after the same ownership check
-    /// used by connector calls. Never return this value through an API DTO.
+    /// Only the host may obtain a global connection credential for an authenticated user.
+    /// Never return this value through an API DTO.
     pub(crate) fn git_credential(
         &self,
         workspace_code: &str,
         user_code: &str,
         code: &str,
     ) -> Result<(StoredConnection, String), ConnectionError> {
-        self.check_workspace(workspace_code)?;
+        let _ = workspace_code;
         let stored = self.repository.get(code)?;
-        if user_code.is_empty() || stored.workspace_code != workspace_code || stored.owner_user_code != user_code {
+        if user_code.is_empty() {
             return Err(ConnectionError::NotFound);
         }
         let encrypted: EncryptedVariableValue = serde_json::from_str(&stored.encrypted_credential)

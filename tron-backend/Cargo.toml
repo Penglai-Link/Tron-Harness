@@ -102,11 +102,6 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 
-[dev-dependencies]
-# Dependencies of the frontend browser acceptance server.
-rand08 = { package = "rand", version = "0.8" }
-rsa = "0.9"
-
 # Framework 1.1.1 pins the preceding SDK revision. Replace that exact package
 # so its public SDK types and Tron's types come from the same revision.
 # Cargo's [patch] cannot override a Git source with another rev of that source.

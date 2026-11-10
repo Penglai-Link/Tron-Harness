@@ -79,7 +79,7 @@ export function PlatformVariableDetailsPage() {
           setRevealedValue("");
         }
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : t("pages:variablesPlatform.errors.load", "Platform variable could not be loaded"));
+        if (active) toast.error(error instanceof Error ? error.message : t("pages:variablesPlatform.errors.load", "Public variable could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -161,7 +161,7 @@ export function PlatformVariableDetailsPage() {
       setRevealedValue("");
       exitEditing(saved.key);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("pages:variables.errors.save", "Platform variable could not be saved"));
+      toast.error(error instanceof Error ? error.message : t("pages:variables.errors.save", "Public variable could not be saved"));
     } finally {
       setSubmitting(false);
     }
@@ -179,7 +179,7 @@ export function PlatformVariableDetailsPage() {
       toast.success(t("pages:variables.messages.deleted", "{{key}} deleted", { key: record.key }));
       navigate("/settings/variables");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("pages:variablesPlatform.errors.delete", "Platform variable could not be deleted"));
+      toast.error(error instanceof Error ? error.message : t("pages:variablesPlatform.errors.delete", "Public variable could not be deleted"));
     } finally {
       setDeleting(false);
     }
@@ -204,9 +204,9 @@ export function PlatformVariableDetailsPage() {
       <>
         <PageHeader
           breadcrumbs={[{ label: t("pages:variablesPlatform.title", "Variables"), href: "/settings/variables" }, { label: t("pages:variables.loading", "Loading") }]}
-          title={t("pages:variablesPlatform.detailTitle", "Platform Variable")}
+          title={t("pages:variablesPlatform.detailTitle", "Public Variable")}
         />
-        <SurfaceCard>{t("pages:variablesPlatform.loading", "Loading platform variable...")}</SurfaceCard>
+        <SurfaceCard>{t("pages:variablesPlatform.loading", "Loading public variable...")}</SurfaceCard>
       </>
     );
   }
@@ -216,9 +216,9 @@ export function PlatformVariableDetailsPage() {
       <>
         <PageHeader
           breadcrumbs={[{ label: t("pages:variablesPlatform.title", "Variables"), href: "/settings/variables" }, { label: t("pages:variables.notFound", "Not Found") }]}
-          title={t("pages:variablesPlatform.detailTitle", "Platform Variable")}
+          title={t("pages:variablesPlatform.detailTitle", "Public Variable")}
         />
-        <SurfaceCard>{t("pages:variablesPlatform.notFound", "Platform variable not found.")}</SurfaceCard>
+        <SurfaceCard>{t("pages:variablesPlatform.notFound", "Public variable not found.")}</SurfaceCard>
       </>
     );
   }

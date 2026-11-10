@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_MINERU_BASE_URL: &str = "http://127.0.0.1:8000";
-const DEFAULT_MINERU_PARSE_ENDPOINT: &str = "/file_parse";
 fn configured_default_timeout_seconds() -> u64 {
     static TIMEOUT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *TIMEOUT.get_or_init(|| {
@@ -15,8 +14,6 @@ fn configured_default_timeout_seconds() -> u64 {
     })
 }
 const DEFAULT_MINERU_MAX_BYTES: usize = 52_428_800;
-const DEFAULT_MINERU_BACKEND: &str = "pipeline";
-const DEFAULT_MINERU_PARSE_METHOD: &str = "auto";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -28,12 +25,8 @@ pub struct MineruConfig {
     pub ingestion: KnowledgeIngestionConfig,
     pub enabled: bool,
     pub base_url: String,
-    pub parse_endpoint: String,
     pub timeout_seconds: u64,
     pub max_bytes: usize,
-    pub backend: String,
-    pub parse_method: String,
-    pub return_content_list: bool,
     pub default_tier: crate::application::knowledge_base::parsing::ParsingTier,
     pub image_description: ImageDescriptionConfig,
     /// Explicit consent boundary: registered KB images may reach the answer model.
@@ -50,12 +43,8 @@ impl Default for MineruConfig {
             ingestion: Default::default(),
             enabled: true,
             base_url: DEFAULT_MINERU_BASE_URL.into(),
-            parse_endpoint: DEFAULT_MINERU_PARSE_ENDPOINT.into(),
             timeout_seconds: configured_default_timeout_seconds(),
             max_bytes: DEFAULT_MINERU_MAX_BYTES,
-            backend: DEFAULT_MINERU_BACKEND.into(),
-            parse_method: DEFAULT_MINERU_PARSE_METHOD.into(),
-            return_content_list: false,
             default_tier: Default::default(),
             image_description: Default::default(),
             visual_context_enabled: false,
@@ -145,23 +134,11 @@ impl MineruConfig {
         if let Some(value) = non_blank(overrides.base_url) {
             self.base_url = value;
         }
-        if let Some(value) = non_blank(overrides.parse_endpoint) {
-            self.parse_endpoint = value;
-        }
         if let Some(value) = overrides.timeout_seconds {
             self.timeout_seconds = value;
         }
         if let Some(value) = overrides.max_bytes {
             self.max_bytes = value;
-        }
-        if let Some(value) = non_blank(overrides.backend) {
-            self.backend = value;
-        }
-        if let Some(value) = non_blank(overrides.parse_method) {
-            self.parse_method = value;
-        }
-        if let Some(value) = overrides.return_content_list {
-            self.return_content_list = value;
         }
     }
 }
@@ -179,12 +156,8 @@ pub(super) struct MineruFileConfig {
     default_tier: Option<crate::application::knowledge_base::parsing::ParsingTier>,
     enabled: Option<bool>,
     base_url: Option<String>,
-    parse_endpoint: Option<String>,
     timeout_seconds: Option<u64>,
     max_bytes: Option<usize>,
-    backend: Option<String>,
-    parse_method: Option<String>,
-    return_content_list: Option<bool>,
 }
 
 fn non_blank(value: Option<String>) -> Option<String> {

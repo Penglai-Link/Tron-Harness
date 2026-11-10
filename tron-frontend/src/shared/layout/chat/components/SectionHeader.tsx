@@ -16,7 +16,7 @@ interface SectionHeaderProps {
 export function SectionHeader({ label, open, onToggle, onCreate, createLabel, createDisabled, shortcutAction }: SectionHeaderProps) {
   const { t } = useTranslation("common");
   return (
-    <div className="group/section flex h-7 min-w-0 items-center gap-1 rounded px-2 text-xs font-medium">
+    <div className="group/section flex h-7 min-w-0 items-center gap-1 rounded px-2 text-sm font-medium">
       <button
         type="button"
         aria-expanded={open}

@@ -1,0 +1,31 @@
+/* Settings share one page surface. Controls, previews, metric tiles and portals
+   keep their own visual boundaries; only structural containers are flattened. */
+[data-settings-content] :is([data-slot="surface-card"], [data-slot="card"], [data-settings-section]):not([data-settings-card]) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-inline: 0 !important;
+  padding-block: 1.25rem;
+}
+
+[data-settings-content] :is([data-slot="surface-card"], [data-slot="card"], [data-settings-section]):not([data-settings-card]) + :is([data-slot="surface-card"], [data-slot="card"], [data-settings-section]):not([data-settings-card]) {
+  border-top: 1px solid var(--color-outline-variant) !important;
+}
+
+[data-settings-content] [data-slot="card"]:not([data-settings-card]) > :is([data-slot="card-header"], [data-slot="card-content"], [data-slot="card-footer"]) {
+  padding-inline: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-settings-content] [data-slot="data-table"] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-settings-content] [data-slot="data-table"] > div:first-child {
+  padding-inline: 0;
+}

@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, patch, post},
@@ -35,14 +35,7 @@ pub fn routes() -> Router<AppState> {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ScopeQuery {
-    workspace_code: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CreateRequest {
-    workspace_code: String,
     provider_id: String,
     name: String,
     endpoint: String,
@@ -52,7 +45,6 @@ struct CreateRequest {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateRequest {
-    workspace_code: String,
     provider_id: String,
     name: String,
     endpoint: String,
@@ -61,14 +53,7 @@ struct UpdateRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct CheckRequest {
-    workspace_code: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SearchRequest {
-    workspace_code: String,
     query: String,
     cursor: Option<String>,
 }
@@ -84,7 +69,6 @@ struct ProviderResponse {
 #[serde(rename_all = "camelCase")]
 struct ConnectionResponse {
     connection_code: String,
-    workspace_code: String,
     provider_id: String,
     name: String,
     endpoint: String,
@@ -93,7 +77,6 @@ impl From<ConnectionView> for ConnectionResponse {
     fn from(value: ConnectionView) -> Self {
         Self {
             connection_code: value.connection_code,
-            workspace_code: value.workspace_code,
             provider_id: value.provider_id,
             name: value.name,
             endpoint: value.endpoint,
@@ -135,11 +118,10 @@ async fn providers(State(state): State<AppState>) -> Response {
 
 async fn list(
     State(state): State<AppState>,
-    Query(query): Query<ScopeQuery>,
     auth: RequestAuthContext,
     headers: HeaderMap,
 ) -> Response {
-    match state.integrations.list(&query.workspace_code, &auth.user().user_code) {
+    match state.integrations.list("PLATFORM", &auth.user().user_code) {
         Ok(items) => Json(ApiResponse::protocol_success(
             items
                 .into_iter()
@@ -158,7 +140,7 @@ async fn create(
     Json(request): Json<CreateRequest>,
 ) -> Response {
     match state.integrations.save(
-        &request.workspace_code,
+        "PLATFORM",
         &auth.user().user_code,
         None,
         &request.provider_id,
@@ -185,7 +167,7 @@ async fn update(
     Json(request): Json<UpdateRequest>,
 ) -> Response {
     match state.integrations.save(
-        &request.workspace_code,
+        "PLATFORM",
         &auth.user().user_code,
         Some(&code),
         &request.provider_id,
@@ -204,11 +186,10 @@ async fn update(
 async fn delete(
     State(state): State<AppState>,
     Path(code): Path<String>,
-    Query(query): Query<ScopeQuery>,
     auth: RequestAuthContext,
     headers: HeaderMap,
 ) -> Response {
-    match state.integrations.delete(&query.workspace_code, &auth.user().user_code, &code) {
+    match state.integrations.delete("PLATFORM", &auth.user().user_code, &code) {
         Ok(()) => Json(ApiResponse::protocol_success(EmptyData {})).into_response(),
         Err(error) => error_response(error, &headers),
     }
@@ -219,11 +200,10 @@ async fn check(
     Path(code): Path<String>,
     auth: RequestAuthContext,
     headers: HeaderMap,
-    Json(request): Json<CheckRequest>,
 ) -> Response {
     match state
         .integrations
-        .check(&request.workspace_code, &auth.user().user_code, &code)
+        .check("PLATFORM", &auth.user().user_code, &code)
         .await
     {
         Ok(()) => Json(ApiResponse::protocol_success(EmptyData {})).into_response(),
@@ -245,7 +225,7 @@ async fn search(
     match state
         .integrations
         .repositories(
-            &request.workspace_code,
+            "PLATFORM",
             &auth.user().user_code,
             &code,
             request.query.trim(),
@@ -282,12 +262,6 @@ pub(crate) fn error_response(error: ConnectionError, headers: &HeaderMap) -> Res
             .and_then(|value| value.to_str().ok()),
     );
     let (status, code, en, zh) = match error {
-        ConnectionError::WorkspaceInvalid => (
-            StatusCode::BAD_REQUEST,
-            "CONNECTOR_WORKSPACE_INVALID",
-            "The selected space is unavailable.",
-            "所选空间不可用。",
-        ),
         ConnectionError::InvalidInput => (
             StatusCode::BAD_REQUEST,
             "CONNECTOR_INPUT_INVALID",

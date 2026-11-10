@@ -3,6 +3,7 @@ import {
   Archive,
   BookOpenText,
   Database,
+  GitBranch,
   Palette,
   Bot,
   Boxes,
@@ -140,6 +141,7 @@ export const settingsNavigation = [
     label: "Integration",
     translationKey: "shell:settings.groups.integration",
     items: [
+      { label: "Code Repositories", href: "/settings/code-repositories", icon: GitBranch, translationKey: "shell:topic.repositorySettings" },
       {
         label: "MCP Servers",
         href: "/settings/mcp-servers",

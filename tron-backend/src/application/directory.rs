@@ -118,11 +118,15 @@ impl DirectoryService {
     }
 
     pub async fn pick_and_register(&self, workspace_code: &str, locale: &str) -> Result<Option<DirectoryView>, DirectoryError> {
-        self.check_workspace(workspace_code)?;
-        match self.picker.pick(locale).await? {
+        match self.pick_path(workspace_code, locale).await? {
             Some(path) => self.register(workspace_code, &path).map(Some),
             None => Ok(None),
         }
+    }
+
+    pub async fn pick_path(&self, workspace_code: &str, locale: &str) -> Result<Option<String>, DirectoryError> {
+        self.check_workspace(workspace_code)?;
+        self.picker.pick(locale).await
     }
 
     pub fn register(

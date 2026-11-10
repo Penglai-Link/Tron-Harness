@@ -152,45 +152,10 @@ function buildWebviewInjectionScript(pageId, enabled) {
     .replace("__TRON_INJECTION_ENABLED__", enabled ? "true" : "false");
 }
 
-function createMainWindow() {
+const detachedBrowserWindows = new Set();
+
+function configureBrowserTabHost(window) {
   const targetPreloadPath = path.resolve(__dirname, "..", "preload", "target-preload.cjs");
-  const window = new BrowserWindow({
-    height: 920,
-    show: false,
-    backgroundColor: "#020305",
-    title: "Tron",
-    width: 1440,
-    ...(["win32", "linux"].includes(process.platform) ? { icon: ICON_PATH } : {}),
-    webPreferences: {
-      webviewTag: true,
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.resolve(__dirname, "..", "preload", "app-preload.cjs"),
-      sandbox: false,
-      ...(state.environment.mode === "wsl" ? {
-        partition: `persist:tron-wsl-${crypto.createHash("sha256").update(state.environment.distribution).digest("hex").slice(0, 16)}`
-      } : {})
-    }
-  });
-
-  state.mainWindow = window;
-  startupScene = require("./startup-scene.cjs").createStartupScene({ window, WebContentsView, ipcMain, dataDir: desktopDataDir });
-
-  window.on("close", (event) => {
-    if (isQuitting || (process.platform !== "darwin" && !residentDesktop?.isResident())) {
-      return;
-    }
-
-    event.preventDefault();
-    window.hide();
-  });
-
-  // Windows shutdown/logoff must terminate the sidecar instead of hiding.
-  window.on("session-end", () => {
-    isQuitting = true;
-    stopBackend();
-  });
-
   window.webContents.on("will-attach-webview", (_event, webPreferences) => {
     webPreferences.contextIsolation = true;
     webPreferences.nodeIntegration = false;
@@ -249,7 +214,68 @@ function createMainWindow() {
     });
   });
 
-  window.webContents.setWindowOpenHandler(({ url }) => {
+}
+
+function createMainWindow() {
+  const window = new BrowserWindow({
+    height: 920,
+    show: false,
+    backgroundColor: "#020305",
+    title: "Tron",
+    width: 1440,
+    ...(["win32", "linux"].includes(process.platform) ? { icon: ICON_PATH } : {}),
+    webPreferences: {
+      webviewTag: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.resolve(__dirname, "..", "preload", "app-preload.cjs"),
+      sandbox: false,
+      ...(state.environment.mode === "wsl" ? {
+        partition: `persist:tron-wsl-${crypto.createHash("sha256").update(state.environment.distribution).digest("hex").slice(0, 16)}`
+      } : {})
+    }
+  });
+
+  state.mainWindow = window;
+  startupScene = require("./startup-scene.cjs").createStartupScene({ window, WebContentsView, ipcMain, dataDir: desktopDataDir });
+
+  window.on("close", (event) => {
+    if (isQuitting || (process.platform !== "darwin" && !residentDesktop?.isResident())) {
+      return;
+    }
+
+    event.preventDefault();
+    window.hide();
+  });
+
+  // Windows shutdown/logoff must terminate the sidecar instead of hiding.
+  window.on("session-end", () => {
+    isQuitting = true;
+    stopBackend();
+  });
+
+  configureBrowserTabHost(window);
+
+  window.webContents.on("did-create-window", (child) => {
+    detachedBrowserWindows.add(child);
+    configureBrowserTabHost(child);
+    // The child hosts a React portal from the main renderer. It never bootstraps
+    // the application, receives privileged IPC, or navigates its top-level frame.
+    child.webContents.on("will-navigate", (event) => event.preventDefault());
+    child.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    child.on("closed", () => detachedBrowserWindows.delete(child));
+  });
+  window.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (url === "about:blank" && /^tron-detached-[0-9a-f-]{36}$/.test(frameName)) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          title: "Tron", minWidth: 400, minHeight: 320,
+          webPreferences: { webviewTag: true, contextIsolation: true, nodeIntegration: false,
+            sandbox: false, webSecurity: true, preload: "" }
+        }
+      };
+    }
     const targetUrl = sanitizeUrl(url);
     if (!isHttpUrl(targetUrl)) {
       return { action: "deny" };
@@ -259,6 +285,8 @@ function createMainWindow() {
   });
 
   window.on("closed", () => {
+    for (const child of detachedBrowserWindows) child.destroy();
+    detachedBrowserWindows.clear();
     if (state.mainWindow === window) {
       state.mainWindow = null;
     }
@@ -295,7 +323,10 @@ function startupPageHtml(message) {
 function startBackend(resourcesDir) {
   const sidecarPath = resolveSidecarPath(resourcesDir);
   const appDataDir = state.appDataDir;
-  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir, { relocateStorage: process.platform === "win32" && app.isPackaged });
+  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir, {
+    relocateStorage: process.platform === "win32" && app.isPackaged,
+    backendInitialize: process.platform !== "win32"
+  });
   const logPath = resolveBackendLogPath(appDataDir);
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
@@ -979,7 +1010,8 @@ function registerIpcHandlers() {
     }
 
     const host = ipcEvent.sender.hostWebContents;
-    if (!host || host.id !== state.mainWindow.webContents.id) {
+    if (!host || (host.id !== state.mainWindow.webContents.id
+      && !Array.from(detachedBrowserWindows).some((child) => !child.isDestroyed() && child.webContents.id === host.id))) {
       return "";
     }
 
@@ -999,7 +1031,8 @@ function registerIpcHandlers() {
     }
 
     const host = ipcEvent.sender.hostWebContents;
-    if (!host || host.id !== state.mainWindow.webContents.id) {
+    if (!host || (host.id !== state.mainWindow.webContents.id
+      && !Array.from(detachedBrowserWindows).some((child) => !child.isDestroyed() && child.webContents.id === host.id))) {
       return false;
     }
 

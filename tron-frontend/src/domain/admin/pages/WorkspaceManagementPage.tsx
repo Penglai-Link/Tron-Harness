@@ -28,7 +28,6 @@ import {
   updateWorkspaceRecord,
 } from "@/domain/admin/mock";
 import type { WorkspaceDetailRecord, WorkspaceStatus, WorkspaceTreeNodeRecord } from "@/domain/admin/model";
-import { PageHeader, SurfaceCard } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 type StatusFilter = WorkspaceStatus | "All";
@@ -181,19 +180,9 @@ export function WorkspaceManagementPage() {
   };
 
   return (
-    <div className="min-w-0 pb-8">
-      <PageHeader title={t("workspaceManagement.title")} actions={<>
-        <Button variant="secondary" onClick={() => void loadTree()} disabled={loading}>
-          {t("workspaceManagement.refresh")}
-        </Button>
-        <Button onClick={() => prepareCreate(null)}>
-          {t("workspaceManagement.createWorkspace")}
-        </Button>
-      </>} />
-
-      <div className="grid min-w-0 grid-cols-1 items-stretch gap-5 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
-        <SurfaceCard aria-label={t("workspaceManagement.hierarchy")} className="flex min-w-0 flex-col overflow-hidden p-0">
-          <div className="space-y-4 border-b border-[var(--color-outline-variant)] p-5">
+    <div className="grid h-full min-h-0 min-w-0 grid-cols-1 overflow-auto lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
+        <aside aria-label={t("workspaceManagement.hierarchy")} className="flex min-h-0 min-w-0 flex-col border-b border-[var(--color-outline-variant)] lg:row-span-2 lg:grid lg:grid-rows-subgrid lg:border-r lg:border-b-0">
+          <div className="shrink-0 space-y-4 border-b border-[var(--color-outline-variant)] p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold">{t("workspaceManagement.hierarchy")}</h2>
               <Badge variant="secondary" className="tabular-nums">{flatten(visibleTree).length}</Badge>
@@ -207,7 +196,7 @@ export function WorkspaceManagementPage() {
               </SelectInput>
             </div>
           </div>
-          <div className="min-h-40 flex-1 overflow-auto p-3 lg:max-h-[calc(100vh-20rem)] lg:min-h-80">
+          <div className="min-h-40 max-h-72 flex-1 overflow-auto overscroll-contain p-3 lg:min-h-0 lg:max-h-none">
             {loading && !tree.length ? <p role="status" className="px-2 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">{t("workspaceManagement.loading")}</p> : visibleTree.length ? <WorkspaceTree records={visibleTree} expandedCodes={expandedCodes} selectedCode={selectedCode}
               label={t("workspaceManagement.hierarchy")} archivedLabel={t("workspaceManagement.statuses.archived")}
               expandLabel={name => t("workspaceManagement.expandNamed", { name })}
@@ -216,19 +205,21 @@ export function WorkspaceManagementPage() {
               onToggle={code => setExpandedCodes(current => { const next = new Set(current); if (next.has(code)) next.delete(code); else next.add(code); return next; })}
               onSelect={selectWorkspace} onCreateChild={prepareCreate} /> : <p className="px-2 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">{t("workspaceManagement.empty")}</p>}
           </div>
-        </SurfaceCard>
+        </aside>
 
-        <SurfaceCard aria-label={t("workspaceManagement.details")} className="flex min-w-0 flex-col overflow-hidden p-0">
+        <section aria-label={t("workspaceManagement.details")} className="min-h-0 min-w-0 lg:row-span-2 lg:grid lg:grid-rows-subgrid">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-[var(--color-outline-variant)] px-5 py-5 sm:px-6">
+        <Button variant="secondary" onClick={() => void loadTree()} disabled={loading}>
+          {t("workspaceManagement.refresh")}
+        </Button>
+        <Button onClick={() => prepareCreate(null)}>
+          {t("workspaceManagement.createWorkspace")}
+        </Button>
+          </div>
+          <div className="min-h-0 min-w-0 lg:overflow-y-auto lg:overscroll-contain">
           {mode === "create" || detail ? (
             <>
-              <div className="flex min-h-19 flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4 sm:px-6">
-                <h2 className="min-w-0 flex-1 truncate text-base font-semibold" title={mode === "create" ? undefined : detail?.name}>
-                  {mode === "create" ? t("workspaceManagement.createWorkspace") : detail?.name}
-                </h2>
-                {detail ? <Badge variant={detail.status === "Active" ? "success" : "secondary"}>{detail.status === "Active" ? t("workspaceManagement.statuses.active") : t("workspaceManagement.statuses.archived")}</Badge> : null}
-              </div>
-
-              <div className="flex-1 p-5 sm:p-6">
+              <div className="p-5 sm:p-6">
               <div className="grid gap-x-5 gap-y-4 xl:grid-cols-2">
                 <Field className="min-w-0" label={t("workspaceManagement.name")} required>
                   <TextInput aria-label={t("workspaceManagement.name")} autoFocus={mode === "create"} value={name} onChange={(event) => setName(event.target.value)} />
@@ -277,8 +268,8 @@ export function WorkspaceManagementPage() {
               <p className="mt-1 max-w-xs text-sm text-[var(--color-on-surface-variant)]">{t("workspaceManagement.selectOrCreate")}</p>
             </div>
           )}
-        </SurfaceCard>
-      </div>
+          </div>
+        </section>
     </div>
   );
 }

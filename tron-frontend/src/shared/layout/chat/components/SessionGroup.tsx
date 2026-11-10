@@ -95,11 +95,11 @@ const SessionGroup = ({
             />
           ))}
           {sessions.length === 0 ? (
-            <p className="py-1 pl-6 text-xs opacity-45">{t("shell:chatSidebar.noSessions")}</p>
+            <p className="py-1 pl-6 text-sm opacity-45">{t("shell:chatSidebar.noSessions")}</p>
           ) : null}
           {sessions.length > visibleSessionCount ? (
             <button
-              className="py-1 pl-6 text-sm! opacity-45 text-left"
+              className="py-1 pl-6 text-base! opacity-45 text-left"
               onClick={() =>
                 setVisibleSessionCount((count) => count + sessionListPageSize)
               }

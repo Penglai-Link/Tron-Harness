@@ -139,6 +139,7 @@ function resolveUpdateServerUrl(resourcesDir) {
 
 function resolveBackendConfigPath(appDataDir, resourcesDir, options = {}) {
   const userConfigPath = path.join(appDataDir, "application.yaml");
+  if (options.backendInitialize) return userConfigPath;
   if (fs.existsSync(userConfigPath)) {
     return userConfigPath;
   }

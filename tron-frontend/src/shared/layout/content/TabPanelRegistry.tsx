@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
+import { useDetachedBrowserTabs } from "./useDetachedBrowserTabs";
 import type { EditableTab } from "@/components/editable-tabs";
 
 export interface TabPanelConfig {
@@ -27,6 +28,10 @@ export interface TabPanelConfig {
 }
 
 interface TabPanelRegistryValue {
+  detachRightPanelTab: (tabId: string, tab: EditableTab, position?: { screenX: number; screenY: number }) => void;
+  detachedRightPanelIds: readonly string[];
+  returnRightPanelTab: (stableId: string) => void;
+  focusRightPanelWindow: (stableId: string) => void;
   cacheConfigs: Readonly<Record<string, TabPanelConfig>>;
   clear: (tabId: string) => void;
   get: (tabId: string) => TabPanelConfig | undefined;
@@ -41,11 +46,16 @@ interface TabPanelRegistryValue {
     updates: Partial<EditableTab>
   ) => void;
   removeRightPanelTab: (tabId: string, key: string) => void;
+  reassignRightPanelOwner: (tabId: string, previous: string | undefined, next: string) => void;
   setRightPanelActiveKey: (tabId: string, key: string) => void;
   setRightPanelOwnerKey: (tabId: string, ownerKey: string | undefined) => void;
 }
 
 const emptyRegistry: TabPanelRegistryValue = {
+  detachRightPanelTab: () => undefined,
+  detachedRightPanelIds: [],
+  returnRightPanelTab: () => undefined,
+  focusRightPanelWindow: () => undefined,
   cacheConfigs: {},
   clear: () => undefined,
   get: () => undefined,
@@ -56,6 +66,7 @@ const emptyRegistry: TabPanelRegistryValue = {
   openRightPanelTab: () => undefined,
   updateRightPanelTab: () => undefined,
   removeRightPanelTab: () => undefined,
+  reassignRightPanelOwner: () => undefined,
   setRightPanelActiveKey: () => undefined,
   setRightPanelOwnerKey: () => undefined,
 };
@@ -185,6 +196,22 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     []
   );
 
+  const reassignRightPanelOwner = useCallback((tabId: string, previous: string | undefined, next: string) => {
+    setRightPanelTabs((current) => ({
+      ...current,
+      [tabId]: (current[tabId] ?? []).map((tab) => tab.ownerKey === previous ? { ...tab, ownerKey: next } : tab),
+    }));
+    setRightPanelOwnerKeys((current) => ({ ...current, [tabId]: next }));
+    setRightPanelActiveKeys((current) => {
+      const previousScope = activeKeyScope(tabId, previous);
+      const key = current[previousScope];
+      if (!key) return current;
+      const remaining = { ...current, [activeKeyScope(tabId, next)]: key };
+      delete remaining[previousScope];
+      return remaining;
+    });
+  }, [activeKeyScope]);
+
   const register = useCallback((tabId: string, config: TabPanelConfig) => {
     const definedConfigEntries = Object.entries(config).filter(
       ([, value]) => value !== undefined
@@ -283,8 +310,12 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     [rightPanelOwnerKeys]
   );
 
+  const { portals, detachRightPanelTab, detachedRightPanelIds, returnRightPanelTab, focusRightPanelWindow } =
+    useDetachedBrowserTabs(rightPanelTabs, cacheConfigs, rightPanelOwnerKeys, updateRightPanelTab, setRightPanelActiveKey, setRightPanelOwnerKey);
+
   const value = useMemo<TabPanelRegistryValue>(
     () => ({
+      detachRightPanelTab, detachedRightPanelIds, returnRightPanelTab, focusRightPanelWindow,
       cacheConfigs,
       clear,
       get,
@@ -295,10 +326,12 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
       updateRightPanelTab,
       register,
       removeRightPanelTab,
+      reassignRightPanelOwner,
       setRightPanelActiveKey,
       setRightPanelOwnerKey,
     }),
     [
+      detachRightPanelTab, detachedRightPanelIds, returnRightPanelTab, focusRightPanelWindow,
       cacheConfigs,
       clear,
       get,
@@ -309,6 +342,7 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
       updateRightPanelTab,
       register,
       removeRightPanelTab,
+      reassignRightPanelOwner,
       setRightPanelActiveKey,
       setRightPanelOwnerKey,
     ]
@@ -318,6 +352,7 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     <TabPanelRegistryContext.Provider value={value}>
       <TabPanelRegistrationContext.Provider value={register}>
         {children}
+        {portals}
       </TabPanelRegistrationContext.Provider>
     </TabPanelRegistryContext.Provider>
   );
@@ -400,7 +435,10 @@ export function useRightPanelTabs(ownerKey?: string) {
     [ownerKey, registry, scopeTabId, updateRightPanelState]
   );
 
-  return useMemo(() => ({ openTab }), [openTab]);
+  const reassignOwner = useCallback((nextOwnerKey: string) => {
+    registry.reassignRightPanelOwner(scopeTabId, ownerKey, nextOwnerKey);
+  }, [ownerKey, registry, scopeTabId]);
+  return useMemo(() => ({ openTab, reassignOwner }), [openTab, reassignOwner]);
 }
 
 export function TabPanelHost() {

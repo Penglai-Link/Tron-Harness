@@ -2655,6 +2655,7 @@ export function ChatManagementPage() {
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
   useCreateChatTab(activeWorkspaceCode,draftProjectCode,draftDirectoryCode);
   const promoteDraftSession = useStableCallback((session: ChatSession) => {
+    reassignRightPanelOwner(session.sessionCode);
     setOptimisticActiveSession(session);
     setSessionGroups((current) => insertSession(current, session));
     activeSessionCodeRef.current = session.sessionCode;
@@ -2837,7 +2838,7 @@ export function ChatManagementPage() {
     [composerSessionCode],
   );
 
-  const { openTab } = useRightPanelTabs(activeSession?.sessionCode);
+  const { openTab, reassignOwner: reassignRightPanelOwner } = useRightPanelTabs(activeSession?.sessionCode);
 
   const openMarkdownInternalLink = useCallback((url: string) => {
     const normalizedUrl = url.trim();
@@ -3703,6 +3704,8 @@ export function ChatManagementPage() {
         {activeSession || isDraft ? (
           <AgentChatWindow
             speechScope={requestedSessionCode || requestedDraftCode || activeSession?.sessionCode}
+            agentIdentity={selectedAgent?.kind === "system" && (!activeSession || activeSession.agentCode === selectedAgent.agentCode)
+              ? { agentCode: selectedAgent.agentCode, name: selectedAgent.name } : undefined}
             allowDraftSession={isDraft}
             agentReplyEffect={agentReplyEffect}
             agentReplySpeed={agentReplySpeed}

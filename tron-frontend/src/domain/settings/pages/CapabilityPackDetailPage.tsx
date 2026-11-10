@@ -12,9 +12,11 @@ import { PageHeader, SurfaceCard } from "@/shared";
 import { listCapabilityPacks, type CapabilityPackRecord } from "../api/capabilityApi";
 
 const CONTENT_KIND_ORDER = [
-  "Tool", "Skill", "Resource", "Page", "Mcp", "Runtime", "Context", "Policy",
+  "Tool", "Skill", "Resource", "Page", "Navigation", "Mcp", "Runtime", "Context", "Policy",
   "Extension", "Implementation", "Plugin", "Dependency", "Permission",
 ] as const;
+
+const NAVIGATION_KINDS = new Set(["NavigationDomain", "NavigationMenu", "NavigationLayout"]);
 
 export function CapabilityPackDetailPage() {
   const { packId } = useParams<{ packId: string }>();
@@ -40,9 +42,10 @@ export function CapabilityPackDetailPage() {
 
   const groups = new Map<string, NonNullable<CapabilityPackRecord["contents"]>>();
   for (const item of record?.contents ?? []) {
-    const group = groups.get(item.kind) ?? [];
+    const kind = NAVIGATION_KINDS.has(item.kind) ? "Navigation" : item.kind;
+    const group = groups.get(kind) ?? [];
     group.push(item);
-    groups.set(item.kind, group);
+    groups.set(kind, group);
   }
   const kinds = [
     ...CONTENT_KIND_ORDER,
@@ -78,9 +81,11 @@ export function CapabilityPackDetailPage() {
             <ul className="grid gap-4">{items.map((item, index) => {
               return <li key={`${item.name}-${index}`}>
                 <SurfaceCard>
+                  {kind === "Navigation" && <Badge variant="outline" className="mb-2">{t(`pages:capabilityManagement.contentKinds.${item.kind}`, { defaultValue: item.kind })}</Badge>}
                   <h2 className="break-words text-sm font-semibold">{item.displayName || item.name}</h2>
                   {item.displayName && item.displayName !== item.name && <p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{item.name}</p>}
-                  {item.kind !== "Plugin" ? <p className="mt-2 max-w-4xl whitespace-pre-wrap break-words text-sm text-[var(--color-on-surface-variant)]">{(item.kind === "Tool" ? item.description : capabilityDescription(t, item.kind, item.name, item.description)) || pageT("noDescription")}</p> : null}
+                  {item.kind !== "Plugin" && (item.kind !== "NavigationLayout" || item.description) ? <p className="mt-2 max-w-4xl whitespace-pre-wrap break-words text-sm text-[var(--color-on-surface-variant)]">{(item.kind === "Tool" ? item.description : capabilityDescription(t, item.kind, item.name, item.description)) || pageT("noDescription")}</p> : null}
+                  {item.kind === "NavigationLayout" && !!item.provides?.length && <ul className="mt-2 space-y-1 text-xs text-[var(--color-on-surface-variant)]">{item.provides.map((menuCode, index) => <li key={`${menuCode}-${index}`} className="break-all font-mono">{menuCode}</li>)}</ul>}
                 </SurfaceCard>
               </li>;
             })}</ul>}

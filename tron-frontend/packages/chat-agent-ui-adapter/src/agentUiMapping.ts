@@ -9,10 +9,10 @@ interface MappedInput extends Ui.SendChatMessageInput {
   metadata: { tron: SendChatMessageInput };
 }
 
-export function toUiSession(session: ChatSession): MappedSession {
+export function toUiSession(session: ChatSession, agentName?: string): MappedSession {
   return {
     id: session.id, sessionId: session.sessionCode, userId: session.userCode,
-    groupId: session.taskCode, displayName: sessionAgentTagLabel(session.agentCode),
+    groupId: session.taskCode, displayName: agentName || sessionAgentTagLabel(session.agentCode),
     title: session.title, status: session.status, lastRunId: session.lastRunCode,
     lastRunStatus: session.lastRunStatus, createdAt: session.createdAt, updatedAt: session.updatedAt,
     metadata: { tron: session, agentId:session.agentCode } as MappedSession["metadata"],
@@ -66,15 +66,29 @@ export function toUiQuestion(value: ChatUserInputRequest): Ui.ChatUserInputReque
     })), answers: answers == null ? answers : answers.map(toUiAnswer),
   };
 }
-export function toUiResult(value: ChatSendResult): Ui.ChatSendResult {
+export function toUiResult(value: ChatSendResult, agentName?: string): Ui.ChatSendResult {
   const { runCode, conversationCode, workspaceCode, systemAgentSessionId, ...run } = value.run;
-  return { session: toUiSession(value.session), messages: value.messages.map(toUiMessage),
+  return { session: toUiSession(value.session, agentName), messages: value.messages.map((message) => toUiMessageWithAgent(message, agentName)),
     run: { ...run, runId: runCode, conversationId: conversationCode,
       metadata: { workspaceCode, systemAgentSessionId } },
     userInputRequest: value.userInputRequest ? toUiQuestion(value.userInputRequest) : value.userInputRequest };
 }
-export function toUiHistory(value: Ui.SessionHistory & { compactionDetails?: Record<string, unknown> }): Ui.SessionHistory {
-  return { ...value, records: { ...value.records, steps: value.records.steps.map((step) => {
+export function toUiMessageWithAgent(value: ChatMessage, agentName?: string): Ui.ChatMessage {
+  const message = toUiMessage(value);
+  return agentName && message.role === "ASSISTANT" && !message.provenance && (!message.actor || message.actor === "Assistant")
+    ? { ...message, actor: agentName } : message;
+}
+
+export function toUiHistory(value: Ui.SessionHistory & { compactionDetails?: Record<string, unknown> }, agentName?: string): Ui.SessionHistory {
+  return { ...value, records: { ...value.records, messages: value.records.messages.map((message) => {
+    const structured = message.structured;
+    // Older external runs stored the entire Tron result as assistant output.
+    const internalResult = message.role === "Assistant" && isRecord(structured)
+      && structured.runCode === message.runId && Array.isArray(structured.observations);
+    return { ...message, ...(internalResult ? { structured: null } : {}),
+      ...(agentName && message.role === "Assistant" && !message.provenance
+        ? { provenance: { sender: { kind: "agent", displayName: agentName } } } : {}) };
+  }), steps: value.records.steps.map((step) => {
     const blocks = Ui.parseCompactionBlocks(value.compactionDetails?.[step.id]);
     return {
       ...step, name: step.name === "framework.context.compaction" ? "agent.context.compaction" : step.name,
@@ -115,17 +129,17 @@ type ProtocolEvent = Pick<ChatAguiStreamEvent, "type" | "outcome" | "threadId" |
   [key: string]: unknown;
 };
 
-function mapProtocolResult(event: ProtocolEvent, result: unknown): unknown {
+function mapProtocolResult(event: ProtocolEvent, result: unknown, agentName?: string): unknown {
   const productCompletion = event.productCompletion === true && !isRecord(event.productCompletionError)
     && (event.type === "RUN_FINISHED" || result !== undefined);
   // Unmarked native JSON may use these keys too; only a valid product envelope is legacy.
   const validProduct = isChatSendResult(result);
   if (!productCompletion && !validProduct) return result;
   if (!validProduct) throw new Error("Invalid product completion result");
-  return toUiResult(result);
+  return toUiResult(result, agentName);
 }
 
-export function toUiEvent(event: ProtocolEvent): Ui.ChatAguiStreamEvent {
+export function toUiEvent(event: ProtocolEvent, agentName?: string): Ui.ChatAguiStreamEvent {
   const { result, ...rest } = event;
   return { ...rest, ...(typeof event.name === "string" ? { name: eventNames[event.name] ?? event.name } : {}),
     outcome: event.outcome?.type === "interrupt" ? {
@@ -134,7 +148,7 @@ export function toUiEvent(event: ProtocolEvent): Ui.ChatAguiStreamEvent {
         ...entry, metadata: entry.metadata ? mapQuestionMetadata(entry.metadata) : entry.metadata,
       })),
     } : event.outcome,
-    result: mapProtocolResult(event, result) };
+    result: mapProtocolResult(event, result, agentName) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

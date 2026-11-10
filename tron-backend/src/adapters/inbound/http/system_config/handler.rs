@@ -56,3 +56,14 @@ pub async fn update_system_config(
         Err(error) => system_config_error_response(error),
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(transparent)]
+pub struct ShortcutDefaultsResponse(std::collections::BTreeMap<String, crate::application::system_config::ShortcutBinding>);
+
+pub async fn get_shortcut_defaults(State(service): State<SystemConfigService>) -> Response {
+    match service.shortcut_defaults() {
+        Ok(defaults) => Json(ApiResponse::success(ShortcutDefaultsResponse(defaults))).into_response(),
+        Err(error) => system_config_error_response(error),
+    }
+}

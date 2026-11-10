@@ -153,7 +153,9 @@ impl fw::ExternalAgent for HostExternalAgent {
         let response = match &result {
             Ok(result) => Ok(fw::ExternalAgentResult {
                 content: result.final_output.clone().into(),
-                structured: serde_json::to_value(result).ok(),
+                // The full product result is retained in execution.result below;
+                // it is bookkeeping, not structured assistant output.
+                structured: None,
                 usage: result
                     .token_usage
                     .map(|usage| fw::Usage {

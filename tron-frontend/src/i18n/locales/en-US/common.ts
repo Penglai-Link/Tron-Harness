@@ -43,6 +43,12 @@ export const common = {
     name: "Tron",
   },
   content: {
+    detachTab: "Open in separate window",
+    tabDetached: "Open in a separate window",
+    focusWindow: "Show window",
+    returnTab: "Return to original tab",
+    popupBlocked: "Allow pop-ups for this site and try again.",
+
     none: "None",
     noData: "No attributes",
     openUrl: "Enter the URL to open the page",

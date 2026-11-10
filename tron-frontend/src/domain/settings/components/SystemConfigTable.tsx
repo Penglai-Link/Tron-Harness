@@ -2,7 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SelectInput, TextArea, TextInput } from "@/components/forms";
+import { SelectInput, TextInput } from "@/components/forms";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { SurfaceCard } from "@/shared";
 import { useToast } from "@/components/ui/toast";
@@ -10,18 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";
 import { useSystemConfig } from "@/domain/settings/hooks/useSystemConfig";
-import type { MineruNodeConfig, SystemConfigItem, SystemConfigValue } from "@/domain/settings/model/SystemConfig";
-import { MineruNodeEditor } from "./MineruNodeEditor";
-import { validateMineruNodes } from "../model/mineruNodeValidation";
+import type { SystemConfigValue } from "@/domain/settings/model/SystemConfig";
 import { systemConfigHelp } from "../model/systemConfigHelp";
+import { userSystemConfigGroups } from "../model/userSystemConfig";
 
-function NumericConfigInput({ label, value, onChange }: { label: string; value: SystemConfigValue; onChange: (value: number | null) => void }) {
+function NumericConfigInput({ label, value, disabled, onChange }: { label: string; value: SystemConfigValue; disabled: boolean; onChange: (value: number | null) => void }) {
   const [draft, setDraft] = useState(value == null ? "" : String(value));
   useEffect(() => {
     const next = value == null ? "" : String(value);
     setDraft((current) => next === "" && (current === "-" || current.endsWith(".")) ? current : current && next !== "" && Number(current) === Number(next) ? current : next);
   }, [value]);
-  return <TextInput aria-label={label} type="text" inputMode="decimal" value={draft} onChange={(event) => {
+  return <TextInput aria-label={label} disabled={disabled} type="text" inputMode="decimal" value={draft} onChange={(event) => {
     const raw = event.target.value;
     if (!/^-?\d*(?:\.\d*)?$/.test(raw)) return;
     setDraft(raw);
@@ -29,32 +28,24 @@ function NumericConfigInput({ label, value, onChange }: { label: string; value: 
   }} />;
 }
 
-function displayGroup(path: string) {
-  return path.includes(".") ? path.slice(0, path.indexOf(".")) : "server";
-}
-
-function displayField(path: string) {
-  return path.slice(path.lastIndexOf(".") + 1);
-}
-
 export function SystemConfigTable() {
   const { t } = useTranslation("pages");
   const toast = useToast();
   const { document, error, loading, refresh, save, saving } = useSystemConfig();
   const [changes, setChanges] = useState<Record<string, SystemConfigValue>>({});
-  const [confirmMigration, setConfirmMigration] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const groups = useMemo(() => {
-    const grouped = new Map<string, SystemConfigItem[]>();
-    document?.items.filter((item) => !item.path.startsWith("mineru.") || !["parseEndpoint", "backend", "parseMethod", "returnContentList"].includes(displayField(item.path))).forEach((item) => {
-      const group = displayGroup(item.path);
-      grouped.set(group, [...(grouped.get(group) ?? []), item]);
-    });
-    return [...grouped.entries()];
+    const byPath = new Map(document?.items.map((item) => [item.path, item]));
+    return userSystemConfigGroups.map(({ id, paths }) => ({
+      id,
+      items: paths.flatMap((path) => {
+        const item = byPath.get(path);
+        return item ? [item] : [];
+      }),
+    })).filter(({ items }) => items.length > 0);
   }, [document]);
-  const dirtyItems = document?.items.filter((item) => Object.hasOwn(changes, item.path)) ?? [];
-  const hasMigration = dirtyItems.some((item) => item.effect === "migration");
+  const dirtyItems = groups.flatMap(({ items }) => items).filter((item) => Object.hasOwn(changes, item.path));
 
   function update(path: string, value: SystemConfigValue) {
     setChanges((current) => ({ ...current, [path]: value }));
@@ -72,18 +63,8 @@ export function SystemConfigTable() {
   async function handleSave() {
     if (!document || dirtyItems.length === 0) return;
     try {
-      if (Object.hasOwn(changes, "mineru.nodes")) {
-        const issue = validateMineruNodes(changes["mineru.nodes"] as MineruNodeConfig[]);
-        if (issue) throw new Error(t(`settingsGeneral.systemConfig.mineruNodes.validation.${issue.key}`, { node: issue.node }));
-      }
-      const result = await save(dirtyItems.map((item) => {
-        const value = changes[item.path];
-        return { path: item.path, value: item.path === "mineru.nodes" && Array.isArray(value)
-          ? (value as MineruNodeConfig[]).map((node) => ({ ...node, id: node.id.trim(), baseUrl: node.baseUrl.trim(), resourceGroup: node.resourceGroup.trim() }))
-          : Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean) : value };
-      }), confirmMigration);
+      const result = await save(dirtyItems.map((item) => ({ path: item.path, value: changes[item.path] })), false);
       setChanges({});
-      setConfirmMigration(false);
       const message = result?.migrationPaths.length ? "savedMigration" : result?.hotUpdatePaths.length
         ? result.restartPaths.length ? "savedMixed" : "savedHot"
         : result?.restartPaths.length ? "savedRestart" : "saved";
@@ -95,23 +76,23 @@ export function SystemConfigTable() {
 
   return (
     <SurfaceCard className="space-y-4 xl:col-span-2">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <button
             aria-controls="system-config-groups"
             aria-expanded={expanded}
-            className="flex items-center gap-1.5 text-left text-sm font-semibold text-[var(--color-on-surface)]"
+            className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-left text-sm font-semibold text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             type="button"
             onClick={() => setExpanded((current) => !current)}
           >
-
+            <ChevronRight aria-hidden="true" className={`size-4 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
             <span>{t("settingsGeneral.systemConfig.title")}</span>
           </button>
           <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.help")}>{t("settingsGeneral.systemConfig.description")}</InfoTooltip>
         </div>
         <div className="flex gap-[12px]">
           <Button disabled={loading || saving} onClick={refresh} variant="secondary">{t("settingsGeneral.systemConfig.actions.refresh")}</Button>
-          {dirtyItems.length > 0 && <Button disabled={saving || (hasMigration && !confirmMigration)} onClick={() => void handleSave()}>
+          {dirtyItems.length > 0 && <Button disabled={saving} onClick={() => void handleSave()}>
             {saving ? t("settingsGeneral.systemConfig.actions.saving") : t("settingsGeneral.systemConfig.actions.save", { count: dirtyItems.length })}
           </Button>}
         </div>
@@ -122,8 +103,8 @@ export function SystemConfigTable() {
           {loading && <p className="text-sm text-[var(--color-on-surface-variant)]">{t("settingsGeneral.systemConfig.loading")}</p>}
           {Boolean(error) && !loading && <p className="rounded-lg bg-[var(--color-error-container)] p-3 text-sm text-[var(--color-on-error-container)]">{error instanceof Error ? error.message : t("settingsGeneral.systemConfig.messages.loadFailed")}</p>}
 
-          {!loading && groups.map(([group, items]) => (
-            <section className="mt-4 overflow-hidden rounded-xl border border-[var(--color-outline-variant)] first:mt-0" key={group}>
+          {!loading && groups.map(({ id: group, items }) => (
+            <section className="mt-6 overflow-hidden border-t border-[var(--color-outline-variant)] pt-4 first:mt-0 first:border-t-0 first:pt-0" key={group}>
               <h3>
                 <button
                   aria-controls={`system-config-group-${group}`}
@@ -143,38 +124,32 @@ export function SystemConfigTable() {
                 {items.map((item) => {
                   const value = Object.hasOwn(changes, item.path) ? changes[item.path] : item.value;
                   const description = systemConfigHelp(item.path, t);
+                  const label = t(`settingsGeneral.systemConfig.fields.${item.path.replaceAll(".", "_")}`);
                   return (
                     <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(300px,1fr)_minmax(260px,1.5fr)] lg:items-center" key={item.path}>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs text-[var(--color-on-surface-variant)]">{t(`settingsGeneral.systemConfig.valueTypes.${item.valueType}`)}</span>
-                          <code className="break-all text-xs text-[var(--color-on-surface)]">{item.path}</code>
+                          <span className="text-sm text-[var(--color-on-surface)]">{label}</span>
                           <Badge variant={item.effect === "migration" ? "warning" : item.effect === "hotUpdate" ? "success" : "info"}>
                             {t(`settingsGeneral.systemConfig.effects.${item.effect}`)}
                           </Badge>
                           {item.overriddenByEnvironment && <Badge variant="outline">{t("settingsGeneral.systemConfig.environmentOverride")}</Badge>}
-                          {description && <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: item.path })}>
+                          {description && <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: label })}>
                             {`${description}${item.effectReason ? ` ${t(`settingsGeneral.systemConfig.effectReasons.${item.effectReason}`, { defaultValue: "" })}` : ""}`}
                           </InfoTooltip>}
                         </div>
                       </div>
-                      {item.path === "mineru.nodes" ? <MineruNodeEditor value={value} disabled={saving} onChange={(nodes) => update(item.path, nodes)} /> : item.path === "mineru.defaultTier" ? (<SelectInput value={String(value)} onValueChange={(next) => update(item.path, next)}>{(["flash", "basic", "standard", "advanced"] as const).map((tier) => <SelectItem key={tier} value={tier}>{t(`knowledgeLibrary.parsingTiers.${tier}`)}</SelectItem>)}</SelectInput>) : item.valueType === "array" ? (
-                        <TextArea
-                          aria-label={item.path}
-                          rows={6}
-                          value={Array.isArray(value) ? value.join("\n") : ""}
-                          onChange={(event) => update(item.path, event.target.value.split("\n"))}
-                        />
-                      ) : item.valueType === "boolean" ? (
-                        <SelectInput value={String(value)} onValueChange={(next) => update(item.path, next === "true")}>
+                      {item.valueType === "boolean" ? (
+                        <SelectInput aria-label={label} disabled={saving} value={String(value)} onValueChange={(next) => update(item.path, next === "true")}>
                           <SelectItem value="true">{t("settingsGeneral.systemConfig.values.true")}</SelectItem>
                           <SelectItem value="false">{t("settingsGeneral.systemConfig.values.false")}</SelectItem>
                         </SelectInput>
                       ) : item.valueType === "number" && !item.sensitive ? (
-                        <NumericConfigInput label={item.path} value={value} onChange={(next) => update(item.path, next)} />
+                        <NumericConfigInput label={label} value={value} disabled={saving} onChange={(next) => update(item.path, next)} />
                       ) : (
                         <TextInput
-                          aria-label={item.path}
+                          aria-label={label}
+                          disabled={saving}
                           placeholder={item.sensitive ? t("settingsGeneral.systemConfig.sensitivePlaceholder") : undefined}
                           type={item.sensitive ? "password" : "text"}
                           value={value === null ? "" : String(value)}
@@ -190,12 +165,6 @@ export function SystemConfigTable() {
         </div>
       )}
 
-      {hasMigration && (
-        <label className="flex items-start gap-3 rounded-lg bg-[var(--color-warning-container)] p-3 text-sm text-[var(--color-on-warning-container)]">
-          <input className="mt-1 size-4" type="checkbox" checked={confirmMigration} onChange={(event) => setConfirmMigration(event.target.checked)} />
-          <span>{t("settingsGeneral.systemConfig.confirmMigration")}</span>
-        </label>
-      )}
     </SurfaceCard>
   );
 }

@@ -108,6 +108,12 @@ function CachedRouteLocationProvider({
 }
 
 export default function AppRoutePage() {
+  useEffect(() => {
+    void useAppShellStore.getState().loadShortcutDefaults().catch((error: unknown) => {
+      console.warn("Unable to load shortcut defaults; using bundled defaults", error);
+    });
+  }, []);
+
   useChatSessionLifecycle();
   const { pathname, search, key: locationKey } = useLocation();
   const navigate = useNavigate();

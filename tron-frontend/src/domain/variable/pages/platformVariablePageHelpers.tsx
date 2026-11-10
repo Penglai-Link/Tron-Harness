@@ -210,7 +210,7 @@ export function PlatformVariableFormFields({
     <div className="space-y-5">
       <Field label={pageT("form.key", "Variable Key")} hint={keyEditable ? pageT("form.keyHint", "Letters, digits, underscore, hyphen, or dot.") : undefined}>
         <TextInput
-          aria-label={pageT("form.keyAria", "Platform variable key")}
+          aria-label={pageT("form.keyAria", "Public variable key")}
           disabled={!keyEditable}
           value={form.key}
           onChange={(event) => onChange({ ...form, key: event.target.value })}
@@ -233,15 +233,15 @@ export function PlatformVariableFormFields({
           : pageT("form.inheritedHint", "This value becomes the inherited default for all workspaces.")}
       >
         <TextArea
-          aria-label={pageT("form.valueAria", "Platform variable value")}
+          aria-label={pageT("form.valueAria", "Public variable value")}
           className="min-h-44 font-mono"
           value={form.value}
           onChange={(event) => onChange({ ...form, value: event.target.value, valueMode: "REPLACE" })}
         />
       </Field>
-      <Field label={pageT("form.description", "Description")} hint={pageT("form.descriptionHint", "Optional operator-facing note about how this platform variable is used.")}>
+      <Field label={pageT("form.description", "Description")} hint={pageT("form.descriptionHint", "Optional operator-facing note about how this public variable is used.")}>
         <TextArea
-          aria-label={pageT("form.descriptionAria", "Platform variable description")}
+          aria-label={pageT("form.descriptionAria", "Public variable description")}
           className="min-h-24"
           value={form.description}
           onChange={(event) => onChange({ ...form, description: event.target.value })}

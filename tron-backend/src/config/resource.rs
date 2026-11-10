@@ -3,11 +3,7 @@ use std::collections::BTreeMap;
 use super::{ConfigError, paths::normalize_storage_path};
 
 pub const DEFAULT_RESOURCE_STORAGE_PROFILE: &str = "local-default";
-pub const DEFAULT_RESOURCE_SCHEMA_MAX_BYTES: usize = 1_048_576;
 pub const DEFAULT_RESOURCE_ATTRIBUTES_MAX_BYTES: usize = 1_048_576;
-pub const DEFAULT_RESOURCE_MAX_DEPTH: usize = 128;
-pub const DEFAULT_RESOURCE_MAX_VALIDATION_ERRORS: usize = 100;
-pub const DEFAULT_RESOURCE_MAX_BINARIES: usize = 500;
 pub const DEFAULT_RESOURCE_MAX_BINARY_BYTES: u64 = 1_073_741_824;
 pub const DEFAULT_RESOURCE_MAX_COMMIT_BYTES: u64 = 1_073_741_824;
 pub const DEFAULT_RESOURCE_MAX_BINARY_NAME_LENGTH: usize = 255;
@@ -49,11 +45,7 @@ pub struct S3ResourceStorageProfile {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResourceLimits {
-    pub schema_max_bytes: usize,
     pub attributes_max_bytes: usize,
-    pub max_depth: usize,
-    pub max_validation_errors: usize,
-    pub max_binaries: usize,
     pub max_binary_bytes: u64,
     pub max_commit_bytes: u64,
     pub max_binary_name_length: usize,
@@ -73,15 +65,6 @@ impl ResourceConfig {
             },
             limits: ResourceLimits::default(),
         }
-    }
-
-    pub fn test_default() -> Self {
-        Self::with_default_root(
-            std::env::temp_dir()
-                .join("tron-resource-test")
-                .display()
-                .to_string(),
-        )
     }
 
     pub(crate) fn apply_overrides(
@@ -123,11 +106,7 @@ impl ResourceConfig {
                 ResourceStorageProfile::Local(_) => {}
             }
         }
-        if self.limits.schema_max_bytes == 0
-            || self.limits.attributes_max_bytes == 0
-            || self.limits.max_depth == 0
-            || self.limits.max_validation_errors == 0
-            || self.limits.max_binaries == 0
+        if self.limits.attributes_max_bytes == 0
             || self.limits.max_binary_bytes == 0
             || self.limits.max_commit_bytes == 0
             || self.limits.max_binary_name_length == 0
@@ -141,11 +120,7 @@ impl ResourceConfig {
 impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
-            schema_max_bytes: DEFAULT_RESOURCE_SCHEMA_MAX_BYTES,
             attributes_max_bytes: DEFAULT_RESOURCE_ATTRIBUTES_MAX_BYTES,
-            max_depth: DEFAULT_RESOURCE_MAX_DEPTH,
-            max_validation_errors: DEFAULT_RESOURCE_MAX_VALIDATION_ERRORS,
-            max_binaries: DEFAULT_RESOURCE_MAX_BINARIES,
             max_binary_bytes: DEFAULT_RESOURCE_MAX_BINARY_BYTES,
             max_commit_bytes: DEFAULT_RESOURCE_MAX_COMMIT_BYTES,
             max_binary_name_length: DEFAULT_RESOURCE_MAX_BINARY_NAME_LENGTH,
@@ -243,20 +218,8 @@ impl S3ResourceStorageProfile {
 
 impl ResourceLimits {
     fn apply_overrides(&mut self, overrides: ResourceLimitsFileConfig) -> Result<(), ConfigError> {
-        if let Some(value) = overrides.schema_max_bytes {
-            self.schema_max_bytes = value;
-        }
         if let Some(value) = overrides.attributes_max_bytes {
             self.attributes_max_bytes = value;
-        }
-        if let Some(value) = overrides.max_depth {
-            self.max_depth = value;
-        }
-        if let Some(value) = overrides.max_validation_errors {
-            self.max_validation_errors = value;
-        }
-        if let Some(value) = overrides.max_binaries {
-            self.max_binaries = value;
         }
         if let Some(value) = overrides.max_binary_bytes {
             self.max_binary_bytes = value;
@@ -310,11 +273,7 @@ struct ResourceStorageProfileFileConfig {
 #[derive(Debug, serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct ResourceLimitsFileConfig {
-    schema_max_bytes: Option<usize>,
     attributes_max_bytes: Option<usize>,
-    max_depth: Option<usize>,
-    max_validation_errors: Option<usize>,
-    max_binaries: Option<usize>,
     max_binary_bytes: Option<u64>,
     max_commit_bytes: Option<u64>,
     max_binary_name_length: Option<usize>,

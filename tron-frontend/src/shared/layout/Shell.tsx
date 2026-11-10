@@ -1,12 +1,14 @@
+import { DomainIcon, WorkspaceIcon } from "@/shared/icons/ScopeIcons";
 import { TabBar } from "./content/TabBar";
 import { CREATE_TOPIC_SHORTCUT_EVENT, ADD_DIRECTORY_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import {
   Settings,
   Bot,
   ChevronDown,
-  MoreHorizontal,
   PanelBottomClose,
   PanelBottomOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
@@ -121,7 +123,7 @@ function MobileNavigationEntry() {
       aria-expanded={openMobile}
       onClick={toggleSidebar}
     >
-      <span className="tron-workspace-monogram" aria-hidden="true">T</span>
+      {openMobile ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
     </Button>
   );
 }
@@ -337,7 +339,6 @@ export function TronShell({
     return () => window.removeEventListener(OPEN_CHAT_CONTEXT_EVENT, handleOpenContext);
   }, [activeTabId, activePanelId, tabPanelRegistry, t, updateRightPanelState]);
 
-  const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
   const [navigationLoading, setNavigationLoading] = useState(false);
   const [mainAgentWindowState, setMainAgentWindowState] = useState<ChatFloatingState>(() => ({
@@ -352,8 +353,6 @@ export function TronShell({
   const workspaceTriggerRef = useRef<HTMLButtonElement | null>(null);
   const domainTriggerRef = useRef<HTMLButtonElement | null>(null);
   const userMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const topbarToolsMenuRef = useRef<HTMLDivElement | null>(null);
-  const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
   const [showBottomPanel, setBottomPanel] = useState(false)
   const terminalSessionCode = new URLSearchParams(search).get("sessionCode") ?? "";
@@ -469,6 +468,8 @@ export function TronShell({
   const selectedWorkspacePathLabel = selectedWorkspaceNode
     ? compactWorkspacePath(selectedWorkspaceNode.label)
     : selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace");
+  const selectedWorkspaceName = selectedWorkspaceNode?.name
+    ?? selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace");
   const activeWorkspaceCode = effectiveSecondarySpaceId || effectivePrimarySpaceId;
   const pageSnapshotSourceRef = useRef({ pathname, search, workspaceCode: activeWorkspaceCode || null,
     workspaceName: selectedWorkspaceNode?.name ?? selectedPrimarySpace?.name ?? null, t });
@@ -751,7 +752,6 @@ export function TronShell({
   useEffect(() => {
     window.dispatchEvent(new Event("tron:close-sidebar"));
     setRightDrawerOpen(false);
-    setTopbarToolsMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -797,16 +797,8 @@ export function TronShell({
           : null,
   });
 
-  useDismissibleLayer({
-    open: topbarToolsMenuOpen,
-    onDismiss: () => setTopbarToolsMenuOpen(false),
-    popupRef: topbarToolsMenuRef,
-    triggerElement: topbarToolsMenuContainerRef.current,
-  });
-
   function openRightDrawer() {
     closeFloatingPanels();
-    setTopbarToolsMenuOpen(false);
     window.dispatchEvent(new Event("tron:close-sidebar"));
     setRightDrawerOpen(true);
     if (activeTab?.id) {
@@ -841,6 +833,14 @@ export function TronShell({
 
   function toggleBottomPanel() {
     setBottomPanel((open) => !open);
+  }
+
+  function activateTabAtIndex(index: number) {
+    const tabState = useTabStore.getState();
+    const tab = tabState.tabs.filter((item) => !item.hide)[index];
+    if (!tab) return false;
+    tabState.setActiveTab(tab.id);
+    navigate(tab.path);
   }
 
   function activateAdjacentTab(direction: -1 | 1) {
@@ -891,6 +891,15 @@ export function TronShell({
     },
     closeOtherTabs: () => closeVisibleTabs(true),
     nextTab: () => activateAdjacentTab(1),
+    activateTab1: () => activateTabAtIndex(0),
+    activateTab2: () => activateTabAtIndex(1),
+    activateTab3: () => activateTabAtIndex(2),
+    activateTab4: () => activateTabAtIndex(3),
+    activateTab5: () => activateTabAtIndex(4),
+    activateTab6: () => activateTabAtIndex(5),
+    activateTab7: () => activateTabAtIndex(6),
+    activateTab8: () => activateTabAtIndex(7),
+    activateTab9: () => activateTabAtIndex(8),
     newTopic: () => {
       if (!canStartSidebarCreation()) return false;
       window.dispatchEvent(new Event(CREATE_TOPIC_SHORTCUT_EVENT));
@@ -935,18 +944,15 @@ export function TronShell({
 
   function handleNavigationDomainSwitcherClick() {
     setAgentOpen(false);
-    setTopbarToolsMenuOpen(false);
     toggleUtilityPanel("domain");
   }
 
   function handleUtilityPanelClick(panel: string) {
     setAgentOpen(false);
-    setTopbarToolsMenuOpen(false);
     toggleUtilityPanel(panel);
   }
 
   function handleAgentLauncherClick() {
-    setTopbarToolsMenuOpen(false);
     if (!agentOpen) {
       closeFloatingPanels();
     }
@@ -966,7 +972,6 @@ export function TronShell({
   }
 
   function openSystemSettings() {
-    setTopbarToolsMenuOpen(false);
     closeFloatingPanels();
     navigate("/settings/general", { state: { from: `${pathname}${search}` } });
   }
@@ -1116,8 +1121,8 @@ export function TronShell({
         <button
           ref={userMenuTriggerRef}
           className={cn(
-            "flex h-12 min-w-0 w-full cursor-pointer items-center rounded-lg text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
-            compact ? "justify-center px-1" : "gap-2 px-2 hover:bg-[var(--color-hover-surface)]",
+            "flex min-h-14 min-w-0 w-full cursor-pointer items-center rounded-lg py-1 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            compact ? "justify-center px-1" : "gap-2.5 px-2 hover:bg-[var(--color-hover-surface)]",
           )}
           type="button"
           aria-label={t("shell:aria.openUserMenu")}
@@ -1125,7 +1130,7 @@ export function TronShell({
           aria-haspopup="dialog"
           onClick={() => handleUtilityPanelClick("user")}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
+          <span className={cn("flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-base font-semibold text-[var(--color-on-primary)]", compact ? "size-10" : "size-12")} aria-hidden="true">
             {avatarSrc ? <img alt="" className="size-full object-cover" onError={handleAvatarLoadError} src={avatarSrc} /> : initial}
           </span>
           {compact ? null : (
@@ -1206,8 +1211,8 @@ export function TronShell({
         <button
           ref={domainTriggerRef}
           className={cn(
-            "group/domain-trigger flex h-8 w-full min-w-0 items-center rounded-lg text-left text-sm font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
-            compact ? "justify-center px-1.5" : "justify-between gap-2 px-2.5",
+            "group/domain-trigger flex h-8 w-full min-w-0 items-center rounded-lg text-left text-base font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            compact ? "justify-center px-1.5" : "gap-2 px-2",
           )}
           type="button"
           id="tron-domain-trigger"
@@ -1218,13 +1223,8 @@ export function TronShell({
           onClick={handleNavigationDomainSwitcherClick}
           title={domainName}
         >
-          {compact ? (
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container)] text-sm font-semibold" aria-hidden="true">
-              {domainName.slice(0, 1)}
-            </span>
-          ) : (
-            <span className="min-w-0 truncate">{domainName}</span>
-          )}
+          <span className="tron-scope-icon"><DomainIcon /></span>
+          {!compact ? <span className="min-w-0 flex-1 truncate">{domainName}</span> : null}
           <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)] transition-opacity [@media(hover:hover)]:opacity-0 group-hover/domain-trigger:opacity-60 group-focus-visible/domain-trigger:opacity-60 group-aria-expanded/domain-trigger:opacity-60", compact ? "hidden" : "")} size={16} aria-hidden="true" />
         </button>
         {utilityPanel === "domain" ? (
@@ -1260,8 +1260,8 @@ export function TronShell({
           onClick={handleWorkspaceSwitcherClick}
           title={selectedWorkspacePathLabel}
         >
-          <span className="tron-workspace-monogram" aria-hidden="true">T</span>
-          {!compact ? <span className="min-w-0 flex-1 truncate text-left">{selectedWorkspacePathLabel}</span> : null}
+          <span className="tron-scope-icon"><WorkspaceIcon /></span>
+          {!compact ? <span className="min-w-0 flex-1 truncate text-left">{selectedWorkspaceName}</span> : null}
           {!compact ? <ChevronDown className="shrink-0" size={15} aria-hidden="true" /> : null}
         </button>
         {utilityPanel === "workspace" ? (
@@ -1323,37 +1323,14 @@ export function TronShell({
                       <MobileNavigationEntry />
                       <TabBar className="min-w-0 flex-1 py-0" />
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-0.5">
                       {renderedTopbarActions}
                       <NotificationLauncher className="tron-shell-tool" />
                       <ToolbarControl label={t("shell:assistant.title")}>
-                        <Button className="hidden min-[900px]:inline-flex" size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} onClick={handleAgentLauncherClick}>
+                        <Button className="tron-shell-tool" size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} onClick={handleAgentLauncherClick}>
                           <Bot size={17} aria-hidden="true" />
                         </Button>
                       </ToolbarControl>
-                      <div ref={topbarToolsMenuContainerRef} className="relative min-[900px]:hidden">
-                        <ToolbarControl label={t("shell:aria.moreActions")}>
-                          <Button
-                            size="icon"
-                            type="button"
-                            variant="ghost"
-                            aria-expanded={topbarToolsMenuOpen}
-                            aria-haspopup="menu"
-                            aria-label={t("shell:aria.moreActions")}
-                            onClick={() => setTopbarToolsMenuOpen((open) => !open)}
-                          >
-                            <MoreHorizontal size={18} aria-hidden="true" />
-                          </Button>
-                        </ToolbarControl>
-                        {topbarToolsMenuOpen ? (
-                          <div ref={topbarToolsMenuRef} className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
-                            <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
-                              <Bot size={16} aria-hidden="true" />
-                              {t("shell:assistant.title")}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
                       <ToolbarControl label={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}>
                         <Button
                           className="hidden min-[900px]:inline-flex"

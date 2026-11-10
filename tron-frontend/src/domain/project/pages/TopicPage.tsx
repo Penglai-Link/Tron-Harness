@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
+import { ExternalLink, FolderDown, Unlink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -101,13 +102,15 @@ export function TopicPage() {
         <div className="flex items-center justify-between gap-3"><h2 id="topic-references-title" className="font-medium">{t("topic.references")}</h2><Button variant="outline" disabled={pending} onClick={() => setPickerOpen(true)}>{t("topic.addReference")}</Button></div>
         {referencesChanged ? <p role="status" className="text-sm text-muted-foreground">{t("topic.referencesChanged")}</p> : null}
         {memo.references.length === 0 ? <p className="text-sm text-muted-foreground">{t("topic.noReferences")}</p> : <ul className="divide-y divide-border rounded border border-border">
-          {memo.references.map((reference) => <li key={reference.referenceCode} className="flex items-center gap-3 px-3 py-2">
+          {memo.references.map((reference) => <li key={reference.referenceCode} className="flex flex-wrap items-center gap-3 px-3 py-3">
             <span className="w-24 shrink-0 text-xs text-muted-foreground">{t(`topic.kind.${reference.kind}`)}</span>
             <div className="min-w-0 flex-1"><div className="truncate">{reference.label || t("topic.unavailable")}</div>{reference.directoryPath ? <div className="truncate text-xs text-muted-foreground">{reference.directoryPath}</div> : null}</div>
             {!reference.available && reference.label ? <span className="text-xs text-muted-foreground">{t("topic.unavailable")}</span> : null}
-            {reference.url ? <a href={reference.url} target="_blank" rel="noreferrer" className="text-sm underline">{t("topic.open")}</a> : null}
-            {reference.kind === "Repository" && reference.available ? <Button size="sm" variant="outline" disabled={pending || notes !== memo.notes} onClick={() => setCheckoutReference(reference)}>{t("topic.checkout.prepare")}</Button> : null}
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => void remove(reference.referenceCode)}>{t("topic.remove")}</Button>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {reference.url ? <Button size="sm" variant="outline" render={<a href={reference.url} target="_blank" rel="noreferrer" />}><ExternalLink size={14} />{t("topic.open")}</Button> : null}
+              {reference.kind === "Repository" && reference.available ? <Button size="sm" variant="secondary" disabled={pending || notes !== memo.notes} onClick={() => setCheckoutReference(reference)}><FolderDown size={14} />{t("topic.checkout.prepare")}</Button> : null}
+              <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" title={t("topic.remove")} aria-label={`${t("topic.remove")} ${reference.label}`} disabled={pending} onClick={() => void remove(reference.referenceCode)}><Unlink size={14} /></Button>
+            </div>
           </li>)}
         </ul>}
       </section>

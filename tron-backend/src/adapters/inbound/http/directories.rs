@@ -18,6 +18,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/directories", get(list).post(register))
         .route("/api/v1/directories/pick", post(pick))
+        .route("/api/v1/directories/pick-path", post(pick_path))
         .route("/api/v1/directories/{directory_code}/archive", post(archive))
         .route("/api/v1/directories/browse", get(browse))
         .route(
@@ -189,6 +190,37 @@ async fn pick(
     headers: HeaderMap,
     Json(request): Json<PickDirectoryRequest>,
 ) -> Response {
+    let locale = match native_picker_locale(peer, &headers) {
+        Ok(locale) => locale,
+        Err(response) => return response,
+    };
+    match state.directories.pick_and_register(&request.workspace_code, if locale == SupportedLocale::EnUs { "en-US" } else { "zh-CN" }).await {
+        Ok(item) => Json(ApiResponse::protocol_success(item.map(PickDirectoryResponse::from))).into_response(),
+        Err(error) => error_response(error, &headers),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PickDirectoryPathRequest { workspace_code: String }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickDirectoryPathResponse { path: Option<String> }
+
+async fn pick_path(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>,
+    headers: HeaderMap,
+    Json(request): Json<PickDirectoryPathRequest>,
+) -> Result<Json<ApiResponse<PickDirectoryPathResponse>>, Response> {
+    let locale = native_picker_locale(peer, &headers)?;
+    let path = state.directories.pick_path(&request.workspace_code, if locale == SupportedLocale::EnUs { "en-US" } else { "zh-CN" })
+        .await.map_err(|error| error_response(error, &headers))?;
+    Ok(Json(ApiResponse::protocol_success(PickDirectoryPathResponse { path })))
+}
+
+fn native_picker_locale(peer: std::net::SocketAddr, headers: &HeaderMap) -> Result<SupportedLocale, Response> {
     // This opens a dialog on the execution machine, so only a local browser may
     // invoke it. The custom header prevents cross-origin simple form requests.
     let locale = SupportedLocale::from_request(headers.get("accept-language").and_then(|value| value.to_str().ok()));
@@ -197,12 +229,9 @@ async fn pick(
         .is_some_and(|url| matches!(url.scheme(), "http" | "https") &&
             url.host_str().is_some_and(|host| host == "localhost" || host.trim_matches(['[', ']']).parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())));
     if !peer.ip().is_loopback() || !local_origin || headers.get("x-tron-native-picker").and_then(|v| v.to_str().ok()) != Some("1") {
-        return (StatusCode::FORBIDDEN, Json(ApiResponse::protocol_error("DIRECTORY_PICKER_LOCAL_ONLY", if locale == SupportedLocale::EnUs { "Open Tron locally to choose a directory." } else { "请在本机打开 Tron 后选择目录。" }))).into_response();
+        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::protocol_error("DIRECTORY_PICKER_LOCAL_ONLY", if locale == SupportedLocale::EnUs { "Open Tron locally to choose a directory." } else { "请在本机打开 Tron 后选择目录。" }))).into_response());
     }
-    match state.directories.pick_and_register(&request.workspace_code, if locale == SupportedLocale::EnUs { "en-US" } else { "zh-CN" }).await {
-        Ok(item) => Json(ApiResponse::protocol_success(item.map(PickDirectoryResponse::from))).into_response(),
-        Err(error) => error_response(error, &headers),
-    }
+    Ok(locale)
 }
 
 async fn rename(

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Field, TextInput } from "@/components/forms";
+import { Field, SelectInput, TextInput } from "@/components/forms";
+import { SelectItem } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { InfoTooltip } from "@/components/info-tooltip";
 import {
@@ -35,18 +36,18 @@ export function SettingsGeneralPage() {
   useEffect(() => setTurnLimitDraft(String(aguiWorkReplayPreferences.recentTurnLimit)), [aguiWorkReplayPreferences.recentTurnLimit]);
 
   return (
-    <>
+    <div className="mx-auto w-full max-w-6xl px-1 py-2 sm:px-3 lg:px-5">
       <PageHeader title={shellT("settings.items.general")} />
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        {desktopBridge.isDesktop() ? <UpdateSettingsCard /> : <WebVersionCard />}
-        {desktopBridge.isElectron() && <BackendEnvironmentSettings />}
+      <div className="flex flex-col divide-y divide-[var(--color-outline-variant)]">
+        <div>{desktopBridge.isDesktop() ? <UpdateSettingsCard /> : <WebVersionCard />}</div>
+        {desktopBridge.isElectron() && <div><BackendEnvironmentSettings /></div>}
 
-        <SystemConfigTable />
+        <div><SystemConfigTable /></div>
 
-        <BrowserNotificationSettingsCard />
+        <div><BrowserNotificationSettingsCard /></div>
 
-        <SurfaceCard className="space-y-4 xl:col-span-2">
+        <div><SurfaceCard className="space-y-4 xl:col-span-2">
           <div className="flex items-center gap-1.5">
             <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">{pageT("settingsGeneral.aguiWorkReplay.title")}</h2>
             <InfoTooltip ariaLabel={pageT("settingsGeneral.aguiWorkReplay.help")}>{pageT("settingsGeneral.aguiWorkReplay.description")}</InfoTooltip>
@@ -76,7 +77,7 @@ export function SettingsGeneralPage() {
             />
           </Field>
 
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-[var(--color-outline-variant)] p-3">
+          <div className="flex items-center justify-between gap-4 border-t border-[var(--color-outline-variant)] py-4">
             <span className="min-w-0 space-y-1">
               <span className="flex items-center gap-1 text-sm font-medium text-[var(--color-on-surface)]">
                 {pageT("settingsGeneral.aguiWorkReplay.showReasoningCards")}
@@ -90,29 +91,26 @@ export function SettingsGeneralPage() {
             />
           </div>
 
-          <fieldset className="space-y-2 rounded-lg border border-[var(--color-outline-variant)] p-3">
+          <fieldset className="space-y-2 border-t border-[var(--color-outline-variant)] py-4">
             <legend className="sr-only">{pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitMode")}</legend>
             <div className="flex items-center gap-1 text-sm font-medium text-[var(--color-on-surface)]">
               {pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitMode")}
               <InfoTooltip ariaLabel={pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitMode")}>{pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitModeHint")}</InfoTooltip>
             </div>
-            <div className="flex flex-wrap gap-4">
+            <SelectInput
+              aria-label={pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitMode")}
+              value={aguiWorkReplayPreferences.runningEnterSubmitMode}
+              onValueChange={(value) => { if (value === "steer" || value === "queue") setRunningEnterSubmitMode(value); }}
+            >
               {(["steer", "queue"] as const).map((mode) => (
-                <label key={mode} className="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-on-surface)]">
-                  <input
-                    type="radio"
-                    name="runningEnterSubmitMode"
-                    value={mode}
-                    checked={aguiWorkReplayPreferences.runningEnterSubmitMode === mode}
-                    onChange={() => setRunningEnterSubmitMode(mode)}
-                  />
+                <SelectItem key={mode} value={mode}>
                   {pageT(`settingsGeneral.aguiWorkReplay.${mode}OnEnter`)}
-                </label>
+                </SelectItem>
               ))}
-            </div>
+            </SelectInput>
           </fieldset>
-        </SurfaceCard>
+        </SurfaceCard></div>
       </div>
-    </>
+    </div>
   );
 }

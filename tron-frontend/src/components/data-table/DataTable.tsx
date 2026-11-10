@@ -65,6 +65,7 @@ export function DataTable<T>({
 
   return (
     <section
+      data-slot="data-table"
       className={cn(
         "overflow-hidden",
         variant === "default"

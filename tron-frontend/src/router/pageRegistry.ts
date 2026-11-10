@@ -194,6 +194,9 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.PlatformAgentsPage,
     }))
   ),
+  "settings.codeRepositories": lazy(() =>
+    import("@/domain/settings/pages/CodeRepositoriesPage").then((module) => ({ default: module.CodeRepositoriesPage }))
+  ),
   "settings.appearance": lazy(() =>
     import("@/domain/settings/pages/SettingsAppearancePage").then((module) => ({
       default: module.SettingsAppearancePage,
@@ -339,11 +342,6 @@ export const routePages: Record<string, RoutePageComponent> = {
   "settings.variablesEdit": lazy(() =>
     import("@/domain/variable/pages/EditPlatformVariablePage").then(
       (module) => ({ default: module.EditPlatformVariablePage })
-    )
-  ),
-  "settings.variablesNew": lazy(() =>
-    import("@/domain/variable/pages/CreatePlatformVariablePage").then(
-      (module) => ({ default: module.CreatePlatformVariablePage })
     )
   ),
   "settings.skills": lazy(() =>

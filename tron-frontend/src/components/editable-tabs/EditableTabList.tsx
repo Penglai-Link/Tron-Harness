@@ -7,7 +7,7 @@ import { TabsList } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import { EditableTabTrigger } from "./EditableTabTrigger";
-import type { EditableTab, EditableTabAddTriggerProps } from "./types";
+import type { EditableTab, EditableTabAddTriggerProps, EditableTabsProps } from "./types";
 
 interface EditableTabListProps {
   tabs: readonly EditableTab[];
@@ -16,6 +16,7 @@ interface EditableTabListProps {
   renderTrailingAction?: () => ReactNode;
   onAdd: () => void;
   onClose: (key: string) => void;
+  onDetach?: EditableTabsProps["onDetach"];
   className?: string;
 }
 
@@ -26,15 +27,16 @@ export function EditableTabList({
   renderTrailingAction,
   onAdd,
   onClose,
+  onDetach,
   className,
 }: EditableTabListProps) {
   const { t } = useTranslation("common");
   return (
-    <div className={cn("flex w-full min-w-0 items-center bg-muted", className)}>
+    <div data-tab-strip className={cn("flex w-full min-w-0 items-center bg-muted", className)}>
       <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
         <TabsList className="bg-transparent gap-1">
           {tabs.filter((tab) => !tab.hidden).map((tab) => (
-            <EditableTabTrigger key={tab.key} onClose={onClose} tab={tab} />
+            <EditableTabTrigger key={tab.stableId ?? tab.key} onClose={onClose} onDetach={onDetach} tab={tab} />
           ))}
           {!hideAdd ? (
             renderAddTrigger ? (

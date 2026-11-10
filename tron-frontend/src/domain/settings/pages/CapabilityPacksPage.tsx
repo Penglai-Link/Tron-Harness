@@ -24,6 +24,7 @@ export function CapabilityPacksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState("all");
+  const [status, setStatus] = useState("effective");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -52,7 +53,8 @@ export function CapabilityPacksPage() {
   const visibleRecords = records.filter(
     (record) =>
       record.kind === "capability" &&
-      (provider === "all" || record.provider === provider)
+      (provider === "all" || record.provider === provider) &&
+      (status === "all" || record.effective === (status === "effective"))
   );
   const importPack = async (file?: File) => {
     if (!file) return;
@@ -154,12 +156,9 @@ export function CapabilityPacksPage() {
           {notice}
         </SurfaceCard>
       ) : null}
-      <div className="flex w-full max-w-md flex-nowrap items-center gap-3">
-        <span className="shrink-0 whitespace-nowrap text-sm font-medium">
-          {pageT("filterProvider")}
-        </span>
+      <div className="flex w-full max-w-xl flex-wrap items-center gap-3">
         <SelectInput
-          className="h-9 min-w-0 flex-1"
+          className="h-9 min-w-40 flex-1"
           aria-label={pageT("filterProvider")}
           value={provider}
           onValueChange={(value) => setProvider(String(value ?? "all"))}
@@ -171,21 +170,32 @@ export function CapabilityPacksPage() {
             </SelectItem>
           ))}
         </SelectInput>
+        <SelectInput
+          className="h-9 w-36"
+          aria-label={pageT("filterStatus")}
+          value={status}
+          onValueChange={(value) => setStatus(String(value ?? "effective"))}
+        >
+          <SelectItem value="effective">{pageT("effective")}</SelectItem>
+          <SelectItem value="inactive">{pageT("inactive")}</SelectItem>
+          <SelectItem value="all">{pageT("allStatuses")}</SelectItem>
+        </SelectInput>
       </div>
       {loading && records.length === 0 ? (
         <p className="text-sm text-[var(--color-on-surface-variant)]">
           {pageT("loading")}
         </p>
       ) : null}
-      {!loading && !error && records.length === 0 ? (
+      {!loading && !error && visibleRecords.length === 0 ? (
         <SurfaceCard className="text-sm text-[var(--color-on-surface-variant)]">
-          {pageT("emptyPacks")}
+          {pageT(records.some((record) => record.kind === "capability") ? "noMatchingPacks" : "emptyPacks")}
         </SurfaceCard>
       ) : null}
       <div className="grid gap-3 xl:grid-cols-2">
         {visibleRecords.map((record) => (
           <SurfaceCard
             data-theme-part="capability-pack-card"
+            data-settings-card
             key={record.id}
             className="relative space-y-4 p-4 transition-colors hover:border-[var(--color-outline)]"
           >

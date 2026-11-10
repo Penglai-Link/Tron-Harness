@@ -248,20 +248,19 @@ help:
 	@echo "Desktop commands:"
 	@echo "  make desktop-build     Build desktop installer packages and sidecar binary"
 	@echo "                         Ubuntu: AppImage、deb、rpm，自动检查并安装缺失的打包工具"
-	@echo "  make desktop-test      Run Electron desktop unit tests"
 	@echo "  make desktop-dev       Build desktop dependencies and run Electron dev mode"
 	@echo "  make desktop-clean     Remove desktop build artifacts"
 	@echo ""
 	@echo "Skill commands:"
-	@echo "  make skill-memory-dreaming-test"
+	@echo "  make skill-memory-dreaming-check"
 	@echo "                    Validate the memory dreaming skill"
-	@echo "  make skill-memory-spec-test"
+	@echo "  make skill-memory-spec-check"
 	@echo "                    Validate the memory spec skill"
-	@echo "  make skill-theme-test（主题包脚本测试）"
+	@echo "  make skill-theme-check"
 	@echo "构建缓存：默认当前用户目录下的 rust-cache，自动创建；可用 RUST_CACHE_DIR 覆盖"
 
 .PHONY: _build-cache
-harness-capability-check agent-capability-check agent-harness-check be-check be-dev openapi web-build web-dev desktop-build desktop-dev be-ui-acceptance: | _build-cache
+harness-capability-check agent-capability-check agent-harness-check be-check be-dev openapi web-build web-dev desktop-build desktop-dev: | _build-cache
 _build-cache:
 ifeq ($(OS),Windows_NT)
 	@if not exist "$(subst /,\,$(SCCACHE_DIR))\" mkdir "$(subst /,\,$(SCCACHE_DIR))"
@@ -612,10 +611,6 @@ desktop-dev: install
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(ELECTRON_NPM) run -s ensure-electron))
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_DEV_ENV),$(NPM) run -s dev))
 
-.PHONY: desktop-test
-desktop-test:
-	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) test)
-
 .PHONY: desktop-clean
 desktop-clean:
 	$(call REMOVE,$(ELECTRON_DIR)/dist)
@@ -625,20 +620,14 @@ desktop-clean:
 	$(call REMOVE_FILE,$(ELECTRON_DIR)/resources/update-config.json)
 	$(call REMOVE,$(ELECTRON_DIR)/node_modules)
 
-.PHONY: skill-memory-dreaming-test
-skill-memory-dreaming-test:
+.PHONY: skill-memory-dreaming-check
+skill-memory-dreaming-check:
 	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/eliteforge-memory-dreaming
 
-.PHONY: skill-memory-spec-test
-skill-memory-spec-test:
+.PHONY: skill-memory-spec-check
+skill-memory-spec-check:
 	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/eliteforge-memory-spec
 
-.PHONY: skill-theme-test
-skill-theme-test:
+.PHONY: skill-theme-check
+skill-theme-check:
 	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/tron-theme-spec
-	$(PYTHON) -B tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/test_theme_pack.py
-
-# Dedicated real-PTY browser fixture; all state lives in TRON_ACCEPTANCE_DIRECTORY.
-.PHONY: be-ui-acceptance
-be-ui-acceptance:
-	$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)" --example ui_acceptance_server

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,11 +13,9 @@ import { suggestQuickResourceType } from "@/domain/resource/features/quick-uploa
 import { fetchTaskPage } from "@/domain/task/api/taskApi";
 import type { TaskListItem } from "@/domain/task/model";
 import { addTopicReference, type AddTopicReference, type TopicMemo, type TopicReferenceKind } from "../api/topicApi";
-import { checkConnection, createConnection, deleteConnection, listConnections, searchRepositories, updateConnection, type ConnectorRecord, type ConnectorRepository } from "../api/connectorApi";
+import { listConnections, searchRepositories, type ConnectorRecord, type ConnectorRepository } from "../api/connectorApi";
 
 type Mode = TopicReferenceKind;
-type Provider = "github" | "gitlab" | "gitee";
-const endpoints: Record<Provider, string> = { github: "https://api.github.com", gitlab: "https://gitlab.com", gitee: "https://gitee.com" };
 
 export function TopicReferencePicker({ open, onOpenChange, projectCode, workspaceCode, revision, onAdded }: {
   open: boolean; onOpenChange: (open: boolean) => void; projectCode: string; workspaceCode: string;
@@ -36,25 +35,11 @@ export function TopicReferencePicker({ open, onOpenChange, projectCode, workspac
   const [link, setLink] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
   const [pending, setPending] = useState(false);
-  const [provider, setProvider] = useState<Provider>("github");
-  const [connectionName, setConnectionName] = useState("");
-  const [endpoint, setEndpoint] = useState(endpoints.github);
-  const [token, setToken] = useState("");
-  const [connectionForm, setConnectionForm] = useState(false);
-  const [editingConnection, setEditingConnection] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const loadConnections = useCallback(async () => {
-    const values = await listConnections(workspaceCode);
-    setConnections(values);
-    setConnectionCode((current) => values.some((item) => item.connectionCode === current) ? current : values[0]?.connectionCode ?? "");
-  }, [workspaceCode]);
-
   useEffect(() => {
-    if (!open) { setToken(""); return; }
+    if (!open) return;
     refreshDirectories();
     let live = true;
-    listConnections(workspaceCode).then((values) => {
+    listConnections().then((values) => {
       if (!live) return;
       setConnections(values);
       setConnectionCode((current) => values.some((item) => item.connectionCode === current) ? current : values[0]?.connectionCode ?? "");
@@ -81,7 +66,7 @@ export function TopicReferencePicker({ open, onOpenChange, projectCode, workspac
         const result = await fetchTaskPage({ workspaceCode, search: query.trim() || undefined, current: 1, size: 50 });
         setTasks(result.records);
       } else if (mode === "Repository" && connectionCode) {
-        const result = await searchRepositories(connectionCode, workspaceCode, query);
+        const result = await searchRepositories(connectionCode, query);
         setRepositories(result.records); setNextCursor(result.nextCursor);
       }
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : t("topic.loadFailed")); }
@@ -92,51 +77,9 @@ export function TopicReferencePicker({ open, onOpenChange, projectCode, workspac
     if (!nextCursor || !connectionCode || pending) return;
     setPending(true);
     try {
-      const result = await searchRepositories(connectionCode, workspaceCode, query, nextCursor);
+      const result = await searchRepositories(connectionCode, query, nextCursor);
       setRepositories((current) => [...current, ...result.records]); setNextCursor(result.nextCursor);
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : t("topic.loadFailed")); }
-    finally { setPending(false); }
-  }
-
-  async function connect() {
-    if (pending || !connectionName.trim() || (!editingConnection && !token) || !endpoint.trim()) return;
-    setPending(true);
-    try {
-      const details = { workspaceCode, providerId: provider, name: connectionName.trim(), endpoint: endpoint.trim() };
-      const record = editingConnection
-        ? await updateConnection(editingConnection, { ...details, token: token || null })
-        : await createConnection({ ...details, token });
-      setToken(""); setConnectionName(""); setConnectionForm(false); setEditingConnection(null);
-      await loadConnections(); setConnectionCode(record.connectionCode);
-      await checkConnection(record.connectionCode, workspaceCode);
-      toast.success(t("topic.connected"));
-    } catch (reason) { toast.error(reason instanceof Error ? reason.message : t("topic.connectFailed")); }
-    finally { setPending(false); }
-  }
-
-  function editConnection() {
-    const selected = connections.find((item) => item.connectionCode === connectionCode);
-    if (!selected || !(selected.providerId in endpoints)) return;
-    setEditingConnection(selected.connectionCode); setProvider(selected.providerId as Provider);
-    setConnectionName(selected.name); setEndpoint(selected.endpoint); setToken(""); setConnectionForm(true);
-  }
-
-  async function testConnection() {
-    if (!connectionCode || pending) return;
-    setPending(true);
-    try { await checkConnection(connectionCode, workspaceCode); toast.success(t("topic.connected")); }
-    catch (reason) { toast.error(reason instanceof Error ? reason.message : t("topic.connectFailed")); }
-    finally { setPending(false); }
-  }
-
-  async function removeConnection() {
-    if (!connectionCode || pending) return;
-    setPending(true);
-    try {
-      await deleteConnection(connectionCode, workspaceCode);
-      setConfirmDelete(false); setConnectionForm(false); setEditingConnection(null);
-      setRepositories([]); setNextCursor(null); await loadConnections();
-    } catch (reason) { toast.error(reason instanceof Error ? reason.message : t("topic.connectFailed")); }
     finally { setPending(false); }
   }
 
@@ -159,21 +102,8 @@ export function TopicReferencePicker({ open, onOpenChange, projectCode, workspac
     {mode === "Directory" ? <div className="space-y-1">{directories.length ? directories.map((directory) => <Button key={directory.directoryCode} variant="ghost" className="h-auto w-full justify-start py-2 text-left" disabled={pending} onClick={() => void add({ kind: "Directory", targetCode: directory.directoryCode, connectionCode: null, label: directory.name, url: null })}><span className="min-w-0"><span className="block truncate">{directory.name}</span><span className="block truncate text-xs text-muted-foreground">{directory.path}</span></span></Button>) : <p className="text-sm text-muted-foreground">{t("topic.noDirectories")}</p>}</div> : null}
     {mode === "Link" ? <div className="space-y-3"><Field><FieldLabel htmlFor="topic-link">{t("topic.url")}</FieldLabel><Input id="topic-link" value={link} onChange={(event) => setLink(event.target.value)} placeholder="https://" /></Field><Field><FieldLabel htmlFor="topic-link-label">{t("topic.label")}</FieldLabel><Input id="topic-link-label" value={linkLabel} onChange={(event) => setLinkLabel(event.target.value)} /></Field><Button disabled={pending || !link.trim()} onClick={() => void add({ kind: "Link", targetCode: link.trim(), connectionCode: null, label: linkLabel.trim() || link.trim(), url: link.trim() })}>{t("topic.add")}</Button></div> : null}
     {mode === "Repository" ? <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{t("topic.privateConnections")}</p>
-      <div className="flex flex-wrap gap-1">{connections.map((connection) => <Button key={connection.connectionCode} variant={connectionCode === connection.connectionCode ? "secondary" : "ghost"} size="sm" onClick={() => { setConnectionCode(connection.connectionCode); setRepositories([]); setNextCursor(null); setConnectionForm(false); setConfirmDelete(false); setToken(""); }}>{connection.name}</Button>)}<Button size="sm" variant="outline" onClick={() => { setEditingConnection(null); setConnectionName(""); setProvider("github"); setEndpoint(endpoints.github); setToken(""); setConnectionForm(true); setConfirmDelete(false); }}>{t("topic.connectPlatform")}</Button></div>
-      {connectionCode && !connectionForm ? <div className="flex flex-wrap gap-1">
-        <Button size="sm" variant="ghost" disabled={pending} onClick={() => void testConnection()}>{t("topic.testConnection")}</Button>
-        <Button size="sm" variant="ghost" disabled={pending} onClick={editConnection}>{t("topic.editConnection")}</Button>
-        <Button size="sm" variant="ghost" disabled={pending} onClick={() => setConfirmDelete(true)}>{t("topic.deleteConnection")}</Button>
-      </div> : null}
-      {confirmDelete ? <div className="space-y-2 rounded border border-border p-3"><p className="text-sm">{t("topic.deleteConnectionDescription")}</p><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setConfirmDelete(false)}>{t("topic.close")}</Button><Button size="sm" variant="destructive" disabled={pending} onClick={() => void removeConnection()}>{t("topic.deleteConnection")}</Button></div></div> : null}
-      {connectionForm ? <div className="space-y-2 rounded border border-border p-3">
-        <div className="flex gap-1">{(["github", "gitlab", "gitee"] as Provider[]).map((value) => <Button key={value} size="sm" disabled={Boolean(editingConnection)} variant={provider === value ? "secondary" : "ghost"} onClick={() => { setProvider(value); setEndpoint(endpoints[value]); }}>{value}</Button>)}</div>
-        <Field><FieldLabel htmlFor="topic-connection-name">{t("topic.connectionName")}</FieldLabel><Input id="topic-connection-name" value={connectionName} onChange={(event) => setConnectionName(event.target.value)} /></Field>
-        <Field><FieldLabel htmlFor="topic-connection-endpoint">{t("topic.endpoint")}</FieldLabel><Input id="topic-connection-endpoint" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} /></Field>
-        <Field><FieldLabel htmlFor="topic-connection-token">Token</FieldLabel><Input id="topic-connection-token" type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" placeholder={editingConnection ? t("topic.keepToken") : ""} /></Field>
-        <div className="flex gap-2"><Button disabled={pending || (!editingConnection && !token) || !connectionName.trim() || !endpoint.trim()} onClick={() => void connect()}>{t(editingConnection ? "topic.saveConnection" : "topic.connect")}</Button><Button variant="outline" onClick={() => { setConnectionForm(false); setToken(""); }}>{t("topic.close")}</Button></div>
-      </div> : null}
+      <div className="flex flex-wrap gap-1">{connections.map((connection) => <Button key={connection.connectionCode} variant={connectionCode === connection.connectionCode ? "secondary" : "ghost"} size="sm" onClick={() => { setConnectionCode(connection.connectionCode); setRepositories([]); setNextCursor(null); }}>{connection.name}</Button>)}</div>
+      <Link className="text-sm text-primary underline" to="/settings/code-repositories" onClick={() => onOpenChange(false)}>{t("topic.manageConnections")}</Link>
     </div> : null}
     {mode === "Resource" ? <Field><FieldLabel htmlFor="topic-upload">{t("topic.upload")}</FieldLabel><Input id="topic-upload" type="file" disabled={pending} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.currentTarget.value = ""; }} /></Field> : null}
     {mode === "Resource" || mode === "Task" || mode === "Repository" ? <div className="flex gap-2"><Input aria-label={t("topic.search")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("topic.searchPlaceholder")} /><Button disabled={pending || (mode === "Repository" && !connectionCode)} onClick={() => void search()}>{t("topic.search")}</Button></div> : null}

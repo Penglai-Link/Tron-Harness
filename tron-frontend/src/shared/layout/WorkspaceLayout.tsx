@@ -14,7 +14,7 @@ interface WorkspaceLayoutProps {
 
 function expandedNavigationWidth(width: number) {
   const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-  return Math.min(20 * rem, Math.max(12 * rem, width));
+  return Math.min(20 * rem, Math.max(10 * rem, width));
 }
 
 function DesktopWorkspaceBase({ navigation, toolbar, onNavigationResize }: Omit<WorkspaceLayoutProps, "children"> & {
@@ -31,7 +31,7 @@ function DesktopWorkspaceBase({ navigation, toolbar, onNavigationResize }: Omit<
   const [expandedSize] = useState(() => {
     const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
     return savedWidth === null
-      ? Math.min(14 * rem, Math.max(12 * rem, window.innerWidth * 0.16))
+      ? Math.min(11 * rem, Math.max(10 * rem, window.innerWidth * 0.12))
       : expandedNavigationWidth(savedWidth);
   });
   const [defaultSize] = useState(() => open ? expandedSize : "3.5rem");
@@ -81,7 +81,7 @@ function DesktopWorkspaceBase({ navigation, toolbar, onNavigationResize }: Omit<
         collapsible
         collapsedSize="3.5rem"
         defaultSize={defaultSize}
-        minSize="12rem"
+        minSize="10rem"
         maxSize="20rem"
         groupResizeBehavior="preserve-pixel-size"
         onResize={({ inPixels }) => {

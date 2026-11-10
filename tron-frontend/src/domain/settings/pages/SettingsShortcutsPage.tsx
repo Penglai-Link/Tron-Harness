@@ -1,11 +1,12 @@
 import { X } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
   formatShortcut,
+  isFixedShellShortcut,
   beginKeyboardShortcutCapture,
   shellShortcutActions,
   shortcutEquals,
@@ -20,7 +21,6 @@ import {
   ItemDescription,
   ItemActions,
 } from "@/components/ui/item";
-import { Separator } from "@/components/ui/separator";
 import { PageHeader, SurfaceCard } from "@/shared";
 import { InfoTooltip } from "@/components/info-tooltip";
 
@@ -80,7 +80,7 @@ export function SettingsShortcutsPage() {
       if (conflict) {
         setCaptureError(
           pageT("messages.conflict", {
-            action: pageT(`shortcuts.${conflict}.label`),
+            action: pageT(`shortcuts.${isFixedShellShortcut(conflict) ? "switchTabs" : conflict}.label`),
           }),
         );
         return;
@@ -127,21 +127,22 @@ export function SettingsShortcutsPage() {
 
         <div className="overflow-x-auto">
           <div className="min-w-0 divide-y divide-[var(--color-outline-variant)]">
-            {shellShortcutActions.map((action, index) => {
+            {shellShortcutActions.filter((action) => !isFixedShellShortcut(action) || action === "activateTab1").map((action) => {
               const binding = shortcutBindings[action];
               const isCapturing = capturingAction === action;
-              const label = pageT(`shortcuts.${action}.label`);
+              const fixed = isFixedShellShortcut(action);
+              const label = pageT(`shortcuts.${fixed ? "switchTabs" : action}.label`);
 
               return (
-                <Fragment key={action}>
-                  <Item size="xs" className="flex-col items-stretch @min-[36rem]:flex-row @min-[36rem]:items-center">
+                  <Item key={action} size="xs" className="flex-col items-stretch @min-[36rem]:flex-row @min-[36rem]:items-center">
                     <ItemContent>
                       <ItemTitle className="break-words">{label}</ItemTitle>
                       <ItemDescription className="line-clamp-none">
-                        {pageT(`shortcuts.${action}.description`)}
+                        {pageT(`shortcuts.${fixed ? "switchTabs" : action}.description`)}
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions className="w-full shrink-0 flex-nowrap justify-end gap-2 @min-[36rem]:w-56">
+                      {fixed ? <span className="font-mono text-sm">{useMacSymbols ? "⌘1–9" : "Ctrl+1–9"}</span> : <>
                       <Button
                         aria-label={pageT("actions.configure", { label })}
                         className="min-w-0 flex-1 justify-start font-mono"
@@ -173,12 +174,9 @@ export function SettingsShortcutsPage() {
                       >
                         <X aria-hidden="true" size={15} />
                       </Button>
+                      </>}
                     </ItemActions>
                   </Item>
-                  {index < shellShortcutActions.length - 1 ? (
-                    <Separator />
-                  ) : null}
-                </Fragment>
               );
             })}
           </div>

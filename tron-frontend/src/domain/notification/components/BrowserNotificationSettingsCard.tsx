@@ -94,9 +94,9 @@ export function BrowserNotificationSettingsCard() {
         <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">
           {t("settingsGeneral.browserNotifications.title")}
         </h2>
-        <p className="text-sm text-[var(--color-on-surface-variant)]">
+        {(requestFailed || permission === "denied" || permission === "unsupported") && <p className="text-sm text-[var(--color-on-surface-variant)]">
           {t(`settingsGeneral.browserNotifications.status.${requestFailed ? "requestFailed" : statusKey}`)}
-        </p>
+        </p>}
       </div>
       <div className="flex flex-wrap items-center gap-3">
         {actionKey ? (

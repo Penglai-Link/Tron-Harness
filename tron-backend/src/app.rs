@@ -659,7 +659,11 @@ impl AppState {
         let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
             config.application_config_path.clone(),
         )))
-        .with_runtime_config(runtime_config);
+        .with_runtime_config(runtime_config)
+        .with_shortcut_defaults(Arc::new(
+            crate::adapters::outbound::persistence::sqlite::SqliteShortcutDefaults::connect(&config.database_url)
+                .expect("shortcut defaults storage"),
+        ));
         let skin_root = std::path::Path::new(&config.application_config_path)
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."))

@@ -29,6 +29,7 @@ export function EditableTabs({
   renderTrailingAction,
   onChange,
   onEdit,
+  onDetach,
   className,
   keepMounted,
   preserveInternalTabs = true,
@@ -160,6 +161,7 @@ export function EditableTabs({
         hideAdd={hideAdd}
         onAdd={handleAdd}
         onClose={handleClose}
+        onDetach={onDetach}
         renderAddTrigger={renderAddTrigger}
         renderTrailingAction={renderTrailingAction}
         tabs={tabs}

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone)]
 pub struct SystemConfigService {
     pub(super) store: Arc<dyn SystemConfigStore>,
+    pub(super) shortcut_defaults: Option<Arc<dyn ShortcutDefaultsStore>>,
     pub(super) runtime_config: Option<super::BackendRuntimeConfig>,
 }
 
@@ -86,4 +87,17 @@ impl SystemConfigError {
             SystemConfigStoreError::WriteFailed => Self::WriteFailed,
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShortcutBinding {
+    pub key: String,
+    pub mod_key: bool,
+    pub alt_key: bool,
+    pub shift_key: bool,
+}
+
+pub trait ShortcutDefaultsStore: Send + Sync {
+    fn load(&self) -> Result<std::collections::BTreeMap<String, ShortcutBinding>, SystemConfigError>;
 }

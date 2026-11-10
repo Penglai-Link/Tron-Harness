@@ -403,8 +403,13 @@ export const TargetPageFrame = forwardRef<
       }
     };
 
+    const ownerWindow = addressFormRef.current?.ownerDocument.defaultView ?? window;
     window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
+    if (ownerWindow !== window) ownerWindow.addEventListener("message", handler);
+    return () => {
+      window.removeEventListener("message", handler);
+      if (ownerWindow !== window) ownerWindow.removeEventListener("message", handler);
+    };
   }, [
     inspectionMode,
     isDesktopHost,
@@ -478,12 +483,12 @@ export const TargetPageFrame = forwardRef<
     if (addressSubmitPendingRef.current) return;
     const nextTarget = event.relatedTarget;
     if (
-      nextTarget instanceof Node &&
-      addressFormRef.current?.contains(nextTarget)
+      nextTarget &&
+      addressFormRef.current?.contains(nextTarget as Node)
     )
       return;
     window.setTimeout(() => {
-      if (!addressFormRef.current?.contains(document.activeElement)) {
+      if (!addressFormRef.current?.contains(addressFormRef.current.ownerDocument.activeElement)) {
         setAddressDraft(activeDisplayAddress);
         setAddressEditing(false);
       }

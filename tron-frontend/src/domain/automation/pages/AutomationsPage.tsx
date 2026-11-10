@@ -115,11 +115,32 @@ export function AutomationsPage() {
     status: statusFilter || undefined,
     workspaceCode: activeWorkspaceCode,
   }), [activeWorkspaceCode, current, debouncedSearch, size, statusFilter]);
-  const { page, refresh } = useAutomationList(query);
+  const { page, refresh: refreshList } = useAutomationList(query);
+  const { page: workspacePage, refresh: refreshTotal } = useAutomationList({
+    workspaceCode: activeWorkspaceCode,
+    current: 1,
+    size: 1,
+  });
+  const { page: activePage, refresh: refreshActive } = useAutomationList({
+    workspaceCode: activeWorkspaceCode,
+    current: 1,
+    size: 1,
+    status: "Active",
+  });
+  const { page: pausedPage, refresh: refreshPaused } = useAutomationList({
+    workspaceCode: activeWorkspaceCode,
+    current: 1,
+    size: 1,
+    status: "Paused",
+  });
+  const refresh = () => {
+    refreshList();
+    refreshTotal();
+    refreshActive();
+    refreshPaused();
+  };
   const totalPages = Math.max(1, Math.ceil(page.total / page.size));
   const bounds = pageBounds(page.current, page.size, page.total, page.records.length);
-  const activeCount = page.records.filter((item) => item.status === "Active").length;
-  const pausedCount = page.records.filter((item) => item.status === "Paused").length;
   const formatTimestamp = (value?: string | null, fallback = "Not available") => (value ? formatDateTime(value, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -274,12 +295,12 @@ export function AutomationsPage() {
         }
       />
       <section className="mb-4 grid gap-3 md:grid-cols-3">
-        <StatisticCard label={pt("In Scope")} value={formatNumber(page.total)} />
-        <StatisticCard label={pt("Active")} value={formatNumber(activeCount)} />
-        <StatisticCard label={pt("Paused")} value={formatNumber(pausedCount)} />
+        <StatisticCard label={pt("Total")} value={formatNumber(workspacePage.total)} />
+        <StatisticCard label={pt("Active")} value={formatNumber(activePage.total)} />
+        <StatisticCard label={pt("Paused")} value={formatNumber(pausedPage.total)} />
       </section>
       <DataTable<AutomationListItem>
-        emptyState={activeWorkspaceCode ? pt("No automations match the current filters.") : pt("Choose a workspace in the shell header before managing automations.")}
+        emptyState={activeWorkspaceCode ? pt("No automations yet.") : pt("Choose a workspace in the shell header before managing automations.")}
         onRowClick={(row) => navigate(`/automations/detail?automationCode=${encodeURIComponent(row.automationCode)}`)}
         rows={page.records}
         rowKey={(row) => row.automationCode}

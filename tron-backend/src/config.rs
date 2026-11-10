@@ -1,4 +1,3 @@
-mod defaults;
 mod error;
 mod file;
 mod mineru;
@@ -39,7 +38,6 @@ const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_FRONTEND_DIST_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/frontend");
 const DEFAULT_TERMINAL_DIRECTORY: &str = ".";
-const TEST_DATABASE_URL: &str = ":memory:";
 const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
 const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
 

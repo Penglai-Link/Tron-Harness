@@ -46,6 +46,12 @@ export function pickDirectory(workspaceCode: string): Promise<DirectoryRecord | 
   });
 }
 
+export function pickDirectoryPath(workspaceCode: string): Promise<{ path: string | null }> {
+  return requestApi("POST /api/v1/directories/pick-path", {
+    body: { workspaceCode }, headers: { "X-Tron-Native-Picker": "1" }, retryOnUnauthorized: false,
+  });
+}
+
 export function deleteDirectory(directoryCode: string): Promise<{ sessionCodes: string[] }> {
   return requestApi("DELETE /api/v1/directories/{directoryCode}", { pathParams: { directoryCode } });
 }

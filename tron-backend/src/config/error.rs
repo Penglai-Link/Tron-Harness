@@ -25,6 +25,10 @@ pub enum ConfigError {
         path: String,
         source: std::io::Error,
     },
+    ConfigFileWriteFailed {
+        path: String,
+        source: std::io::Error,
+    },
     ConfigFileInvalid {
         path: String,
         source: serde_yaml::Error,
@@ -55,6 +59,12 @@ impl fmt::Display for ConfigError {
             Self::ConfigFileReadFailed { path, .. } => {
                 write!(formatter, "failed to read backend config file `{path}`")
             }
+            Self::ConfigFileWriteFailed { path, .. } => {
+                write!(
+                    formatter,
+                    "failed to initialize backend config file `{path}`"
+                )
+            }
             Self::ConfigFileInvalid { path, .. } => {
                 write!(formatter, "invalid backend config file `{path}`")
             }
@@ -71,6 +81,7 @@ impl Error for ConfigError {
             | Self::InvalidResourceConfig { .. } => None,
             Self::InvalidSocketAddr { source, .. } => Some(source),
             Self::ConfigFileReadFailed { source, .. } => Some(source),
+            Self::ConfigFileWriteFailed { source, .. } => Some(source),
             Self::ConfigFileInvalid { source, .. } => Some(source),
         }
     }

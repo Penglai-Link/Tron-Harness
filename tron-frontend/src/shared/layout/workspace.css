@@ -1,8 +1,13 @@
 /* Two real layout layers: navigation/chrome on the desktop, content on a sheet. */
-.tron-shell-frame {
+.tron-shell-frame,
+.tron-settings-frame {
   --tron-shell-gutter: clamp(0.75rem, 1.4vw, 1.5rem);
-  --tron-shell-toolbar-height: 3.25rem;
-  --tron-navigation-width: clamp(12rem, 16vw, 14rem);
+  --tron-shell-toolbar-height: 2.5rem;
+  --tron-shell-bottom-gap: max(0.5rem, env(safe-area-inset-bottom));
+  --tron-shell-right-gap: max(0.5rem, env(safe-area-inset-right));
+  --tron-navigation-width: clamp(10rem, 12vw, 11rem);
+}
+.tron-shell-frame {
   --tron-control-radius: 0.7rem;
   --agent-ui-composer-radius: 1rem;
   --agent-ui-chat-transcript-bg: var(--color-elevated-surface);
@@ -26,7 +31,7 @@
   z-index: 30;
   height: var(--tron-shell-toolbar-height);
   min-width: 0;
-  padding-inline: calc(var(--tron-shell-gutter) + 0.5rem);
+  padding-inline: calc(var(--tron-shell-gutter) + 0.5rem) var(--tron-shell-right-gap);
 }
 /* Quiet window controls; reserve contrast for the working content. */
 .tron-shell-tool {
@@ -67,7 +72,7 @@
   align-self: stretch;
   margin-inline: -6px;
   margin-top: calc(var(--tron-shell-toolbar-height) + 1.5rem);
-  margin-bottom: calc(var(--tron-shell-gutter) + 1.5rem);
+  margin-bottom: calc(var(--tron-shell-bottom-gap) + 1.5rem);
   transform: translateX(var(--tron-shell-gutter));
   background: transparent;
   cursor: col-resize;
@@ -114,13 +119,13 @@
   padding: 0.25rem 0.5rem;
   border-radius: 0.5rem;
   background: transparent;
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
 }
 .tron-workspace-selector:hover { background: var(--color-surface-container-high); }
 .tron-workspace-selector:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
-.tron-workspace-monogram {
+.tron-scope-icon {
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -129,8 +134,6 @@
   border-radius: 0.375rem;
   background: transparent;
   color: var(--color-accent);
-  font-size: 1.1rem;
-  font-weight: 700;
 }
 /* Every collapsed control uses the navigation container's shared center line. */
 .tron-shell-navigation[data-collapsible="icon"] [data-slot="sidebar-header"],
@@ -151,7 +154,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: var(--tron-shell-toolbar-height) var(--tron-shell-gutter) var(--tron-shell-gutter) calc(var(--tron-navigation-width) + var(--tron-shell-gutter));
+  padding: var(--tron-shell-toolbar-height) var(--tron-shell-right-gap) var(--tron-shell-bottom-gap) calc(var(--tron-navigation-width) + var(--tron-shell-gutter));
 }
 .tron-shell-workspace > * { pointer-events: auto; }
 .tron-workspace-surface {
@@ -175,16 +178,16 @@
   padding: clamp(1.5rem, 5vh, 4rem) clamp(0.25rem, 3vw, 3rem);
 }
 @media (max-width: 767px) {
+  .tron-shell-frame,
+  .tron-settings-frame { --tron-shell-gutter: 0.6rem; }
   .tron-shell-frame {
     --tron-navigation-width: 0rem;
-    --tron-shell-gutter: 0.6rem;
   }
-  .tron-shell-toolbar { padding-inline: 1rem; }
+  .tron-shell-toolbar { padding-inline-start: 1rem; }
   .tron-workspace-surface { border-radius: 1.1rem; }
 }
 
 .tron-settings-frame {
-  --tron-shell-gutter: clamp(0.75rem, 1.4vw, 1.5rem);
   display: flex;
   flex-direction: column;
   height: 100dvh;
@@ -194,7 +197,7 @@
 }
 .tron-settings-body {
   display: grid;
-  grid-template-columns: clamp(10rem, 12vw, 11rem) minmax(0, 1fr);
+  grid-template-columns: var(--tron-navigation-width) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -204,8 +207,18 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+.tron-settings-navigation {
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+.tron-settings-navigation::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 .tron-settings-body > main {
-  margin: 0 var(--tron-shell-gutter) var(--tron-shell-gutter);
+  min-height: 0;
+  margin: 0 var(--tron-shell-right-gap) var(--tron-shell-bottom-gap) var(--tron-shell-gutter);
   overflow-y: auto;
 }
 @media (max-width: 1023px) {

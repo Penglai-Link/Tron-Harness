@@ -14,7 +14,6 @@ export function EmptyTabWorkspace() {
     <section className="tron-workspace-start" aria-label={t("shell:workspaceStart.title")} data-testid="tron-empty-tab-workspace">
       <MotionReveal className="flex w-full max-w-[36rem] flex-col items-center text-center">
         <h1 className="text-[clamp(1.5rem,3vw,2.5rem)] font-semibold leading-tight tracking-tight">{t("shell:workspaceStart.title")}</h1>
-        <p className="mt-3 text-base text-[var(--color-on-surface-variant)] sm:text-lg">{t("shell:workspaceStart.description")}</p>
         <Button className="mt-8 min-h-12 min-w-40 px-8 text-base" onClick={actions?.createQuickChat} disabled={!actions?.available}>
           {t("shell:workspaceStart.newChat")}
         </Button>

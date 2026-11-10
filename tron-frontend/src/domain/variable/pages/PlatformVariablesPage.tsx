@@ -43,6 +43,7 @@ import {
   matchesPlatformVariableSearch,
 } from "./platformVariablePageHelpers";
 import { SelectItem } from "@/components/ui/select";
+import { CreatePlatformVariableDialog } from "./CreatePlatformVariableDialog";
 
 interface RowMenuState {
   left: number;
@@ -64,6 +65,7 @@ export function PlatformVariablesPage() {
   const toast = useToast();
   const dataSource = getServiceDataSource("variable");
   const [records, setRecords] = useState<PlatformVariableRecord[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sensitiveFilter, setSensitiveFilter] = useState<PlatformSensitiveFilter>("All");
   const [loading, setLoading] = useState(false);
@@ -97,7 +99,7 @@ export function PlatformVariablesPage() {
       setRevealedValues({});
       setRevealPendingKey("");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform variables could not be loaded"));
+      toast.error(error instanceof Error ? error.message : pageT("errors.load", "Public variables could not be loaded"));
     } finally {
       setLoading(false);
     }
@@ -118,7 +120,7 @@ export function PlatformVariablesPage() {
           setRevealPendingKey("");
         }
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform variables could not be loaded"));
+        if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Public variables could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -199,7 +201,7 @@ export function PlatformVariablesPage() {
       toast.success(pageT("messages.deleted", "{{key}} deleted", { key: row.key }));
       await refreshPlatformVariables();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : pageT("errors.delete", "Platform variable could not be deleted"));
+      toast.error(error instanceof Error ? error.message : pageT("errors.delete", "Public variable could not be deleted"));
     } finally {
       setRowBusyKey("");
     }
@@ -250,14 +252,14 @@ export function PlatformVariablesPage() {
   return (
     <>
       <PageHeader
-        title={pageT("title", "Platform Variables")}
+        title={pageT("title", "Public Variables")}
         actions={(
           <>
             <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={() => void refreshPlatformVariables()}>
 
               {loading ? pageT("actions.refreshing", "Refreshing...") : pageT("actions.refresh", "Refresh")}
             </Button>
-            <Button onClick={() => navigate("/settings/variables/new")}>
+            <Button onClick={() => setCreateOpen(true)}>
 
               {pageT("actions.new", "New")}
             </Button>
@@ -271,18 +273,18 @@ export function PlatformVariablesPage() {
           rowKey={(row) => row.key}
           tableClassName="table-fixed min-w-[1080px]"
           onRowClick={(row) => navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(row.key)}`)}
-          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "platform variables")} {...pagination.paginationProps} />}
+          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "public variables")} {...pagination.paginationProps} />}
           toolbar={(
             <>
               <SearchField
-                ariaLabel={pageT("aria.search", "Search platform variables")}
+                ariaLabel={pageT("aria.search", "Search public variables")}
                 className="min-w-0 grow basis-full sm:basis-0 sm:max-w-[360px]"
-                placeholder={pageT("filters.searchPlaceholder", "Search platform variables...")}
+                placeholder={pageT("filters.searchPlaceholder", "Search public variables...")}
                 value={query}
                 onChange={setQuery}
               />
               <SelectInput
-                aria-label={pageT("aria.sensitiveFilter", "Filter platform variables by sensitive data")}
+                aria-label={pageT("aria.sensitiveFilter", "Filter public variables by sensitive data")}
                 className="w-full sm:w-auto"
                 value={sensitiveFilter}
                 onValueChange={(event) => setSensitiveFilter(sensitiveFilterValue(event!))}
@@ -295,7 +297,7 @@ export function PlatformVariablesPage() {
               </SelectInput>
             </>
           )}
-          emptyState={pageT("empty.filtered", "No platform variables match the current filters.")}
+          emptyState={pageT("empty.filtered", "No public variables match the current filters.")}
           columns={[
             {
               id: "key",
@@ -399,6 +401,13 @@ export function PlatformVariablesPage() {
           ]}
         />
       </div>
+      {createOpen && <CreatePlatformVariableDialog
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => {
+          setCreateOpen(false);
+          void refreshPlatformVariables();
+        }}
+      />}
       {openRowMenu && openMenuRow
         ? createPortal(
           <div

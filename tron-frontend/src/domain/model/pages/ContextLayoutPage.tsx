@@ -98,7 +98,7 @@ export function ContextLayoutPage() {
       {!loading && order.length > 0 ? <>
         <ContextBudgetPreview budgets={budgets} windowTokens={previewWindow} onWindowChange={setPreviewWindow} highlightedId={highlightedId} onHighlightChange={setHighlightedId} />
         <div className="overflow-x-auto">
-          <section aria-label={t("contextLayout.title")} className="min-w-0 overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
+          <section data-settings-section aria-label={t("contextLayout.title")} className="min-w-0 overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
             <div className={`hidden @min-[54rem]:grid ${columns} border-b border-[var(--color-outline-variant)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]`}>
               <span className="pl-6">{t("contextLayout.blockColumn")}</span>
               <span className="text-center">{t("contextLayout.updateMode")}</span>

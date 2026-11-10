@@ -43,6 +43,12 @@ export const common = {
     name: "Tron",
   },
   content: {
+    detachTab: "在独立窗口打开",
+    tabDetached: "已在独立窗口打开",
+    focusWindow: "唤回窗口",
+    returnTab: "放回原位置",
+    popupBlocked: "请允许此站点打开弹出窗口后重试。",
+
     none: "无",
     noData: "暂无属性",
     openUrl: "输入 URL 打开页面",

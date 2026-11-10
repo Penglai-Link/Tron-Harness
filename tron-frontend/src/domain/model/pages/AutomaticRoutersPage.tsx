@@ -28,7 +28,7 @@ export function AutomaticRoutersPage() {
   return <div className="space-y-5">
     <PageHeader title={t("automaticRouters.title")} actions={<Button variant="outline" disabled={loading} onClick={() => setRevision(v => v + 1)}>{t("automaticRouters.refresh")}</Button>} />
     {error && <p role="alert" className="text-[var(--color-error)]">{error}</p>}
-    {loading ? <p role="status">{t("automaticRouters.loading")}</p> : <div className="max-w-5xl divide-y rounded-lg border bg-[var(--color-elevated-surface)]">
+    {loading ? <p role="status">{t("automaticRouters.loading")}</p> : <div data-settings-section className="max-w-5xl divide-y rounded-lg border bg-[var(--color-elevated-surface)]">
       {routes.map(route => <RouterEditor key={route.kind} route={route} />)}
     </div>}
   </div>;

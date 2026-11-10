@@ -8,6 +8,15 @@ export const shellShortcutActions = [
   "closeCurrentTab",
   "previousTab",
   "nextTab",
+  "activateTab1",
+  "activateTab2",
+  "activateTab3",
+  "activateTab4",
+  "activateTab5",
+  "activateTab6",
+  "activateTab7",
+  "activateTab8",
+  "activateTab9",
   "closeAllTabs",
   "closeOtherTabs",
   "toggleLeftSidebar",
@@ -115,15 +124,24 @@ export function createDefaultShellShortcutBindings(): ShellShortcutBindings {
     altKey: true, key, modKey: true, shiftKey: false,
   });
   return {
-    newTopic: modAlt("1"),
-    newDirectory: modAlt("2"),
+    newTopic: { ...modAlt("1"), altKey: false, shiftKey: true },
+    newDirectory: { ...modAlt("2"), altKey: false, shiftKey: true },
     newSession: { ...modAlt("N"), altKey: false },
-    toggleAgentWindow: modAlt("N"),
-    toggleVoiceInput: modAlt("M"),
-    openNotifications: null,
+    toggleAgentWindow: { ...modAlt("N"), altKey: false, shiftKey: true },
+    toggleVoiceInput: { ...modAlt("T"), altKey: false },
+    openNotifications: { ...modAlt("M"), altKey: false, shiftKey: true },
     closeCurrentTab: modAlt("W"),
     previousTab: modAlt("H"),
     nextTab: modAlt("L"),
+    activateTab1: { ...modAlt("1"), altKey: false },
+    activateTab2: { ...modAlt("2"), altKey: false },
+    activateTab3: { ...modAlt("3"), altKey: false },
+    activateTab4: { ...modAlt("4"), altKey: false },
+    activateTab5: { ...modAlt("5"), altKey: false },
+    activateTab6: { ...modAlt("6"), altKey: false },
+    activateTab7: { ...modAlt("7"), altKey: false },
+    activateTab8: { ...modAlt("8"), altKey: false },
+    activateTab9: { ...modAlt("9"), altKey: false },
     closeAllTabs: modAlt("X"),
     closeOtherTabs: modAlt("O"),
     toggleLeftSidebar: modAlt("ArrowLeft"),
@@ -132,13 +150,21 @@ export function createDefaultShellShortcutBindings(): ShellShortcutBindings {
   };
 }
 
+export function isFixedShellShortcut(action: ShellShortcutAction) {
+  return action.startsWith("activateTab");
+}
+
+export function isReservedTabShortcut(binding: ShellShortcutBinding | null) {
+  return Boolean(binding?.modKey && !binding.altKey && !binding.shiftKey && /^[1-9]$/.test(binding.key));
+}
+
 export function normalizeShellShortcutBindings(value: unknown): ShellShortcutBindings {
   const defaults = createDefaultShellShortcutBindings();
   if (!value || typeof value !== "object") return defaults;
   const persisted = value as Partial<ShellShortcutBindings>;
 
-  return shellShortcutActions.reduce<ShellShortcutBindings>((bindings, action) => {
-    const binding = persisted[action];
+  const normalized = shellShortcutActions.reduce<ShellShortcutBindings>((bindings, action) => {
+    const binding = isFixedShellShortcut(action) ? defaults[action] : persisted[action];
     bindings[action] = binding === null ? null : isShortcutBinding(binding)
       ? {
           ...binding,
@@ -146,7 +172,14 @@ export function normalizeShellShortcutBindings(value: unknown): ShellShortcutBin
         }
       : defaults[action];
     return bindings;
-  }, defaults);
+  }, { ...defaults });
+  // Numeric tab shortcuts are reserved even when old custom bindings conflict.
+  for (const action of shellShortcutActions) {
+    if (!isFixedShellShortcut(action) && isReservedTabShortcut(normalized[action])) {
+      normalized[action] = defaults[action];
+    }
+  }
+  return normalized;
 }
 
 /** Upgrade shipped defaults while retaining explicit custom key combinations. */
@@ -154,14 +187,19 @@ export function migrateDefaultShellShortcutBindings(value: unknown): ShellShortc
   const bindings = normalizeShellShortcutBindings(value);
   const defaults = createDefaultShellShortcutBindings();
   const legacyKeys: Partial<Record<ShellShortcutAction, string[]>> = {
+    newTopic: ["1"],
+    newDirectory: ["2"],
+    toggleAgentWindow: ["N"],
+    toggleVoiceInput: ["M"],
     newSession: ["N"],
     toggleBottomPanel: ["J", "K"],
     toggleLeftSidebar: ["[", "U"],
     toggleRightSidebar: ["]", "Y"],
   };
   for (const action of shellShortcutActions) {
+    if (action.startsWith("activateTab")) continue;
     const binding = bindings[action];
-    if (binding === null && !legacyKeys[action]) {
+    if (binding === null && (!legacyKeys[action] || action === "toggleVoiceInput")) {
       bindings[action] = defaults[action];
     } else if (binding?.modKey && binding.altKey && !binding.shiftKey
       && legacyKeys[action]?.includes(binding.key)) {

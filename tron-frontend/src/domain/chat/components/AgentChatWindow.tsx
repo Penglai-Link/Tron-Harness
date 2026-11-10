@@ -36,6 +36,7 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
   attachmentDownloader?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   submitterRef?: Ref<AgentChatSubmitter>;
   knowledgeBaseId?: string;
+  agentIdentity?: { agentCode: string; name: string };
   speechScope?: string;
   config: ChatClientConfig;
   initialSession?: ChatSession | null;
@@ -52,7 +53,7 @@ function ComposerControls({ children }: { children: React.ReactNode }) {
 }
 
 /** Product context adapter only. Rendering, streaming, queues, stop and replay belong to Agent UI. */
-export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, config, knowledgeBaseId, speechScope, initialSession, pendingAttachments,
+export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, config, knowledgeBaseId, agentIdentity, speechScope, initialSession, pendingAttachments,
   onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, footerAddon, draft: controlledDraft, onDraftChange, composerRef: hostComposerRef, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
   const tabVisible = useTabVisibility();
@@ -159,9 +160,14 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     otherAnswerPlaceholder: t("chat.userInput.otherAnswerPlaceholder"),
     otherAnswerAriaLabel: (index: number) => t("chat.userInput.otherAnswerAriaLabel", { index }),
   }), [t]);
-  const uiAdapter = useMemo(() => createAgentUiAdapter(adapter, config),
-    [adapter, config.workspaceCode, config.appCode, config.taskCode, config.agentCode]);
-  const session = useMemo(() => initialSession ? toUiSession(initialSession) : initialSession, [initialSession]);
+  const identityCode = agentIdentity?.agentCode;
+  const identityName = agentIdentity?.name;
+  const identitySessionId = initialSession?.sessionCode;
+  const uiAdapter = useMemo(() => createAgentUiAdapter(adapter, config,
+    identityCode && identityName ? { agentCode: identityCode, name: identityName, sessionId: identitySessionId } : undefined),
+    [adapter, config.workspaceCode, config.appCode, config.taskCode, config.agentCode, identityCode, identityName, identitySessionId]);
+  const session = useMemo(() => initialSession ? toUiSession(initialSession,
+    initialSession.agentCode === identityCode ? identityName : undefined) : initialSession, [initialSession, identityCode, identityName]);
   const attachments = useMemo(() => pendingAttachments?.map(toUiAttachment), [pendingAttachments]);
   const downloadAttachment = useMemo(() => attachmentDownloader
     ? (value: Ui.ChatMessageAttachment) => attachmentDownloader(fromUiAttachment(value))

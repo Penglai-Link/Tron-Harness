@@ -1,7 +1,5 @@
 use serde::Deserialize;
 
-const DEFAULT_VARIABLE_CRYPTO_KEY_BASE64: &str = "EBESExQVFhcYGRobHB0eHw==";
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VariableCryptoConfig {
     pub key_base64: String,
@@ -22,12 +20,6 @@ impl Default for VariableCryptoConfig {
 }
 
 impl VariableCryptoConfig {
-    pub fn test_default() -> Self {
-        Self {
-            key_base64: DEFAULT_VARIABLE_CRYPTO_KEY_BASE64.into(),
-        }
-    }
-
     pub(super) fn apply_overrides(&mut self, overrides: VariableCryptoFileConfig) {
         if let Some(value) = overrides.key_base64 {
             self.key_base64 = normalize_config_string(value).unwrap_or_default();

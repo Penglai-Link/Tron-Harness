@@ -1,7 +1,6 @@
 export const shell = {
   workspaceStart: {
-    title: "开始你的下一项工作",
-    description: "让想法成为现实",
+    title: "让想法成为现实",
     newChat: "开始随聊",
   },
   aria: {
@@ -38,11 +37,11 @@ export const shell = {
     notes: "主题说明", notesPlaceholder: "描述要做的事情和重要背景", saveNotes: "保存说明", refresh: "刷新", retry: "重试",
     references: "关联资源", addReference: "添加资源", noReferences: "还没有关联资源。", sessions: "会话", unavailable: "不可用", open: "打开", remove: "移除",
     referencesChanged: "主题资源已更改，请保留未保存的说明后刷新。",
-    checkout: { title: "准备本地目录", prepare: "准备本地目录", preparing: "正在准备…", existing: "使用已有目录", clone: "克隆仓库", existingPath: "已有仓库目录", clonePath: "新目录路径", username: "Git 账户名", existingHint: "所选目录必须是此仓库的本地检出目录。", cloneHint: "已登记的同一仓库会优先复用。令牌仅用于本次克隆。", giteeHint: "请输入 Gitee 账户名；已登记的同一仓库会优先复用。", httpsRequired: "克隆需要受支持的 HTTPS 地址；你仍可使用已有检出目录。", failed: "准备本地目录失败" },
+    checkout: { chooseFolder: "选择文件夹", chooseParent: "选择父文件夹", pathHelp: "目录路径说明", clonePathHint: "选择父文件夹后，会自动追加仓库名作为克隆目录；也可直接修改为尚不存在的完整路径。", usernameHelp: "Git 账户名说明", usernameHint: "HTTPS 克隆时使用的用户名，与代码仓库连接中保存的令牌配合认证。通常保留默认值；若平台要求账户名，请填写该平台的登录名。", giteeUsernameHint: "填写 Gitee 登录用户名，与代码仓库连接中保存的令牌配合完成 HTTPS 克隆认证。", title: "准备本地目录", prepare: "准备本地目录", preparing: "正在准备…", existing: "使用已有目录", clone: "克隆仓库", existingPath: "已有仓库目录", clonePath: "新目录路径", username: "Git 账户名", existingHint: "所选目录必须是此仓库的本地检出目录。", httpsRequired: "克隆需要受支持的 HTTPS 地址；你仍可使用已有检出目录。", failed: "准备本地目录失败" },
     kind: { Directory: "工作区", Repository: "仓库", Resource: "资料", Task: "任务", Link: "链接" },
     noDirectories: "请先在左侧添加工作区。", url: "链接地址", label: "名称", add: "添加", close: "关闭",
-    connectPlatform: "连接平台", connectionName: "连接名称", endpoint: "平台地址", connect: "连接", connected: "连接成功", connectFailed: "连接失败",
-    privateConnections: "连接使用你的个人凭据，其他成员不能借用它访问关联仓库。",
+    connectPlatform: "连接平台", newConnection: "新增连接", connectionType: "连接类型", connectionName: "连接名称", endpoint: "平台地址", connect: "连接", connected: "连接成功", connectFailed: "连接失败",
+    repositorySettings: "代码仓库", manageConnections: "管理代码仓库连接", noConnections: "还没有代码仓库连接。", connectionSaved: "连接已保存",
     testConnection: "测试连接", editConnection: "编辑连接", deleteConnection: "删除连接", saveConnection: "保存连接", keepToken: "留空则保留当前 Token", deleteConnectionDescription: "删除此连接？主题中的仓库引用会保留，但将变为不可用。",
     search: "搜索", searchPlaceholder: "按名称搜索", more: "显示更多", upload: "上传到资源库", uploadFailed: "上传失败", loadFailed: "加载主题失败", saveFailed: "保存主题失败",
   },
@@ -129,6 +128,7 @@ export const shell = {
       restoring: "正在恢复会话…",
       pin: "置顶会话",
       pinned: "已置顶",
+      awaitingInput: "等待你的回复",
       unpin: "取消置顶",
       rename: "重命名",
       title: "会话名称",
@@ -258,8 +258,8 @@ export const shell = {
   },
   navigation: {
     emptyGroup: "暂无菜单，可在菜单编排中加入。",
-    defaultDescription: "高级模式",
-    defaultName: "高级模式",
+    defaultDescription: "日常工作",
+    defaultName: "日常工作",
     noDomains: "没有可用的领域。",
     refreshing: "正在刷新领域...",
     selectorTitle: "领域选择器",

@@ -91,6 +91,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const { t } = useTranslation("common");
   const {
     get,
+    detachRightPanelTab, detachedRightPanelIds, returnRightPanelTab, focusRightPanelWindow,
     getRightPanelActiveKey,
     getRightPanelOwnerKey,
     getRightPanelTabs,
@@ -104,7 +105,6 @@ const RightPanelTabs = memo(function RightPanelTabs({
   );
 
   const panelId = panelTabId(tab.tabId, tab.workspaceCode);
-  const nextTabId = useRef(1);
   const panelConfig = get(panelId);
   const dynamicTabs = getRightPanelTabs(panelId);
   const ownerKey = getRightPanelOwnerKey(panelId);
@@ -144,7 +144,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
   }, [fileTabKeys, fileTabLabels, fileTabOwners, panelId, isDesktop, t]);
 
   const createWebTab = useCallback((): EditableTab => {
-    const id = nextTabId.current++;
+    const id = crypto.randomUUID();
     const stableId = `right-panel-page-${panelId}-${ownerKey ?? "default"}-${id}`;
     const newTab: EditableTab = {
       key: stableId,
@@ -172,7 +172,16 @@ const RightPanelTabs = memo(function RightPanelTabs({
       return {
         ...item,
         hidden: item.ownerKey !== ownerKey,
-        children: (
+        detachable: !detachedRightPanelIds.includes(item.stableId),
+        children: detachedRightPanelIds.includes(item.stableId) ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm">
+            <p className="text-muted-foreground">{t("content.tabDetached")}</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="outline" onClick={() => focusRightPanelWindow(item.stableId!)}>{t("content.focusWindow")}</Button>
+              <Button onClick={() => returnRightPanelTab(item.stableId!)}>{t("content.returnTab")}</Button>
+            </div>
+          </div>
+        ) : (
           <PageView
             inspectionMode={Boolean(panelConfig?.onPageInspectionConfirm)}
             onInspectionConfirm={panelConfig?.onPageInspectionConfirm}
@@ -189,7 +198,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
         ),
       };
     }),
-    [dynamicTabs, ownerKey, panelConfig?.onPageInspectionConfirm, panelId, updateRightPanelTab],
+    [dynamicTabs, ownerKey, panelConfig?.onPageInspectionConfirm, panelId, updateRightPanelTab, detachedRightPanelIds, focusRightPanelWindow, returnRightPanelTab, t],
   );
 
   const items = useMemo(
@@ -258,6 +267,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
       preserveInternalTabs={false}
       provideTabVisibility
       onEdit={handleEdit}
+      onDetach={(item, position) => detachRightPanelTab(panelId, item, position)}
       onChange={(key) => {
         if (!key) return;
         if (key.startsWith(FILE_TAB_KEY_PREFIX)) {

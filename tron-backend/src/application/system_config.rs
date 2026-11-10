@@ -6,7 +6,7 @@ mod types;
 pub use runtime::BackendRuntimeConfig;
 
 pub use types::{
-    StoredSystemConfig, SystemConfigChange, SystemConfigDocument, SystemConfigError,
+    ShortcutBinding, ShortcutDefaultsStore, StoredSystemConfig, SystemConfigChange, SystemConfigDocument, SystemConfigError,
     SystemConfigItem, SystemConfigService, SystemConfigStore, SystemConfigStoreError,
     SystemConfigUpdateResult,
 };

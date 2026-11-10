@@ -17,12 +17,22 @@ impl SystemConfigService {
         Self {
             store,
             runtime_config: None,
+            shortcut_defaults: None,
         }
     }
 
     pub fn with_runtime_config(mut self, runtime: super::BackendRuntimeConfig) -> Self {
         self.runtime_config = Some(runtime);
         self
+    }
+
+    pub fn with_shortcut_defaults(mut self, store: Arc<dyn super::ShortcutDefaultsStore>) -> Self {
+        self.shortcut_defaults = Some(store);
+        self
+    }
+
+    pub fn shortcut_defaults(&self) -> Result<std::collections::BTreeMap<String, super::ShortcutBinding>, SystemConfigError> {
+        self.shortcut_defaults.as_ref().ok_or(SystemConfigError::ReadFailed)?.load()
     }
 
     pub fn get(&self) -> Result<SystemConfigDocument, SystemConfigError> {

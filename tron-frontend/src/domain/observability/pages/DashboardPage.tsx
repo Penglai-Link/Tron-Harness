@@ -161,7 +161,7 @@ export function DashboardPage() {
                       aria-label={`${formatDateTime(b.startedAt, { timeStyle: "short" })} · ${t("requestsValue", { count: b.requests })}`}
                     >
                       <div
-                        className="relative w-full overflow-hidden rounded-t bg-[var(--chart-3)]"
+                        className="relative w-full overflow-hidden rounded-t bg-[var(--chart-1)]"
                         style={{ height: `${(b.requests / maximum) * 100}%` }}
                       >
                         <div

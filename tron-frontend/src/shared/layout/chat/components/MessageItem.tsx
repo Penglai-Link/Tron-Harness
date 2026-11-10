@@ -1,4 +1,4 @@
-import { Archive, Copy, Folder, FolderInput, LoaderCircle, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
+import { Archive, Copy, Folder, FolderInput, LoaderCircle, MessageCircleQuestion, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -16,7 +16,7 @@ import { toastManager, useToast } from "@/components/ui/toast";
 import { cn } from "@/shared/lib/utils";
 import { useTabStore } from "@/store/tabStore";
 import ActionButton from "./ActionButton";
-import { useSessionRunning } from "../hooks/useSessionRunning";
+import { useSessionActivity } from "../hooks/useSessionActivity";
 import Item from "./Item";
 
 const MessageItem = ({
@@ -29,7 +29,7 @@ const MessageItem = ({
   pinned: boolean;
   session: ChatSession;
 }) => {
-  const running = useSessionRunning(session.sessionCode);
+  const { running, awaitingInput } = useSessionActivity(session.sessionCode);
   const toast = useToast();
   const { t } = useTranslation("shell");
   const [pendingAction, setPendingAction] = useState<"archive" | "delete" | null>(null);
@@ -193,12 +193,12 @@ const MessageItem = ({
   return (
     <>
       <Item
-        className={cn("group/session relative flex h-8 min-w-0 items-center pl-6", active && "bg-sidebar-accent text-sidebar-accent-foreground")}
+        className={cn("group/session relative flex h-auto min-h-11 min-w-0 items-center py-2 pl-3", active && "bg-sidebar-accent text-sidebar-accent-foreground")}
         left={
           <Link
             to={sessionPath}
             title={session.title}
-            className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-base"
             onClick={(event) => {
               if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               if (session.workspaceCode && useTabStore.getState().workspaceCode !== session.workspaceCode) return;
@@ -207,13 +207,14 @@ const MessageItem = ({
             }}
           >
             {pinned ? <Pin size={12} className="shrink-0 opacity-70" aria-label={t("shell:chatSidebar.session.pinned")} /> : null}
-            {running ? <LoaderCircle aria-label={t("common:status.running", "Running")} size={14} className="shrink-0 animate-spin" /> : null}
-            <span className="min-w-0 truncate">{session.title}</span>
+            {awaitingInput ? <span className="flex shrink-0 text-[var(--color-warning)]" role="img" aria-label={t("shell:chatSidebar.session.awaitingInput")} title={t("shell:chatSidebar.session.awaitingInput")}><MessageCircleQuestion size={16} aria-hidden="true" /></span>
+              : running ? <LoaderCircle aria-label={t("common:status.running", "Running")} size={16} className="shrink-0 animate-spin" /> : null}
+            <span className="min-w-0 line-clamp-2 break-words leading-snug">{session.title}</span>
           </Link>
         }
         right={
           <div className={cn(
-            "pointer-events-none flex h-full shrink-0 items-center gap-1 pl-2 opacity-0 transition-opacity",
+            "pointer-events-none flex h-full shrink-0 items-center pl-1 opacity-0 transition-opacity",
             "group-hover/session:pointer-events-auto group-hover/session:opacity-100",
             "group-focus-within/session:pointer-events-auto group-focus-within/session:opacity-100",
             "has-[button[data-popup-open]]:pointer-events-auto has-[button[data-popup-open]]:opacity-100",
@@ -241,15 +242,15 @@ const MessageItem = ({
                 <DropdownMenuItem onClick={() => void copySessionId()}>
                   <Copy aria-hidden="true" />{t("shell:chatSidebar.session.copyId")}
                 </DropdownMenuItem>
+                <DropdownMenuItem disabled={running || Boolean(pendingAction)} onClick={() => void archive()}>
+                  <Archive aria-hidden="true" />{t("common:actions.archive", "Archive")}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" disabled={running || Boolean(pendingAction)} onClick={() => setDeleteOpen(true)}>
                   <Trash2 aria-hidden="true" />{t("shell:chatSidebar.session.delete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <ActionButton needHover className="size-6 shrink-0 justify-center rounded hover:bg-sidebar-accent" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void archive(); }} disabled={Boolean(pendingAction) || running} aria-label={t("common:actions.archive", "Archive")}>
-              {pendingAction === "archive" ? <LoaderCircle size={14} className="animate-spin" aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
-            </ActionButton>
           </div>
         }
       />

@@ -61,3 +61,6 @@ pub use dude_memory_repository::SqliteDudeMemoryRepository;
 
 mod rag_graph_index;
 pub use rag_graph_index::SqliteRagGraphIndexRepository;
+
+mod shortcut_defaults;
+pub use shortcut_defaults::SqliteShortcutDefaults;

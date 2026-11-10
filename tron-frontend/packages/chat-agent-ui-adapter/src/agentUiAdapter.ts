@@ -1,30 +1,34 @@
 import type * as Ui from "@personai/agent-ui-chat-core";
 import type { ChatAdapter, ChatClientConfig, ChatStreamHandlers } from "@tron/chat-core";
-import { fromUiAnswer, fromUiAttachment, fromUiInput, fromUiResume, fromUiSession, toUiAttachment, toUiEvent, toUiHistory, toUiMessage, toUiQuestion, toUiResult, toUiSession, uiRequest } from "./agentUiMapping";
+import { fromUiAnswer, fromUiAttachment, fromUiInput, fromUiResume, fromUiSession, toUiAttachment, toUiEvent, toUiHistory, toUiMessage, toUiMessageWithAgent, toUiQuestion, toUiResult, toUiSession, uiRequest } from "./agentUiMapping";
 
 /** Transport/auth/locale stay in the existing product adapter. No API is called by UI components. */
-export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig): Ui.ChatAdapter {
+export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig, identity?: { agentCode: string; name: string; sessionId?: string }): Ui.ChatAdapter {
+  const nameForSession = (sessionId: string) => identity && (!identity.sessionId || identity.sessionId === sessionId) ? identity.name : undefined;
+  const nameForResult = (result: { session: { agentCode?: string | null; sessionCode: string } }) =>
+    result.session.agentCode === identity?.agentCode ? nameForSession(result.session.sessionCode) : undefined;
   const handlers = (target?: Ui.ChatStreamHandlers): ChatStreamHandlers => ({
     onDelta: target?.onDelta,
-    onAguiEvent: (event) => target?.onAguiEvent?.(toUiEvent(event)),
+    onAguiEvent: (event) => target?.onAguiEvent?.(toUiEvent(event, event.threadId ? nameForSession(event.threadId) : undefined)),
   });
   return {
     capabilities: host.capabilities,
     createSession: async (input) => {
       if (!config.workspaceCode?.trim()) throw new Error("Workspace code is required before starting a session");
-      return toUiSession(await uiRequest(host.createSession({
+      const session = await uiRequest(host.createSession({
         workspaceCode: config.workspaceCode, appCode: config.appCode, taskCode: config.taskCode,
         agentCode: config.agentCode, title: input.title,
-      })));
+      }));
+      return toUiSession(session, identity && session.agentCode === identity.agentCode ? identity.name : undefined);
     },
     deleteSession: async (...args) => toUiSession(await uiRequest(host.deleteSession(...args))),
     loadA2uiState: host.loadA2uiState ? (...args) => uiRequest(host.loadA2uiState!(...args)) : undefined,
-    sendA2uiActionStream: host.sendA2uiActionStream ? async (session,input,events,signal) => toUiResult(await uiRequest(host.sendA2uiActionStream!(fromUiSession(session),input,handlers(events),signal))) : undefined,
-    loadMessages: async (id) => (await uiRequest(host.loadMessages(id))).map(toUiMessage),
+    sendA2uiActionStream: host.sendA2uiActionStream ? async (session,input,events,signal) => { const result = await uiRequest(host.sendA2uiActionStream!(fromUiSession(session),input,handlers(events),signal)); return toUiResult(result, nameForResult(result)); } : undefined,
+    loadMessages: async (id) => (await uiRequest(host.loadMessages(id))).map((message) => toUiMessageWithAgent(message, nameForSession(id))),
     deleteTurn: host.deleteTurn ? (...args) => uiRequest(host.deleteTurn!(...args)) : undefined,
-    loadHistory: host.loadHistory ? async (...args) => toUiHistory(await uiRequest(host.loadHistory!(...args))) : undefined,
+    loadHistory: host.loadHistory ? async (...args) => toUiHistory(await uiRequest(host.loadHistory!(...args)), nameForSession(args[0])) : undefined,
     loadAguiEvents: async (id) => (await uiRequest(host.loadAguiEvents(id))).map(({ runCode, ...event }) => ({ ...event, runId: runCode })),
-    loadProtocolEvents: host.loadProtocolEvents ? async (id) => (await uiRequest(host.loadProtocolEvents!(id))).map(toUiEvent) : undefined,
+    loadProtocolEvents: host.loadProtocolEvents ? async (id) => (await uiRequest(host.loadProtocolEvents!(id))).map((event) => toUiEvent(event, nameForSession(id))) : undefined,
     loadUserInputRequests: host.loadUserInputRequests ? async (...args) => (await uiRequest(host.loadUserInputRequests!(...args))).map(toUiQuestion) : undefined,
     getActiveRun: host.getActiveRun ? async (...args) => {
       const value = await uiRequest(host.getActiveRun!(...args));
@@ -34,8 +38,10 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
         ...(value.activeRun.operationKind ? { operationKind: value.activeRun.operationKind } : {}),
       } : null };
     } : undefined,
-    streamMessage: async (session, input, events, signal) => toUiResult(await uiRequest(
-      host.streamMessage(fromUiSession(session), fromUiInput(input), handlers(events), signal))),
+    streamMessage: async (session, input, events, signal) => {
+      const result = await uiRequest(host.streamMessage(fromUiSession(session), fromUiInput(input), handlers(events), signal));
+      return toUiResult(result, nameForResult(result));
+    },
     steerMessage: host.steerMessage ? async (session, input, context, signal) => {
       const value = await uiRequest(host.steerMessage!(fromUiSession(session), fromUiInput(input),
         { expectedRunCode: context.expectedRunId }, signal));
@@ -53,8 +59,9 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
       const answers = input.answers.map(fromUiAnswer);
       // The payload is a product API contract too; mapping only the outer answers loses resume data.
       const resume = input.resume ? (input.answers.length ? fromUiResume(input.resume) : input.resume) : undefined;
-      return toUiResult(await uiRequest(host.answerUserInputRequestStream!(fromUiSession(session), id,
-        { answers, resume, clientCapabilities:input.clientCapabilities, a2uiMetadata:input.a2uiMetadata }, handlers(events), signal)));
+      const result = await uiRequest(host.answerUserInputRequestStream!(fromUiSession(session), id,
+        { answers, resume, clientCapabilities:input.clientCapabilities, a2uiMetadata:input.a2uiMetadata }, handlers(events), signal));
+      return toUiResult(result, nameForResult(result));
     } : undefined,
   };
 }

@@ -7,7 +7,7 @@ import { cn } from "@/shared/lib/utils";
 import { MotionReveal } from "@/shared/motion";
 
 export function SurfaceCard({ className, ...props }: HTMLAttributes<HTMLElement>) {
-  return <MotionReveal as="section" data-theme-anchor="card" className={cn("min-w-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-[var(--tron-card-padding,1.25rem)] shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))]", className)} {...props} />;
+  return <MotionReveal as="section" data-slot="surface-card" data-theme-anchor="card" className={cn("min-w-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-[var(--tron-card-padding,1.25rem)] shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))]", className)} {...props} />;
 }
 
 interface MetricCardProps {

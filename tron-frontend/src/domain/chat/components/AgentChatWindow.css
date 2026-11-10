@@ -8,6 +8,28 @@
   font-size: var(--tron-system-font-size);
 }
 
+/* Keep long structured values and code within the transcript width. */
+.ef-chat .ef-chat__transcript {
+  overflow-x: hidden;
+}
+
+.ef-chat .ef-chat__transcript-inner,
+.ef-chat .ef-chat__turn,
+.ef-chat .ef-chat__history-details {
+  min-width: 0;
+}
+
+.ef-chat .ef-chat__transcript pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+}
+
+.ef-chat .ef-chat__message-body {
+  overflow-wrap: anywhere;
+}
+
 /* Messages sit directly on the transcript canvas, using the public role hooks. */
 .ef-chat [data-theme-part="chat-message-user"],
 .ef-chat [data-theme-part="chat-message-assistant"] {

@@ -25,11 +25,7 @@ resource:
       #   secretAccessKeyEnv: AWS_SECRET_ACCESS_KEY
       #   sessionTokenEnv: AWS_SESSION_TOKEN
   limits:
-    schemaMaxBytes: 1048576
     attributesMaxBytes: 1048576
-    maxDepth: 128
-    maxValidationErrors: 100
-    maxBinaries: 500
     maxBinaryBytes: 1073741824
     maxCommitBytes: 1073741824
     maxBinaryNameLength: 255
@@ -103,12 +99,8 @@ mineru:
   defaultTier: standard
   enabled: true
   baseUrl: http://127.0.0.1:8000
-  parseEndpoint: /file_parse
   timeoutSeconds: 1200
   maxBytes: 52428800
-  backend: pipeline
-  parseMethod: auto
-  returnContentList: false
 
 shortTermMemory:
   context:

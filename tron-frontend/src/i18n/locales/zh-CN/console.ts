@@ -104,7 +104,6 @@ export const consoleMessages = {
       resourcesDetail: "公共资源详情",
       memoryDomains: "记忆领域",
       variables: "公共变量",
-      variablesNew: "新建公共变量",
       variablesDetail: "公共变量详情",
       variablesEdit: "编辑公共变量",
       skills: "技能中心",

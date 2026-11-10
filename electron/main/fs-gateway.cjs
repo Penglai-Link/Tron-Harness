@@ -11,9 +11,6 @@
  *
  * 每个路径操作都会基于授权根重新解析并做 containment（含 realpath）校验，
  * 从而防止被攻破的渲染进程逃逸到用户显式打开的目录之外。
- *
- * 本模块刻意只在 pick 处理器内 `require("electron")`，使纯 fs/path 工具函数
- * 可在 `node --test` 下直接进行单元测试。
  */
 
 const fs = require("node:fs");

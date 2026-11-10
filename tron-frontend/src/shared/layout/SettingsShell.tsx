@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronRight,
   type LucideIcon,
@@ -18,6 +19,7 @@ import {
 } from "react-router";
 
 import { cn } from "@/shared/lib/utils";
+import "./settingsLayout.css";
 import { buttonVariants } from "@/components/ui/button";
 import { useTabStore, type TabItem } from "@/store/tabStore";
 
@@ -123,28 +125,29 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
 
   return (
     <div data-tron-settings-shell data-theme-anchor="app-shell" className="tron-skin-canvas tron-settings-frame">
-      <header className="relative z-30 h-20 shrink-0 px-4 sm:px-6">
+      <header className="relative z-30 h-[var(--tron-shell-toolbar-height)] shrink-0 pl-4 pr-[var(--tron-shell-right-gap)] sm:pl-6">
         <div className="flex h-full items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-[var(--color-surface-container)] text-[var(--color-primary)]">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container)] text-[var(--color-primary)]">
               <Settings2 size={18} aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-base font-semibold">{t("shell:settings.title")}</p>
             </div>
           </div>
-          <Link to={returnTo} className={buttonVariants({ variant: "secondary" })}>
+          <Link to={returnTo} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}>
+            <ArrowLeft size={14} aria-hidden="true" />
             {t("shell:settings.exit")}
           </Link>
         </div>
       </header>
 
       <div className="tron-settings-body">
-        <aside data-theme-anchor="sidebar" className="min-h-0 min-w-0 px-4 pb-4 lg:px-2 lg:overflow-y-auto lg:overscroll-y-contain">
+        <aside data-theme-anchor="sidebar" className="tron-settings-navigation mt-3 min-h-0 min-w-0 px-4 pb-4 lg:px-2 lg:overflow-y-auto lg:overscroll-y-contain">
           <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
             {t("shell:settings.navigation")}
           </p>
-          <nav className="mt-3 flex gap-[12px] overflow-x-auto lg:hidden" aria-label={t("shell:settings.navigation")}>
+          <nav className="tron-settings-navigation mt-3 flex gap-[12px] overflow-x-auto lg:hidden" aria-label={t("shell:settings.navigation")}>
             {flatItems.map((item) => {
               const Icon = item.icon;
               const selected = item.label === activeItem;
@@ -225,7 +228,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
           </div>
         </aside>
 
-        <main data-theme-anchor="page" className={cn(
+        <main data-theme-anchor="page" data-settings-content className={cn(
           "tron-workspace-surface min-w-0 overscroll-y-contain",
           contentClassName ?? "px-4 py-5 sm:px-6",
         )}

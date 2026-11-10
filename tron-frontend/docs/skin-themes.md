@@ -168,7 +168,7 @@ python3 tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scrip
 
 这不是任意 CSS 插件，也不以“扫描到零个 HEX”为覆盖标准。主题变量只对消费它的组件生效。新增业务控件应复用公共组件或显式接入变量，不靠全局 `!important` 覆盖业务语义。
 
-主题视觉验收应在实际业务页面检查按钮、表单、数据行和弹层等公共组件的交互状态。脚本测试通过 `make skill-theme-test` 运行；模板另由 Rust Store 测试确认可安装激活。
+主题视觉验收应在实际业务页面检查按钮、表单、数据行和弹层等公共组件的交互状态。使用 `make skill-theme-check` 校验技能结构。
 
 ### 本轮精细变量验收
 
@@ -196,7 +196,7 @@ Tron 当前显式配置的出现时长、位移和过渡时间优先于对应通
 - 主题切换/预览替换整个装饰实例；退出预览重建已激活主题的装饰；卸载时断开观察器并移除节点。仅静态定位宿主临时获得定位上下文，清理时恢复；已有 fixed/absolute/sticky 不改动。
 - CSS 几何权限仅适用于完整标准特效选择器列表，不能通过后代、兄弟、`:is()` 或混入按钮选择器扩大权限。position 仅接受 absolute、pointer-events 仅接受 none，不开放 z-index。关键帧仍只能用视觉属性，例如 transform、opacity。
 
-协议使用 `version: 3`，后端响应与清单都包含双配色。前端编译器、Rust 安装校验器、Python 制作脚本同步维护选择器白名单。针对动态节点、清理、样式隔离、几何越权与资源路径的回归检查见 `src/shared/theme`、Rust `domain::skin::manifest::effect_tests` 和 `make skill-theme-test`。
+协议使用 `version: 3`，后端响应与清单都包含双配色。前端编译器、Rust 安装校验器、Python 制作脚本同步维护选择器白名单。
 
 
 ### 锚点扩展验收（2026-09-26）

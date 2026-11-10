@@ -3,6 +3,7 @@ use rand::RngCore;
 use serde::Deserialize;
 use std::{
     env, fs,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -27,7 +28,46 @@ impl AppConfig {
             .filter(|value| !value.trim().is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(default_application_config_path_from_home()));
+        if path == PathBuf::from(default_application_config_path_from_home()) {
+            Self::initialize_default_config(&path)?;
+        }
         Self::from_yaml_file(path)
+    }
+
+    fn initialize_default_config(path: &Path) -> Result<(), ConfigError> {
+        if path.exists() {
+            return Ok(());
+        }
+        let config_error = |source| ConfigError::ConfigFileWriteFailed {
+            path: path.display().to_string(),
+            source,
+        };
+        let parent = path.parent().ok_or_else(|| {
+            config_error(std::io::Error::other("configuration path has no parent"))
+        })?;
+        fs::create_dir_all(parent).map_err(&config_error)?;
+        let mut key = [0_u8; 16];
+        rand::rng().fill_bytes(&mut key);
+        let content = include_str!("../../application.yaml")
+            .lines()
+            .map(|line| {
+                if line.trim_start().starts_with("keyBase64:") {
+                    let indent = &line[..line.len() - line.trim_start().len()];
+                    format!("{indent}keyBase64: {}", BASE64.encode(key))
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+        let mut file = tempfile::NamedTempFile::new_in(parent).map_err(&config_error)?;
+        file.write_all(content.as_bytes()).map_err(&config_error)?;
+        match file.persist_noclobber(path) {
+            Ok(_) => Ok(()),
+            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            Err(error) => Err(config_error(error.error)),
+        }
     }
 
     pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
@@ -317,7 +357,9 @@ impl SystemAgentConfig {
         if let Some(value) = overrides.codex_command {
             self.codex_command = value;
         }
-        if let Some(value) = overrides.dsh_command { self.dsh_command = value; }
+        if let Some(value) = overrides.dsh_command {
+            self.dsh_command = value;
+        }
         if let Some(value) = overrides.opencode_command {
             self.opencode_command = value;
         }

@@ -11,6 +11,7 @@ export interface EditableTab {
   labelClassName?: string;
   children: ReactNode;
   closable?: boolean;
+  detachable?: boolean;
 }
 
 export interface EditableTabEditInfo {
@@ -38,6 +39,7 @@ export interface EditableTabsProps {
   renderAddTrigger?: (props: EditableTabAddTriggerProps) => ReactNode;
   renderTrailingAction?: () => ReactNode;
   onChange?: (activeKey: string | undefined) => void;
+  onDetach?: (tab: EditableTab, position?: { screenX: number; screenY: number }) => void;
   onEdit?: (action: OperateType, info: EditableTabEditInfo) => void;
   className?: string;
   keepMounted?: boolean;
