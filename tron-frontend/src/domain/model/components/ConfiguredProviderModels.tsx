@@ -1,12 +1,53 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Field, SelectInput, TextInput, ToggleSwitch } from "@/components/forms";
+import { Combobox, ComboboxInput, ComboboxPopup, ComboboxList, ComboboxItem } from "@/components/ui/combobox";
 import { SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
 import type { ConfiguredProviderModelType, ConfiguredProviderProtocol, ProviderInputCapability } from "@/domain/model/api/configuredProviderApi";
 import { configuredProviderModelTypes, emptyProviderModel, isMediaModel, isMultimodalModel, supportsModelType, type ProviderModelDraft } from "./configuredProviderForm";
 import { ProviderModelPicker } from "./ProviderModelPicker";
+
+const contextWindowPresets = [
+  { label: "256K", tokens: "256000" },
+  { label: "475K", tokens: "475000" },
+  { label: "512K", tokens: "512000" },
+  { label: "1M", tokens: "1000000" },
+  { label: "2M", tokens: "2000000" },
+];
+
+function ContextWindowInput({ value, onChange, label, disabled }: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  disabled: boolean;
+}) {
+  const { t, i18n } = useTranslation("pages");
+  return (
+    <Combobox items={contextWindowPresets} filter={null} disabled={disabled}
+      value={contextWindowPresets.find(preset => preset.tokens === value) ?? null}
+      inputValue={value} itemToStringLabel={preset => preset.tokens}
+      onInputValueChange={(input, details) => {
+        if (details.reason === "input-change" && /^\d*$/.test(input)) onChange(input);
+      }}
+      onValueChange={preset => { if (preset) onChange(preset.tokens); }}>
+      <ComboboxInput required aria-label={label} inputMode="numeric" pattern="[0-9]*"
+        placeholder={t("configuredProviders.models.contextPlaceholder")}
+        triggerProps={{ "aria-label": t("configuredProviders.models.contextPresets") }} />
+      <ComboboxPopup className="w-(--anchor-width)">
+        <ComboboxList>{(preset: typeof contextWindowPresets[number]) => (
+          <ComboboxItem key={preset.tokens} value={preset}>
+            <span className="flex items-center justify-between gap-4">
+              <span>{preset.label}</span>
+              <span className="text-xs text-[var(--color-on-surface-variant)]">{new Intl.NumberFormat(i18n.language).format(Number(preset.tokens))} tokens</span>
+            </span>
+          </ComboboxItem>
+        )}</ComboboxList>
+      </ComboboxPopup>
+    </Combobox>
+  );
+}
 
 export function ConfiguredProviderModels({ presetId, models, protocol, disabled, onChange }: {
   presetId?: string | null;
@@ -75,10 +116,10 @@ export function ConfiguredProviderModels({ presetId, models, protocol, disabled,
               <TextInput aria-label={t("configuredProviders.models.nameNumber", { number: index + 1 })} value={model.name}
                 onChange={(event) => update(model.rowId, { name: event.currentTarget.value })} />
             </Field>
-            {!isMediaModel(model.modelType) && <Field label={text("models.contextWindowTokens")}>
-              <TextInput aria-label={t("configuredProviders.models.contextNumber", { number: index + 1 })} type="text" inputMode="numeric" pattern="[0-9]*"
-                value={model.contextWindowTokens} placeholder={text("models.unspecified")}
-                onChange={(event) => { if (/^\d*$/.test(event.currentTarget.value)) update(model.rowId, { contextWindowTokens: event.currentTarget.value }); }} />
+            {!isMediaModel(model.modelType) && <Field label={text("models.contextWindowTokens")} required>
+              <ContextWindowInput label={t("configuredProviders.models.contextNumber", { number: index + 1 })}
+                value={model.contextWindowTokens} disabled={disabled}
+                onChange={(contextWindowTokens) => update(model.rowId, { contextWindowTokens })} />
             </Field>}
             {(model.modelType === "TextEmbedding" || model.modelType === "MultimodalEmbedding") && <Field label={text("models.dimension")} required><TextInput type="text" inputMode="numeric" pattern="[0-9]*" value={model.dimension} onChange={(event) => { if (/^\d*$/.test(event.currentTarget.value)) update(model.rowId, { dimension: event.currentTarget.value }); }} /></Field>}
             {model.modelType === "Text" && <Field label={text("models.maxOutputTokens")}>

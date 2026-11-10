@@ -366,6 +366,7 @@ fn validate_provider(
                 .as_deref()
                 .is_some_and(|code| !codes.insert(code))
             || model.dimension == Some(0)
+            || (!model.model_type.is_media() && model.context_window_tokens.is_none())
             || model.context_window_tokens == Some(0)
             || model.max_output_tokens == Some(0)
             || matches!((model.context_window_tokens, model.max_output_tokens), (Some(context), Some(output)) if output > context)

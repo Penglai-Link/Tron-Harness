@@ -111,7 +111,7 @@ const forbiddenHeaders = new Set([
   "host", "content-length", "connection", "transfer-encoding", "upgrade", "trailer", "te",
 ]);
 
-export type ProviderDraftError = "logicalModelCode" | "displayName" | "baseUrl" | "modelsRequired" | "modelId" | "modelName" | "duplicateModel" | "tokenLimit" | "outputLimit" | "headers" | "inputCapabilities" | "modelType" | "dimension";
+export type ProviderDraftError = "logicalModelCode" | "displayName" | "baseUrl" | "modelsRequired" | "modelId" | "modelName" | "duplicateModel" | "contextRequired" | "tokenLimit" | "outputLimit" | "headers" | "inputCapabilities" | "modelType" | "dimension";
 
 function tokenLimit(value: string): number | null {
   return value.trim() === "" ? null : Number(value);
@@ -135,6 +135,7 @@ export function validateProviderDraft(draft: ConfiguredProviderDraft): ProviderD
     if (ids.has(model.modelId.trim())) return "duplicateModel";
     ids.add(model.modelId.trim());
     const context = tokenLimit(model.contextWindowTokens), output = tokenLimit(model.maxOutputTokens);
+    if (!isMediaModel(model.modelType) && context === null) return "contextRequired";
     if ([context, output].some((value) => value !== null && (!Number.isSafeInteger(value) || value <= 0 || value > 4_294_967_295))) return "tokenLimit";
     if (context !== null && output !== null && output > context) return "outputLimit";
     if (["TextEmbedding", "TextRerank"].includes(model.modelType) && (model.inputCapabilities.length !== 1 || model.inputCapabilities[0] !== "Text")) return "inputCapabilities";
