@@ -10,7 +10,8 @@ if (applyUpdateArgIndex >= 0) {
   const installerPath = process.argv[applyUpdateArgIndex + 1] || "";
   void runApplyUpdate(installerPath, { logPath: process.argv[applyUpdateArgIndex + 2] }).then((code) => process.exit(code));
 } else {
-const { app, BrowserWindow, WebContentsView, clipboard, dialog, ipcMain, Menu, net, shell, Tray } = require("electron");
+const { app, BrowserWindow, WebContentsView, clipboard, dialog, ipcMain, Menu, nativeTheme, net, shell, Tray } = require("electron");
+const { startupPalette } = require("./startup-page.cjs");
 const { STARTUP_ARG, ICON_PATH } = require("./desktop-constants.cjs");
 const { createWindowsDesktop } = require("./windows-desktop.cjs");
 const { createLinuxDesktop } = require("./linux-desktop.cjs");
@@ -217,16 +218,17 @@ function configureBrowserTabHost(window) {
 }
 
 function createMainWindow() {
+  const palette = startupPalette(nativeTheme.shouldUseDarkColors ? "matrix-dark" : "light");
   const window = new BrowserWindow({
     height: 920,
     show: false,
-    backgroundColor: "#020305",
+    backgroundColor: palette.background,
     title: "Tron",
     width: 1440,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     ...(process.platform === "darwin"
       ? { trafficLightPosition: { x: 12, y: 13 } }
-      : { titleBarOverlay: { height: 40, color: "#00000000", symbolColor: "#f3f1eb" } }),
+      : { titleBarOverlay: { height: 40, color: "#00000000", symbolColor: palette.foreground } }),
     ...(["win32", "linux"].includes(process.platform) ? { icon: ICON_PATH } : {}),
     webPreferences: {
       webviewTag: true,
@@ -254,7 +256,7 @@ function createMainWindow() {
     window.setFullScreen(!window.isFullScreen());
   };
   window.webContents.on("before-input-event", onBeforeInput);
-  startupScene = require("./startup-scene.cjs").createStartupScene({ window, WebContentsView, ipcMain, dataDir: desktopDataDir, onBeforeInput });
+  startupScene = require("./startup-scene.cjs").createStartupScene({ window, WebContentsView, ipcMain, nativeTheme, onBeforeInput });
 
   window.on("close", (event) => {
     if (isQuitting || (process.platform !== "darwin" && !residentDesktop?.isResident())) {
@@ -312,11 +314,11 @@ function createMainWindow() {
   return window;
 }
 
-async function showStartupMessage(message) {
+async function showStartupMessage(message, { failed = false } = {}) {
   if (!state.mainWindow) {
     return;
   }
-  const html = startupPageHtml(message);
+  const html = startupPageHtml(message, { failed });
   await startupScene.show(html);
 }
 
@@ -327,13 +329,13 @@ async function keepStartupScreenVisible(startedAt) {
   }
 }
 
-function startupPageHtml(message) {
+function startupPageHtml(message, { failed = false } = {}) {
   return require("./startup-page.cjs").startupPageHtml({
     message,
     dataDir: state.appDataDir,
     logPath: state.backendLogPath,
     locale: app.getLocale(),
-    theme: startupScene.theme
+    failed
   });
 }
 
@@ -478,7 +480,7 @@ async function bootstrapRuntime() {
   residentDesktop?.initialize();
 
   const mainWindow = createMainWindow();
-  await showStartupMessage("Backend starting...");
+  await showStartupMessage(app.getLocale().startsWith("zh") ? "正在启动本地服务…" : "Starting local services…");
   if (!residentDesktop?.isResident() || !app.isPackaged || !process.argv.includes(STARTUP_ARG) || mainWindowRequested) {
     mainWindow.show();
   }
@@ -563,7 +565,7 @@ async function chooseBackendEnvironment() {
 async function handleBackendFailure(error) {
   state.backendReady = false;
   stopBackend();
-  await showStartupMessage(`Backend failed to start. ${describeError(error)}\nLogs: ${state.backendLogPath}`);
+  await showStartupMessage(`Backend failed to start. ${describeError(error)}\nLogs: ${state.backendLogPath}`, { failed: true });
   if (!state.wsl) return;
   const zh = app.getLocale().startsWith("zh");
   const result = await dialog.showMessageBox({

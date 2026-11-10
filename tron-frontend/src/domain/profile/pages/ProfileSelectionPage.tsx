@@ -1,4 +1,9 @@
-import { ParticlesBackground } from "@/components/particles-bg/ParticlesBackground";
+import {
+  EntryBackdrop,
+  EntryLoadingIndicator,
+  EntryWordmark,
+} from "@/shared/entry/EntryScene";
+import "./ProfileSelectionPage.css";
 import { Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -56,7 +61,7 @@ function ProfileAvatar({ profile }: { profile: PersonAiProfile }) {
   useEffect(() => setImageFailed(false), [profile.avatarUrl]);
 
   return (
-    <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]">
+    <span className="tron-login-avatar flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-medium">
       {src && !imageFailed ? (
         <img
           alt=""
@@ -364,35 +369,28 @@ export function ProfileSelectionPage() {
   const availableProfiles = profiles.filter(
     (profile) => profile.status !== "PENDING"
   );
-  const waitingForAutoEntry = !forceSelection && !error && (
-    loading || authStatus === "checking" || (
-      availableProfiles.length === 1 && bootstrap?.activeProfile?.status !== "PENDING"
-    )
-  );
+  const waitingForAutoEntry =
+    !forceSelection &&
+    !error &&
+    (loading ||
+      authStatus === "checking" ||
+      (availableProfiles.length === 1 &&
+        bootstrap?.activeProfile?.status !== "PENDING"));
 
   return (
     <main
       data-theme-anchor="app-shell"
       data-tron-entry-ready={!waitingForAutoEntry ? "" : undefined}
-      className="tron-login relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--color-background)] px-6 text-[var(--color-on-surface)]"
+      className="tron-login tron-entry-scene"
     >
-      <ParticlesBackground />
-      <section
-        data-theme-anchor="card"
-        className="tron-login-panel relative z-10 w-full max-w-md rounded-2xl border border-[var(--color-outline)] bg-[var(--color-surface)] p-8 shadow-sm"
-      >
-        <header className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-primary)]">
-              Tron
-            </p>
-            <h1 className="mt-3 text-2xl font-semibold">
-              {t("personAiProfiles.title")}
-            </h1>
-          </div>
-          <button
+      <EntryBackdrop />
+      <div className="tron-entry-layout tron-login-layout">
+        <header className="tron-login-header">
+          <EntryWordmark />
+          <Button
+            variant="ghost"
             type="button"
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+            className="tron-login-locale inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
             aria-label={t("common:locale.label")}
             title={t("common:locale.label")}
             onClick={() => void changeLocale(nextLocale)}
@@ -402,171 +400,100 @@ export function ProfileSelectionPage() {
                 ? t("common:locale.shortSimplifiedChinese")
                 : t("common:locale.english")}
             </span>
-          </button>
+          </Button>
         </header>
-        {loading ? (
-          <p className="mt-8 text-sm text-[var(--color-on-surface-variant)]">
-            {t("personAiProfiles.loading")}
-          </p>
-        ) : null}
-        {!loading &&
-        !forceReauthorization &&
-        !authorization &&
-        bootstrap?.activeProfile?.status !== "PENDING" ? (
-          <div className="mt-8 flex items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] px-3 py-3 text-sm text-[var(--color-on-surface-variant)]">
-            <input
-              id="person-ai-agreement"
-              type="checkbox"
-              checked={agreementChecked}
-              onChange={(event) => setAgreementChecked(event.target.checked)}
-              className="size-4 accent-[var(--color-primary)]"
-            />
-            <label htmlFor="person-ai-agreement">
-              {t("personAiProfiles.agreement.checkboxLabel")}
-            </label>
-            <button
-              type="button"
-              className="font-medium text-[var(--color-on-surface)] underline underline-offset-2"
-              onClick={() => setAgreementOpen(true)}
-            >
-              {t("personAiProfiles.agreement.linkLabel")}
-            </button>
-          </div>
-        ) : null}
-        {!loading &&
-        (authorization ||
-          forceReauthorization ||
-          bootstrap?.activeProfile?.status === "PENDING") ? (
-          <div className="mt-8">
-            {forceReauthorization && !authorization ? (
-              <p className="mb-4 text-sm text-[var(--color-on-surface-variant)]">
-                {t("personAiProfiles.reauthorizationRequired")}
-              </p>
-            ) : null}
-            {authorization ? (
-              <div className="space-y-2">
-                <Button className="h-10 w-full" type="button" disabled>
-                  {t(
-                    completingAuthorization
-                      ? "personAiProfiles.signingIn"
-                      : "personAiProfiles.authorizing"
-                  )}
-                </Button>
-                {!completingAuthorization ? (
-                  <Button
-                    className="h-10 w-full"
-                    type="button"
-                    variant="secondary"
-                    onClick={cancelPersonAiAuthorization}
-                  >
-                    {t("personAiProfiles.cancelAuthorization")}
-                  </Button>
-                ) : null}
-              </div>
-            ) : (
-              <Button
-                className="h-10 w-full"
-                type="button"
-                disabled={authorizing}
-                onClick={() => void beginPersonAiAuthorization()}
-              >
-                {authorizing
-                  ? t("personAiProfiles.authorizing")
-                  : forceReauthorization
-                  ? t("personAiProfiles.reauthorize")
-                  : t("personAiProfiles.authorizeNewAccount")}
-              </Button>
-            )}
-          </div>
-        ) : null}
-        {!loading &&
-        !forceReauthorization &&
-        bootstrap?.activeProfile?.status !== "PENDING" &&
-        availableProfiles.length === 0 ? (
-          <div className="mt-8">
-            <Button
-              className="h-10 w-full"
-              type="button"
-              disabled={activating !== null || !agreementChecked}
-              onClick={() => void beginNewAccountAuthorization()}
-            >
-              {activating === "pending"
-                ? t("personAiProfiles.switching")
-                : t("personAiProfiles.authorizeNewAccount")}
-            </Button>
-          </div>
-        ) : null}
-        {!loading &&
-        !forceReauthorization &&
-        !authorization &&
-        !authorizing &&
-        activating !== "pending" &&
-        availableProfiles.length > 0 ? (
-          <div className="mt-3 space-y-3">
-            {availableProfiles.map((profile) => (
-              <div
-                key={profile.profileId}
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedProfileId(profile.profileId)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ")
-                    setSelectedProfileId(profile.profileId);
-                }}
-                aria-current={
-                  bootstrap?.activeProfileId === profile.profileId
-                    ? "true"
-                    : undefined
-                }
-                className={`flex w-full items-center gap-4 rounded-xl border-2 bg-[var(--color-surface)] p-4 text-left shadow-sm transition-colors ${
-                  selectedProfileId === profile.profileId
-                    ? "border-[var(--color-primary)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_10%,transparent)]"
-                    : "border-[var(--color-outline-variant)]"
-                }`}
-              >
-                <ProfileAvatar profile={profile} />
-                <span className="min-w-0">
-                  <p className="truncate font-medium">
-                    {profile.personAiUsername}
-                  </p>
-                </span>
-                <Button
+        <section
+          aria-labelledby="tron-profile-title"
+          className="tron-login-panel"
+        >
+          {!loading ? (
+            <h2 id="tron-profile-title">{t("personAiProfiles.title")}</h2>
+          ) : null}
+          {loading ? (
+            <div className="tron-login-loading">
+              <EntryLoadingIndicator label={t("personAiProfiles.loading")} />
+            </div>
+          ) : null}
+          {!loading &&
+          !forceReauthorization &&
+          !authorization &&
+          bootstrap?.activeProfile?.status !== "PENDING" ? (
+            <div className="tron-login-agreement">
+              <input
+                id="person-ai-agreement"
+                type="checkbox"
+                checked={agreementChecked}
+                onChange={(event) => setAgreementChecked(event.target.checked)}
+                className="size-4 accent-[var(--color-primary)]"
+              />
+              <div>
+                <label htmlFor="person-ai-agreement">
+                  {t("personAiProfiles.agreement.checkboxLabel")}
+                </label>{" "}
+                <button
                   type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="ml-auto shrink-0 text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)]"
-                  aria-label={t("personAiProfiles.remove.ariaLabel")}
-                  title={t("personAiProfiles.remove.ariaLabel")}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setError(null);
-                    setProfileToRemove(profile);
-                  }}
+                  className="font-medium text-[var(--color-on-surface)] underline underline-offset-2"
+                  onClick={() => setAgreementOpen(true)}
                 >
-                  <Trash2 className="size-4" />
-                </Button>
+                  {t("personAiProfiles.agreement.linkLabel")}
+                </button>
               </div>
-            ))}
-            <Button
-              className="h-10 w-full"
-              type="button"
-              disabled={activating !== null || selectedProfileId === null}
-              onClick={() => {
-                const profile = availableProfiles.find(
-                  (item) => item.profileId === selectedProfileId
-                );
-                if (profile) void selectProfile(profile);
-              }}
-            >
-              {activating && activating !== "pending"
-                ? t("personAiProfiles.switching")
-                : t("personAiProfiles.startUsing")}
-            </Button>
-            {bootstrap?.activeProfile?.status !== "PENDING" ? (
+            </div>
+          ) : null}
+          {!loading &&
+          (authorization ||
+            forceReauthorization ||
+            bootstrap?.activeProfile?.status === "PENDING") ? (
+            <div className="mt-8">
+              {forceReauthorization && !authorization ? (
+                <p className="mb-4 text-sm text-[var(--color-on-surface-variant)]">
+                  {t("personAiProfiles.reauthorizationRequired")}
+                </p>
+              ) : null}
+              {authorization ? (
+                <div className="space-y-2">
+                  <Button className="tron-login-action" type="button" disabled>
+                    {t(
+                      completingAuthorization
+                        ? "personAiProfiles.signingIn"
+                        : "personAiProfiles.authorizing"
+                    )}
+                  </Button>
+                  {!completingAuthorization ? (
+                    <Button
+                      className="tron-login-action"
+                      type="button"
+                      variant="secondary"
+                      onClick={cancelPersonAiAuthorization}
+                    >
+                      {t("personAiProfiles.cancelAuthorization")}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <Button
+                  className="tron-login-action"
+                  type="button"
+                  disabled={authorizing}
+                  onClick={() => void beginPersonAiAuthorization()}
+                >
+                  {authorizing
+                    ? t("personAiProfiles.authorizing")
+                    : forceReauthorization
+                    ? t("personAiProfiles.reauthorize")
+                    : t("personAiProfiles.authorizeNewAccount")}
+                </Button>
+              )}
+            </div>
+          ) : null}
+          {!loading &&
+          !forceReauthorization &&
+          bootstrap?.activeProfile?.status !== "PENDING" &&
+          availableProfiles.length === 0 ? (
+            <div className="mt-8">
               <Button
-                className="h-10 w-full"
+                className="tron-login-action"
                 type="button"
-                variant="secondary"
                 disabled={activating !== null || !agreementChecked}
                 onClick={() => void beginNewAccountAuthorization()}
               >
@@ -574,18 +501,98 @@ export function ProfileSelectionPage() {
                   ? t("personAiProfiles.switching")
                   : t("personAiProfiles.authorizeNewAccount")}
               </Button>
-            ) : null}
-          </div>
-        ) : null}
-        {error && !profileToRemove ? (
-          <p
-            role="alert"
-            className="mt-5 text-sm text-[var(--color-destructive)]"
-          >
-            {error}
-          </p>
-        ) : null}
-      </section>
+            </div>
+          ) : null}
+          {!loading &&
+          !forceReauthorization &&
+          !authorization &&
+          !authorizing &&
+          activating !== "pending" &&
+          availableProfiles.length > 0 ? (
+            <div className="mt-6 space-y-3">
+              <div className="tron-login-accounts">
+                {availableProfiles.map((profile) => (
+                  <div
+                    key={profile.profileId}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedProfileId(profile.profileId)}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedProfileId(profile.profileId);
+                      }
+                    }}
+                    aria-current={
+                      bootstrap?.activeProfileId === profile.profileId
+                        ? "true"
+                        : undefined
+                    }
+                    aria-pressed={selectedProfileId === profile.profileId}
+                    className="tron-login-account"
+                  >
+                    <ProfileAvatar profile={profile} />
+                    <span className="min-w-0">
+                      <p className="truncate font-medium">
+                        {profile.personAiUsername}
+                      </p>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="tron-login-remove ml-auto shrink-0 text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)]"
+                      aria-label={t("personAiProfiles.remove.ariaLabel")}
+                      title={t("personAiProfiles.remove.ariaLabel")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setError(null);
+                        setProfileToRemove(profile);
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                className="tron-login-action"
+                type="button"
+                disabled={activating !== null || selectedProfileId === null}
+                onClick={() => {
+                  const profile = availableProfiles.find(
+                    (item) => item.profileId === selectedProfileId
+                  );
+                  if (profile) void selectProfile(profile);
+                }}
+              >
+                {activating && activating !== "pending"
+                  ? t("personAiProfiles.switching")
+                  : t("personAiProfiles.startUsing")}
+              </Button>
+              {bootstrap?.activeProfile?.status !== "PENDING" ? (
+                <Button
+                  className="tron-login-action"
+                  type="button"
+                  variant="secondary"
+                  disabled={activating !== null || !agreementChecked}
+                  onClick={() => void beginNewAccountAuthorization()}
+                >
+                  {activating === "pending"
+                    ? t("personAiProfiles.switching")
+                    : t("personAiProfiles.authorizeNewAccount")}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {error && !profileToRemove ? (
+            <p role="alert" className="mt-5 text-sm text-[var(--color-error)]">
+              {error}
+            </p>
+          ) : null}
+        </section>
+      </div>
       <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
         <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
@@ -638,7 +645,7 @@ export function ProfileSelectionPage() {
             </DialogDescription>
           </DialogHeader>
           {error ? (
-            <p role="alert" className="text-sm text-[var(--color-destructive)]">
+            <p role="alert" className="text-sm text-[var(--color-error)]">
               {error}
             </p>
           ) : null}

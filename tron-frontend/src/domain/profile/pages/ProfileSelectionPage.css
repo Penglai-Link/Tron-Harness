@@ -1,0 +1,150 @@
+.tron-login::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: 40px;
+  -webkit-app-region: drag;
+}
+
+.tron-login-layout {
+  position: relative;
+  z-index: 0;
+  overflow-x: clip;
+}
+
+.tron-login .tron-entry-atmosphere {
+  mask-image: linear-gradient(90deg, #00000018, #000 54%);
+}
+
+.tron-login-header {
+  flex: none;
+  min-width: 0;
+}
+
+.tron-login .tron-entry-brand {
+  margin-bottom: 40px;
+}
+
+.tron-login-locale {
+  position: absolute;
+  top: 44px;
+  right: clamp(28px, 10vw, 160px);
+  -webkit-app-region: no-drag;
+}
+
+.tron-login-panel {
+  position: relative;
+  width: min(360px, 100%);
+  padding-bottom: 32px;
+}
+
+.tron-login-panel h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.tron-login-agreement {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 24px;
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.tron-login-agreement input {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 4px;
+  accent-color: var(--color-primary);
+}
+
+.tron-login-agreement input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 4px;
+}
+
+.tron-login-agreement button {
+  color: var(--color-on-surface);
+  text-decoration-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.tron-login-panel .tron-login-action {
+  --tron-button-radius: 8px;
+  height: 42px;
+  width: 100%;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.tron-login-accounts {
+  max-height: min(264px, 36svh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+  margin: 0 -3px 16px;
+}
+
+.tron-login-account {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 180ms, border-color 180ms;
+}
+
+.tron-login-account + .tron-login-account {
+  margin-top: 4px;
+}
+.tron-login-account:hover {
+  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
+}
+.tron-login-account[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+.tron-login-account:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.tron-login-avatar {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+.tron-login-remove {
+  opacity: 0.45;
+}
+.tron-login-account:hover .tron-login-remove,
+.tron-login-account:focus-within .tron-login-remove {
+  opacity: 1;
+}
+
+.tron-login-loading {
+  padding-top: 4px;
+}
+
+@media (max-width: 480px) {
+  .tron-login .tron-entry-brand {
+    margin-bottom: 36px;
+  }
+  .tron-login-locale {
+    top: 44px;
+    right: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tron-login-account {
+    transition: none;
+  }
+}

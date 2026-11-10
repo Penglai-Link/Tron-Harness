@@ -1,0 +1,211 @@
+/* Shared entry presentation: Electron startup and the React sign-in page. */
+.tron-entry-scene {
+  --entry-background: var(--color-background, var(--background));
+  --entry-foreground: var(--color-on-surface, var(--foreground));
+  --entry-primary: var(--color-primary, var(--primary));
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  background: var(--entry-background);
+  color: var(--entry-foreground);
+}
+.tron-entry-atmosphere {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+  background: radial-gradient(
+    ellipse at 85% 90%,
+    color-mix(in srgb, var(--entry-primary) 7%, transparent),
+    transparent 60%
+  );
+}
+.tron-entry-weave {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.tron-entry-layout {
+  min-height: 100svh;
+  padding: clamp(96px, 22vh, 220px) clamp(28px, 10vw, 160px) 40px;
+  display: flex;
+  flex-direction: column;
+}
+.tron-entry-brand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.22em;
+  margin: 0 0 36px;
+  font-size: clamp(72px, 9.5vw, 136px);
+  line-height: 0.94;
+  font-weight: 550;
+  letter-spacing: -0.045em;
+}
+.tron-entry-brand span {
+  --ink: color-mix(in srgb, var(--entry-foreground) 94%, var(--entry-primary));
+  display: inline-block;
+  color: var(--entry-foreground);
+  animation: tron-entry-unfold 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.tron-entry-brand span:nth-child(2) {
+  animation-delay: 65ms;
+}
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .tron-entry-brand span {
+    color: transparent;
+    background-image: linear-gradient(
+      108deg,
+      var(--ink) 0%,
+      var(--ink) 40%,
+      color-mix(in srgb, var(--entry-foreground) 65%, var(--entry-primary)) 47%,
+      color-mix(in srgb, var(--entry-foreground) 35%, var(--entry-primary)) 50%,
+      color-mix(in srgb, var(--entry-foreground) 65%, var(--entry-primary)) 53%,
+      var(--ink) 60%,
+      var(--ink) 100%
+    );
+    background-size: 260% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    text-shadow: 0 0 26px
+      color-mix(in srgb, var(--entry-primary) 7%, transparent);
+    animation: tron-entry-unfold 1100ms cubic-bezier(0.16, 1, 0.3, 1) both,
+      tron-entry-ink-light 9s ease-in-out infinite;
+    animation-delay: 0s, -2.8s;
+  }
+  .tron-entry-brand span:nth-child(2) {
+    animation-delay: 65ms, -1.7s;
+  }
+}
+@keyframes tron-entry-unfold {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+@keyframes tron-entry-ink-light {
+  0%,
+  18% {
+    background-position: 100% 50%;
+  }
+  78%,
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@media (max-width: 480px) {
+  .tron-entry-layout {
+    padding: clamp(100px, 21vh, 160px) 28px 28px;
+  }
+  .tron-entry-brand {
+    font-size: 84px;
+    margin-bottom: 28px;
+  }
+}
+@media (max-height: 560px) and (min-width: 481px) {
+  .tron-entry-layout {
+    padding-top: 84px;
+    padding-bottom: 24px;
+  }
+  .tron-entry-brand {
+    font-size: 80px;
+    margin-bottom: 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tron-entry-brand span {
+    animation: none !important;
+  }
+}
+:root[data-tron-motion-policy="reduced"] .tron-entry-brand span,
+:root[data-tron-motion-policy="off"] .tron-entry-brand span {
+  animation: none !important;
+}
+@media (forced-colors: active) {
+  .tron-entry-brand span {
+    color: CanvasText;
+    background: none;
+    text-shadow: none;
+  }
+}
+
+.tron-entry-progress {
+  position: relative;
+  width: 144px;
+  max-width: 100%;
+  height: 1px;
+  animation: tron-entry-appear 900ms 350ms both;
+}
+.tron-entry-progress::before,
+.tron-entry-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--entry-primary) 12%, transparent),
+    var(--entry-primary),
+    color-mix(in srgb, var(--entry-primary) 12%, transparent)
+  );
+  background-size: 200% 100%;
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+  animation: tron-entry-flow 2.8s linear infinite;
+}
+.tron-entry-progress::before {
+  inset: -3px 0;
+  filter: blur(4px);
+  opacity: 0.22;
+}
+
+@keyframes tron-entry-flow {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+@keyframes tron-entry-appear {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tron-entry-progress,
+  .tron-entry-progress::before,
+  .tron-entry-progress::after {
+    animation: none !important;
+  }
+  .tron-entry-progress::before {
+    display: none;
+  }
+  .tron-entry-progress::after {
+    background-position: 50% 0;
+  }
+}
+:root[data-tron-motion-policy="reduced"] .tron-entry-progress,
+:root[data-tron-motion-policy="reduced"] .tron-entry-progress::before,
+:root[data-tron-motion-policy="reduced"] .tron-entry-progress::after,
+:root[data-tron-motion-policy="off"] .tron-entry-progress,
+:root[data-tron-motion-policy="off"] .tron-entry-progress::before,
+:root[data-tron-motion-policy="off"] .tron-entry-progress::after {
+  animation: none !important;
+}
