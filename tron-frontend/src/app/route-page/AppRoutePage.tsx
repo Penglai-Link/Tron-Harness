@@ -175,6 +175,7 @@ export default function AppRoutePage() {
       }
 
       const { Component, route: cachedRoute } = cachedResolved;
+      if (cachedRoute.pageId === "capability.page" && !isCurrentTab) return null;
       return (
         <MotionReveal
           key={`${cachedTab.tabId}:${cachedTab.revision}`}

@@ -29,3 +29,6 @@ include!("navigation_repository/implementation.rs");
 
 #[path = "navigation_repository/packs.rs"]
 mod packs;
+
+#[path = "navigation_repository/availability.rs"]
+mod availability;

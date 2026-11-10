@@ -254,7 +254,9 @@ impl NavigationService {
 
     pub fn get_menu(&self, menu_code: &str) -> Result<NavigationMenu, NavigationError> {
         let mut repository = self.lock_repository();
-        repository.get_menu(menu_code)
+        let menu = repository.get_menu(menu_code)?;
+        if menu.source == MenuSource::CapabilityPack && !menu.enabled { return Err(NavigationError::MenuNotFound); }
+        Ok(menu)
     }
 
     pub fn delete_menu(&self, menu_code: &str) -> Result<(), NavigationError> {
@@ -317,6 +319,7 @@ impl NavigationService {
         let mut repository = self.lock_repository();
         repository.get_menu_tree(domain_code)?;
         let menu = repository.get_menu(&command.menu_code)?;
+        if menu.source == MenuSource::CapabilityPack && !menu.enabled { return Err(NavigationError::MenuNotFound); }
         let items = repository.list_items(domain_code)?;
         validate_flat_tree(&items, self.max_depth())?;
         if items

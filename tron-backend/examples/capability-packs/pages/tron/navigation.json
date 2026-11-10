@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "domains": [
+    {
+      "code": "PAGE_DEMO",
+      "name": {
+        "zh-CN": "页面示例",
+        "en-US": "Page demo"
+      }
+    }
+  ],
+  "menus": [
+    {
+      "code": "OVERVIEW_DEMO",
+      "name": {
+        "zh-CN": "示例概览",
+        "en-US": "Example overview"
+      },
+      "menuType": "PackPage",
+      "pageCode": "overview"
+    },
+    {
+      "code": "DETAILS_DEMO",
+      "name": {
+        "zh-CN": "示例详情",
+        "en-US": "Example details"
+      },
+      "menuType": "PackPage",
+      "pageCode": "details"
+    }
+  ],
+  "layouts": {
+    "PAGE_DEMO": [
+      {
+        "menuCode": "OVERVIEW_DEMO",
+        "position": 0
+      },
+      {
+        "menuCode": "DETAILS_DEMO",
+        "position": 1
+      }
+    ]
+  }
+}

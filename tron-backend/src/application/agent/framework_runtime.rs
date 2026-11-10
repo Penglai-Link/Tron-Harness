@@ -30,7 +30,7 @@ pub use capability_catalog::{
     CapabilityPackInfo, ExtensionImplementationInfo, capability_pack_catalog,
     capability_pack_catalog_with_state, extension_implementation_catalog,
     extension_implementation_catalog_with_state, install_capability_pack,
-    installed_capability_packs, installed_extension_implementations,
+    installed_capability_packs, installed_extension_implementations, query_installed_capability_packs,
 };
 pub(crate) use host::{PendingSudoInput, SudoInputError};
 pub use host::{

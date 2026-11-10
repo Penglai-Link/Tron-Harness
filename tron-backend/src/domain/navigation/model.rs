@@ -41,6 +41,7 @@ impl MenuSource {
 pub enum MenuType {
     Group,
     Internal,
+    PackPage,
     ExternalLink,
     /// Rendered by a dedicated shell panel component; `page_code` holds the widget code.
     Widget,
@@ -51,6 +52,7 @@ impl MenuType {
         match self {
             Self::Group => "Group",
             Self::Internal => "Internal",
+            Self::PackPage => "PackPage",
             Self::ExternalLink => "ExternalLink",
             Self::Widget => "Widget",
         }
@@ -60,6 +62,7 @@ impl MenuType {
         match value {
             "Group" => Ok(Self::Group),
             "Internal" => Ok(Self::Internal),
+            "PackPage" => Ok(Self::PackPage),
             "ExternalLink" => Ok(Self::ExternalLink),
             "Widget" => Ok(Self::Widget),
             _ => Err(NavigationError::StorageFailure),
@@ -306,7 +309,7 @@ pub fn validate_menu_target(
 ) -> Result<(), NavigationError> {
     match menu_type {
         MenuType::Group if page_code.is_none() && url.is_none() => Ok(()),
-        MenuType::Internal
+        MenuType::Internal | MenuType::PackPage
             if page_code.is_some_and(|value| !value.trim().is_empty()) && url.is_none() =>
         {
             Ok(())

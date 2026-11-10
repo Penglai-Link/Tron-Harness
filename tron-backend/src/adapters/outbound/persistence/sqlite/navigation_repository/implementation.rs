@@ -113,10 +113,12 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
         &mut self,
         query: &MenuQuery,
     ) -> Result<NavigationPage<NavigationMenu>, NavigationError> {
+        let inactive = availability::inactive_codes(self.connection, "Menu")?;
         let mut records = self
             .all_menus()?
             .into_iter()
             .filter(|menu| {
+                if inactive.contains(&menu.menu_code) { return false; }
                 let keyword_match = query.keyword.trim().is_empty()
                     || menu.menu_code.contains(&query.keyword.to_ascii_uppercase())
                     || menu.translations.zh_cn.contains(&query.keyword)
@@ -162,7 +164,7 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
                  url = excluded.url, icon = excluded.icon, description_zh_cn = excluded.description_zh_cn,
                  description_en_us = excluded.description_en_us, enabled = excluded.enabled, updated_at = excluded.updated_at",
             params![menu.id.value(), menu.menu_code, (if menu.source == MenuSource::CapabilityPack { "Custom" } else { menu.source.as_storage() }), menu.menu_type.as_storage(), menu.page_code, menu.url, menu.icon, menu.description.zh_cn, menu.description.en_us, i64::from(menu.enabled), menu.created_at, menu.updated_at],
-        ).map_err(|error| if error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation) { NavigationError::DuplicateMenuCode } else { NavigationError::StorageFailure })?;
+        ).map_err(|error| if error.sqlite_error().is_some_and(|failure| failure.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE) { NavigationError::DuplicateMenuCode } else { tracing::error!(%error, "failed to save navigation menu"); NavigationError::StorageFailure })?;
         let menu_id: i64 = tx
             .query_row(
                 "SELECT id FROM navigation_menus WHERE menu_code = ?1",
@@ -292,7 +294,7 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
         target_domain_code: &str,
         command: &CopyMenuTreeCommand,
     ) -> Result<(), NavigationError> {
-        let source = self.load_items(&command.source_domain_code)?;
+        let source = availability::visible_items(self.connection, self.load_items(&command.source_domain_code)?)?;
         let target_domain_id = self.tree_id(target_domain_code)?;
         let target = self.load_items(target_domain_code)?;
         let target_parent_id =
@@ -624,14 +626,14 @@ impl NavigationRepository for SqliteNavigationRepository {
     }
     fn list_domains(&mut self) -> Result<Vec<NavigationDomain>, NavigationError> {
         self.connection.call(
-            move |connection| SqliteNavigationRepositorySql { connection }.list_domains(),
+            move |connection| availability::domains(connection),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }
     fn get_domain(&mut self, domain_code: &str) -> Result<NavigationDomain, NavigationError> {
         let domain_code = domain_code.to_owned();
         self.connection.call(
-            move |connection| SqliteNavigationRepositorySql { connection }.get_domain(&domain_code),
+            move |connection| availability::domain(connection, &domain_code),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }
@@ -653,7 +655,7 @@ impl NavigationRepository for SqliteNavigationRepository {
     }
     fn list_menu_trees(&mut self) -> Result<Vec<NavigationMenuTree>, NavigationError> {
         self.connection.call(
-            move |connection| SqliteNavigationRepositorySql { connection }.list_menu_trees(),
+            move |connection| availability::trees(connection),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }
@@ -661,7 +663,7 @@ impl NavigationRepository for SqliteNavigationRepository {
         let tree_code = tree_code.to_owned();
         self.connection.call(
             move |connection| {
-                SqliteNavigationRepositorySql { connection }.get_menu_tree(&tree_code)
+                availability::tree(connection, &tree_code)
             },
             || storage_error(rusqlite::Error::InvalidQuery),
         )
@@ -721,7 +723,7 @@ impl NavigationRepository for SqliteNavigationRepository {
     ) -> Result<Vec<NavigationTreeItem>, NavigationError> {
         let domain_code = domain_code.to_owned();
         self.connection.call(
-            move |connection| SqliteNavigationRepositorySql { connection }.list_items(&domain_code),
+            move |connection| availability::items(connection, &domain_code),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }

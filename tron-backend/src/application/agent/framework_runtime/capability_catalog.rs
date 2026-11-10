@@ -43,10 +43,16 @@ pub fn installed_capability_packs(
     root: &std::path::Path,
     locale: &str,
 ) -> Result<Vec<CapabilityPackInfo>, String> {
+    query_installed_capability_packs(root, locale, true, None)
+}
+
+pub fn query_installed_capability_packs(
+    root: &std::path::Path, locale: &str, include_contents: bool, id: Option<&str>,
+) -> Result<Vec<CapabilityPackInfo>, String> {
     use eliteforge_agent_capability_runtime::CapabilityPackManager;
     let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
-    let mut packs = capability_pack_catalog();
-    for pack in &mut packs {
+    let mut packs = capability_pack_entries(include_contents, id);
+    for pack in packs.iter_mut().filter(|_| include_contents) {
         for item in pack.contents.iter_mut().filter(|item| item.kind == "Plugin") {
             if let Some(name) = contents::plugin_display_name(&item.name, locale) {
                 item.display_name = name.into();
@@ -63,9 +69,9 @@ pub fn installed_capability_packs(
     }
     // Imported metadata belongs to its provider; never translate by a colliding
     // built-in call name or activate a plugin merely to display its manifest.
-    for installed in manager.installed().map_err(|error| error.to_string())? {
-        let mut contents=manifest_contents(&installed.manifest);
-        contents.extend(contents::navigation_contents(&installed.path, &installed.manifest, locale)?);
+    for installed in manager.installed().map_err(|error| error.to_string())?.into_iter().filter(|pack| id.is_none_or(|id| pack.manifest.id == id)) {
+        let mut contents = if include_contents { manifest_contents(&installed.manifest) } else { vec![] };
+        if include_contents { contents.extend(contents::navigation_contents(&installed.path, &installed.manifest, locale)?); }
         for item in contents.iter_mut().filter(|item|item.kind=="Tool") {
             if let Some(entry)=installed.manifest.tools.iter().find(|entry|entry.descriptor.call_name==item.name) {
                 let display=entry.descriptor.resolve_display(locale);
@@ -112,6 +118,9 @@ pub fn install_capability_pack(
 }
 
 pub fn capability_pack_catalog() -> Vec<CapabilityPackInfo> {
+    capability_pack_entries(true, None)
+}
+fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<CapabilityPackInfo> {
     [
         (
             "framework.external-agent",
@@ -179,9 +188,10 @@ pub fn capability_pack_catalog() -> Vec<CapabilityPackInfo> {
         ),
     ]
     .into_iter()
+    .filter(|entry| id.is_none_or(|id| entry.0 == id))
     .map(
         |(id, name, description, provider, version, updated_at)| CapabilityPackInfo {
-            contents: builtin_contents(id),
+            contents: if include_contents { builtin_contents(id) } else { vec![] },
             id: id.into(),
             name: name.into(),
             version: version.into(),

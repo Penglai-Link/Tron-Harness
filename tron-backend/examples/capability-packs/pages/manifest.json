@@ -1,0 +1,17 @@
+{
+  "manifest_version": 1,
+  "id": "example.isolated-pages",
+  "name": "Isolated pages example",
+  "version": "1.0.0",
+  "framework": "*",
+  "resources": [
+    "tron/pages.json",
+    "tron/navigation.json",
+    "ui/details.html",
+    "ui/inter.woff2",
+    "ui/mark.svg",
+    "ui/overview.html",
+    "ui/page.css",
+    "ui/page.js"
+  ]
+}

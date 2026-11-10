@@ -631,3 +631,7 @@ skill-memory-spec-check:
 .PHONY: skill-theme-check
 skill-theme-check:
 	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/tron-theme-spec
+
+.PHONY: capability-pages-example
+capability-pages-example: | _build-cache
+	$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)" --example package_pages

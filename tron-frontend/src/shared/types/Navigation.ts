@@ -1,4 +1,4 @@
-export type NavigationMenuType = "Group" | "Internal" | "ExternalLink" | "Widget";
+export type NavigationMenuType = "Group" | "Internal" | "ExternalLink" | "Widget" | "PackPage";
 export type NavigationMenuSource = "BuiltIn" | "Custom" | "CapabilityPack";
 export type NavigationMenuChildDisplay = "Inline" | "Flyout";
 

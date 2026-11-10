@@ -57,6 +57,8 @@ export function getNavigationIcon(iconName?: string | null): LucideIcon | null {
 function mapMenu(menu: NavigationRuntimeMenu, locale: string): TronNavItem {
   const href = menu.menuType === "ExternalLink"
     ? menu.url ?? "#"
+    : menu.menuType === "PackPage"
+      ? `/capability-pages/${(menu.pageCode ?? "").split("/").map(encodeURIComponent).join("/")}`
     : menu.menuType === "Internal"
       ? navigationPageRegistry[menu.pageCode ?? ""] ?? "#"
       : menu.menuType === "Widget"

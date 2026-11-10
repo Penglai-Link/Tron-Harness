@@ -4,6 +4,7 @@ import { lazyRoute as lazy } from "./lazyRoute";
 type RoutePageComponent = LazyExoticComponent<ComponentType>;
 
 export const routePages: Record<string, RoutePageComponent> = {
+  "capability.page": lazy(() => import("@/domain/capability-pages/CapabilityPage").then(m => ({ default: m.CapabilityPage }))),
   "dudes.index": lazy(() => import("@/domain/dude/pages/DudesPage").then(module => ({ default: module.DudesPage }))),
   "notifications.index": lazy(() => import("@/domain/notification/pages/NotificationsPage").then(module => ({ default: module.NotificationsPage }))),
   "observability.logs": lazy(() => import("@/domain/observability/pages/LogsPage").then(module => ({default:module.LogsPage}))),

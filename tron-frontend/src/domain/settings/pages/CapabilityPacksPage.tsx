@@ -6,7 +6,9 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { SelectInput } from "@/components/forms";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SelectItem } from "@/components/ui/select";
 import { PageHeader, SurfaceCard } from "@/shared";
 import { notifyCapabilityResourcesChanged } from "@/domain/skill/api";
@@ -22,20 +24,25 @@ export function CapabilityPacksPage() {
   const { t } = useTranslation(["shell", "pages"]);
   const [records, setRecords] = useState<CapabilityPackRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  const [loadFailed, setLoadFailed] = useState(false);
   const [provider, setProvider] = useState("all");
   const [status, setStatus] = useState("effective");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [pendingImport, setPendingImport] = useState<File | null>(null);
   const load = async (signal?: AbortSignal) => {
     setLoading(true);
-    setError(null);
+    setLoadFailed(false);
     try {
       setRecords(await listCapabilityPacks(signal));
     } catch (reason) {
-      if (!signal?.aborted)
-        setError(reason instanceof Error ? reason.message : String(reason));
+      if (!signal?.aborted) {
+        setLoadFailed(true);
+        toast.error(reason instanceof Error ? reason.message : String(reason), {
+          title: t("pages:capabilityManagement.loadFailed"),
+        });
+      }
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -57,32 +64,29 @@ export function CapabilityPacksPage() {
       (status === "all" || record.effective === (status === "effective"))
   );
   const importPack = async (file?: File) => {
-    if (!file) return;
-    if (!window.confirm(pageT("developmentImportWarning"))) return;
+    if (!file || busyId !== null) return;
+    setPendingImport(null);
     setBusyId("import");
-    setNotice(null);
-    setError(null);
     try {
       await importCapabilityPack(file);
       await load();
       notifyCapabilityResourcesChanged();
-      setNotice(pageT("importSucceeded"));
+      toast.success(pageT("importSucceeded"));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      toast.error(reason instanceof Error ? reason.message : String(reason), { title: pageT("importFailed") });
     } finally {
       setBusyId(null);
     }
   };
   const togglePack = async (record: CapabilityPackRecord) => {
     setBusyId(record.id);
-    setNotice(null);
-    setError(null);
     try {
       await setCapabilityPackEnabled(record.id, !record.effective);
+      toast.success(pageT(record.effective ? "disableSucceeded" : "enableSucceeded"));
       await load();
       notifyCapabilityResourcesChanged();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      toast.error(reason instanceof Error ? reason.message : String(reason), { title: pageT(record.effective ? "disableFailed" : "enableFailed") });
     } finally {
       setBusyId(null);
     }
@@ -90,13 +94,13 @@ export function CapabilityPacksPage() {
 
   const removePack = async (record: CapabilityPackRecord) => {
     setBusyId(record.id);
-    setError(null);
     try {
       await uninstallCapabilityPack(record.id);
+      toast.success(pageT("uninstallSucceeded"));
       await load();
       notifyCapabilityResourcesChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast.error(e instanceof Error ? e.message : String(e), { title: pageT("uninstallFailed") });
     } finally {
       setBusyId(null);
     }
@@ -106,6 +110,16 @@ export function CapabilityPacksPage() {
       data-theme-part="capability-packs-page"
       className="space-y-5 [--tron-capability-effective-fg:var(--color-success)] [--tron-capability-inactive-fg:var(--color-on-surface-variant)] [--tron-capability-id-fg:var(--color-on-surface-variant)]"
     >
+      <ConfirmDialog
+        open={pendingImport !== null}
+        title={pageT("import")}
+        description={`${pendingImport?.name ?? ""} — ${pageT("developmentImportWarning")}`}
+        tone="default"
+        cancelText={pageT("cancelImport")}
+        confirmText={pageT("confirmImport")}
+        onCancel={() => setPendingImport(null)}
+        onConfirm={() => void importPack(pendingImport ?? undefined)}
+      />
       <PageHeader
         title={t("shell:settings.items.capabilityPacks")}
         actions={
@@ -118,7 +132,7 @@ export function CapabilityPacksPage() {
               accept=".zip,application/zip"
               disabled={busyId !== null}
               onChange={(event) => {
-                void importPack(event.currentTarget.files?.[0]);
+                setPendingImport(event.currentTarget.files?.[0] ?? null);
                 event.currentTarget.value = "";
               }}
             />
@@ -143,19 +157,6 @@ export function CapabilityPacksPage() {
           </div>
         }
       />
-      {error ? (
-        <SurfaceCard role="alert" className="text-sm text-[var(--color-error)]">
-          {pageT("loadFailed")}: {error}
-        </SurfaceCard>
-      ) : null}
-      {notice ? (
-        <SurfaceCard
-          role="status"
-          className="text-sm text-[var(--color-success)]"
-        >
-          {notice}
-        </SurfaceCard>
-      ) : null}
       <div className="flex w-full max-w-xl flex-wrap items-center gap-3">
         <SelectInput
           className="h-9 min-w-40 flex-1"
@@ -186,7 +187,7 @@ export function CapabilityPacksPage() {
           {pageT("loading")}
         </p>
       ) : null}
-      {!loading && !error && visibleRecords.length === 0 ? (
+      {!loading && !loadFailed && visibleRecords.length === 0 ? (
         <SurfaceCard className="text-sm text-[var(--color-on-surface-variant)]">
           {pageT(records.some((record) => record.kind === "capability") ? "noMatchingPacks" : "emptyPacks")}
         </SurfaceCard>

@@ -1,0 +1,1 @@
+window.tronPage.onContext(context => { document.getElementById("context").textContent = `${context.packId} / ${context.pageId} · ${context.locale} · ${context.appearance}`; }); let count = 0; document.getElementById("counter").onclick = event => { event.target.textContent = String(++count); };

@@ -1,11 +1,11 @@
 use crate::{
     app::AppState,
-    application::agent::{installed_capability_packs, installed_extension_implementations},
+    application::agent::{query_installed_capability_packs, installed_extension_implementations},
     response::ApiResponse,
 };
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Multipart, Path, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
@@ -15,6 +15,8 @@ use serde::Deserialize;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/capabilities/packs", get(list_capability_packs))
+        .route("/api/v1/capabilities/packs/{id}/pages/{page}", get(get_page))
+        .route("/api/v1/capabilities/packs/{id}/pages", get(list_pages))
         .route("/api/v1/capabilities/packs/{id}", delete(uninstall_pack))
         .route(
             "/api/v1/capabilities/packs/import",
@@ -117,15 +119,28 @@ fn tool_policy_failure(
         .into_response()
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PackListQuery {
+    #[serde(default = "include_contents_by_default")]
+    include_contents: bool,
+    id: Option<String>,
+}
+fn include_contents_by_default() -> bool { true }
 async fn list_capability_packs(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<PackListQuery>,
 ) -> Response {
     let locale = crate::shared::locale::resolve_request_locale(
         headers.get(axum::http::header::ACCEPT_LANGUAGE).and_then(|value| value.to_str().ok()),
     );
     let (packs, _) = state.agent_framework.capability_state();
-    match installed_capability_packs(state.agent_framework.pack_root(), &locale) {
+    let root = state.agent_framework.pack_root().to_path_buf();
+    let records = tokio::task::spawn_blocking(move || query_installed_capability_packs(&root, &locale, query.include_contents, query.id.as_deref())).await;
+    match records {
+        Err(error) => failure(StatusCode::INTERNAL_SERVER_ERROR, "CAPABILITY_LIST_FAILED", error.to_string()),
+        Ok(result) => match result {
         Ok(records) => Json(ApiResponse::success(
             records
                 .into_iter()
@@ -141,6 +156,7 @@ async fn list_capability_packs(
             "CAPABILITY_LIST_FAILED",
             error,
         ),
+        }
     }
 }
 
@@ -209,7 +225,7 @@ async fn set_pack_enabled(
         .set_pack_enabled(&id, request.enabled)
         .await
     {
-        Ok(()) => list_capability_packs(State(state), headers).await,
+        Ok(()) => list_capability_packs(State(state), headers, Query(PackListQuery { include_contents: false, id: None })).await,
         Err(error) => failure(StatusCode::CONFLICT, "CAPABILITY_RECONFIGURE_FAILED", error),
     }
 }
@@ -349,5 +365,30 @@ async fn uninstall_pack(
             )
                 .into_response()
         }
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GetPageVo { pack_id: String, version: String, digest: String, page_id: String, title: std::collections::BTreeMap<String, String>, entry: String, assets: std::collections::BTreeMap<String, String> }
+async fn get_page(
+    _auth: crate::adapters::inbound::http::auth::RequestAuthContext,
+    State(state): State<AppState>, Path((id, page)): Path<(String, String)>,
+) -> Response {
+    let host = state.agent_framework.clone();
+    match tokio::task::spawn_blocking(move || host.capability_page(&id, &page)).await {
+        Ok(Ok(p)) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(ApiResponse::protocol_success(GetPageVo { pack_id:p.pack_id, version:p.version, digest:p.digest, page_id:p.page_id, title:p.title, entry:p.entry, assets:p.assets }))).into_response(),
+        _ => failure(StatusCode::NOT_FOUND, "CAPABILITY_PAGE_UNAVAILABLE", "Capability page is unavailable / 能力包页面不可用".into()),
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ListPagesVo { id: String, title: std::collections::BTreeMap<String, String> }
+async fn list_pages(_auth: crate::adapters::inbound::http::auth::RequestAuthContext, State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    let host = state.agent_framework.clone();
+    match tokio::task::spawn_blocking(move || host.capability_page_catalog(&id)).await {
+        Ok(Ok(pages)) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(ApiResponse::protocol_success(pages.into_iter().map(|p| ListPagesVo { id:p.id, title:p.title }).collect::<Vec<_>>()))).into_response(),
+        _ => failure(StatusCode::NOT_FOUND, "CAPABILITY_PAGE_UNAVAILABLE", "Capability page is unavailable / 能力包页面不可用".into()),
     }
 }

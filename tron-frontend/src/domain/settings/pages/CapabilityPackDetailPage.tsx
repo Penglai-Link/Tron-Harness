@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarkdownContent } from "@/components/markdown-content/MarkdownContent";
 import { capabilityDescription, capabilityPackDetails } from "../model/capabilityDescription";
 import { PageHeader, SurfaceCard } from "@/shared";
-import { listCapabilityPacks, type CapabilityPackRecord } from "../api/capabilityApi";
+import { getCapabilityPack, type CapabilityPackRecord } from "../api/capabilityApi";
 
 const CONTENT_KIND_ORDER = [
   "Tool", "Skill", "Resource", "Page", "Navigation", "Mcp", "Runtime", "Context", "Policy",
@@ -32,8 +32,8 @@ export function CapabilityPackDetailPage() {
     setLoading(true);
     setError(undefined);
     setRecord(undefined);
-    listCapabilityPacks(controller.signal).then((records) => {
-      if (!controller.signal.aborted) setRecord(records.find((pack) => pack.id === packId));
+    getCapabilityPack(packId ?? "", controller.signal).then((record) => {
+      if (!controller.signal.aborted) setRecord(record);
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -51,7 +51,7 @@ export function CapabilityPackDetailPage() {
     ...CONTENT_KIND_ORDER,
     ...Array.from(groups.keys()).filter((kind) => !CONTENT_KIND_ORDER.some((known) => known === kind)).sort(),
   ];
-  const contentGroups = kinds.map((kind) => ({ kind, items: groups.get(kind) ?? [] }));
+  const contentGroups = kinds.map((kind) => ({ kind, items: groups.get(kind) ?? [] })).filter(({ items }) => items.length > 0);
   const defaultKind = contentGroups.find(({ items }) => items.length > 0)?.kind ?? CONTENT_KIND_ORDER[0];
 
   return <div data-theme-part="capability-pack-detail-page" className="space-y-5">

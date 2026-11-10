@@ -299,7 +299,7 @@ CREATE TABLE "navigation_menus" (
     id INTEGER PRIMARY KEY CHECK (id > 0),
     menu_code TEXT NOT NULL UNIQUE,
     source TEXT NOT NULL CHECK (source IN ('BuiltIn', 'Custom')),
-    menu_type TEXT NOT NULL CHECK (menu_type IN ('Group', 'Internal', 'ExternalLink', 'Widget')),
+    menu_type TEXT NOT NULL CHECK (menu_type IN ('Group', 'Internal', 'ExternalLink', 'Widget', 'PackPage')),
     page_code TEXT,
     url TEXT,
     icon TEXT,
@@ -310,7 +310,7 @@ CREATE TABLE "navigation_menus" (
     updated_at TEXT NOT NULL,
     CHECK (
         (menu_type = 'Group' AND page_code IS NULL AND url IS NULL)
-        OR (menu_type = 'Internal' AND page_code IS NOT NULL AND url IS NULL)
+        OR (menu_type IN ('Internal', 'PackPage') AND page_code IS NOT NULL AND url IS NULL)
         OR (menu_type = 'ExternalLink' AND page_code IS NULL AND url IS NOT NULL)
         OR (menu_type = 'Widget' AND page_code IS NOT NULL AND url IS NULL)
     )

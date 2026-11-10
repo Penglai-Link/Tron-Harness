@@ -7871,6 +7871,7 @@ dependencies = [
  "russh",
  "rustls",
  "rustls-pemfile",
+ "scraper",
  "semver",
  "serde",
  "serde_json",

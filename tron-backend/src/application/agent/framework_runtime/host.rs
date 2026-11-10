@@ -49,6 +49,8 @@ mod host_external;
 pub(super) mod host_navigation;
 #[path = "host_import.rs"]
 mod host_import;
+#[path = "host_pages.rs"]
+pub(super) mod host_pages;
 #[path = "host_interactions.rs"]
 mod host_interactions;
 #[path = "host_run.rs"]

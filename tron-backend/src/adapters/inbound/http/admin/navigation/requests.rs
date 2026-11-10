@@ -17,6 +17,7 @@ mod request {
         Internal,
         ExternalLink,
         Widget,
+        PackPage,
     }
 
     #[derive(Debug, Deserialize)]
@@ -131,6 +132,7 @@ mod request {
                 MenuTypeRequest::Internal => Self::Internal,
                 MenuTypeRequest::ExternalLink => Self::ExternalLink,
                 MenuTypeRequest::Widget => Self::Widget,
+                MenuTypeRequest::PackPage => Self::PackPage,
             }
         }
     }

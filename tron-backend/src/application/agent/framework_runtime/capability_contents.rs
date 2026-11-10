@@ -333,6 +333,12 @@ pub(super) fn plugin_display_name(id: &str, locale: &str) -> Option<&'static str
 pub(super) fn navigation_contents(path: &std::path::Path, manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest, locale: &str) -> Result<Vec<CapabilityContentInfo>, String> {
     let navigation = super::super::host::host_navigation::read_navigation(path, manifest)?;
     let mut items = Vec::new();
+    for page in super::super::host::host_pages::read_pages(path, manifest)? {
+        let title = page.title.get(if locale.starts_with("zh") { "zh-CN" } else { "en-US" }).cloned().unwrap_or_else(|| page.id.clone());
+        let mut item = content("Page", &page.id, "");
+        item.display_name = title;
+        items.push(item);
+    }
     for domain in &navigation.domains {
         let mut item = content("NavigationDomain", &domain.code, domain.description.localized().value(locale));
         item.display_name = domain.name.localized().value(locale).into();

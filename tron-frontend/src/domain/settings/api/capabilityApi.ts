@@ -47,7 +47,15 @@ export interface ExtensionImplementationRecord {
 export function listCapabilityPacks(signal?: AbortSignal) {
   return requestApi<CapabilityPackRecord[]>("GET /api/v1/capabilities/packs", {
     signal,
+    queryParams: { includeContents: false },
   });
+}
+
+export async function getCapabilityPack(id: string, signal?: AbortSignal) {
+  const records = await requestApi<CapabilityPackRecord[]>("GET /api/v1/capabilities/packs", {
+    signal, queryParams: { id, includeContents: true },
+  });
+  return records.find(record => record.id === id);
 }
 
 export function listExtensionImplementations(signal?: AbortSignal) {

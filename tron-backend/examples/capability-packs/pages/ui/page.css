@@ -1,0 +1,2 @@
+@font-face { font-family: ExampleInter; src: url("inter.woff2") format("woff2"); }
+body { background: var(--color-surface, #fff); color: var(--color-on-surface, #111); font-family: ExampleInter, system-ui; padding: 24px; } main { max-width: 720px; margin: auto; } img { width: 48px; } button { color: inherit; background: var(--color-surface-container, #ddd); padding: 12px; border: 0; border-radius: 8px; }

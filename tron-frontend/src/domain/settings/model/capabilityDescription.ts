@@ -6,7 +6,8 @@ export function capabilityDescription(t: TFunction, kind: string, name: string, 
   // look up a host translation for it.
   if (kind === "Tool") return fallback;
   const key = `${kind}_${name}`.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return t(`pages:capabilityManagement.catalog.${key}`, { defaultValue: fallback });
+  const translated = t(`pages:capabilityManagement.catalog.${key}`, { defaultValue: fallback });
+  return translated === `capabilityManagement.catalog.${key}` ? fallback : translated;
 }
 
 /** Keep catalog summaries short; detail pages show the pack's feature list. */
