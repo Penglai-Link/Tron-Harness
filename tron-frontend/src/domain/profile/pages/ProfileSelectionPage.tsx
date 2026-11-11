@@ -102,6 +102,7 @@ export function ProfileSelectionPage() {
   );
   const [authorizing, setAuthorizing] = useState(false);
   const [completingAuthorization, setCompletingAuthorization] = useState(false);
+  const [authorizationRetrying, setAuthorizationRetrying] = useState(false);
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [profileToRemove, setProfileToRemove] =
@@ -110,7 +111,7 @@ export function ProfileSelectionPage() {
   const [authorization, setAuthorization] =
     useState<PersonAiAuthorizationSession | null>(null);
   const authorizationWindowRef = useRef<Window | null>(null);
-  const authorizationPollTimerRef = useRef<number | null>(null);
+  const authorizationRequestRef = useRef<AbortController | null>(null);
   const autoEnteredProfileRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -139,7 +140,10 @@ export function ProfileSelectionPage() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      authorizationRequestRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -180,31 +184,77 @@ export function ProfileSelectionPage() {
 
   useEffect(() => {
     if (!authorization) return;
-    let active = true;
+    const controller = new AbortController();
+    authorizationRequestRef.current = controller;
+    let pollTimer: number | undefined;
+    let expiryTimer: number | undefined;
+    let failures = 0;
+    let completing = false;
+    let polling = false;
+    // Some upstream sessions omit expiresAt. Keep those sessions bounded too.
+    const deadline = authorization.createdAt + 10 * 60_000;
+    const fail = (message: string) => {
+      controller.abort();
+      window.clearTimeout(pollTimer);
+      window.clearTimeout(expiryTimer);
+      setAuthorization(null);
+      setCompletingAuthorization(false);
+      setAuthorizationRetrying(false);
+      closeAuthorizationWindow();
+      setError(message);
+    };
+    const scheduleExpiry = (expiresAt: number | null) => {
+      window.clearTimeout(expiryTimer);
+      const remaining = Math.min(expiresAt ?? deadline, deadline) - Date.now();
+      if (remaining <= 0) {
+        fail(t("personAiProfiles.errors.authorizationExpired"));
+        return false;
+      }
+      expiryTimer = window.setTimeout(
+        () => fail(t("personAiProfiles.errors.authorizationExpired")),
+        remaining
+      );
+      return true;
+    };
     const poll = async () => {
+      if (controller.signal.aborted || polling || completing) return;
+      polling = true;
+      window.clearTimeout(pollTimer);
       try {
-        const result = await pollPersonAiAuthorization(authorization.sessionId);
-        if (!active) return;
+        const signal = AbortSignal.any([
+          controller.signal,
+          AbortSignal.timeout(45_000),
+        ]);
+        const result = await pollPersonAiAuthorization(authorization.sessionId, signal);
+        if (controller.signal.aborted) return;
+        failures = 0;
+        setAuthorizationRetrying(false);
         if (!result.completed) {
-          authorizationPollTimerRef.current = window.setTimeout(() => {
-            authorizationPollTimerRef.current = null;
-            void poll();
-          }, 1_500);
+          if (["expired", "cancelled", "canceled", "denied", "rejected", "failed"]
+            .includes(result.session.status.toLowerCase())) {
+            fail(t("personAiProfiles.errors.authorizationEnded"));
+            return;
+          }
+          if (scheduleExpiry(result.session.expiresAt)) {
+            pollTimer = window.setTimeout(() => void poll(), 1_500);
+          }
           return;
         }
+        completing = true;
         setCompletingAuthorization(true);
         closeAuthorizationWindow();
         const [nextProfiles, nextBootstrap] = await Promise.all([
-          fetchProfiles(),
-          fetchBootstrapProfileStatus(),
+          fetchProfiles(signal),
+          fetchBootstrapProfileStatus(signal),
         ]);
-        if (!active) return;
+        if (controller.signal.aborted) return;
         // Keep authorization pending until the session is usable. Clearing it
         // earlier lets auto-entry mistake the old auth status for expired access.
         const authenticated = await useAuthStore
           .getState()
-          .ensureSessionFresh();
-        if (!active) return;
+          .ensureSessionFresh(signal);
+        if (controller.signal.aborted) return;
+        window.clearTimeout(expiryTimer);
         setProfiles(nextProfiles);
         setBootstrap(nextBootstrap);
         setAuthorization(null);
@@ -215,35 +265,54 @@ export function ProfileSelectionPage() {
           setError(t("personAiProfiles.errors.activate"));
         }
       } catch (reason: unknown) {
-        if (active) {
-          setAuthorization(null);
-          setCompletingAuthorization(false);
-          closeAuthorizationWindow();
-          setError(
-            isApiError(reason)
-              ? reason.message
-              : reason instanceof Error
-              ? reason.message
-              : t("personAiProfiles.errors.authorize")
-          );
+        if (controller.signal.aborted) return;
+        const transient = isApiError(reason)
+          ? reason.status >= 500 || reason.status === 408 || reason.status === 429
+          : reason instanceof TypeError || (reason instanceof DOMException && reason.name === "TimeoutError");
+        if (!completing && transient && ++failures <= 3) {
+          setAuthorizationRetrying(true);
+          pollTimer = window.setTimeout(() => void poll(), failures * 1_500);
+          return;
         }
+        fail(transient
+          ? t("personAiProfiles.errors.authorizationUnavailable")
+          : reason instanceof Error
+          ? reason.message
+          : t("personAiProfiles.errors.authorize"));
+      } finally {
+        polling = false;
       }
     };
-    void poll();
+    // Background windows may throttle timers while the browser handles consent.
+    const resume = () => {
+      if (document.visibilityState === "visible") void poll();
+    };
+    window.addEventListener("focus", resume);
+    document.addEventListener("visibilitychange", resume);
+    if (scheduleExpiry(authorization.expiresAt)) void poll();
     return () => {
-      active = false;
-      if (authorizationPollTimerRef.current !== null) {
-        window.clearTimeout(authorizationPollTimerRef.current);
-        authorizationPollTimerRef.current = null;
-      }
+      controller.abort();
+      window.removeEventListener("focus", resume);
+      document.removeEventListener("visibilitychange", resume);
+      window.clearTimeout(pollTimer);
+      window.clearTimeout(expiryTimer);
+      if (authorizationRequestRef.current === controller) authorizationRequestRef.current = null;
     };
   }, [authorization, navigate, t]);
 
   async function beginPersonAiAuthorization() {
+    authorizationRequestRef.current?.abort();
+    const controller = new AbortController();
+    authorizationRequestRef.current = controller;
     setAuthorizing(true);
+    setAuthorizationRetrying(false);
+    setCompletingAuthorization(false);
     setError(null);
     try {
-      const nextAuthorization = await createPersonAiAuthorization();
+      const nextAuthorization = await createPersonAiAuthorization(
+        AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)])
+      );
+      if (controller.signal.aborted) return;
       setAuthorization(nextAuthorization);
       authorizationWindowRef.current = window.open(
         nextAuthorization.loginUrl,
@@ -251,6 +320,7 @@ export function ProfileSelectionPage() {
         "noopener,noreferrer"
       );
     } catch (reason: unknown) {
+      if (controller.signal.aborted) return;
       setError(
         isApiError(reason)
           ? reason.message
@@ -305,8 +375,11 @@ export function ProfileSelectionPage() {
   }
 
   function cancelPersonAiAuthorization() {
+    authorizationRequestRef.current?.abort();
     closeAuthorizationWindow();
     setAuthorization(null);
+    setCompletingAuthorization(false);
+    setAuthorizationRetrying(false);
     setError(null);
   }
 
@@ -456,9 +529,21 @@ export function ProfileSelectionPage() {
                     {t(
                       completingAuthorization
                         ? "personAiProfiles.signingIn"
+                        : authorizationRetrying
+                        ? "personAiProfiles.retryingAuthorization"
                         : "personAiProfiles.authorizing"
                     )}
                   </Button>
+                  {!completingAuthorization ? (
+                    <Button
+                      className="tron-login-action"
+                      type="button"
+                      variant="secondary"
+                      onClick={() => window.open(authorization.loginUrl, "_blank", "noopener,noreferrer")}
+                    >
+                      {t("personAiProfiles.reopenAuthorization")}
+                    </Button>
+                  ) : null}
                   {!completingAuthorization ? (
                     <Button
                       className="tron-login-action"

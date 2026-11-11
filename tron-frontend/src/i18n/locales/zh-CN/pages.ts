@@ -4995,7 +4995,7 @@ export const pages = {
     },
     loading: "正在加载",
     messages: {
-      authorizationCompleted: "供应商 授权、聊天和 Embedding 验证已完成。",
+      authorizationCompleted: "供应商授权已完成。",
       authorizationPageOpened:
         "已打开 供应商 授权页；完成登录后会自动检查结果。",
       authorizationPending: "授权仍在等待中，请完成 供应商 登录。",
@@ -5227,6 +5227,8 @@ export const pages = {
     switching: "切换中…",
     authorizeNewAccount: "授权新账号",
     authorizing: "等待授权完成…",
+    retryingAuthorization: "连接中断，正在重试…",
+    reopenAuthorization: "打开授权页面",
     signingIn: "正在登录…",
     cancelAuthorization: "取消授权",
     reauthorizationRequired: "设备授权已失效，请重新登录 PersonAI 账号。",
@@ -5265,6 +5267,9 @@ export const pages = {
       activate: "账号切换失败",
       create: "无法添加 PersonAI 账号",
       authorize: "PersonAI 授权失败",
+      authorizationExpired: "授权已超时，请重新发起授权。",
+      authorizationEnded: "授权已结束且未获批准，请重新发起授权。",
+      authorizationUnavailable: "重试后仍无法确认授权，请检查网络后重试。",
       remove: "删除本地账号失败",
     },
   },

@@ -5190,8 +5190,7 @@ export const pages = {
     },
     loading: "Loading",
     messages: {
-      authorizationCompleted:
-        "the provider authorization, chat, and Embedding validation completed.",
+      authorizationCompleted: "Provider authorization completed.",
       authorizationPageOpened:
         "The the provider authorization page is open. Results are checked automatically after you sign in.",
       authorizationPending:
@@ -5445,6 +5444,8 @@ export const pages = {
     switching: "Switching…",
     authorizeNewAccount: "Authorize new account",
     authorizing: "Waiting for authorization…",
+    retryingAuthorization: "Connection interrupted. Retrying…",
+    reopenAuthorization: "Open authorization page",
     cancelAuthorization: "Cancel authorization",
     signingIn: "Signing in…",
     reauthorizationRequired:
@@ -5487,6 +5488,9 @@ export const pages = {
       activate: "Unable to switch accounts",
       create: "Unable to add a PersonAI account",
       authorize: "PersonAI authorization failed",
+      authorizationExpired: "Authorization expired. Please start again.",
+      authorizationEnded: "Authorization ended without approval. Please start again.",
+      authorizationUnavailable: "Unable to confirm authorization after retrying. Check your connection and try again.",
       remove: "Failed to remove the local account",
     },
   },

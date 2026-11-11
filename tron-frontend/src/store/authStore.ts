@@ -14,7 +14,7 @@ export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 interface AuthState {
   session: AuthSession | null;
   status: AuthStatus;
-  ensureSessionFresh: () => Promise<boolean>;
+  ensureSessionFresh: (signal?: AbortSignal) => Promise<boolean>;
   initialize: () => Promise<void>;
   markUnauthenticated: () => void;
   logout: () => Promise<void>;
@@ -67,10 +67,12 @@ function transitionToUnauthenticated(set: (state: Partial<AuthState>) => void) {
 async function loadActiveProfile(
   set: (state: Partial<AuthState>) => void,
   generation: number,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   const accountRevision = accountStateRevision;
   try {
-    const bootstrap = await fetchBootstrapProfileStatus();
+    const bootstrap = await fetchBootstrapProfileStatus(signal);
+    if (signal?.aborted) return false;
     if (generation !== sessionLoadGeneration) {
       return useAuthStore.getState().status === "authenticated";
     }
@@ -79,7 +81,8 @@ async function loadActiveProfile(
       transitionToUnauthenticated(set);
       return false;
     }
-    const token = await fetchActiveProfileToken();
+    const token = await fetchActiveProfileToken(signal);
+    if (signal?.aborted) return false;
     if (generation !== sessionLoadGeneration) {
       return useAuthStore.getState().status === "authenticated";
     }
@@ -98,6 +101,7 @@ async function loadActiveProfile(
     });
     return true;
   } catch (error) {
+    if (signal?.aborted) return false;
     if (generation === sessionLoadGeneration) {
       // A refresh outage does not invalidate an existing session.
       if (!isUnauthorizedApiError(error) && useAuthStore.getState().status === "authenticated") {
@@ -140,7 +144,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     accountRefresh = { userCode, promise };
     return promise;
   },
-  ensureSessionFresh: () => loadActiveProfile(set, ++sessionLoadGeneration),
+  ensureSessionFresh: (signal) => loadActiveProfile(set, ++sessionLoadGeneration, signal),
   initialize: async () => {
     if (initializePromise) return initializePromise;
     set((state) => state.status === "authenticated" ? state : { session: null, status: "checking" });

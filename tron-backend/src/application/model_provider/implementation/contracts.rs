@@ -29,8 +29,6 @@ pub struct CompleteProviderAuthorizationCommand {
 pub struct CompleteProviderAuthorizationResult {
     pub session: ProviderAuthorizationSessionView,
     pub connection: ProviderConnectionView,
-    pub text_verified: bool,
-    pub embedding_verified: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -32,8 +32,6 @@ struct AuthorizationPollResponse {
     completed: bool,
     session: ProviderAuthorizationSessionView,
     connection: Option<crate::domain::model_provider::ProviderConnectionView>,
-    text_verified: Option<bool>,
-    embedding_verified: Option<bool>,
     profile_id: Option<String>,
 }
 
@@ -222,22 +220,13 @@ async fn poll_authorization(
                     profile_id = Some(profile.profile_id);
                 }
             }
-            if let Err(error) = state.model_providers.heartbeat_active_profile().await {
-                if !matches!(
-                    error,
-                    ModelProviderError::AuthenticationRequired
-                        | ModelProviderError::ConnectionNotReady
-                ) {
-                    tracing::error!("[person-ai] login heartbeat failed: {error}");
-                }
-            }
+            // The periodic heartbeat maintains device presence. It is not a
+            // prerequisite for returning an already committed authorization.
             state.account_sync.request_sync();
             Json(ApiResponse::success(AuthorizationPollResponse {
                 completed: true,
                 session: result.session,
                 connection: Some(result.connection),
-                text_verified: Some(result.text_verified),
-                embedding_verified: Some(result.embedding_verified),
                 profile_id,
             }))
             .into_response()
@@ -248,8 +237,6 @@ async fn poll_authorization(
                     completed: false,
                     session,
                     connection: None,
-                    text_verified: None,
-                    embedding_verified: None,
                     profile_id: None,
                 }))
                 .into_response(),

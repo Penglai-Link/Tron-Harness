@@ -90,8 +90,6 @@ export interface ProviderAuthorizationPollResult {
   completed: boolean;
   session: ProviderAuthorizationSession;
   connection: ModelProviderConnection | null;
-  textVerified: boolean | null;
-  embeddingVerified: boolean | null;
   profileId: string | null;
 }
 
@@ -149,10 +147,13 @@ export function createModelProviderAuthorization(
   providerCode: string,
   payload: { serverBaseUrl?: string | null } = {},
   purpose: "Provider" | "Profile" = "Provider",
+  signal?: AbortSignal,
 ) {
   return requestApi<ProviderAuthorizationSession>(purpose === "Profile" ? modelProviderApiEndpoints.profileAuthorize : modelProviderApiEndpoints.authorize, {
     body: payload,
     pathParams: { providerCode },
+    signal,
+    retryOnUnauthorized: purpose !== "Profile",
   });
 }
 
@@ -171,10 +172,13 @@ export function pollModelProviderAuthorization(
   providerCode: string,
   sessionId: string,
   purpose: "Provider" | "Profile" = "Provider",
+  signal?: AbortSignal,
 ) {
   return requestApi<ProviderAuthorizationPollResult>(purpose === "Profile" ? modelProviderApiEndpoints.profilePollAuthorization : modelProviderApiEndpoints.pollAuthorization, {
     body: {},
     pathParams: { providerCode, sessionId },
+    signal,
+    retryOnUnauthorized: purpose !== "Profile",
   });
 }
 

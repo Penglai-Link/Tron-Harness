@@ -49,8 +49,6 @@ export interface PersonAiAuthorizationPollResult {
     personAiUserId: string | null;
     personAiUsername: string | null;
   } | null;
-  textVerified: boolean | null;
-  embeddingVerified: boolean | null;
   profileId: string | null;
 }
 
@@ -68,9 +66,10 @@ export function fetchBootstrapProfileStatus(signal?: AbortSignal) {
   });
 }
 
-export function fetchActiveProfileToken() {
+export function fetchActiveProfileToken(signal?: AbortSignal) {
   return requestApi<{ token: string }>("GET /api/v1/profiles/active/token", {
     retryOnUnauthorized: false,
+    signal,
   });
 }
 
@@ -94,14 +93,15 @@ export function createPendingProfile() {
   });
 }
 
-export function createPersonAiAuthorization() {
-  return createModelProviderAuthorization("PersonAi", {}, "Profile");
+export function createPersonAiAuthorization(signal?: AbortSignal) {
+  return createModelProviderAuthorization("PersonAi", {}, "Profile", signal);
 }
 
 export function pollPersonAiAuthorization(
   sessionId: string,
+  signal?: AbortSignal,
 ) {
-  return pollModelProviderAuthorization("PersonAi", sessionId, "Profile");
+  return pollModelProviderAuthorization("PersonAi", sessionId, "Profile", signal);
 }
 
 export function registerProfile(personAiUserId: string, personAiUsername: string) {

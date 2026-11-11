@@ -121,6 +121,20 @@ impl ModelProviderService {
         &self,
         command: CompleteProviderAuthorizationCommand,
     ) -> Result<CompleteProviderAuthorizationResult, ModelProviderError> {
+        // Authorizing an account must not wait indefinitely on upstream services.
+        // All awaited work finishes before credentials are committed below.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            self.complete_authorization_session(command),
+        )
+        .await
+        .map_err(|_| ModelProviderError::Remote("Person-AI authorization check timed out".into()))?
+    }
+
+    async fn complete_authorization_session(
+        &self,
+        command: CompleteProviderAuthorizationCommand,
+    ) -> Result<CompleteProviderAuthorizationResult, ModelProviderError> {
         let stored = {
             let this = self.clone();
             let worker_command = command.clone();
@@ -192,12 +206,9 @@ impl ModelProviderService {
                     let (catalog, multimedia_catalog) = self
                         .fetch_catalog_snapshot(stored.provider_code, &credentials)
                         .await?;
-                    if catalog.is_empty() {
-                        return Err(ModelProviderError::Remote(
-                            "Person-AI returned no selectable chat models".into(),
-                        ));
-                    }
-                    self.verify_sdk_model_credentials(&credentials).await?;
+                    // Identity validation proves authorization. Generating chat or
+                    // embedding output here makes sign-in depend on model latency,
+                    // availability and quota, even after browser consent succeeds.
                     let identity = match identity {
                         Some(identity) => identity,
                         None => self.fetch_person_ai_identity(&credentials).await?,
@@ -254,8 +265,6 @@ impl ModelProviderService {
                 Ok(CompleteProviderAuthorizationResult {
                     session,
                     connection: connection_view(row, count),
-                    text_verified: true,
-                    embedding_verified: true,
                 })
              },||ModelProviderError::Storage)
             }
