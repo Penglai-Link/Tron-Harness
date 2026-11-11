@@ -3,8 +3,8 @@
   "customAvatars": true,
   "officialLogos": false,
   "styleReferences": [
-    "src/domain/agent/assets/avatars/robot.png",
-    "src/domain/agent/assets/avatars/fox.png"
+    "src/domain/agent/assets/avatars/robot.webp",
+    "src/domain/agent/assets/avatars/fox.webp"
   ],
   "brandReferences": {
     "codex": "OpenAI Codex app bundled icon-codex-light.png",

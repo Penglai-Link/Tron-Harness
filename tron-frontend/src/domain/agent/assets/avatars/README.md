@@ -1,6 +1,8 @@
 # Built-in agent avatars
 
-Generated with the built-in `image_gen` tool on 2026-10-10. These PNGs are bundled local assets; no external image service is needed to display them. `avatarId` stores the filename stem. Legacy agents default to `robot`.
+Generated with the built-in `image_gen` tool on 2026-10-10. These WebP images are bundled local assets; no external image service is needed to display them. `avatarId` stores the filename stem. Legacy agents default to `robot`.
+
+Bundled portraits are limited to 1024×1024 pixels to support the large picker preview on high-density displays. The original 1254×1254 PNGs were resized with Lanczos and encoded as WebP at quality 90 (method 6). Optimize future portraits before committing them; keep high-resolution originals outside Git.
 
 | ID | Subject |
 | --- | --- |

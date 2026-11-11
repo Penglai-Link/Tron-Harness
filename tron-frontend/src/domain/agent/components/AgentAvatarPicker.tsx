@@ -12,11 +12,11 @@ const systemAvatarImages: Record<string, string> = {
 };
 
 export const BUILTIN_AGENT_AVATAR_IDS = ["codex", "deepseek", "opencode", "robot", "fox", "cat", "owl", "astronaut", "wizard", "panda", "frog", "penguin", "raccoon", "rabbit", "dragon", "sun", "moon", "earth", "mars", "mercury", "jupiter", "pig", "dog", "cow", "sheep", "horse", "snake", "rat", "chinese-dragon", "kucha", "black-hole", "neo", "red-blue-pills", "tibo"] as const;
-const assets = import.meta.glob<string>("../assets/avatars/*.png", { eager: true, query: "?url", import: "default" });
+const assets = import.meta.glob<string>("../assets/avatars/*.webp", { eager: true, query: "?url", import: "default" });
 
 export function AgentAvatar({ avatarId, alt = "", className }: { avatarId?: string; alt?: string; className?: string }) {
   const id = BUILTIN_AGENT_AVATAR_IDS.find((id) => id === avatarId) ?? "robot";
-  return <img src={systemAvatarImages[id] ?? assets[`../assets/avatars/${id}.png`]} alt={alt} width={64} height={64} draggable={false} className={cn("object-cover [image-rendering:pixelated]", className)} />;
+  return <img src={systemAvatarImages[id] ?? assets[`../assets/avatars/${id}.webp`]} alt={alt} width={64} height={64} draggable={false} className={cn("object-cover [image-rendering:pixelated]", className)} />;
 }
 
 export function AgentAvatarPicker({ value, disabled, onChange }: { value: string; disabled?: boolean; onChange: (id: string) => void }) {
