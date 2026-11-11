@@ -56,6 +56,7 @@ export type UpdateStatusType =
 
 export interface UpdateStatus {
   type: UpdateStatusType;
+  installationMode?: "automatic" | "manual";
   version?: string;
   versionId?: string;
   releaseDate?: string;

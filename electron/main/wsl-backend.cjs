@@ -7,6 +7,7 @@ const { once } = require("node:events");
 const { promisify } = require("node:util");
 const { buildApiUrl, normalizeVersion, readJsonResponse } = require("./updater.cjs");
 const { findFreePort } = require("./helpers.cjs");
+const { secureDownloadUrl } = require("./wsl-download.cjs");
 
 const execFileAsync = promisify(execFile);
 const runtime = fs.readFileSync(path.join(__dirname, "wsl/runtime.py"), "utf8");
@@ -65,7 +66,7 @@ function requestText(url) {
 }
 
 class WslBackend {
-  constructor({ dataDir, getVersion, getVersionServerUrl, frontendDir, sidecarPath, fetchImpl = globalThis.fetch, onStatus = () => {} }) {
+  constructor({ dataDir, getVersion, getVersionServerUrl, frontendDir, sidecarPath, fetchImpl = globalThis.fetch, fetchDownloadImpl = fetchImpl, onStatus = () => {} }) {
     this.preferencePath = path.join(dataDir, "backend-environment.json");
     this.getVersion = getVersion;
     this.getVersionServerUrl = getVersionServerUrl;
@@ -73,6 +74,7 @@ class WslBackend {
     this.sidecarPath = sidecarPath;
     this.platforms = null;
     this.fetch = fetchImpl;
+    this.fetchDownload = fetchDownloadImpl;
     this.onStatus = onStatus;
     this.status = { phase: "idle" };
     this.busy = false;
@@ -171,12 +173,15 @@ class WslBackend {
     await run(argsFor(distro, ["sh", "-s"], true), { input: dependencies, timeout: 600000 });
     const frontend = await run(argsFor(distro, ["wslpath", "-u", this.frontendDir]));
     const link = await this.api(`/versions/${encodeURIComponent(String(latest.id))}/download?os_type=${info.osType}`);
-    const url = new URL(link?.download_url ?? link?.downloadUrl);
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) throw new Error("wsl-insecure-download-url");
+    const url = secureDownloadUrl(link?.download_url ?? link?.downloadUrl);
     this.setStatus("downloading", { distribution: distro, progress: 0 });
-    const response = await this.fetch(url.href, { signal: AbortSignal.timeout(600000) });
-    if (!response.ok || !response.body) throw new Error("wsl-package-download-failed");
-    if (url.protocol === "https:" && !response.url.startsWith("https:")) throw new Error("wsl-insecure-download-url");
+    const response = await this.fetchDownload(url.href, { signal: AbortSignal.timeout(600000) });
+    if (!response.ok || !response.body) {
+      await response.body?.cancel().catch(() => {});
+      throw new Error("wsl-package-download-failed");
+    }
+    try { secureDownloadUrl(response.url, url); }
+    catch (error) { await response.body.cancel().catch(() => {}); throw error; }
     const total = Number(response.headers.get("content-length")) || 0;
     if (total > MAX_DOWNLOAD) throw new Error("package-too-large");
     const child = spawn("wsl.exe", argsFor(distro, ["python3", "-c", runtime, "install", version, frontend]), { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });

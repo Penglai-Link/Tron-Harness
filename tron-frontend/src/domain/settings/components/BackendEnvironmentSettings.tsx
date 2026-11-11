@@ -3,18 +3,24 @@ import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SurfaceCard } from "@/shared/layout/SurfaceCard";
 import { DesktopBridge, type BackendEnvironmentState, type WslDistribution } from "@/shared/desktop/DesktopBridge";
-import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
+import { useAppShellStore } from "@/store/appShellStore";
+import { useTabStore } from "@/store/tabStore";
 
-const errorCodes = ["wsl-not-installed", "wsl2-distribution-required", "wsl-unsupported-distribution", "wsl-linux-path-required", "wsl-version-mismatch", "wsl-package-not-published", "wsl-localhost-forwarding-unavailable", "wsl-backend-already-running"] as const;
+const errorCodes = ["wsl-not-installed", "wsl2-distribution-required", "wsl-unsupported-distribution", "wsl-linux-path-required", "wsl-version-mismatch", "wsl-package-not-published", "wsl-insecure-download-url", "wsl-localhost-forwarding-unavailable", "wsl-backend-already-running"] as const;
 
 export function BackendEnvironmentSettings() {
   const { t } = useTranslation("pages");
-  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
-  const workspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
+  const toast = useToast();
+  // Settings renders outside Shell's workspace context. Keep the chat in the
+  // workspace the user was using before opening settings.
+  const tabWorkspaceCode = useTabStore((state) => state.workspaceCode);
+  const selectedWorkspaceCode = useAppShellStore((state) => state.selectedSecondarySpaceId || state.selectedPrimarySpaceId);
+  const workspaceCode = tabWorkspaceCode || selectedWorkspaceCode;
   const { createWithMessage } = useCreateChatTab(workspaceCode);
   const bridge = useMemo(() => new DesktopBridge(), []);
   const [environment, setEnvironment] = useState<BackendEnvironmentState | null>(null);
@@ -83,7 +89,11 @@ export function BackendEnvironmentSettings() {
   }
 
   function analyze() {
-    if (!environment || !errorText || !workspaceCode) return;
+    if (!environment || !errorText) return;
+    if (!workspaceCode) {
+      toast.info(t("backendEnvironment.analysisWorkspaceRequired"));
+      return;
+    }
     const diagnostics = {
       capturedAt: new Date().toISOString(),
       currentEnvironment: environment.selection,
@@ -118,7 +128,7 @@ export function BackendEnvironmentSettings() {
     {busy && <p role="status" className="text-sm">{t(`backendEnvironment.phases.${environment.status.phase}`)}{environment.status.progress !== undefined ? ` ${environment.status.progress}%` : ""}</p>}
     {errorText && <div className="space-y-2">
       <p role="alert" className="break-words text-sm text-destructive">{errorCode ? t(`backendEnvironment.errors.${errorCode}`) : errorText}</p>
-      <Button variant="outline" onClick={analyze} disabled={busy || refreshing || !workspaceCode}>
+      <Button variant="outline" onClick={analyze} disabled={busy || refreshing}>
         <Sparkles aria-hidden="true" />{t("backendEnvironment.analyze")}
       </Button>
     </div>}

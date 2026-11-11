@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Square, SquareCheck } from "lucide-react";
 import { Field, SelectInput, TextInput, ToggleSwitch } from "@/components/forms";
 import { Combobox, ComboboxInput, ComboboxPopup, ComboboxList, ComboboxItem } from "@/components/ui/combobox";
 import { SelectItem } from "@/components/ui/select";
@@ -47,6 +48,46 @@ function ContextWindowInput({ value, onChange, label, disabled }: {
       </ComboboxPopup>
     </Combobox>
   );
+}
+
+function ModelInputCapabilities({ model, number, disabled, onChange }: {
+  model: ProviderModelDraft;
+  number: number;
+  disabled: boolean;
+  onChange: (inputs: ProviderInputCapability[]) => void;
+}) {
+  const { t } = useTranslation("pages");
+  const text = (key: string) => t(`configuredProviders.${key}`);
+  const flexibleInputs = isMediaModel(model.modelType) || isMultimodalModel(model.modelType);
+  const textOnly = !flexibleInputs && model.modelType !== "Text";
+  const inputs: ProviderInputCapability[] = flexibleInputs ? ["Text", "Image", "Audio", "Video"] : textOnly ? ["Text"] : ["Text", "Image"];
+  const help = textOnly ? "models.textOnlyInputsHelp" : model.modelType === "Text" ? "models.chatInputsHelp" : isMultimodalModel(model.modelType) ? "models.multimodalInputsHelp" : "models.mediaInputsHelp";
+
+  return <fieldset className="min-w-0 space-y-2">
+    <legend className="inline-flex items-center gap-1 text-sm font-medium">
+      {text("models.inputTypes")}
+      <span className="font-normal text-[var(--color-on-surface-variant)]">{text(textOnly ? "models.fixedInputs" : "models.multipleInputs")}</span>
+      <InfoTooltip ariaLabel={text("models.inputTypes")}>
+        <div className="space-y-2"><p>{text("models.inputCapabilitiesHelp")}</p><p>{text(help)}</p></div>
+      </InfoTooltip>
+    </legend>
+    <div className="flex flex-wrap gap-2">
+      {inputs.map((input) => {
+        const checked = model.inputCapabilities.includes(input);
+        const required = input === "Text" && !flexibleInputs;
+        const Icon = checked ? SquareCheck : Square;
+        return <Button key={input} type="button" size="sm" variant={checked ? "secondary" : "outline"}
+          aria-pressed={checked}
+          aria-label={`${t("configuredProviders.models.inputNumber", { number, input: text(`inputs.${input}`) })}${required ? ` ${text("models.requiredInput")}` : ""}`}
+          disabled={disabled || required}
+          onClick={() => onChange(checked ? model.inputCapabilities.filter((value) => value !== input) : [...model.inputCapabilities, input])}>
+          <Icon aria-hidden="true" className="size-4" />
+          {text(`inputs.${input}`)}
+          {required && <span className="text-xs">{text("models.requiredInput")}</span>}
+        </Button>;
+      })}
+    </div>
+  </fieldset>;
 }
 
 export function ConfiguredProviderModels({ presetId, models, protocol, disabled, onChange }: {
@@ -136,16 +177,8 @@ export function ConfiguredProviderModels({ presetId, models, protocol, disabled,
             {protocol === "OpenAiChatCompletions" && model.modelType === "Text" && <ToggleSwitch label={text("models.developerRole")} ariaLabel={t("configuredProviders.models.developerNumber", { number: index + 1 })}
               checked={model.supportsDeveloperRole} disabled={disabled} onCheckedChange={(supportsDeveloperRole) => update(model.rowId, { supportsDeveloperRole })} />}
           </div>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <span className="text-sm text-[var(--color-on-surface-variant)]">{text("models.inputTypes")}</span>
-            {!isMediaModel(model.modelType) && !isMultimodalModel(model.modelType) && <span className="text-sm">{text("inputs.Text")}</span>}
-            {(isMediaModel(model.modelType) || isMultimodalModel(model.modelType) ? ["Text", "Image", "Audio", "Video"] as ProviderInputCapability[] : ["Image"] as ProviderInputCapability[]).map((input) => <ToggleSwitch key={input} label={text(`inputs.${input}`)}
-              ariaLabel={t("configuredProviders.models.inputNumber", { number: index + 1, input: text(`inputs.${input}`) })}
-              checked={model.inputCapabilities.includes(input)} disabled={disabled || (!isMediaModel(model.modelType) && !isMultimodalModel(model.modelType) && model.modelType !== "Text")}
-              onCheckedChange={(checked) => update(model.rowId, { inputCapabilities: checked
-                ? [...model.inputCapabilities.filter((value) => value !== input), input]
-                : model.inputCapabilities.filter((value) => value !== input) })} />)}
-          </div>
+          <ModelInputCapabilities model={model} number={index + 1} disabled={disabled}
+            onChange={(inputCapabilities) => update(model.rowId, { inputCapabilities })} />
           </fieldset>}
         </div>
       ))}

@@ -6,9 +6,14 @@ const { spawn, exec } = require("node:child_process");
 
 const applyUpdateArgIndex = process.argv.indexOf("--_tron-apply-update");
 if (applyUpdateArgIndex >= 0) {
-  const { runApplyUpdate } = require("./updater.cjs");
+  const { runApplyUpdate, UPDATE_HELPER_READY } = require("./updater.cjs");
   const installerPath = process.argv[applyUpdateArgIndex + 1] || "";
-  void runApplyUpdate(installerPath, { logPath: process.argv[applyUpdateArgIndex + 2] }).then((code) => process.exit(code));
+  void runApplyUpdate(installerPath, {
+    logPath: process.argv[applyUpdateArgIndex + 2],
+    installDir: process.argv[applyUpdateArgIndex + 3],
+    parentPid: process.argv[applyUpdateArgIndex + 4] ? Number(process.argv[applyUpdateArgIndex + 4]) : undefined,
+    onReady: () => process.stdout.write(`${UPDATE_HELPER_READY}\n`)
+  }).then((code) => process.exit(code));
 } else {
 const { app, BrowserWindow, WebContentsView, clipboard, dialog, ipcMain, Menu, nativeTheme, net, shell, Tray } = require("electron");
 const { startupPalette } = require("./startup-page.cjs");
@@ -439,6 +444,7 @@ async function bootstrapRuntime() {
   if (process.platform !== "darwin") Menu.setApplicationMenu(null);
   if (process.platform === "win32") {
     const { WslBackend } = require("./wsl-backend.cjs");
+    const { fetchWslDownload } = require("./wsl-download.cjs");
     state.wsl = new WslBackend({
       dataDir: appDataDir,
       getVersion: () => app.getVersion(),
@@ -446,6 +452,7 @@ async function bootstrapRuntime() {
       frontendDir: state.frontendDistDir,
       sidecarPath: resolveSidecarPath(resourcesDir),
       fetchImpl: (url, options) => net.fetch(url, options),
+      fetchDownloadImpl: (url, options) => fetchWslDownload(net, url, options),
       onStatus: (status) => {
         state.mainWindow?.webContents.send("backend-environment:status", status);
         if (status.backendExited && state.backendReady && state.environment.mode === "wsl") {
@@ -463,7 +470,10 @@ async function bootstrapRuntime() {
     getVersionServerUrl: () => resolveUpdateServerUrl(resourcesDir),
     onStatus: sendUpdaterStatus,
     onLog: createApplicationLogger(path.join(appDataDir, "logs")),
-    openInstaller: (filePath) => shell.openPath(filePath),
+    openInstaller: (filePath) => {
+      if (process.platform === "linux") { shell.showItemInFolder(filePath); return ""; }
+      return shell.openPath(filePath);
+    },
     exit: (code) => {
       isQuitting = true;
       stopBackend();

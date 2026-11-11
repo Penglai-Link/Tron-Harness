@@ -53,6 +53,7 @@ export function UpdateSettingsCard() {
   }
 
   const progress = Math.max(0, Math.min(100, Math.round(status.progress ?? 0)));
+  const manualInstall = status.installationMode === "manual";
   const statusText = status.type === "upToDate"
     ? t("update.status.upToDate")
     : status.type === "updateAvailable"
@@ -60,7 +61,7 @@ export function UpdateSettingsCard() {
       : status.type === "downloading"
         ? t("update.downloading", { progress })
         : status.type === "downloaded"
-          ? t("update.downloaded")
+          ? t(manualInstall ? "update.manualDownloaded" : "update.downloaded")
           : status.type === "installing"
             ? t("update.installing")
             : status.type === "error"
@@ -94,13 +95,13 @@ export function UpdateSettingsCard() {
       {status.type === "updateAvailable" ? (
         <Button size="sm" onClick={() => void handleDownload()}>
 
-          {t("update.actions.download")}
+          {t(manualInstall ? "update.actions.downloadManual" : "update.actions.download")}
         </Button>
       ) : null}
       {status.type === "downloaded" ? (
         <Button size="sm" onClick={() => void handleApply()}>
 
-          {t("update.actions.install")}
+          {t(manualInstall ? "update.actions.installManual" : "update.actions.install")}
         </Button>
       ) : null}
     </SurfaceCard>

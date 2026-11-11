@@ -3,10 +3,12 @@ const fsp = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn: defaultSpawn } = require("node:child_process");
+const { finished } = require("node:stream/promises");
 const { DEFAULT_PERSON_AI_SERVER_BASE_URL } = require("./helpers.cjs");
 
 const PRODUCT_CODE = "tron";
 const UPDATE_STATUS_EVENT = "update:status-changed";
+const UPDATE_HELPER_READY = "TRON_UPDATE_HELPER_READY";
 
 const OS_TYPES = Object.freeze({
   WINDOWS_X86: 110,
@@ -161,7 +163,8 @@ function installerExtension(platformName) {
 function resolveInstallerFileName(packageInfo, version, platformName) {
   const expectedExtension = installerExtension(platformName);
   const configuredName = sanitizeFileName(packageInfo?.file_name ?? packageInfo?.fileName);
-  if (configuredName && configuredName.toLowerCase().endsWith(expectedExtension.toLowerCase())) {
+  const extensions = platformName === "linux" ? [".appimage", ".deb", ".rpm"] : [expectedExtension.toLowerCase()];
+  if (configuredName && extensions.some((extension) => configuredName.toLowerCase().endsWith(extension))) {
     return configuredName;
   }
   return `Tron_${version}${expectedExtension}`;
@@ -193,12 +196,67 @@ async function writeLog(logPath, message) {
   }
 }
 
-async function waitForLauncherExit(input = process.stdin) {
-  if (!input || typeof input.once !== "function") return;
+async function waitForLauncherExit(input = process.stdin, parentPid) {
+  if (parentPid !== undefined) {
+    if (!Number.isSafeInteger(parentPid) || parentPid <= 0 || parentPid === process.pid) throw new Error("invalid update launcher PID");
+    const deadline = Date.now() + 120000;
+    while (true) {
+      try { process.kill(parentPid, 0); }
+      catch (error) { if (error.code === "ESRCH") return; throw error; }
+      if (Date.now() >= deadline) throw new Error("timed out waiting for the update launcher to exit");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  if (!input || typeof input.once !== "function" || input.readableEnded || input.destroyed) return;
   await new Promise((resolve) => {
-    input.once("end", resolve);
-    input.once("close", resolve);
+    const done = () => {
+      input.removeListener("end", done);
+      input.removeListener("close", done);
+      resolve();
+    };
+    input.once("end", done);
+    input.once("close", done);
     if (typeof input.resume === "function") input.resume();
+  });
+}
+
+function waitForSpawn(child) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      child.removeListener("spawn", spawned);
+      child.removeListener("error", failed);
+    };
+    const spawned = () => { cleanup(); resolve(); };
+    const failed = (error) => { cleanup(); reject(error); };
+    child.once("spawn", spawned);
+    child.once("error", failed);
+  });
+}
+
+function waitForHelperReady(child) {
+  return new Promise((resolve, reject) => {
+    let output = "", errors = "";
+    const timer = setTimeout(() => done(new Error("update helper readiness timed out")), 15000);
+    const stdout = (chunk) => {
+      output += chunk.toString();
+      if (output.includes(`${UPDATE_HELPER_READY}\n`)) done();
+      else if (output.length > 4096) done(new Error("invalid update helper response"));
+    };
+    const stderr = (chunk) => { if (errors.length < 4096) errors += chunk.toString(); };
+    const exited = (code) => done(new Error(errors.trim() || `update helper exited before ready (${code})`));
+    const failed = (error) => done(error);
+    const done = (error) => {
+      clearTimeout(timer);
+      child.stdout?.removeListener("data", stdout);
+      child.stderr?.removeListener("data", stderr);
+      child.removeListener("error", failed);
+      child.removeListener("exit", exited);
+      error ? reject(error) : resolve();
+    };
+    child.stdout?.on("data", stdout);
+    child.stderr?.on("data", stderr);
+    child.once("error", failed);
+    child.once("exit", exited);
   });
 }
 
@@ -236,18 +294,27 @@ async function runApplyUpdate(installerPath, options = {}) {
 
   try {
     await writeLog(logPath, `update helper started: ${filePath}`);
-    await waitForLauncherExit(input);
+    options.onReady?.();
+    await waitForLauncherExit(input, options.parentPid);
 
     if (platformName !== "win32") {
       await writeLog(logPath, `update helper does not support platform ${platformName}`);
       return 1;
     }
 
-    const child = spawnImpl(filePath, ["/S", "/R"], {
+    const args = ["--updated", "/S", "--force-run"];
+    if (options.installDir) {
+      if (!path.win32.isAbsolute(options.installDir)) throw new Error("invalid update installation directory");
+      // NSIS consumes everything after /D= as the directory; keep it last.
+      args.push(`/D=${options.installDir}`);
+    }
+    const child = spawnImpl(filePath, args, {
       detached: true,
       stdio: "ignore",
-      windowsHide: true
+      windowsHide: true,
+      cwd: os.tmpdir()
     });
+    await waitForSpawn(child);
     child.unref?.();
     await writeLog(logPath, "update helper spawned NSIS installer");
     return 0;
@@ -264,6 +331,7 @@ class Updater {
     this.getVersionServerUrl = options.getVersionServerUrl ?? (() => process.env.TRON_VERSION_SERVER_URL || DEFAULT_PERSON_AI_SERVER_BASE_URL);
     this.platformName = options.platformName ?? process.platform;
     this.archName = options.archName ?? process.arch;
+    this.execPath = options.execPath ?? process.execPath;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
     this.spawnImpl = options.spawnImpl ?? defaultSpawn;
     this.openInstaller = options.openInstaller ?? (async () => "desktop-open-not-configured");
@@ -289,7 +357,7 @@ class Updater {
         status.type === "error" ? status.message : `Update status: ${status.type}`,
         { operation: "desktop.update", state: status.type, platform: this.platformName, architecture: this.archName });
     }
-    this.status = cloneStatus(status);
+    this.status = { installationMode: this.platformName === "win32" ? "automatic" : "manual", ...status };
     this.onStatus(this.getStatus());
     return this.getStatus();
   }
@@ -321,7 +389,7 @@ class Updater {
   }
 
   async check(accessToken) {
-    if (this.status.type === "checking") return this.getStatus();
+    if (this.downloadPromise || ["checking", "downloaded", "installing"].includes(this.status.type)) return this.getStatus();
     const token = this.requireToken(accessToken);
     this.setStatus({ type: "checking" });
 
@@ -391,7 +459,7 @@ class Updater {
     }
 
     const token = this.requireToken(accessToken);
-    this.downloadPromise = this.download(token).finally(() => {
+    this.downloadPromise = this.download(token).then(() => this.apply()).finally(() => {
       this.downloadPromise = null;
     });
     await this.downloadPromise;
@@ -450,10 +518,10 @@ class Updater {
           }
         }
         if (writerError) throw writerError;
-        await new Promise((resolve, reject) => {
-          writer.once("error", reject);
-          writer.end(resolve);
-        });
+        const completed = finished(writer, { cleanup: true });
+        writer.end();
+        await completed;
+        if (!downloaded || (total > 0 && downloaded !== total)) throw new Error("update download is incomplete; retry the download");
       } catch (error) {
         await new Promise((resolve) => {
           if (writer.closed) {
@@ -484,29 +552,38 @@ class Updater {
   }
 
   async apply() {
+    if (this.status.type === "installing") return true;
     if (this.status.type !== "downloaded") throw new Error("no downloaded update is available");
     const version = this.status.version;
     try {
       const filePath = String(this.status.filePath || "");
       if (!filePath || !fs.existsSync(filePath)) throw new Error("downloaded update file is missing");
 
-      if (this.platformName === "darwin") {
+      if (this.platformName === "darwin" || this.platformName === "linux") {
+        if (this.platformName === "linux" && filePath.toLowerCase().endsWith(".appimage")) await fsp.chmod(filePath, 0o755);
         const openError = await this.openInstaller(filePath);
         if (openError) throw new Error(String(openError));
-        this.setStatus({ type: "installing", version });
-        setTimeout(() => this.exit(0), 600).unref?.();
+        // DMG and distribution packages require a user-driven installation.
+        // Keep the current app running until that installation is complete.
         return true;
       }
 
       if (this.platformName !== "win32") throw new Error(`automatic installation is not supported on ${this.platformName}`);
 
-      const child = this.spawnImpl(process.execPath, ["--_tron-apply-update", filePath, this.logPath], {
+      this.setStatus({ type: "installing", version });
+      const child = this.spawnImpl(this.execPath, ["--_tron-apply-update", filePath, this.logPath, path.dirname(this.execPath), String(process.pid)], {
         detached: true,
-        stdio: ["pipe", "ignore", "ignore"]
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+        cwd: os.tmpdir()
       });
+      child.stdin?.on("error", () => {});
+      try { await waitForHelperReady(child); }
+      catch (error) { child.stdin?.end(); child.kill?.(); throw error; }
       child.unref?.();
       child.stdin?.unref?.();
-      this.setStatus({ type: "installing", version });
+      child.stdout?.unref?.();
+      child.stderr?.unref?.();
       setTimeout(() => this.exit(0), 600).unref?.();
       return true;
     } catch (error) {
@@ -523,6 +600,7 @@ function createUpdater(options) {
 module.exports = {
   PRODUCT_CODE,
   UPDATE_STATUS_EVENT,
+  UPDATE_HELPER_READY,
   OS_TYPES,
   Updater,
   buildApiUrl,

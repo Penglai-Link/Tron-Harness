@@ -246,7 +246,7 @@ help:
 	@echo "  make web-clean    Remove standalone and integrated frontend build artifacts"
 	@echo ""
 	@echo "Desktop commands:"
-	@echo "  make desktop-check     Check desktop syntax and WSL dependency bootstrap"
+	@echo "  make desktop-check     Check desktop syntax, WSL bootstrap and updater flows"
 	@echo "  make desktop-build     Build desktop installer packages and sidecar binary"
 	@echo "                         Ubuntu: AppImage、deb、rpm，自动检查并安装缺失的打包工具"
 	@echo "  make desktop-dev       Build desktop dependencies and run Electron dev mode"
@@ -466,7 +466,9 @@ endif
 .PHONY: desktop-check
 desktop-check:
 	$(NODE) --check "$(ELECTRON_DIR)/main/wsl-backend.cjs"
-	$(NODE) --test "$(ELECTRON_DIR)/scripts/wsl-dependencies.test.cjs"
+	$(NODE) --check "$(ELECTRON_DIR)/main/wsl-download.cjs"
+	$(NODE) --check "$(ELECTRON_DIR)/main/index.cjs"
+	$(NODE) --test "$(ELECTRON_DIR)/scripts/wsl-dependencies.test.cjs" "$(ELECTRON_DIR)/scripts/wsl-download.test.cjs" "$(ELECTRON_DIR)/scripts/updater.test.cjs"
 
 .PHONY: desktop-build
 desktop-build: _desktop-build-tools
@@ -499,6 +501,17 @@ else
 	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) run -s ensure-electron
 	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) run -s package
 endif
+
+# Rebuild the UI and desktop shell around an existing release sidecar. Backend
+# changes require desktop-build; shell-only fixes do not need a Rust rebuild.
+.PHONY: desktop-repackage
+desktop-repackage: desktop-check
+	$(call ASSERT_FILE,$(DESKTOP_SIDECAR_PATH))
+	$(MAKE) fe-build
+	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
+	$(call COPY_TREE,$(FRONTEND_DIR)/dist,$(ELECTRON_DIR)/resources/frontend)
+	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) run -s package)
 
 .PHONY: desktop-dev
 desktop-dev: install

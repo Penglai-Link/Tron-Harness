@@ -74,6 +74,7 @@ export function UpdateNotification() {
   const isDownloaded = status.type === "downloaded";
   const isInstalling = status.type === "installing";
   const isError = status.type === "error";
+  const manualInstall = status.installationMode === "manual";
 
   return (
     <section
@@ -104,7 +105,7 @@ export function UpdateNotification() {
           </div>
 
           {status.type === "updateAvailable" ? (
-            <p className="mt-2 text-[13px] text-[var(--color-on-surface-variant)]">{t("update.available")}</p>
+            <p className="mt-2 text-[13px] text-[var(--color-on-surface-variant)]">{t(manualInstall ? "update.manualAvailable" : "update.available")}</p>
           ) : null}
           {isDownloading ? (
             <div className="mt-3">
@@ -114,7 +115,7 @@ export function UpdateNotification() {
               <p className="mt-1.5 text-xs text-[var(--color-on-surface-variant)]">{t("update.downloading", { progress })}</p>
             </div>
           ) : null}
-          {isDownloaded ? <p className="mt-2 text-[13px] text-[var(--color-on-surface-variant)]">{t("update.downloaded")}</p> : null}
+          {isDownloaded ? <p className="mt-2 text-[13px] text-[var(--color-on-surface-variant)]">{t(manualInstall ? "update.manualDownloaded" : "update.downloaded")}</p> : null}
           {isInstalling ? <p className="mt-2 text-[13px] text-[var(--color-on-surface-variant)]">{t("update.installing")}</p> : null}
           {isError ? <p className="mt-2 break-words text-[13px] text-destructive">{status.message || t("update.errors.generic")}</p> : null}
 
@@ -123,13 +124,13 @@ export function UpdateNotification() {
               {status.type === "updateAvailable" ? (
                 <Button size="sm" onClick={() => void handleDownload()}>
 
-                  {t("update.actions.download")}
+                  {t(manualInstall ? "update.actions.downloadManual" : "update.actions.download")}
                 </Button>
               ) : null}
               {isDownloaded ? (
                 <Button size="sm" onClick={() => void handleApply()}>
 
-                  {t("update.actions.install")}
+                  {t(manualInstall ? "update.actions.installManual" : "update.actions.install")}
                 </Button>
               ) : null}
               {isError ? (
