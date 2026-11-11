@@ -1,11 +1,7 @@
-/* Use the input's available width, including floating and split chat panels. */
-.ef-chat__composer {
-  container: tron-chat-composer / inline-size;
-}
-
 .tron-chat-composer-metrics {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   align-items: center;
   gap: 2px;
   min-width: 0;
@@ -16,10 +12,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-@container tron-chat-composer (width < 36rem) {
-  .tron-chat-composer-metrics {
-    display: none;
-  }
+.tron-chat-composer-metrics[data-hidden] {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .tron-chat-composer-metrics__item {
