@@ -7,10 +7,11 @@ export function useCreateChatTab(workspaceCode: string, projectCode?: string, di
   const navigate = useNavigate();
   const { t } = useTranslation("shell");
 
-  function create(targetDirectoryCode = directoryCode) {
+  function create(targetDirectoryCode = directoryCode, initialChatMessage?: string) {
     if (!workspaceCode) return;
     const tabs = useTabStore.getState();
-    const existingDraft = tabs.tabs.find((tab) => {
+    const existingDraft = !initialChatMessage && tabs.tabs.find((tab) => {
+      if (tab.initialChatMessage) return false;
       if (!tab.activeNav?.startsWith("chat-draft:")) return false;
       const [pathname, search = ""] = tab.path.split("?");
       if (pathname !== "/chats") return false;
@@ -36,9 +37,15 @@ export function useCreateChatTab(workspaceCode: string, projectCode?: string, di
       path,
       closable: true,
       activeNav: `chat-draft:${draftCode}`,
+      initialChatMessage,
     });
     useTabStore.getState().setActiveTab(tabId);
     navigate(path);
   }
-  return { create: () => create(), createForDirectory: (code: string) => create(code), creating: false };
+  return {
+    create: () => create(),
+    createForDirectory: (code: string) => create(code),
+    createWithMessage: (message: string) => create(undefined, message),
+    creating: false,
+  };
 }

@@ -10,6 +10,7 @@ const { findFreePort } = require("./helpers.cjs");
 
 const execFileAsync = promisify(execFile);
 const runtime = fs.readFileSync(path.join(__dirname, "wsl/runtime.py"), "utf8");
+const dependencies = fs.readFileSync(path.join(__dirname, "wsl/dependencies.sh"), "utf8").replace(/\r\n/g, "\n");
 const fileRuntime = () => fs.readFileSync(path.join(__dirname, "wsl/files.py"), "utf8");
 const MAX_DOWNLOAD = 512 * 1024 * 1024;
 
@@ -167,7 +168,7 @@ class WslBackend {
     if (!packageInfo || !latest.id) throw new Error("wsl-package-not-published");
 
     this.setStatus("dependencies", { distribution: distro });
-    await run(argsFor(distro, ["sh", "-c", "set -eu; export DEBIAN_FRONTEND=noninteractive; apt-get -o Acquire::Retries=3 -o APT::Update::Error-Mode=any update; apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3 util-linux git ca-certificates libgcc-s1 libstdc++6 libssl3t64 libwayland-client0"], true), { timeout: 600000 });
+    await run(argsFor(distro, ["sh", "-s"], true), { input: dependencies, timeout: 600000 });
     const frontend = await run(argsFor(distro, ["wslpath", "-u", this.frontendDir]));
     const link = await this.api(`/versions/${encodeURIComponent(String(latest.id))}/download?os_type=${info.osType}`);
     const url = new URL(link?.download_url ?? link?.downloadUrl);

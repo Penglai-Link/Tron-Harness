@@ -35,6 +35,27 @@ for (const relativePath of files) {
   }
 }
 
+for (const [relativePath, packagePaths] of [
+  ["tron-frontend/package-lock.json", ["", "packages/chat-internal-adapter"]],
+]) {
+  const url = new URL(relativePath, root);
+  const lock = JSON.parse(await readFile(url, "utf8"));
+  const packages = packagePaths.map((packagePath) => {
+    const entry = lock.packages?.[packagePath];
+    if (!entry) throw new Error(`${relativePath} is missing package '${packagePath}'`);
+    return entry;
+  });
+  if (checkOnly) {
+    if (lock.version !== revision || packages.some((entry) => entry.version !== revision)) {
+      throw new Error(`${relativePath} does not use revision ${revision}`);
+    }
+  } else {
+    lock.version = revision;
+    packages.forEach((entry) => { entry.version = revision; });
+    await writeFile(url, `${JSON.stringify(lock, null, 2)}\n`);
+  }
+}
+
 const replaceFirst = async (relativePath, pattern, replacement) => {
   const url = new URL(relativePath, root);
   const content = await readFile(url, "utf8");
@@ -50,6 +71,7 @@ if (!checkOnly) {
   await writeFile(versionFile, `# Single source of truth for the Tron product version.\n# Keep this compatible with Maven's ${"${revision}"} convention.\nrevision=${revision}\n`);
 }
 await replaceFirst("tron-backend/Cargo.toml", /^version\s*=\s*"[^"]+"/m, `version = "${revision}"`);
+await replaceFirst("tron-backend/Cargo.lock", /(\[\[package\]\]\r?\nname = "tron-backend"\r?\nversion = ")[^"]+("\r?\n)/, (_match, prefix, suffix) => `${prefix}${revision}${suffix}`);
 await replaceFirst("openapi.yaml", /^(\s+version:\s*)[^\s]+/m, `$1${revision}`);
 
 console.log(checkOnly ? `Tron revision is consistent at ${revision}` : `Tron revision synchronized to ${revision}`);

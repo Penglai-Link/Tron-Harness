@@ -6,6 +6,7 @@ export interface TabItem {
   id: string;
   title: string;
   titleTranslationKey?: string;
+  initialChatMessage?: string;
   path: string;
   closable: boolean;
   activeNav?: string;

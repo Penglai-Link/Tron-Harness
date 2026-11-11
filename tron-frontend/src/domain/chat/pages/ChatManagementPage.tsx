@@ -19,6 +19,7 @@ import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
 import { ChatSubagentsPanel } from "../components/ChatSubagentsPanel";
 import { useChatSubagents } from "../hooks/useChatSubagents";
 import { useTabPanelScopeId } from "@/shared/layout/content/TabPanelRegistry";
+import { useTabVisibility } from "@/components/editable-tabs";
 import { AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
 import { SessionApplicationsPanel } from "@/domain/chat/components/SessionApplicationsPanel";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
@@ -2593,6 +2594,9 @@ function ChatAgentSelector({
 
 export function ChatManagementPage() {
   const scopeTabId = useTabPanelScopeId();
+  const tabVisible = useTabVisibility();
+  const [initialChatMessage] = useState(() => useTabStore.getState().tabs.find((tab) => tab.id === scopeTabId)?.initialChatMessage);
+  const initialMessageSubmitted = useRef(false);
   const contextPanelOpen = useTabStore((state) => state.tabs.find((tab) => tab.id === scopeTabId)?.rightPanelOpen ?? false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -2714,7 +2718,9 @@ export function ChatManagementPage() {
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>(() => orderSessionGroups(groups));
   const [activeSessionCode, setActiveSessionCode] = useState("");
-  const [composerDraftsBySessionCode, setComposerDraftsBySessionCode] = useState<Record<string, string>>({});
+  const [composerDraftsBySessionCode, setComposerDraftsBySessionCode] = useState<Record<string, string>>(() => (
+    initialChatMessage && requestedDraftCode ? { [requestedDraftCode]: initialChatMessage } : {}
+  ));
   const [optimisticActiveSession, setOptimisticActiveSession] = useState<ChatSession | null>(null);
   useEffect(() => {
     const onUpdated = (event: Event) => {
@@ -2953,6 +2959,27 @@ export function ChatManagementPage() {
     ),
     [effectiveAgentCode, selectedModel, selectedReasoningEffort, savingExecutionMode],
   );
+
+  useEffect(() => {
+    if (!initialChatMessage || initialMessageSubmitted.current || !isDraft || !tabVisible) return;
+    if (composer !== initialChatMessage) {
+      initialMessageSubmitted.current = true;
+      useTabStore.getState().updateTab(scopeTabId, { initialChatMessage: undefined });
+      return;
+    }
+    if (!selectedModel?.enabled || savingExecutionMode || creatingSession || !submitterRef.current) return;
+    // Claim before submitting: StrictMode and model updates must not send twice.
+    initialMessageSubmitted.current = true;
+    useTabStore.getState().updateTab(scopeTabId, { initialChatMessage: undefined });
+    setComposer("");
+    const restoreDraft = () => setComposer((current) => current || initialChatMessage);
+    void submitterRef.current.submit({ content: initialChatMessage }).then((accepted) => {
+      if (!accepted) restoreDraft();
+    }).catch((error: unknown) => {
+      restoreDraft();
+      toast.error(error instanceof Error ? error.message : String(error));
+    });
+  }, [initialChatMessage, isDraft, tabVisible, composer, selectedModel, savingExecutionMode, creatingSession, scopeTabId, setComposer, toast]);
 
   const handleRuntimeSessionChange = useCallback((nextSession: RuntimeChatSession | null) => {
     if (!nextSession) return;
