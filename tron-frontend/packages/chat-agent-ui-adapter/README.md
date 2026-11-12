@@ -29,4 +29,4 @@ Tron 页面通过 `AgentChatWindow` 保留完整产品输入与会话范围。�
 `HistoryStep.compaction.blocks`；实时流透传 `agent.memory.compaction.details`。
 记忆块名称与结果由宿主的 notices 文案回调国际化，历史摘要生成单独标注。
 
-Agent UI 依赖统一固定为公共 npm 的 `1.0.0-preview.6`，包含压缩详情展示能力。
+Agent UI 依赖统一固定为公共 npm 的 `1.0.0-preview.7`，包含压缩详情展示、回答后等待状态修正和前端连续计时。
