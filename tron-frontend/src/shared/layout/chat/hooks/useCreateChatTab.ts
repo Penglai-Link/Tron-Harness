@@ -9,23 +9,6 @@ export function useCreateChatTab(workspaceCode: string, projectCode?: string, di
 
   function create(targetDirectoryCode = directoryCode, initialChatMessage?: string) {
     if (!workspaceCode) return;
-    const tabs = useTabStore.getState();
-    const existingDraft = !initialChatMessage && tabs.tabs.find((tab) => {
-      if (tab.initialChatMessage) return false;
-      if (!tab.activeNav?.startsWith("chat-draft:")) return false;
-      const [pathname, search = ""] = tab.path.split("?");
-      if (pathname !== "/chats") return false;
-      const params = new URLSearchParams(search);
-      return Boolean(params.get("draftCode"))
-        && params.get("workspaceCode") === workspaceCode
-        && (params.get("projectCode") ?? undefined) === projectCode
-        && (params.get("directoryCode") ?? undefined) === targetDirectoryCode;
-    });
-    if (existingDraft) {
-      tabs.setActiveTab(existingDraft.id);
-      navigate(existingDraft.path);
-      return;
-    }
     const draftCode = crypto.randomUUID();
     const params = new URLSearchParams({ draftCode, workspaceCode });
     if (projectCode) params.set("projectCode", projectCode);

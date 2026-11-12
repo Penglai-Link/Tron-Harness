@@ -250,7 +250,8 @@ export default function AppRoutePage() {
         : titleTranslationKey
           ? t(titleTranslationKey)
           : resolved.route.title;
-      const activeNav = sessionActiveNav ?? resolved.route.activeNav;
+      const activeNav = sessionActiveNav ?? (resolved.route.pageId === "topics.detail"
+        ? `topic:${pathname}` : resolved.route.activeNav);
 
       // Stateful detail pages react to their query themselves. Replacing their
       // cache entry on every version change races with that page-level reload.
