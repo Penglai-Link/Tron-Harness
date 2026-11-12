@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import {
   Link,
   useLocation,
+  useNavigate,
 } from "react-router";
 
 import { cn } from "@/shared/lib/utils";
@@ -45,6 +46,31 @@ interface SettingsShellProps {
 }
 
 const settingsReturnToStorageKey = "tron.settings.returnTo";
+
+// Escape first closes the topmost overlay. Settings pages mount dialogs,
+// menus, selectors, and fullscreen viewers, so leave those keys to the layer.
+const escapeLayerSelector = [
+  "[aria-modal='true']",
+  "[data-slot='dialog-content']",
+  "[data-slot='sheet-content']",
+  "[data-slot='popover-content']",
+  "[data-slot='dropdown-menu-content']",
+  "[data-slot='dropdown-menu-sub-content']",
+  "[data-slot='context-menu-content']",
+  "[data-slot='select-positioner']",
+  "[data-slot='combobox-positioner']",
+  "[data-slot='tooltip-content']",
+  "[role='dialog']",
+  "[role='alertdialog']",
+  "[role='menu']",
+  "[role='listbox']",
+].join(", ");
+
+function hasOpenEscapeLayer() {
+  if (typeof document === "undefined") return false;
+  if (document.body.style.overflow === "hidden") return true;
+  return document.querySelector(escapeLayerSelector) !== null;
+}
 
 function resolveReturnTo(state: unknown, tabs: TabItem[], activeTabId: string | null) {
   // Closing the last tab retains its URL; returning to it would reopen that tab.
@@ -78,6 +104,7 @@ function resolveReturnTo(state: unknown, tabs: TabItem[], activeTabId: string | 
 export function SettingsShell({ activeItem, children, contentClassName, items }: SettingsShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const location = useLocation();
+  const navigate = useNavigate();
   const tabs = useTabStore((state) => state.tabs);
   const activeTabId = useTabStore((state) => state.activeTabId);
   const returnTo = resolveReturnTo(location.state, tabs, activeTabId);
@@ -98,6 +125,24 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
       window.sessionStorage.setItem(settingsReturnToStorageKey, returnTo);
     }
   }, [returnTo]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Escape"
+        || event.defaultPrevented
+        || event.isComposing
+        || event.repeat
+      ) {
+        return;
+      }
+      if (hasOpenEscapeLayer()) return;
+      navigate(returnTo);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [navigate, returnTo]);
 
   useEffect(() => {
     if (previousActiveGroupKeyRef.current === activeGroupKey) return;
