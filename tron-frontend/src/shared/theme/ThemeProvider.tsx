@@ -132,6 +132,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [activeSkin, setActiveSkin] = useState<Skin>(() => builtins.find((skin) => skin.id === localStorage.getItem("tron.skin")) ?? builtins[0]);
   const [colorMode, setColorModeState] = useState<ColorMode>(readColorMode);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  useEffect(() => {
+    document.documentElement.dataset.tronColorMode = colorMode;
+  }, [colorMode]);
   const resolvedMode = colorMode === "system" ? (systemDark ? "dark" : "light") : colorMode;
   const [displayedSkin, setDisplayedSkin] = useState(activeSkin);
   const [displayedMode, setDisplayedMode] = useState(resolvedMode);

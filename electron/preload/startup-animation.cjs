@@ -5,9 +5,12 @@ module.exports = function observeStartupAnimation({ ipcRenderer, window, documen
     let ready = false;
     const update = () => {
       const nextTheme = document.documentElement.dataset.theme;
-      if (["light", "matrix-dark"].includes(nextTheme) && theme !== nextTheme) {
-        theme = nextTheme;
-        ipcRenderer.send("tron-animation:theme", theme);
+      const colorMode = document.documentElement.dataset.tronColorMode
+        || window.localStorage.getItem("tron.color-mode") || "system";
+      const signature = `${nextTheme}:${colorMode}`;
+      if (["light", "matrix-dark"].includes(nextTheme) && theme !== signature) {
+        theme = signature;
+        ipcRenderer.send("tron-animation:theme", { theme: nextTheme, colorMode });
       }
       if (!ready && document.querySelector("[data-tron-entry-ready]")) {
         ready = true;
@@ -15,7 +18,7 @@ module.exports = function observeStartupAnimation({ ipcRenderer, window, documen
       }
     };
     const observer = new MutationObserver(update);
-    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "data-theme", "data-renderer", "data-tron-entry-ready"] });
+    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "data-theme", "data-tron-color-mode", "data-renderer", "data-tron-entry-ready"] });
     update();
     window.addEventListener("pagehide", () => observer.disconnect(), { once: true });
   }, { once: true });

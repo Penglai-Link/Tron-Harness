@@ -45,6 +45,8 @@
 .tron-entry-brand span {
   --ink: color-mix(in srgb, var(--entry-foreground) 94%, var(--entry-primary));
   display: inline-block;
+  padding-inline-end: 0.1em;
+  margin-inline-end: -0.1em;
   color: var(--entry-foreground);
   animation: tron-entry-unfold 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }

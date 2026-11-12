@@ -38,15 +38,15 @@ function startupDetails() {
   });
 }
 
-function startupPageHtml({ message, dataDir, logPath, locale = "en", failed = false }) {
+function startupPageHtml({ message, dataDir, logPath, locale = "en", theme = "light", failed = false }) {
   const zh = locale.startsWith("zh");
   return `<!doctype html>
 <html lang="${zh ? "zh-CN" : "en"}">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TRON Harness</title>
 <style>
 ${entrySceneCss}
-:root { ${paletteVariables(startupPalettes.light)} color-scheme:light; font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--background); color:var(--foreground); }
-@media(prefers-color-scheme:dark) { :root { ${paletteVariables(startupPalettes["matrix-dark"])} color-scheme:dark; } }
+:root { ${paletteVariables(startupPalette(theme))} color-scheme:${theme === "light" ? "light" : "dark"}; font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--background); color:var(--foreground); }
+
 * { box-sizing:border-box; }
 html,body { min-height:100%; margin:0; }
 body::before { content:""; position:fixed; inset:0 0 auto; height:40px; z-index:2; -webkit-app-region:drag; }

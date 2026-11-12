@@ -1,3 +1,4 @@
+const { readStartupColorMode, startupTheme } = require("./startup-theme.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
@@ -223,7 +224,7 @@ function configureBrowserTabHost(window) {
 }
 
 function createMainWindow() {
-  const palette = startupPalette(nativeTheme.shouldUseDarkColors ? "matrix-dark" : "light");
+  const palette = startupPalette(startupTheme(readStartupColorMode(app), nativeTheme));
   const window = new BrowserWindow({
     height: 920,
     show: false,
@@ -262,7 +263,7 @@ function createMainWindow() {
     window.setFullScreen(!window.isFullScreen());
   };
   window.webContents.on("before-input-event", onBeforeInput);
-  startupScene = require("./startup-scene.cjs").createStartupScene({ window, WebContentsView, ipcMain, nativeTheme, onBeforeInput });
+  startupScene = require("./startup-scene.cjs").createStartupScene({ app, window, WebContentsView, ipcMain, nativeTheme, onBeforeInput });
 
   window.on("close", (event) => {
     if (isQuitting || (process.platform !== "darwin" && !residentDesktop?.isResident())) {
@@ -341,6 +342,7 @@ function startupPageHtml(message, { failed = false } = {}) {
     dataDir: state.appDataDir,
     logPath: state.backendLogPath,
     locale: app.getLocale(),
+    theme: startupTheme(readStartupColorMode(app), nativeTheme),
     failed
   });
 }

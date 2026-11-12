@@ -1,14 +1,18 @@
+const { readStartupColorMode, saveStartupColorMode, startupTheme } = require("./startup-theme.cjs");
 const { startupPalette } = require("./startup-page.cjs");
 
 // Presentation only: retain the live startup scene while the main document loads.
-function createStartupScene({ window, WebContentsView, ipcMain, nativeTheme, onBeforeInput }) {
-  const systemTheme = () => nativeTheme.shouldUseDarkColors ? "matrix-dark" : "light";
-  let appTheme = null;
+function createStartupScene({ app, window, WebContentsView, ipcMain, nativeTheme, onBeforeInput }) {
+  let colorMode = readStartupColorMode(app);
   let view = null;
   let fallbackTimer = null;
   const syncWindowTheme = () => {
-    // Startup follows the OS; the app preference takes over once it is ready.
-    const palette = startupPalette(view ? systemTheme() : appTheme ?? systemTheme());
+    const theme = startupTheme(colorMode, nativeTheme);
+    const palette = startupPalette(theme);
+    if (view && !view.webContents.isDestroyed()) {
+      const variables = Object.entries(palette);
+      void view.webContents.executeJavaScript(`(() => { for (const [key, value] of ${JSON.stringify(variables)}) document.documentElement.style.setProperty("--" + key, value); document.documentElement.style.colorScheme = ${JSON.stringify(theme === "light" ? "light" : "dark")}; })()`).catch(() => {});
+    }
     window.setBackgroundColor(palette.background);
     view?.setBackgroundColor(palette.background);
     if (process.platform !== "darwin") {
@@ -31,8 +35,10 @@ function createStartupScene({ window, WebContentsView, ipcMain, nativeTheme, onB
   };
   const ready = (event) => { if (event.sender === window.webContents) dismiss(); };
   const saveTheme = (event, value) => {
-    if (event.sender !== window.webContents || !["light", "matrix-dark"].includes(value)) return;
-    appTheme = value;
+    if (event.sender !== window.webContents || !value || !["light", "matrix-dark"].includes(value.theme)
+      || !["light", "dark", "system"].includes(value.colorMode)) return;
+    colorMode = value.colorMode;
+    saveStartupColorMode(app, colorMode);
     syncWindowTheme();
   };
   ipcMain.on("tron-animation:ready", ready);
@@ -55,6 +61,7 @@ function createStartupScene({ window, WebContentsView, ipcMain, nativeTheme, onB
         resize();
       }
       await view.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      syncWindowTheme();
     },
     dismissIfNotReadyAfter(delayMs = 5000) {
       if (!view || fallbackTimer) return;
