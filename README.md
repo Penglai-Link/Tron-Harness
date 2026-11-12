@@ -1,7 +1,9 @@
 <div align="center">
   <img src="electron/assets/tron.png" alt="Tron 黑洞标志" width="160">
   <h1>TRON Harness</h1>
+  <p><strong>简体中文</strong> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a></p>
   <p>
+    <a href="https://github.com/Penglai-Link/Tron-Harness/releases/latest"><img src="https://img.shields.io/github/v/release/Penglai-Link/Tron-Harness?style=flat-square&amp;label=Release&amp;color=2563EB" alt="Latest release"></a>
     <a href="https://personai.chat/person-ai-index/"><img src="https://img.shields.io/badge/Person--AI-Ecosystem-7C3AED?style=flat-square" alt="Person-AI Ecosystem"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="License: AGPL-3.0-only"></a>
     <a href="tron-backend"><img src="https://img.shields.io/badge/Rust-Backend-CE422B?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust Backend"></a>
