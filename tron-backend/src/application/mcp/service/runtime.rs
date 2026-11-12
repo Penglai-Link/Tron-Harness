@@ -2,7 +2,10 @@ use super::McpService;
 use crate::application::agent::tool_framework::FrameworkToolRegistryExt;
 use crate::domain::{
     agent::{EffectiveTool, McpAccessMode, ToolRegistry},
-    mcp::{McpError, McpServerAuthKind, McpServerTransportKind, PlatformMcpServerRecord},
+    mcp::{
+        McpError, McpHealthStatus, McpServerAuthKind, McpServerTransportKind,
+        PlatformMcpServerRecord,
+    },
 };
 use eliteforge_agent_core as fw;
 use eliteforge_agent_official_plugin_tools_mcp::{
@@ -89,10 +92,15 @@ impl McpService {
             let (client, bindings) = match discovered {
                 Ok(value) => value,
                 Err(error) => {
+                    self.record_runtime_health(
+                        &server.server_code,
+                        Some(runtime_error_message(&error)),
+                    );
                     warnings.push(runtime_warning(&server, error));
                     continue;
                 }
             };
+            self.record_runtime_health(&server.server_code, None);
             let mut public_bindings = Vec::new();
             for mut binding in bindings {
                 // Resource operations use their public call name and executor too.
@@ -123,7 +131,8 @@ impl McpService {
                     required_variable_keys: required_variable_keys(&server),
                 });
                 binding.domain_code = Some(domain_code);
-                binding.category = Some(crate::application::agent::builtin_category("tron.platform"));
+                binding.category =
+                    Some(crate::application::agent::builtin_category("tron.platform"));
                 binding.descriptor.id = format!("tron.{tool_name}");
                 binding.descriptor.call_name = tool_name;
                 if let (Some(resources), Some(owner)) = (
@@ -144,6 +153,7 @@ impl McpService {
                     inner: binding.executor,
                     service: self.clone(),
                     server: server.server_code.clone(),
+                    tool: remote_name,
                 });
                 descriptors.push(binding.descriptor.clone());
                 public_bindings.push(binding);
@@ -244,6 +254,32 @@ async fn verify(config: McpConfig) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 impl McpService {
+    // Update the current row rather than writing back a run's stale configuration.
+    fn record_runtime_health(&self, server_code: &str, failure: Option<String>) {
+        let result = (|| -> Result<(), McpError> {
+            let mut repository = self
+                .repository
+                .lock()
+                .expect("MCP repository mutex poisoned");
+            let Some(mut server) = repository.get_platform_server(server_code)? else {
+                return Ok(());
+            };
+            server.last_health_status = if failure.is_some() {
+                McpHealthStatus::Unhealthy
+            } else {
+                McpHealthStatus::Healthy
+            };
+            server.last_health_message = failure.map(|message| {
+                crate::application::short_term_memory::redact_sensitive_text(&message)
+            });
+            server.last_health_checked_at = Some(crate::shared::time::current_timestamp());
+            repository.upsert_platform_server(&server)
+        })();
+        if let Err(error) = result {
+            tracing::warn!(server_code, error = ?error, "MCP runtime health update failed");
+        }
+    }
+
     fn resolve_runtime_servers(
         &self,
         workspace_code: &str,
@@ -424,6 +460,7 @@ struct CurrentMcpTool {
     inner: std::sync::Arc<dyn fw::Tool>,
     service: McpService,
     server: String,
+    tool: String,
 }
 #[async_trait::async_trait]
 impl fw::Tool for CurrentMcpTool {
@@ -432,16 +469,42 @@ impl fw::Tool for CurrentMcpTool {
         args: Value,
         run: &fw::RunContext,
     ) -> Result<fw::ToolOutput, fw::ToolError> {
-        if !self.service.capability_available(&self.server)
-            || !self
-                .service
-                .get_platform_server(&self.server)
-                .is_ok_and(|s| s.enabled)
-        {
-            return Err(fw::ToolError::Failed(
-                "MCP server is no longer available".into(),
-            ));
+        let server = self
+            .service
+            .get_platform_server(&self.server)
+            .map_err(|error| {
+                fw::ToolError::Failed(format!(
+                    "MCP server `{}` lookup failed: {error}",
+                    self.server
+                ))
+            })?;
+        if !self.service.capability_available(&self.server) || !server.enabled {
+            return Err(fw::ToolError::Failed(format!(
+                "MCP server `{}` or its capability package is disabled",
+                self.server
+            )));
         }
-        self.inner.call(args, run).await
+        match self.inner.call(args, run).await {
+            Ok(output) => Ok(output),
+            Err(error) => {
+                let (indeterminate, detail) = match error {
+                    fw::ToolError::Indeterminate(detail) => (true, detail),
+                    fw::ToolError::Failed(detail) => (false, detail),
+                };
+                let message = format!(
+                    "MCP server `{}`, tool `{}`: {detail}",
+                    self.server, self.tool
+                );
+                if indeterminate {
+                    self.service
+                        .record_runtime_health(&self.server, Some(message.clone()));
+                    // A failed response does not prove that the remote operation
+                    // had no effect. Preserve uncertainty and never replay it.
+                    Err(fw::ToolError::Indeterminate(message))
+                } else {
+                    Err(fw::ToolError::Failed(message))
+                }
+            }
+        }
     }
 }

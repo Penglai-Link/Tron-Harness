@@ -311,6 +311,7 @@ export function PlatformMcpServersPage() {
         </SurfaceCard>
 
         <DataTable<PlatformMcpServerRecord>
+          tableClassName="table-fixed min-w-[900px]"
           title={pageT("table.title", "Platform registry")}
           rows={pagination.visibleItems}
           rowKey={(row) => row.serverCode}
@@ -346,12 +347,13 @@ export function PlatformMcpServersPage() {
               id: "server",
               header: pageT("table.columns.server", "Server"),
               width: "24%",
+              cellClassName: "overflow-hidden",
               render: (row) => (
-                <div>
-                  <p className="font-medium text-[var(--color-on-surface)]">{row.name}</p>
-                  <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{row.serverCode}</p>
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-[var(--color-on-surface)]" title={row.name}>{row.name}</p>
+                  <p className="mt-1 truncate font-mono text-[12px] text-[var(--color-on-surface-variant)]" title={row.serverCode}>{row.serverCode}</p>
                   {row.description ? (
-                    <p className="mt-1 line-clamp-2 text-[13px] text-[var(--color-on-surface-variant)]">{row.description}</p>
+                    <p className="mt-1 truncate text-[13px] text-[var(--color-on-surface-variant)]" title={row.description}>{row.description}</p>
                   ) : null}
                 </div>
               ),
@@ -371,7 +373,7 @@ export function PlatformMcpServersPage() {
               header: pageT("table.columns.endpoint", "Endpoint"),
               width: "24%",
               render: (row) => (
-                <span className="block max-w-[28rem] truncate font-mono text-[13px] text-[var(--color-on-surface-variant)]">
+                <span className="block max-w-full truncate font-mono text-[13px] text-[var(--color-on-surface-variant)]" title={formatPlatformMcpEndpoint(row)}>
                   {formatPlatformMcpEndpoint(row)}
                 </span>
               ),

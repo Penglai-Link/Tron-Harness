@@ -35,6 +35,9 @@ impl SkillRegistryService {
                 updated_at: now.clone(),
             })
             .collect::<Vec<_>>();
+        let controllers = if pack == crate::domain::computer_use::PACK_ID && enabled {
+            crate::domain::computer_use::CONTROLLERS.iter().map(|agent| (*agent).to_owned()).collect::<Vec<_>>()
+        } else { vec![] };
         let mut repository = self.repository.lock().unwrap();
         let existing = repository.list_registry_skills()?;
         if entries.iter().any(|entry| {
@@ -45,6 +48,15 @@ impl SkillRegistryService {
             return Err(SkillError::DuplicateSkill);
         }
         repository.upsert_registry_skills(&entries)?;
+        // A newly installed/upgraded desktop package receives the requested
+        // primary-controller defaults once. Later scans preserve deselections.
+        for entry in &entries {
+            if !controllers.is_empty() && existing.iter().find(|old| old.skill_name == entry.skill_name)
+                .is_none_or(|old| old.registry_path != entry.registry_path)
+            {
+                repository.replace_skill_agents(&entry.skill_name, &controllers)?;
+            }
+        }
         Ok(())
     }
     /// Read and validate the complete contribution before changing the registry.

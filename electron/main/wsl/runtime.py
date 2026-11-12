@@ -202,7 +202,7 @@ def uninstall(delete_user_data=False):
                         shutil.rmtree(entry)
 
 
-def serve(version, port, nonce):
+def serve(version, port, nonce, bundled_packs=None):
     root, desktop, release = directories(version)
     if not re.fullmatch(r"[0-9a-f]{32}", nonce) or not 1024 <= port <= 65535:
         raise ValueError("invalid-launch-parameters")
@@ -241,6 +241,14 @@ def serve(version, port, nonce):
         "TRON_BACKEND_BIND_ADDRESS": "127.0.0.1",
         "TRON_BACKEND_PORT": str(port),
     })
+    if bundled_packs:
+        bundled = Path(bundled_packs).resolve()
+        if not (bundled / "catalog.json").is_file():
+            raise ValueError("wsl-capability-bundle-missing")
+        environment["TRON_BUNDLED_CAPABILITY_PACKS_DIR"] = str(bundled)
+    powershell = shutil.which("powershell.exe")
+    if powershell:
+        environment["TRON_COMPUTER_USE_POWERSHELL"] = powershell
     stopping = threading.Event()
     for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(signum, lambda *_: stopping.set())
@@ -303,7 +311,7 @@ try:
     elif command == "install":
         install(sys.argv[2], sys.argv[3])
     elif command == "serve":
-        serve(sys.argv[2], int(sys.argv[3]), sys.argv[4])
+        serve(sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5] if len(sys.argv) > 5 else None)
     else:
         raise ValueError("unknown-runtime-command")
 except Exception as error:

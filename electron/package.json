@@ -27,7 +27,6 @@
       "preload/**/*",
       "injection/**/*",
       "assets/**/*",
-      "resources/**/*",
       "package.json"
     ],
     "extraResources": [

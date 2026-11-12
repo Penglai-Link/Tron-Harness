@@ -1,5 +1,8 @@
 use serde::Serialize;
 
+#[path = "capability_skill_contents.rs"]
+mod skills;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityContentInfo {
@@ -32,7 +35,6 @@ pub(super) fn manifest_contents(
     items.extend(manifest.tools.iter().map(|entry| content("Tool",&entry.descriptor.call_name,&entry.descriptor.description)));
     for (kind, names) in [
         ("Plugin", &manifest.plugins),
-        ("Skill", &manifest.skills),
         ("Resource", &manifest.resources),
         ("Permission", &manifest.permissions),
     ] {
@@ -64,6 +66,17 @@ pub(super) fn manifest_contents(
         }),
     );
     items
+}
+
+pub(super) fn installed_contents(
+    path: &std::path::Path,
+    manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest,
+    locale: &str,
+) -> Result<Vec<CapabilityContentInfo>, String> {
+    let mut items = manifest_contents(manifest);
+    items.extend(skills::skill_contents(path, manifest)?);
+    items.extend(navigation_contents(path, manifest, locale)?);
+    Ok(items)
 }
 
 pub(super) fn builtin_tool_descriptors(id: &str) -> Vec<eliteforge_agent_core::ToolDescriptor> {

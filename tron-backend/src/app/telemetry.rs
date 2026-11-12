@@ -290,6 +290,10 @@ impl TraceGuard {
         }
         Self(context, Some(store), std::sync::atomic::AtomicBool::new(true), snapshot)
     }
+    pub(crate) fn trace_id(&self) -> String {
+        self.0.span().span_context().trace_id().to_string()
+    }
+
     pub(crate) fn complete(&self, outcome: &str) {
         if !self.2.swap(false, std::sync::atomic::Ordering::AcqRel) { return; }
         self.0.span().set_attribute(KeyValue::new("agent.operation.outcome", outcome.to_owned()));

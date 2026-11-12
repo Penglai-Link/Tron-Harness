@@ -58,6 +58,7 @@ impl AgentManagementService {
         }
         .into();
         config.group_name = None;
+        restrict_desktop_assignment(&mut config);
         if let Some(prompt) = role_prompt {
             config.role_prompt = prompt
         }
@@ -197,6 +198,7 @@ impl AgentManagementService {
             })
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
         change(&mut config)?;
+        restrict_desktop_assignment(&mut config);
         repository.upsert_platform_internal_agent_config(&config)?;
         drop(repository);
         Ok(platform_view(config, &self.list_tools(None, None, "en-US")))
@@ -248,6 +250,11 @@ impl AgentManagementService {
         command: UpdateWorkspaceInternalAgentPolicyCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.validate_selected_categories(&command.selected_category_codes)?;
+        if !crate::domain::computer_use::allows(code)
+            && command.selected_category_codes.as_ref().is_some_and(|categories| categories.iter().any(|code| code == crate::domain::computer_use::DOMAIN))
+        {
+            return Err(AgentManagementError::InternalAgentPolicyInvalid);
+        }
         if command.max_parallel_tool_calls == Some(0) {
             return Err(AgentManagementError::InternalAgentPolicyInvalid);
         }
@@ -293,13 +300,16 @@ impl AgentManagementService {
         // Dynamic catalog lookups also lock the repository. Validate before the
         // config mutation acquires its guard, and reject the whole selection on error.
         let tools = normalize_string_codes(tools);
-        for code in &tools {
+        for tool_code in &tools {
             let tool = self
-                .tool(code, "en-US")
-                .ok_or_else(|| AgentManagementError::InternalToolUnknown(code.clone()))?;
+                .tool(tool_code, "en-US")
+                .ok_or_else(|| AgentManagementError::InternalToolUnknown(tool_code.clone()))?;
+            if !crate::domain::computer_use::tool_allowed(code, &tool) {
+                return Err(AgentManagementError::InternalToolAssignmentStale(tool_code.clone()));
+            }
             if tool.availability_state != crate::domain::agent::ToolAvailabilityState::Available {
                 return Err(AgentManagementError::InternalToolAssignmentStale(
-                    code.clone(),
+                    tool_code.clone(),
                 ));
             }
         }
@@ -336,7 +346,8 @@ fn platform_view(
     let tools = catalog
         .iter()
         .filter(|tool| {
-            config.tool_assignment_mode.selects_policy(
+            crate::domain::computer_use::tool_allowed(&config.agent_code, tool)
+            && config.tool_assignment_mode.selects_policy(
                 tool,
                 &config.selected_tool_codes,
                 &config.selected_category_codes,
@@ -368,6 +379,14 @@ fn platform_view(
         selected_server_codes: config.selected_server_codes,
         assigned_tool_count: count,
         effective_tool_count: count,
+    }
+}
+
+fn restrict_desktop_assignment(config: &mut PlatformInternalAgentConfig) {
+    if !crate::domain::computer_use::allows(&config.agent_code) {
+        config.selected_tool_codes.retain(|code| !crate::domain::computer_use::is_tool(code, code, None, None));
+        config.selected_category_codes.retain(|code| code != crate::domain::computer_use::DOMAIN);
+        config.selected_server_codes.retain(|code| code != "tron.computer-use.cua-driver");
     }
 }
 

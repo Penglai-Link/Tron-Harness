@@ -1,0 +1,605 @@
+{
+  "defaultLocale": "zh-CN",
+  "tools": {
+    "tron.computer-use.list_apps": {
+      "zh-CN": {
+        "name": "列出应用",
+        "description": "查看正在运行的应用。"
+      },
+      "en-US": {
+        "name": "List apps",
+        "description": "List apps."
+      }
+    },
+    "tron.computer-use.list_windows": {
+      "zh-CN": {
+        "name": "列出窗口",
+        "description": "查看应用打开的窗口。"
+      },
+      "en-US": {
+        "name": "List windows",
+        "description": "List windows."
+      }
+    },
+    "tron.computer-use.get_window_state": {
+      "zh-CN": {
+        "name": "读取界面",
+        "description": "读取窗口中的文字、控件和截图。"
+      },
+      "en-US": {
+        "name": "Read window",
+        "description": "Read window."
+      }
+    },
+    "tron.computer-use.verify_state": {
+      "zh-CN": {
+        "name": "核验结果",
+        "description": "检查界面是否达到预期状态。"
+      },
+      "en-US": {
+        "name": "Verify result",
+        "description": "Verify result."
+      }
+    },
+    "tron.computer-use.launch_app": {
+      "zh-CN": {
+        "name": "打开应用",
+        "description": "启动指定应用或打开文件。"
+      },
+      "en-US": {
+        "name": "Open app",
+        "description": "Open app."
+      }
+    },
+    "tron.computer-use.kill_app": {
+      "zh-CN": {
+        "name": "关闭应用",
+        "description": "结束指定应用进程。"
+      },
+      "en-US": {
+        "name": "Close app",
+        "description": "Close app."
+      }
+    },
+    "tron.computer-use.bring_to_front": {
+      "zh-CN": {
+        "name": "切换窗口",
+        "description": "将指定窗口切到前台。"
+      },
+      "en-US": {
+        "name": "Focus window",
+        "description": "Focus window."
+      }
+    },
+    "tron.computer-use.set_window_frame": {
+      "zh-CN": {
+        "name": "调整窗口",
+        "description": "设置窗口的位置和大小。"
+      },
+      "en-US": {
+        "name": "Resize window",
+        "description": "Resize window."
+      }
+    },
+    "tron.computer-use.invoke_menu": {
+      "zh-CN": {
+        "name": "选择菜单",
+        "description": "执行应用菜单中的指定选项。"
+      },
+      "en-US": {
+        "name": "Choose menu",
+        "description": "Choose menu."
+      }
+    },
+    "tron.computer-use.click": {
+      "zh-CN": {
+        "name": "点击元素",
+        "description": "点击控件或指定位置。"
+      },
+      "en-US": {
+        "name": "Click",
+        "description": "Click."
+      }
+    },
+    "tron.computer-use.double_click": {
+      "zh-CN": {
+        "name": "双击元素",
+        "description": "双击控件或指定位置。"
+      },
+      "en-US": {
+        "name": "Double-click",
+        "description": "Double-click."
+      }
+    },
+    "tron.computer-use.right_click": {
+      "zh-CN": {
+        "name": "右键点击",
+        "description": "打开控件或位置的右键菜单。"
+      },
+      "en-US": {
+        "name": "Right-click",
+        "description": "Right-click."
+      }
+    },
+    "tron.computer-use.drag": {
+      "zh-CN": {
+        "name": "拖动元素",
+        "description": "将鼠标从起点拖到终点。"
+      },
+      "en-US": {
+        "name": "Drag",
+        "description": "Drag."
+      }
+    },
+    "tron.computer-use.type_text": {
+      "zh-CN": {
+        "name": "输入文字",
+        "description": "向指定位置输入文字。"
+      },
+      "en-US": {
+        "name": "Type text",
+        "description": "Type text."
+      }
+    },
+    "tron.computer-use.press_key": {
+      "zh-CN": {
+        "name": "按下按键",
+        "description": "发送一个键盘按键。"
+      },
+      "en-US": {
+        "name": "Press key",
+        "description": "Press key."
+      }
+    },
+    "tron.computer-use.hotkey": {
+      "zh-CN": {
+        "name": "使用快捷键",
+        "description": "发送一组组合按键。"
+      },
+      "en-US": {
+        "name": "Use shortcut",
+        "description": "Use shortcut."
+      }
+    },
+    "tron.computer-use.set_value": {
+      "zh-CN": {
+        "name": "设置控件值",
+        "description": "直接修改输入框等控件的值。"
+      },
+      "en-US": {
+        "name": "Set value",
+        "description": "Set value."
+      }
+    },
+    "tron.computer-use.scroll": {
+      "zh-CN": {
+        "name": "滚动界面",
+        "description": "滚动窗口或指定区域。"
+      },
+      "en-US": {
+        "name": "Scroll",
+        "description": "Scroll."
+      }
+    },
+    "tron.computer-use.clipboard_read": {
+      "zh-CN": {
+        "name": "读取剪贴板",
+        "description": "查看剪贴板中的内容。"
+      },
+      "en-US": {
+        "name": "Read clipboard",
+        "description": "Read clipboard."
+      }
+    },
+    "tron.computer-use.clipboard_write": {
+      "zh-CN": {
+        "name": "写入剪贴板",
+        "description": "将文字、图片或文件写入剪贴板。"
+      },
+      "en-US": {
+        "name": "Write clipboard",
+        "description": "Write clipboard."
+      }
+    },
+    "tron.computer-use.get_screen_size": {
+      "zh-CN": {
+        "name": "查看屏幕尺寸",
+        "description": "读取屏幕的宽度和高度。"
+      },
+      "en-US": {
+        "name": "Screen size",
+        "description": "Screen size."
+      }
+    },
+    "tron.computer-use.get_desktop_state": {
+      "zh-CN": {
+        "name": "读取桌面",
+        "description": "读取桌面布局和截图。"
+      },
+      "en-US": {
+        "name": "Read desktop",
+        "description": "Read desktop."
+      }
+    },
+    "tron.computer-use.get_cursor_position": {
+      "zh-CN": {
+        "name": "查看鼠标位置",
+        "description": "读取鼠标当前坐标。"
+      },
+      "en-US": {
+        "name": "Cursor position",
+        "description": "Cursor position."
+      }
+    },
+    "tron.computer-use.move_cursor": {
+      "zh-CN": {
+        "name": "移动鼠标",
+        "description": "将鼠标移到指定位置。"
+      },
+      "en-US": {
+        "name": "Move cursor",
+        "description": "Move cursor."
+      }
+    },
+    "tron.computer-use.set_agent_cursor_enabled": {
+      "zh-CN": {
+        "name": "显示操作光标",
+        "description": "开启或关闭操作光标。"
+      },
+      "en-US": {
+        "name": "Toggle cursor",
+        "description": "Toggle cursor."
+      }
+    },
+    "tron.computer-use.set_agent_cursor_motion": {
+      "zh-CN": {
+        "name": "调整光标动画",
+        "description": "设置操作光标的移动效果。"
+      },
+      "en-US": {
+        "name": "Cursor motion",
+        "description": "Cursor motion."
+      }
+    },
+    "tron.computer-use.set_agent_cursor_theme": {
+      "zh-CN": {
+        "name": "调整光标样式",
+        "description": "设置操作光标的外观。"
+      },
+      "en-US": {
+        "name": "Cursor style",
+        "description": "Cursor style."
+      }
+    },
+    "tron.computer-use.get_agent_cursor_state": {
+      "zh-CN": {
+        "name": "查看光标状态",
+        "description": "读取操作光标的当前设置。"
+      },
+      "en-US": {
+        "name": "Cursor state",
+        "description": "Cursor state."
+      }
+    },
+    "tron.computer-use.check_permissions": {
+      "zh-CN": {
+        "name": "检查系统权限",
+        "description": "检查辅助功能和屏幕录制权限。"
+      },
+      "en-US": {
+        "name": "Check permissions",
+        "description": "Check permissions."
+      }
+    },
+    "tron.computer-use.health_report": {
+      "zh-CN": {
+        "name": "检查运行状态",
+        "description": "查看电脑操作能力是否正常。"
+      },
+      "en-US": {
+        "name": "Check health",
+        "description": "Check health."
+      }
+    },
+    "tron.computer-use.get_config": {
+      "zh-CN": {
+        "name": "查看操作设置",
+        "description": "读取电脑操作的当前设置。"
+      },
+      "en-US": {
+        "name": "Read settings",
+        "description": "Read settings."
+      }
+    },
+    "tron.computer-use.set_config": {
+      "zh-CN": {
+        "name": "修改操作设置",
+        "description": "更新电脑操作的运行设置。"
+      },
+      "en-US": {
+        "name": "Update settings",
+        "description": "Update settings."
+      }
+    },
+    "tron.computer-use.get_accessibility_tree": {
+      "zh-CN": {
+        "name": "读取控件树",
+        "description": "查看窗口中的控件及其层级。"
+      },
+      "en-US": {
+        "name": "Read controls",
+        "description": "Read controls."
+      }
+    },
+    "tron.computer-use.zoom": {
+      "zh-CN": {
+        "name": "放大截图",
+        "description": "查看指定画面区域的细节。"
+      },
+      "en-US": {
+        "name": "Zoom screenshot",
+        "description": "Zoom screenshot."
+      }
+    },
+    "tron.computer-use.page": {
+      "zh-CN": {
+        "name": "操作网页",
+        "description": "在浏览器页面中执行指定操作。"
+      },
+      "en-US": {
+        "name": "Use page",
+        "description": "Use page."
+      }
+    },
+    "tron.computer-use.get_browser_state": {
+      "zh-CN": {
+        "name": "读取浏览器",
+        "description": "查看当前网页和浏览器状态。"
+      },
+      "en-US": {
+        "name": "Read browser",
+        "description": "Read browser."
+      }
+    },
+    "tron.computer-use.browser_prepare": {
+      "zh-CN": {
+        "name": "准备浏览器",
+        "description": "打开或连接用于操作的浏览器。"
+      },
+      "en-US": {
+        "name": "Prepare browser",
+        "description": "Prepare browser."
+      }
+    },
+    "tron.computer-use.browser_navigate": {
+      "zh-CN": {
+        "name": "打开网页",
+        "description": "访问网址或切换网页。"
+      },
+      "en-US": {
+        "name": "Open page",
+        "description": "Open page."
+      }
+    },
+    "tron.computer-use.browser_click": {
+      "zh-CN": {
+        "name": "点击网页元素",
+        "description": "点击网页中的控件。"
+      },
+      "en-US": {
+        "name": "Click page",
+        "description": "Click page."
+      }
+    },
+    "tron.computer-use.browser_type": {
+      "zh-CN": {
+        "name": "填写网页",
+        "description": "向网页输入框填写文字。"
+      },
+      "en-US": {
+        "name": "Fill page",
+        "description": "Fill page."
+      }
+    },
+    "tron.computer-use.browser_select": {
+      "zh-CN": {
+        "name": "选择网页选项",
+        "description": "选择网页下拉列表中的选项。"
+      },
+      "en-US": {
+        "name": "Select option",
+        "description": "Select option."
+      }
+    },
+    "tron.computer-use.browser_dialog": {
+      "zh-CN": {
+        "name": "处理网页弹窗",
+        "description": "确认、取消或填写网页弹窗。"
+      },
+      "en-US": {
+        "name": "Handle dialog",
+        "description": "Handle dialog."
+      }
+    },
+    "tron.computer-use.browser_set_input_files": {
+      "zh-CN": {
+        "name": "上传文件",
+        "description": "为网页上传控件选择文件。"
+      },
+      "en-US": {
+        "name": "Upload files",
+        "description": "Upload files."
+      }
+    },
+    "tron.computer-use.browser_download": {
+      "zh-CN": {
+        "name": "下载文件",
+        "description": "保存网页提供的下载文件。"
+      },
+      "en-US": {
+        "name": "Download file",
+        "description": "Download file."
+      }
+    },
+    "tron.computer-use.browser_pointer": {
+      "zh-CN": {
+        "name": "移动网页指针",
+        "description": "在网页中移动或操作鼠标。"
+      },
+      "en-US": {
+        "name": "Use page pointer",
+        "description": "Use page pointer."
+      }
+    },
+    "tron.computer-use.start_recording": {
+      "zh-CN": {
+        "name": "开始录制",
+        "description": "开始记录桌面操作。"
+      },
+      "en-US": {
+        "name": "Start recording",
+        "description": "Start recording."
+      }
+    },
+    "tron.computer-use.stop_recording": {
+      "zh-CN": {
+        "name": "停止录制",
+        "description": "结束并保存桌面操作记录。"
+      },
+      "en-US": {
+        "name": "Stop recording",
+        "description": "Stop recording."
+      }
+    },
+    "tron.computer-use.get_recording_state": {
+      "zh-CN": {
+        "name": "查看录制状态",
+        "description": "检查当前录制进度。"
+      },
+      "en-US": {
+        "name": "Recording state",
+        "description": "Recording state."
+      }
+    },
+    "tron.computer-use.replay_trajectory": {
+      "zh-CN": {
+        "name": "回放操作",
+        "description": "重新执行已记录的操作。"
+      },
+      "en-US": {
+        "name": "Replay actions",
+        "description": "Replay actions."
+      }
+    },
+    "tron.computer-use.install_ffmpeg": {
+      "zh-CN": {
+        "name": "安装录制组件",
+        "description": "安装录屏所需的 FFmpeg。"
+      },
+      "en-US": {
+        "name": "Install recorder",
+        "description": "Install recorder."
+      }
+    },
+    "tron.computer-use.start_session": {
+      "zh-CN": {
+        "name": "开始操作会话",
+        "description": "建立一次桌面操作会话。"
+      },
+      "en-US": {
+        "name": "Start session",
+        "description": "Start session."
+      }
+    },
+    "tron.computer-use.escalate_session": {
+      "zh-CN": {
+        "name": "扩大操作范围",
+        "description": "申请扩大当前会话的访问范围。"
+      },
+      "en-US": {
+        "name": "Expand session",
+        "description": "Expand session."
+      }
+    },
+    "tron.computer-use.get_session": {
+      "zh-CN": {
+        "name": "查看操作会话",
+        "description": "读取指定会话的信息。"
+      },
+      "en-US": {
+        "name": "Read session",
+        "description": "Read session."
+      }
+    },
+    "tron.computer-use.list_sessions": {
+      "zh-CN": {
+        "name": "列出操作会话",
+        "description": "查看现有桌面操作会话。"
+      },
+      "en-US": {
+        "name": "List sessions",
+        "description": "List sessions."
+      }
+    },
+    "tron.computer-use.get_session_state": {
+      "zh-CN": {
+        "name": "查看会话范围",
+        "description": "检查会话当前可访问的范围。"
+      },
+      "en-US": {
+        "name": "Session scope",
+        "description": "Session scope."
+      }
+    },
+    "tron.computer-use.end_session": {
+      "zh-CN": {
+        "name": "结束操作会话",
+        "description": "关闭指定的桌面操作会话。"
+      },
+      "en-US": {
+        "name": "End session",
+        "description": "End session."
+      }
+    },
+    "tron.computer-use.get_guide": {
+      "zh-CN": {
+        "name": "查看操作指南",
+        "description": "读取电脑操作的使用说明。"
+      },
+      "en-US": {
+        "name": "Read guide",
+        "description": "Read guide."
+      }
+    },
+    "tron.computer-use.run_steps": {
+      "zh-CN": {
+        "name": "执行操作步骤",
+        "description": "依次执行一组操作并检查结果。"
+      },
+      "en-US": {
+        "name": "Run steps",
+        "description": "Run steps."
+      }
+    },
+    "tron.computer-use.run_script": {
+      "zh-CN": {
+        "name": "执行操作脚本",
+        "description": "执行包含判断或循环的操作流程。"
+      },
+      "en-US": {
+        "name": "Run script",
+        "description": "Run script."
+      }
+    },
+    "tron.computer-use.parse_visual_regions": {
+      "zh-CN": {
+        "name": "识别画面区域",
+        "description": "从截图中识别可操作区域。"
+      },
+      "en-US": {
+        "name": "Find visual regions",
+        "description": "Find visual regions."
+      }
+    }
+  }
+}

@@ -92,6 +92,15 @@ struct SkillFrontmatter {
     description: Option<String>,
 }
 
+pub(crate) fn skill_metadata(markdown: &str) -> Result<(String, String), SkillError> {
+    Ok((
+        parse_skill_name(markdown)?,
+        parse_skill_frontmatter(markdown)
+            .description
+            .unwrap_or_default(),
+    ))
+}
+
 impl SkillRegistryService {
     pub fn new(
         repository: impl SkillRegistryRepository + 'static,

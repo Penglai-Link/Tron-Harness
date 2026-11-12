@@ -454,6 +454,18 @@ export function fetchToolDomains(signal?: AbortSignal) {
   ).then((records) => records.map(normalizeToolCatalogDomainRecord));
 }
 
+export interface ToolCatalogIssueRecord {
+  toolCode: string | null;
+  toolName: string | null;
+  providerId: string | null;
+  packId: string | null;
+  message: string;
+}
+
+export function fetchToolCatalogIssues(signal?: AbortSignal) {
+  return requestApi<ToolCatalogIssueRecord[]>(agentApiEndpoints.getToolCatalogIssues, { signal });
+}
+
 export function fetchToolCategories(signal?: AbortSignal) {
   return requestApi<{ code: string; name: string; toolCount: number }[]>(
     agentApiEndpoints.getToolCategories,

@@ -1,0 +1,38 @@
+diff --git a/node_modules/@personai/agent-ui-chat-core/dist/index.js b/node_modules/@personai/agent-ui-chat-core/dist/index.js
+index 53e3ef5..04fa88f 100644
+--- a/node_modules/@personai/agent-ui-chat-core/dist/index.js
++++ b/node_modules/@personai/agent-ui-chat-core/dist/index.js
+@@ -1869,6 +1869,7 @@ function $e(e) {
+ 				kind: "runError",
+ 				code: e,
+ 				message: t,
++				diagnostic: s.diagnostic ?? n?.diagnostic,
+ 				...e.toLowerCase() === "tool_schema_over_budget" ? { toolSchemaBudget: Xe(t) } : {}
+ 			};
+ 		}
+@@ -2117,7 +2118,9 @@ function At(e, t, n) {
+ 	return r === kt(a) || r === kt(i);
+ }
+ function jt(e, t, n, r) {
+-	let i = E(e, t, { locale: r }), a = n?.trim(), o = a && !At(e, a, t) ? a : i.title, s = i.subject;
++	let a = n?.trim();
++	if (a && !At(e, a, t)) return a;
++	let i = E(e, t, { locale: r }), o = i.title, s = i.subject;
+ 	return !s || o.includes(s) ? o : `${o} ${s}`;
+ }
+ function Mt(e, t = void 0, n, r) {
+diff --git a/node_modules/@personai/agent-ui-chat-core/dist/src/transcript.d.ts b/node_modules/@personai/agent-ui-chat-core/dist/src/transcript.d.ts
+index 1a71d60..3f046af 100644
+--- a/node_modules/@personai/agent-ui-chat-core/dist/src/transcript.d.ts
++++ b/node_modules/@personai/agent-ui-chat-core/dist/src/transcript.d.ts
+@@ -140,8 +140,8 @@ export declare function isRawToolNameOverride(rawToolName: string, hostName: str
+ /**
+  * Compact summary for a tool row inside a grouped run. A host-supplied display
+  * name still wins, but only when it is actually readable: a name that merely
+- * echoes the raw tool id is ignored in favor of the presenter title. The
+- * argument subject is always parsed by the presenter.
++ * echoes the raw tool id is ignored in favor of the presenter title. Subjects
++ * are appended only when no readable host-supplied name is available.
+  */
+ export declare function toolCompactLabel(rawToolName: string, rawArgs: unknown, displayName?: string, locale?: string): string;
+ /**

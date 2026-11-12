@@ -100,7 +100,8 @@ impl AgentManagementService {
                 tools
                     .iter()
                     .filter(|tool| {
-                        mode.includes_policy(tool, &selected, &policy.selected_category_codes)
+                        crate::domain::computer_use::tool_allowed(&agent_code, tool)
+                            && mode.includes_policy(tool, &selected, &policy.selected_category_codes)
                     })
                     .map(|tool| tool.tool_code.clone())
                     .collect(),
@@ -174,6 +175,11 @@ impl AgentManagementService {
             return Err(AgentManagementError::InternalAgentPolicyInvalid);
         }
         self.validate_selected_categories(&command.selected_category_codes)?;
+        if !crate::domain::computer_use::allows(agent_code)
+            && command.selected_category_codes.as_ref().is_some_and(|categories| categories.iter().any(|code| code == crate::domain::computer_use::DOMAIN))
+        {
+            return Err(AgentManagementError::InternalAgentPolicyInvalid);
+        }
         self.active_workspace_detail(workspace_code)?;
         let definition = self
             .resolve_internal_agent_default(workspace_code, agent_code)?
@@ -299,6 +305,9 @@ impl AgentManagementService {
                 let Some(tool_definition) = self.tool(&trimmed, "en-US") else {
                     return Err(AgentManagementError::InternalToolUnknown(trimmed));
                 };
+                if !crate::domain::computer_use::tool_allowed(agent_code, &tool_definition) {
+                    return Err(AgentManagementError::InternalToolAssignmentStale(trimmed));
+                }
                 if tool_definition.availability_state
                     != crate::domain::agent::ToolAvailabilityState::Available
                 {

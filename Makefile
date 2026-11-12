@@ -203,7 +203,7 @@ export CCACHE_DIR ?= $(RUST_CACHE_DIR)/ccache
 help:
 	@echo "Common commands:"
 	@echo "  make install    Install frontend and backend dependencies"
-	@echo "  make clean      Run backend, frontend, integrated web, and desktop cleanup"
+	@echo "  make clean      清理后端、前端、集成 Web、桌面及 Computer Use 能力包构建产物"
 	@echo "  make version VERSION=0.2.0  Set and synchronize the product revision"
 	@echo "  make version-check           Verify all product manifests use revision"
 	@echo ""
@@ -218,6 +218,9 @@ help:
 	@echo ""
 	@echo "Tron 能力包（Framework 依赖来自公开 Git 仓库）:"
 	@echo "  make harness-capability-check Compile the Tron capability package"
+	@echo "  make capability-computer-use 构建可导入的 Computer Use 能力包（当前系统与架构）"
+	@echo "                    VERSION 留空或与能力包 manifest 版本一致；SKIP_TESTS=true/false（本目标不运行测试）"
+	@echo "                    WSL2 构建需传入 COMPUTER_USE_WINDOWS_PACKAGE=同版本同架构的Windows包路径"
 	@echo ""
 	@echo "Backend commands:"
 	@echo "  make be-install   Fetch backend dependencies"
@@ -248,6 +251,8 @@ help:
 	@echo "Desktop commands:"
 	@echo "  make desktop-check     Check desktop syntax, WSL bootstrap and updater flows"
 	@echo "  make desktop-build     Build desktop installer packages and sidecar binary"
+	@echo "                         自动内置当前平台和架构的 Computer Use 包；Windows 同时内置 WSL2 桥接包"
+	@echo "                         优先复用已校验的现成包；缺失或不匹配时运行 make capability-computer-use"
 	@echo "                         Ubuntu: AppImage、deb、rpm，自动检查并安装缺失的打包工具"
 	@echo "  make desktop-dev       Build desktop dependencies and run Electron dev mode"
 	@echo "  make desktop-clean     Remove desktop build artifacts"
@@ -271,7 +276,7 @@ else
 endif
 
 .PHONY: clean
-clean: be-clean fe-clean web-clean desktop-clean
+clean: be-clean fe-clean web-clean desktop-clean _computer-use-clean
 
 .PHONY: install
 install: fe-install be-install
@@ -465,14 +470,25 @@ endif
 
 .PHONY: desktop-check
 desktop-check:
+	$(NODE) --check "scripts/prepare-desktop-capability-packs.cjs"
+	$(NODE) --check "$(ELECTRON_DIR)/main/capability-packs.cjs"
 	$(NODE) --check "$(ELECTRON_DIR)/main/wsl-backend.cjs"
 	$(NODE) --check "$(ELECTRON_DIR)/main/wsl-download.cjs"
 	$(NODE) --check "$(ELECTRON_DIR)/main/index.cjs"
 	$(NODE) --test "$(ELECTRON_DIR)/scripts/wsl-dependencies.test.cjs" "$(ELECTRON_DIR)/scripts/wsl-download.test.cjs" "$(ELECTRON_DIR)/scripts/updater.test.cjs"
 
 .PHONY: desktop-build
+# A stalled sccache server can block both the capability pack and backend.
+# Keep desktop packaging independent of the cache on macOS; Cargo still
+# reuses its normal target artifacts. Other targets retain their wrapper.
+ifeq ($(HOST_OS),posix)
+ifeq ($(shell uname -s),Darwin)
+desktop-build: export RUSTC_WRAPPER :=
+endif
+endif
 desktop-build: _desktop-build-tools
 	$(MAKE) desktop-clean
+	$(MAKE) _desktop-capability-packs
 	$(MAKE) web-assets
 ifeq ($(HOST_OS),windows)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
@@ -494,12 +510,23 @@ else
 	cp -- "$(BACKEND_DIR)/application.yaml" "$(ELECTRON_DIR)/resources/application.yaml"
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
 	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
-	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
+	# Apple libLTO may be older than rustc's LLVM and unable to read bundled bitcode.
+	@if [ "$$(uname -s)" = Darwin ]; then \
+		CARGO_PROFILE_RELEASE_LTO=false $(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release; \
+	else \
+		$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release; \
+	fi
 	test -f $(BACKEND_RELEASE_PATH)
 	cp $(BACKEND_RELEASE_PATH) $(DESKTOP_SIDECAR_PATH)
 	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) install
 	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) run -s ensure-electron
-	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) run -s package
+	@if [ "$$(uname -s)" = Darwin ] && [ ! -f "$(ELECTRON_DIR)/build/entitlements.mac.plist" ]; then \
+		cp "$(ELECTRON_DIR)/node_modules/app-builder-lib/templates/entitlements.mac.plist" "$(ELECTRON_DIR)/node_modules/.tron-entitlements.mac.plist"; \
+		/usr/libexec/PlistBuddy -c 'Add :com.apple.security.device.audio-input bool true' "$(ELECTRON_DIR)/node_modules/.tron-entitlements.mac.plist"; \
+		cd "$(ELECTRON_DIR)" && $(ELECTRON_NPM) run -s package -- --config.mac.entitlements=node_modules/.tron-entitlements.mac.plist; \
+	else \
+		cd "$(ELECTRON_DIR)" && $(ELECTRON_NPM) run -s package; \
+	fi
 endif
 
 # Rebuild the UI and desktop shell around an existing release sidecar. Backend
@@ -507,6 +534,7 @@ endif
 .PHONY: desktop-repackage
 desktop-repackage: desktop-check
 	$(call ASSERT_FILE,$(DESKTOP_SIDECAR_PATH))
+	$(MAKE) _desktop-capability-packs
 	$(MAKE) fe-build
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_TREE,$(FRONTEND_DIR)/dist,$(ELECTRON_DIR)/resources/frontend)
@@ -531,6 +559,7 @@ desktop-dev: install
 
 .PHONY: desktop-clean
 desktop-clean:
+	$(call REMOVE,$(ELECTRON_DIR)/resources/capability-packs)
 	$(call REMOVE,$(ELECTRON_DIR)/dist)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/binaries)
@@ -553,3 +582,30 @@ skill-theme-check:
 .PHONY: capability-pages-example
 capability-pages-example: | _build-cache
 	$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)" --example package_pages
+
+.PHONY: capability-computer-use
+capability-computer-use: export TRON_COMPUTER_USE_VERSION = $(VERSION)
+capability-computer-use: export TRON_COMPUTER_USE_SKIP_TESTS = $(SKIP_TESTS)
+capability-computer-use: export TRON_COMPUTER_USE_WINDOWS_PACKAGE = $(COMPUTER_USE_WINDOWS_PACKAGE)
+capability-computer-use: | _build-cache
+	$(CARGO) run --locked --manifest-path "capability-packs/computer-use/packager/Cargo.toml"
+
+.PHONY: _computer-use-native
+_computer-use-native: | _build-cache
+	$(CARGO) build --locked --release --manifest-path "capability-packs/computer-use/native/Cargo.toml"
+
+.PHONY: _computer-use-clean
+_computer-use-clean:
+	$(call REMOVE,capability-packs/computer-use/native/target)
+	$(call REMOVE,capability-packs/computer-use/packager/target)
+	$(call REMOVE,output/capability-packs/computer-use)
+
+.PHONY: _desktop-capability-packs
+_desktop-capability-packs: export TRON_COMPUTER_USE_VERSION =
+_desktop-capability-packs: export TRON_COMPUTER_USE_SKIP_TESTS = $(SKIP_TESTS)
+_desktop-capability-packs: export TRON_COMPUTER_USE_WINDOWS_PACKAGE =
+_desktop-capability-packs: export TRON_COMPUTER_USE_MAKE = $(MAKE)
+_desktop-capability-packs: export TRON_COMPUTER_USE_CARGO = $(CARGO)
+_desktop-capability-packs: | _build-cache
+	$(call REMOVE,$(ELECTRON_DIR)/resources/capability-packs)
+	$(NODE) "scripts/prepare-desktop-capability-packs.cjs" "$(ELECTRON_DIR)/resources/capability-packs"

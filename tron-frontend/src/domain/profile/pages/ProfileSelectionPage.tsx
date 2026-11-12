@@ -34,6 +34,12 @@ import { useLocale } from "@/i18n";
 import { isApiError } from "@/shared/api/httpClient";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 import { useAuthStore } from "@/store/authStore";
+import { useProfileAgreementStore } from "@/store/profileAgreementStore";
+
+type AgreementAction =
+  | { type: "authorize" }
+  | { type: "new-account" }
+  | { type: "enter"; profile: PersonAiProfile };
 
 function firstAvailableProfileId(
   profiles: PersonAiProfile[],
@@ -61,7 +67,7 @@ function ProfileAvatar({ profile }: { profile: PersonAiProfile }) {
   useEffect(() => setImageFailed(false), [profile.avatarUrl]);
 
   return (
-    <span className="tron-login-avatar flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-medium">
+    <span className="tron-login-avatar flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md text-xs font-medium">
       {src && !imageFailed ? (
         <img
           alt=""
@@ -84,13 +90,11 @@ export function ProfileSelectionPage() {
     currentLocale;
   const navigate = useNavigate();
   async function enterWorkspace() {
+    if (!useProfileAgreementStore.getState().checked) return;
     navigate("/workspace", { replace: true });
   }
-  const authStatus = useAuthStore((state) => state.status);
   const [searchParams] = useSearchParams();
   const forceReauthorization = searchParams.get("mode") === "reauth";
-  const forceSelection =
-    searchParams.get("mode") === "switch" || forceReauthorization;
   const [profiles, setProfiles] = useState<PersonAiProfile[]>([]);
   const [bootstrap, setBootstrap] = useState<BootstrapProfileStatus | null>(
     null
@@ -103,7 +107,10 @@ export function ProfileSelectionPage() {
   const [authorizing, setAuthorizing] = useState(false);
   const [completingAuthorization, setCompletingAuthorization] = useState(false);
   const [authorizationRetrying, setAuthorizationRetrying] = useState(false);
-  const [agreementChecked, setAgreementChecked] = useState(false);
+  const agreementChecked = useProfileAgreementStore((state) => state.checked);
+  const setAgreementChecked = useProfileAgreementStore((state) => state.setChecked);
+  const [pendingAgreementAction, setPendingAgreementAction] =
+    useState<AgreementAction | null>(null);
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [profileToRemove, setProfileToRemove] =
     useState<PersonAiProfile | null>(null);
@@ -112,10 +119,10 @@ export function ProfileSelectionPage() {
     useState<PersonAiAuthorizationSession | null>(null);
   const authorizationWindowRef = useRef<Window | null>(null);
   const authorizationRequestRef = useRef<AbortController | null>(null);
-  const autoEnteredProfileRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setAgreementChecked(false);
     const controller = new AbortController();
     Promise.all([
       fetchProfiles(controller.signal),
@@ -145,42 +152,6 @@ export function ProfileSelectionPage() {
       authorizationRequestRef.current?.abort();
     };
   }, []);
-
-  useEffect(() => {
-    if (
-      forceSelection ||
-      loading ||
-      authorization ||
-      error ||
-      authStatus === "checking" ||
-      bootstrap?.activeProfile?.status === "PENDING"
-    )
-      return;
-    const availableProfiles = profiles.filter(
-      (profile) => profile.status !== "PENDING"
-    );
-    if (availableProfiles.length !== 1) return;
-    const [profile] = availableProfiles;
-    if (autoEnteredProfileRef.current === profile.profileId) return;
-    autoEnteredProfileRef.current = profile.profileId;
-    if (bootstrap?.activeProfileId === profile.profileId) {
-      // A locally ACTIVE profile does not prove that its remote credentials work.
-      // Re-entering a protected route while unauthenticated creates a redirect loop.
-      if (authStatus === "authenticated") void enterWorkspace();
-      else navigate("/profiles?mode=reauth", { replace: true });
-      return;
-    }
-    void selectProfile(profile);
-  }, [
-    authStatus,
-    authorization,
-    bootstrap,
-    error,
-    forceSelection,
-    loading,
-    navigate,
-    profiles,
-  ]);
 
   useEffect(() => {
     if (!authorization) return;
@@ -299,6 +270,24 @@ export function ProfileSelectionPage() {
       if (authorizationRequestRef.current === controller) authorizationRequestRef.current = null;
     };
   }, [authorization, navigate, t]);
+
+  function requestAgreementAction(action: AgreementAction) {
+    if (!useProfileAgreementStore.getState().checked) {
+      setPendingAgreementAction(action);
+      return;
+    }
+    switch (action.type) {
+      case "authorize":
+        void beginPersonAiAuthorization();
+        break;
+      case "new-account":
+        void beginNewAccountAuthorization();
+        break;
+      case "enter":
+        void selectProfile(action.profile);
+        break;
+    }
+  }
 
   async function beginPersonAiAuthorization() {
     authorizationRequestRef.current?.abort();
@@ -442,18 +431,11 @@ export function ProfileSelectionPage() {
   const availableProfiles = profiles.filter(
     (profile) => profile.status !== "PENDING"
   );
-  const waitingForAutoEntry =
-    !forceSelection &&
-    !error &&
-    (loading ||
-      authStatus === "checking" ||
-      (availableProfiles.length === 1 &&
-        bootstrap?.activeProfile?.status !== "PENDING"));
 
   return (
     <main
       data-theme-anchor="app-shell"
-      data-tron-entry-ready={!waitingForAutoEntry ? "" : undefined}
+      data-tron-entry-ready={!loading ? "" : undefined}
       className="tron-login tron-entry-scene"
     >
       <EntryBackdrop />
@@ -476,48 +458,19 @@ export function ProfileSelectionPage() {
           </Button>
         </header>
         <section
-          aria-labelledby="tron-profile-title"
+          aria-label={t("personAiProfiles.startUsing")}
           className="tron-login-panel"
         >
-          {!loading ? (
-            <h2 id="tron-profile-title">{t("personAiProfiles.title")}</h2>
-          ) : null}
           {loading ? (
             <div className="tron-login-loading">
               <EntryLoadingIndicator label={t("personAiProfiles.loading")} />
             </div>
           ) : null}
           {!loading &&
-          !forceReauthorization &&
-          !authorization &&
-          bootstrap?.activeProfile?.status !== "PENDING" ? (
-            <div className="tron-login-agreement">
-              <input
-                id="person-ai-agreement"
-                type="checkbox"
-                checked={agreementChecked}
-                onChange={(event) => setAgreementChecked(event.target.checked)}
-                className="size-4 accent-[var(--color-primary)]"
-              />
-              <div>
-                <label htmlFor="person-ai-agreement">
-                  {t("personAiProfiles.agreement.checkboxLabel")}
-                </label>{" "}
-                <button
-                  type="button"
-                  className="font-medium text-[var(--color-on-surface)] underline underline-offset-2"
-                  onClick={() => setAgreementOpen(true)}
-                >
-                  {t("personAiProfiles.agreement.linkLabel")}
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {!loading &&
           (authorization ||
             forceReauthorization ||
             bootstrap?.activeProfile?.status === "PENDING") ? (
-            <div className="mt-8">
+            <div className="tron-login-actions">
               {forceReauthorization && !authorization ? (
                 <p className="mb-4 text-sm text-[var(--color-on-surface-variant)]">
                   {t("personAiProfiles.reauthorizationRequired")}
@@ -560,7 +513,7 @@ export function ProfileSelectionPage() {
                   className="tron-login-action"
                   type="button"
                   disabled={authorizing}
-                  onClick={() => void beginPersonAiAuthorization()}
+                  onClick={() => requestAgreementAction({ type: "authorize" })}
                 >
                   {authorizing
                     ? t("personAiProfiles.authorizing")
@@ -573,14 +526,15 @@ export function ProfileSelectionPage() {
           ) : null}
           {!loading &&
           !forceReauthorization &&
+          !authorization &&
           bootstrap?.activeProfile?.status !== "PENDING" &&
           availableProfiles.length === 0 ? (
-            <div className="mt-8">
+            <div className="tron-login-actions">
               <Button
                 className="tron-login-action"
                 type="button"
-                disabled={activating !== null || !agreementChecked}
-                onClick={() => void beginNewAccountAuthorization()}
+                disabled={activating !== null || authorizing}
+                onClick={() => requestAgreementAction({ type: "new-account" })}
               >
                 {activating === "pending"
                   ? t("personAiProfiles.switching")
@@ -594,40 +548,30 @@ export function ProfileSelectionPage() {
           !authorizing &&
           activating !== "pending" &&
           availableProfiles.length > 0 ? (
-            <div className="mt-6 space-y-3">
-              <div className="tron-login-accounts">
+            <div className="tron-login-actions">
+              <div className="tron-login-accounts" data-multiple={availableProfiles.length > 1 || undefined}>
                 {availableProfiles.map((profile) => (
-                  <div
-                    key={profile.profileId}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedProfileId(profile.profileId)}
-                    onKeyDown={(event) => {
-                      if (event.target !== event.currentTarget) return;
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelectedProfileId(profile.profileId);
-                      }
-                    }}
-                    aria-current={
-                      bootstrap?.activeProfileId === profile.profileId
-                        ? "true"
-                        : undefined
-                    }
-                    aria-pressed={selectedProfileId === profile.profileId}
-                    className="tron-login-account"
-                  >
-                    <ProfileAvatar profile={profile} />
-                    <span className="min-w-0">
-                      <p className="truncate font-medium">
+                  <div key={profile.profileId} className="tron-login-account">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="tron-login-account-select"
+                      disabled={activating !== null}
+                      onClick={() => setSelectedProfileId(profile.profileId)}
+                      aria-pressed={selectedProfileId === profile.profileId}
+                      aria-current={bootstrap?.activeProfileId === profile.profileId ? "true" : undefined}
+                    >
+                      <ProfileAvatar profile={profile} />
+                      <span className="min-w-0 flex-1 truncate text-left font-medium">
                         {profile.personAiUsername}
-                      </p>
-                    </span>
+                      </span>
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      className="tron-login-remove ml-auto shrink-0 text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)]"
+                      className="tron-login-remove"
+                      disabled={activating !== null}
                       aria-label={t("personAiProfiles.remove.ariaLabel")}
                       title={t("personAiProfiles.remove.ariaLabel")}
                       onClick={(event) => {
@@ -641,43 +585,114 @@ export function ProfileSelectionPage() {
                   </div>
                 ))}
               </div>
-              <Button
-                className="tron-login-action"
-                type="button"
-                disabled={activating !== null || selectedProfileId === null}
-                onClick={() => {
-                  const profile = availableProfiles.find(
-                    (item) => item.profileId === selectedProfileId
-                  );
-                  if (profile) void selectProfile(profile);
-                }}
-              >
-                {activating && activating !== "pending"
-                  ? t("personAiProfiles.switching")
-                  : t("personAiProfiles.startUsing")}
-              </Button>
-              {bootstrap?.activeProfile?.status !== "PENDING" ? (
+              <div className="tron-login-profile-actions">
                 <Button
                   className="tron-login-action"
                   type="button"
-                  variant="secondary"
-                  disabled={activating !== null || !agreementChecked}
-                  onClick={() => void beginNewAccountAuthorization()}
+                  disabled={activating !== null || selectedProfileId === null}
+                  onClick={() => {
+                    const profile = availableProfiles.find(
+                      (item) => item.profileId === selectedProfileId
+                    );
+                    if (profile) requestAgreementAction({ type: "enter", profile });
+                  }}
                 >
-                  {activating === "pending"
+                  {activating && activating !== "pending"
                     ? t("personAiProfiles.switching")
-                    : t("personAiProfiles.authorizeNewAccount")}
+                    : t("personAiProfiles.startUsing")}
                 </Button>
-              ) : null}
+                {bootstrap?.activeProfile?.status !== "PENDING" ? (
+                  <Button
+                    className="tron-login-action"
+                    type="button"
+                    variant="secondary"
+                    disabled={activating !== null || authorizing}
+                    onClick={() => requestAgreementAction({ type: "new-account" })}
+                  >
+                    {activating === "pending"
+                      ? t("personAiProfiles.switching")
+                      : t("personAiProfiles.authorizeNewAccount")}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {!loading && !authorization ? (
+            <div className="tron-login-agreement">
+              <input
+                id="person-ai-agreement"
+                type="checkbox"
+                checked={agreementChecked}
+                disabled={authorizing || activating !== null}
+                onChange={(event) => setAgreementChecked(event.target.checked)}
+                className="size-4 accent-[var(--color-primary)]"
+              />
+              <div>
+                <label htmlFor="person-ai-agreement">
+                  {t("personAiProfiles.agreement.checkboxLabel")}
+                </label>{" "}
+                <button
+                  type="button"
+                  className="font-medium text-[var(--color-on-surface)] underline underline-offset-2"
+                  onClick={() => setAgreementOpen(true)}
+                >
+                  {t("personAiProfiles.agreement.linkLabel")}
+                </button>
+              </div>
             </div>
           ) : null}
           {error && !profileToRemove ? (
-            <p role="alert" className="mt-5 text-sm text-[var(--color-error)]">
+            <p role="alert" className="tron-login-error">
               {error}
             </p>
           ) : null}
         </section>
       </div>
+      <Dialog
+        open={pendingAgreementAction !== null && !agreementOpen}
+        onOpenChange={(open) => {
+          if (!open) setPendingAgreementAction(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("personAiProfiles.agreement.confirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("personAiProfiles.agreement.confirmDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            type="button"
+            variant="link"
+            className="w-fit px-0"
+            onClick={() => {
+              setAgreementOpen(true);
+            }}
+          >
+            {t("personAiProfiles.agreement.linkLabel")}
+          </Button>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setPendingAgreementAction(null)}
+            >
+              {t("personAiProfiles.agreement.cancel")}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const action = pendingAgreementAction;
+                setPendingAgreementAction(null);
+                setAgreementChecked(true);
+                if (action) requestAgreementAction(action);
+              }}
+            >
+              {t("personAiProfiles.agreement.confirmAndContinue")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
         <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
@@ -700,8 +715,11 @@ export function ProfileSelectionPage() {
             <Button
               type="button"
               onClick={() => {
+                const action = pendingAgreementAction;
+                setPendingAgreementAction(null);
                 setAgreementChecked(true);
                 setAgreementOpen(false);
+                if (action) requestAgreementAction(action);
               }}
             >
               {t("personAiProfiles.agreement.acknowledge")}

@@ -1934,6 +1934,7 @@ export const pages = {
         actionEdit: "编辑",
         commandSummary: "执行：{{command}}",
         searchSummary: "{{name}}：{{query}}",
+        unknownTarget: "工具调用（目标工具未知）",
       },
       rail: {
         waitingModel: "等待模型...",
@@ -2095,7 +2096,8 @@ export const pages = {
       checkpoint: "压缩检查点",
       checkpointReady: "检查点已生成",
       noCheckpoint: "暂无检查点",
-      compactMemory: "压缩短期记忆",
+      compactMemory: "手动压缩短期记忆",
+      compactingMemory: "压缩中",
       goalStatuses: {
         ACTIVE: "运行中",
         PAUSED: "暂停",
@@ -2315,6 +2317,7 @@ export const pages = {
         latestRequestUsage: "最近一次模型请求",
         actualInput: "实际输入",
         input: "输入",
+        output: "输出",
         cached: "缓存",
         reasoning: "推理",
         providerDelta:
@@ -2467,6 +2470,9 @@ export const pages = {
     emptyPacks: "当前没有已装配的能力包。",
     emptyExtensions: "当前没有已注册的扩展点实现。",
     version: "版本",
+    packVersion: "能力包版本",
+    cuaDriverSdkVersion: "cua-driver SDK 版本",
+    versionUndeclared: "未声明",
     provider: "提供方",
     updatedAt: "更新时间",
     effective: "已生效",
@@ -2493,6 +2499,8 @@ export const pages = {
     },
   },
   settingsTools: {
+    catalogIssues: { title: "部分工具加载失败", hint: "其他工具仍可查看。请修复出错的工具或提供者后刷新。" },
+    loadParts: { domains: "工具领域", tools: "工具列表", permissions: "工具权限", categories: "工具分类", diagnostics: "工具加载诊断" },
     categories: { label: "工具分类", all: "全部工具", uncategorized: "未分类", readonly: "只读工具", source: "来源", unknown: "未知", unknownKind: "未声明", unavailable: "不可用", pack: "能力包", plugin: "插件", provider: "提供者", adapter: "接入方" },
     permissions: {
       title: "执行权限",
@@ -3202,26 +3210,26 @@ export const pages = {
   },
   settingsGeneral: {
     browserNotifications: {
-      title: "浏览器通知",
+      title: "系统通知",
       status: {
-        enabled: "已启用。新通知会在此应用位于后台时显示为浏览器通知。",
+        enabled: "已启用。新通知会在此应用位于后台时显示为系统通知。",
         authorized: "浏览器已授权，启用后即可接收后台通知。",
         disabled: "授权后，可在此应用位于后台时接收新通知提醒。",
         denied: "浏览器已阻止通知，请在浏览器的网站设置中允许通知。",
         unsupported: "当前浏览器或访问环境不支持通知，请使用安全连接并检查浏览器设置。",
-        requestFailed: "未能请求浏览器通知权限，请检查浏览器设置后重试。",
+        requestFailed: "未能请求系统通知权限，请检查浏览器设置后重试。",
       },
       test: {
         title: "Tron 测试通知",
         body: "这是一条测试通知。你可以正常接收 Tron 的通知提醒。",
         failed: "测试通知发送失败，请检查浏览器权限和系统通知设置。",
-        requireEnabled: "请先授权并启用浏览器通知。",
+        requireEnabled: "请先授权并启用系统通知。",
       },
       actions: {
         test: "测试通知",
         authorize: "授权并启用",
-        enable: "启用浏览器通知",
-        disable: "关闭浏览器通知",
+        enable: "启用系统通知",
+        disable: "关闭系统通知",
       },
     },
     update: {
@@ -5274,7 +5282,11 @@ export const pages = {
       linkLabel: "《用户协议》",
       title: "用户协议",
       description: "请仔细阅读以下合规声明。勾选即表示你已阅读并同意以下内容。",
-      acknowledge: "我知道了",
+      acknowledge: "我已阅读并同意",
+      confirmTitle: "请先同意用户协议",
+      confirmDescription: "继续前，请阅读并同意《用户协议》。选择“同意并继续”将自动勾选协议并继续当前操作。",
+      confirmAndContinue: "同意并继续",
+      cancel: "取消",
       rules: {
         rule1: "你已合法取得所接入模型 API、账号、密钥和额度的授权。",
         rule2:

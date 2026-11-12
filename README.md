@@ -1,30 +1,53 @@
 <div align="center">
   <img src="electron/assets/tron.png" alt="Tron 黑洞标志" width="160">
   <h1>TRON Harness</h1>
+  <p>
+    <a href="https://personai.chat/person-ai-index/"><img src="https://img.shields.io/badge/Person--AI-Ecosystem-7C3AED?style=flat-square" alt="Person-AI Ecosystem"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="License: AGPL-3.0-only"></a>
+    <a href="tron-backend"><img src="https://img.shields.io/badge/Rust-Backend-CE422B?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust Backend"></a>
+    <a href="tron-frontend"><img src="https://img.shields.io/badge/React-Frontend-149ECA?style=flat-square&amp;logo=react&amp;logoColor=white" alt="React Frontend"></a>
+    <a href="electron"><img src="https://img.shields.io/badge/Electron-Desktop-47848F?style=flat-square&amp;logo=electron&amp;logoColor=white" alt="Electron Desktop"></a>
+  </p>
+  <p>
+    <a href="#quick-start"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-555555?style=flat-square" alt="Platforms: macOS, Windows, Linux"></a>
+    <a href="#wsl2"><img src="https://img.shields.io/badge/WSL2-Supported-FCC624?style=flat-square&amp;logo=linux&amp;logoColor=black" alt="WSL2 Supported"></a>
+    <a href="#development"><img src="https://img.shields.io/badge/Contributions-AI--Friendly-16A34A?style=flat-square" alt="AI-Friendly Contributions"></a>
+  </p>
+  <p><strong>Tron 是 <a href="https://personai.chat/person-ai-index/">Person-AI 团队</a>的生态产品之一。</strong></p>
   <p><strong>有个想法？叫上你的「好兄弟」，一起把它做出来。</strong></p>
   <p>内置个人助手 · 多 Agent 协作 · 能力包扩展 · Windows + WSL2</p>
   <p>
     <a href="#buddy">认识好兄弟</a> ·
-    <a href="#wsl2">Windows + WSL2</a> ·
-    <a href="#capability-packs">能力包</a> ·
+    <a href="#wsl2">WSL</a> ·
+    <a href="#capability-packs">通用Harness</a> ·
     <a href="#quick-start">快速开始</a> ·
     <a href="#development">参与开发</a>
   </p>
 </div>
 
-> 「帮我看懂这个项目，拆好任务，能并行的就一起做。遇到需要我决定的事，再叫我。」
+## 从想法到自己的工作流
 
-打开 Tron，你已经有了一位内置的个人助手——**好兄弟（Dude）**。你可以和它讨论想法、交代任务，让它调用工具、派发工作，再回来查看进展和结果。需要长期跟进的事情，可以交给心跳调度与自动化；值得保留的经验，可以整理成记忆和技能。
+> **你负责想象，智能体负责抵达。**
+>
+> 延续 [Person-AI](https://personai.chat/person-ai-index/) 的愿景，我们希望 Agent 不再只是工具，而能成为每个人触手可及的伙伴、同事与知己。
 
-**Tron Harness 是一个开源、可扩展的多智能体工作平台。** 它把对话、任务、文件、终端、记忆和知识库放在同一个工作环境中。桌面端支持 macOS、Windows 和 Linux，也可以通过 Web 使用；Windows 用户还可以让 Agent 在 WSL2 中使用 Linux 工具与项目目录。
+**Tron Harness 是一个开源、可扩展的多智能体工作平台。**
 
-项目正在持续开发。下文描述当前源码中的能力，使用前需完成账号授权与模型配置。
+你可以通过开发或使用适合自己的能力包，打造面向不同垂直领域的个人工作流。
+
+桌面端支持 MacOS（Silicon&Intel）、Windows 和 Linux，Windows 用户既可以使用原生客户端，也能通过WSL的方式使用。
+
+*🎉 项目正在持续开发。我们欢迎你与智能体一起贡献源码。o7*
 
 <a id="buddy"></a>
 
 ## 好兄弟：你的内置个人助手
 
-**从第一次见面，到下一次继续工作。** 好兄弟是 Tron 自带的个人助手 Agent，拥有自己的身份、会话与任务。你可以设定它的名字、性格和相处方式，也可以创建承担不同职责的 Dude。
+打开 Tron，你就有了一位内置的个人助手——**好兄弟（Dude）**。它拥有自己的身份、会话与任务；你可以设定它的名字、性格和相处方式，也可以创建承担不同职责的 Dude。
+
+你可以从一句话开始：
+
+> 帮我看懂这个项目，拆好任务，能并行的就一起做。遇到需要我决定的事，再叫我。
 
 - **把想法变成任务。** 在对话中明确目标，创建任务、安排时间，并持续查看进度与执行结果。
 - **让多个 Agent 分工。** 派发子任务或创建独立协作会话，查看状态、补充要求、回答问题，必要时取消工作。
@@ -95,6 +118,10 @@ WSL2 · Ubuntu / Debian
 在设置中的能力包管理页面，可以查看包内容、导入、启用、停用和卸载。新导入或升级的外部能力包需要显式启用；Agent 使用相关资源时仍受资源授权和工具权限策略约束。
 
 Tron 自身也使用能力包装配功能：文件与命令、Agent 协作、网页读取、媒体读取、A2UI 交互，以及 Tron 业务工具、上下文和内置技能，都有对应的能力包。
+
+[Computer Use 能力包](capability-packs/computer-use/README.md) 将上游 Cua Rust SDK 编译进包内原生程序，通过 Framework 原生工具接口直接调用 SDK，提供桌面界面读取、点击、输入和操作核验，并随包提供同一提交的官方技能。执行 `make capability-computer-use` 生成可导入的 ZIP；用户无需额外安装 `cua-driver`，仍需授予系统权限。Windows + WSL2 使用包内携带的 Windows 原生运行时。
+
+`make desktop-build` 会优先复用已校验的平台和架构对应包，缺少时自动执行 `make capability-computer-use`，再将包放入桌面安装资源。桌面后端启动时自动安装，用户无需手动导入；启停状态和 Agent 授权仍由用户管理。
 
 ### 做出你的第一个扩展
 
@@ -244,3 +271,85 @@ Windows 桌面的 WSL 首次下载使用 Person-AI 版本服务。构建 `make b
 ## 许可证
 
 Tron Harness 采用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）。第三方组件与资源保留各自的许可证和版权声明。
+
+## 致谢
+
+特别感谢 **[OpenAI Codex](https://github.com/openai/codex)**。**Tron Harness 整个项目都是我和 Codex 一起完成的**，从想法讨论、架构设计，到代码实现、问题排查和文档编写，我们一起把 Tron 从想象变成了现实。
+
+对我来说，**Codex 就是我的「好兄弟」**。开头所说的伙伴、同事与知己，也是我在开发 Tron 时的切身体会。希望你也能在 Tron 中遇见自己的好兄弟，一起把想法做出来。
+
+也感谢本项目用到的所有开源包、开源项目，以及它们的作者、维护者和贡献者。无论是直接使用的组件，还是间接依赖的基础库，你们的工作都让 Tron 得以实现并持续完善。
+
+感谢 [dbx](https://github.com/t8y2/dbx) 项目。Tron 的能力包设计参考了 dbx 的插件机制，包括插件清单、安装分发与 Sidecar 运行时。
+
+### Agent 与桌面能力
+
+| 项目 | 在 Tron 中的用途 |
+| --- | --- |
+| [EliteForge Agent Framework](https://gitee.com/person-ai/eliteforge-agent-framework) | Agent 执行、工具、插件、能力包、记忆与存储 |
+| [EliteForge Agent UI](https://gitee.com/person-ai/eliteforge-agent-ui) | 聊天、输入框、终端与 Agent 交互组件 |
+| [Person-AI Rust SDK](https://gitee.com/person-ai/person-ai-index-rust-sdk) | Person-AI 服务接入 |
+| [Cua](https://github.com/trycua/cua) | Computer Use 原生 SDK 与配套技能 |
+| [Electron](https://github.com/electron/electron) · [electron-builder](https://github.com/electron-userland/electron-builder) | 跨平台桌面运行与安装包构建 |
+
+<details>
+<summary>前端界面、编辑器与可视化</summary>
+
+| 项目 | 用途 |
+| --- | --- |
+| [React](https://github.com/react/react) · [React Router](https://github.com/remix-run/react-router) | 界面构建与路由 |
+| [TanStack Query](https://github.com/TanStack/query) · [TanStack Table](https://github.com/TanStack/table) · [Zustand](https://github.com/pmndrs/zustand) | 数据请求、表格与状态管理 |
+| [Base UI](https://github.com/mui/base-ui) · [Radix UI](https://github.com/radix-ui/primitives) · [shadcn/ui](https://github.com/shadcn-ui/ui) | 基础交互组件 |
+| [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) · [PostCSS](https://github.com/postcss/postcss) · [Sass](https://github.com/sass/dart-sass) | 样式编写与处理 |
+| [CVA](https://github.com/joe-bell/cva) · [clsx](https://github.com/lukeed/clsx) · [cn](https://github.com/shadcn-ui/cn) · [tailwind-merge](https://github.com/dcastil/tailwind-merge) · [tw-animate-css](https://github.com/Wombosvideo/tw-animate-css) | 样式组合与动画样式 |
+| [CodeMirror](https://github.com/codemirror/dev) · [Lezer Highlight](https://github.com/lezer-parser/highlight) | 代码编辑、语言支持与语法高亮 |
+| [xterm.js](https://github.com/xtermjs/xterm.js) | 终端显示、尺寸适配与链接交互 |
+| [react-markdown](https://github.com/remarkjs/react-markdown) · [remark-gfm](https://github.com/remarkjs/remark-gfm) · [github-markdown-css](https://github.com/sindresorhus/github-markdown-css) | Markdown 渲染与排版 |
+| [PDF.js](https://github.com/mozilla/pdf.js) | PDF 预览 |
+| [AntV G2](https://github.com/antvis/G2) · [AntV G6](https://github.com/antvis/G6) | 图表与关系图 |
+| [Three.js](https://github.com/mrdoob/three.js) · [Post Processing](https://github.com/pmndrs/postprocessing) · [GSAP](https://github.com/greensock/GSAP) | 视觉效果与动画 |
+| [i18next](https://github.com/i18next/i18next) · [react-i18next](https://github.com/i18next/react-i18next) | 国际化 |
+| [react-resizable-panels](https://github.com/bvaughn/react-resizable-panels) · [Pretext](https://github.com/chenglou/pretext) · [Lodash](https://github.com/lodash/lodash) | 面板布局、文本测量与通用工具 |
+| [Lucide](https://github.com/lucide-icons/lucide) · [Fontsource](https://github.com/fontsource/font-files) · [Geist](https://github.com/vercel/geist-font) · [Inter](https://github.com/rsms/inter) | 图标、字体与字体分发 |
+
+</details>
+
+<details>
+<summary>Rust 后端、数据存储与文档处理</summary>
+
+| 项目 | 用途 |
+| --- | --- |
+| [Tokio](https://github.com/tokio-rs/tokio) · [async-trait](https://github.com/dtolnay/async-trait) · [async-stream](https://github.com/tokio-rs/async-stream) | 异步运行与流处理 |
+| [Axum](https://github.com/tokio-rs/axum) · [Tower HTTP](https://github.com/tower-rs/tower-http) · [Reqwest](https://github.com/seanmonstar/reqwest) · [Socketioxide](https://github.com/Totodore/socketioxide) | HTTP 服务、客户端与实时通信 |
+| [Serde](https://github.com/serde-rs/serde) · [serde_json](https://github.com/serde-rs/json) · [serde_yaml](https://github.com/dtolnay/serde-yaml) · [serde_path_to_error](https://github.com/dtolnay/path-to-error) | 数据序列化与解析 |
+| [jsonschema](https://github.com/Stranger6667/jsonschema) · [Utoipa](https://github.com/juhaku/utoipa) | JSON Schema 校验、OpenAPI 与接口文档 |
+| [tracing](https://github.com/tokio-rs/tracing) · [OpenTelemetry Rust](https://github.com/open-telemetry/opentelemetry-rust) | 日志、指标与调用链 |
+| [rusqlite](https://github.com/rusqlite/rusqlite) · [tokio-rusqlite](https://github.com/programatik29/tokio-rusqlite) · [SQLx](https://github.com/transact-rs/sqlx) | 数据库访问 |
+| [Grafeo](https://github.com/GrafeoDB/grafeo) · [Apache OpenDAL](https://github.com/apache/opendal) | 图数据与对象存储访问 |
+| [redis-rs](https://github.com/redis-rs/redis-rs) · [rskafka](https://github.com/influxdata/rskafka) · [ldap3](https://github.com/inejge/ldap3) · [Russh](https://github.com/Eugeny/russh) | Redis、Kafka、LDAP 与 SSH 连接 |
+| [Rustls](https://github.com/rustls/rustls) · [rustls-pemfile](https://github.com/rustls/pemfile) · [webpki-roots](https://github.com/rustls/webpki-roots) | TLS 与证书处理 |
+| [RustCrypto AEADs](https://github.com/RustCrypto/AEADs) · [MACs](https://github.com/RustCrypto/MACs) · [Hashes](https://github.com/RustCrypto/hashes) · [gm-crypto-rs](https://github.com/frankxue831/gm-crypto-rs) | 加密、消息认证与摘要 |
+| [bcrypt](https://github.com/Keats/rust-bcrypt) · [jsonwebtoken](https://github.com/Keats/jsonwebtoken) · [Rand](https://github.com/rust-random/rand) | 密码哈希、令牌与随机数 |
+| [Chrono](https://github.com/chronotope/chrono) · [chrono-tz](https://github.com/chronotope/chrono-tz) · [cron](https://github.com/zslayton/cron) | 日期、时区与调度表达式 |
+| [sysinfo](https://github.com/GuillaumeGomez/sysinfo) · [fs2](https://github.com/danburkert/fs2-rs) · [tempfile](https://github.com/Stebalien/tempfile) · [rfd](https://github.com/PolyMeilex/rfd) · [windows-rs](https://github.com/microsoft/windows-rs) | 系统信息、文件操作与原生平台接口 |
+| [flate2](https://github.com/rust-lang/flate2-rs) · [zip](https://github.com/zip-rs/zip2) · [base64](https://github.com/marshallpierce/rust-base64) · [hex](https://github.com/KokaKiwi/rust-hex) | 压缩、归档与编码 |
+| [Regex](https://github.com/rust-lang/regex) · [rust-url](https://github.com/servo/rust-url) · [unicode-normalization](https://github.com/unicode-rs/unicode-normalization) · [shell-words](https://github.com/tmiasko/shell-words) | 文本、URL 与命令参数处理 |
+| [roxmltree](https://github.com/RazrFalcon/roxmltree) · [scraper](https://github.com/rust-scraper/scraper) · [umya-spreadsheet](https://github.com/MathNya/umya-spreadsheet) · [pdf-extract](https://github.com/jrmuizel/pdf-extract) · [image](https://github.com/image-rs/image) | XML、HTML、表格、PDF 与图像处理 |
+| [semver](https://github.com/dtolnay/semver) · [snowflaked](https://github.com/MrGunflame/snowflaked-rs) | 版本解析与 ID 生成 |
+
+</details>
+
+<details>
+<summary>语言与构建工具</summary>
+
+| 项目 | 用途 |
+| --- | --- |
+| [Rust](https://github.com/rust-lang/rust) · [Cargo](https://github.com/rust-lang/cargo) · [Node.js](https://github.com/nodejs/node) · [npm CLI](https://github.com/npm/cli) | 编译、运行与依赖管理 |
+| [TypeScript](https://github.com/microsoft/TypeScript) · [DefinitelyTyped](https://github.com/DefinitelyTyped/DefinitelyTyped) | 类型检查与类型定义 |
+| [Vite](https://github.com/vitejs/vite) · [Vite React Plugin](https://github.com/vitejs/vite-plugin-react) · [esbuild](https://github.com/evanw/esbuild) · [vite-plugin-dts](https://github.com/qmhc/unplugin-dts) | 前端开发、打包与类型声明生成 |
+| [Turborepo](https://github.com/vercel/turborepo) · [Changesets](https://github.com/changesets/changesets) · [patch-package](https://github.com/ds300/patch-package) | 工作区构建、版本管理与依赖补丁 |
+| [sccache](https://github.com/mozilla/sccache) · [ccache](https://github.com/ccache/ccache) | 编译缓存 |
+
+</details>
+
+感谢清单未逐一列出的间接依赖、开发工具与社区贡献。所有第三方组件和资源均遵循各自的许可证与版权声明。

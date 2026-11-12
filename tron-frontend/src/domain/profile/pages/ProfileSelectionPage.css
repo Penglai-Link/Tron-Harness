@@ -13,7 +13,8 @@
 }
 
 .tron-login .tron-entry-atmosphere {
-  mask-image: linear-gradient(90deg, #00000018, #000 54%);
+  mask-image: linear-gradient(180deg, transparent 52%, #000 88%);
+  opacity: 0.55;
 }
 
 .tron-login-header {
@@ -22,7 +23,7 @@
 }
 
 .tron-login .tron-entry-brand {
-  margin-bottom: 40px;
+  margin-bottom: 48px;
 }
 
 .tron-login-locale {
@@ -33,104 +34,157 @@
 }
 
 .tron-login-panel {
+  --tron-button-focus-width: 1px;
+  --tron-button-radius: 6px;
+  --tron-button-primary-bg: var(--color-on-surface);
+  --tron-button-primary-fg: var(--color-background);
+  --tron-button-primary-hover-bg: color-mix(in srgb, var(--color-on-surface) 88%, var(--color-background));
+  --tron-button-primary-hover-fg: var(--color-background);
+  --tron-button-primary-active-bg: var(--color-on-surface);
+  --tron-button-primary-active-fg: var(--color-background);
+  --tron-button-secondary-bg: color-mix(in srgb, var(--color-on-surface) 8%, var(--color-background));
+  --tron-button-secondary-fg: var(--color-on-surface);
+  --tron-button-secondary-hover-bg: color-mix(in srgb, var(--color-on-surface) 12%, var(--color-background));
+  --tron-button-secondary-hover-fg: var(--color-on-surface);
+  --tron-button-secondary-active-bg: color-mix(in srgb, var(--color-on-surface) 16%, var(--color-background));
+  --tron-button-secondary-active-fg: var(--color-on-surface);
   position: relative;
-  width: min(360px, 100%);
+  width: min(320px, 100%);
   padding-bottom: 32px;
+  animation: tron-entry-appear 600ms 150ms both;
 }
 
-.tron-login-panel h2 {
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.5;
-  font-weight: 500;
+.tron-login-actions,
+.tron-login-profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tron-login-panel .tron-login-action {
+  height: 42px;
+  width: 100%;
+  padding-inline: 16px;
+  justify-content: center;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.tron-login-accounts {
+  max-height: min(240px, 32svh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+  margin: 0 -3px 12px;
+}
+
+.tron-login-account {
+  position: relative;
+  border-radius: 6px;
+}
+
+.tron-login-account + .tron-login-account {
+  margin-top: 4px;
+}
+
+.tron-login-account-select {
+  --tron-button-ghost-bg: transparent;
+  --tron-button-ghost-hover-bg: color-mix(in srgb, var(--color-on-surface) 3%, transparent);
+  --tron-button-ghost-active-bg: color-mix(in srgb, var(--color-on-surface) 5%, transparent);
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 8px 36px 8px 0;
+}
+
+.tron-login-accounts[data-multiple] .tron-login-account-select {
+  padding-inline-start: 8px;
+  color: var(--color-on-surface-variant);
+}
+
+.tron-login-accounts[data-multiple] .tron-login-account-select[aria-pressed="true"] {
+  --tron-button-ghost-bg: color-mix(in srgb, var(--color-on-surface) 7%, transparent);
+  --tron-button-ghost-hover-bg: color-mix(in srgb, var(--color-on-surface) 9%, transparent);
+  color: var(--color-on-surface);
+}
+
+.tron-login-avatar {
+  background: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
+  color: var(--color-on-surface-variant);
+}
+
+.tron-login-remove {
+  position: absolute;
+  inset-inline-end: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-on-surface-variant);
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.tron-login-account:hover .tron-login-remove,
+.tron-login-account:focus-within .tron-login-remove {
+  opacity: 1;
 }
 
 .tron-login-agreement {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  margin-top: 24px;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
   color: var(--color-on-surface-variant);
   font-size: 12px;
   line-height: 1.8;
 }
 
 .tron-login-agreement input {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   flex: none;
   margin-top: 4px;
-  accent-color: var(--color-primary);
+  accent-color: var(--color-on-surface);
+  cursor: pointer;
+}
+
+.tron-login-agreement label {
+  cursor: pointer;
 }
 
 .tron-login-agreement input:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 4px;
+  outline: 1px solid var(--color-focus-ring);
+  outline-offset: 3px;
 }
 
 .tron-login-agreement button {
-  color: var(--color-on-surface);
+  color: inherit;
   text-decoration-color: color-mix(in srgb, currentColor 30%, transparent);
 }
 
-.tron-login-panel .tron-login-action {
-  --tron-button-radius: 8px;
-  height: 42px;
-  width: 100%;
-  font-size: 13px;
-  box-shadow: none;
+.tron-login-agreement button:hover {
+  color: var(--color-on-surface);
+  text-decoration-color: currentColor;
 }
 
-.tron-login-accounts {
-  max-height: min(264px, 36svh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 3px;
-  margin: 0 -3px 16px;
-}
-
-.tron-login-account {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 70px;
-  padding: 12px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 180ms, border-color 180ms;
-}
-
-.tron-login-account + .tron-login-account {
-  margin-top: 4px;
-}
-.tron-login-account:hover {
-  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
-}
-.tron-login-account[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--color-primary) 22%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
-}
-.tron-login-account:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
-.tron-login-avatar {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
-.tron-login-remove {
-  opacity: 0.45;
-}
-.tron-login-account:hover .tron-login-remove,
-.tron-login-account:focus-within .tron-login-remove {
-  opacity: 1;
+.tron-login-error {
+  margin: 20px 0 0;
+  color: var(--color-error);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 
 .tron-login-loading {
   padding-top: 4px;
+}
+
+@media (hover: none) {
+  .tron-login-remove {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 480px) {
@@ -144,7 +198,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tron-login-account {
+  .tron-login-panel {
+    animation: none;
+  }
+  .tron-login-remove {
     transition: none;
   }
+}
+
+:root[data-tron-motion-policy="reduced"] .tron-login-panel,
+:root[data-tron-motion-policy="off"] .tron-login-panel {
+  animation: none;
+}
+
+:root[data-tron-motion-policy="reduced"] .tron-login-remove,
+:root[data-tron-motion-policy="off"] .tron-login-remove {
+  transition: none;
 }

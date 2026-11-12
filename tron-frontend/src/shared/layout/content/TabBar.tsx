@@ -147,7 +147,7 @@ function TabBarItem({
               className={cn(
                 "group relative inline-flex h-8 min-w-0 max-w-[16rem] shrink-0 cursor-pointer items-center rounded-lg px-1 text-sm font-medium whitespace-nowrap text-[var(--color-on-surface-variant)] transition-all",
                 isActive
-                  ? "bg-[var(--color-elevated-surface)] text-foreground"
+                  ? "bg-[var(--tron-tab-active-bg,var(--color-elevated-surface))] text-foreground"
                   : "hover:bg-background/50 hover:text-foreground",
               )}
               role="tab"

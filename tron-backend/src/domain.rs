@@ -4,6 +4,7 @@ pub mod auth;
 pub mod automation;
 pub mod chat;
 pub mod connector;
+pub mod computer_use;
 pub mod directory;
 pub mod graph;
 pub mod mcp;

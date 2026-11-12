@@ -349,6 +349,7 @@ function startupPageHtml(message, { failed = false } = {}) {
 
 function startBackend(resourcesDir) {
   const sidecarPath = resolveSidecarPath(resourcesDir);
+  const bundledPacks = require("./capability-packs.cjs").resolveBundledCapabilityPacks(resourcesDir, { packaged: app.isPackaged });
   const appDataDir = state.appDataDir;
   const configPath = resolveBackendConfigPath(appDataDir, resourcesDir, {
     relocateStorage: process.platform === "win32" && app.isPackaged,
@@ -372,6 +373,7 @@ function startBackend(resourcesDir) {
   const child = spawn(sidecarPath, [], {
     env: {
       ...process.env,
+      ...(bundledPacks ? { TRON_BUNDLED_CAPABILITY_PACKS_DIR: bundledPacks } : {}),
       ...(process.platform === "darwin" ? { MallocLargeCache: process.env.MallocLargeCache ?? "0" } : {}),
       TRON_BACKEND_DATABASE_URL: state.databasePath,
       TRON_BACKEND_CONTROL_DATABASE_URL: state.controlDatabasePath,
@@ -454,6 +456,7 @@ async function bootstrapRuntime() {
       getVersionServerUrl: () => resolveUpdateServerUrl(resourcesDir),
       frontendDir: state.frontendDistDir,
       sidecarPath: resolveSidecarPath(resourcesDir),
+      bundledCapabilityPacksDir: require("./capability-packs.cjs").resolveBundledCapabilityPacks(resourcesDir, { packaged: app.isPackaged, mode: "wsl2" }),
       fetchImpl: (url, options) => net.fetch(url, options),
       fetchDownloadImpl: (url, options) => fetchWslDownload(net, url, options),
       onStatus: (status) => {

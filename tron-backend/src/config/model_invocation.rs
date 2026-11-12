@@ -58,7 +58,6 @@ pub struct ModelInvocationConfig {
     pub embedding: EmbeddingInvocationConfig,
     pub rerank: ModelInvocationTimeouts,
     pub verification: ModelInvocationTimeouts,
-    pub agent_model_timeout_seconds: u64,
     pub agent_run_timeout_seconds: u64,
     pub external_agent: ModelInvocationTimeouts,
 }
@@ -66,7 +65,7 @@ pub struct ModelInvocationConfig {
 impl Default for ModelInvocationConfig {
     fn default() -> Self {
         Self {
-            default_output_tokens: 16_384,
+            default_output_tokens: 65_536,
             text: ModelInvocationTimeouts {
                 call_timeout_seconds: 300,
                 operation_timeout_seconds: 900,
@@ -80,7 +79,6 @@ impl Default for ModelInvocationConfig {
                 call_timeout_seconds: 60,
                 operation_timeout_seconds: 180,
             },
-            agent_model_timeout_seconds: 300,
             agent_run_timeout_seconds: 3 * 24 * 60 * 60,
             external_agent: ModelInvocationTimeouts {
                 call_timeout_seconds: 3600,
@@ -107,13 +105,8 @@ impl ModelInvocationConfig {
         if self.embedding.max_batch_inputs == 0 || self.embedding.max_batch_tokens == 0 {
             return Err("embedding: maxBatchInputs和maxBatchTokens必须大于零".into());
         }
-        if self.agent_model_timeout_seconds == 0
-            || self.agent_run_timeout_seconds < self.agent_model_timeout_seconds
-        {
-            return Err(
-                "agentModelTimeoutSeconds必须大于零，agentRunTimeoutSeconds不能小于单次调用超时"
-                    .into(),
-            );
+        if self.agent_run_timeout_seconds == 0 {
+            return Err("agentRunTimeoutSeconds必须大于零".into());
         }
         if tokio::time::Instant::now()
             .checked_add(std::time::Duration::from_secs(self.agent_run_timeout_seconds))
@@ -183,9 +176,8 @@ impl ModelInvocationConfig {
                 overrides.apply(current);
             }
         }
-        if let Some(value) = file.agent_model_timeout_seconds {
-            self.agent_model_timeout_seconds = value;
-        }
+        // Retired: slow streams must not be terminated by a per-model deadline.
+        let _ = file.agent_model_timeout_seconds;
         if let Some(value) = file.agent_run_timeout_seconds {
             self.agent_run_timeout_seconds = value;
         }

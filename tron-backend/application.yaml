@@ -37,7 +37,8 @@ systemAgents:
 
 # Model budgets are read at the next invocation; batch limits at the next embedding batch.
 modelInvocation:
-  defaultOutputTokens: 16384
+  # Shared by reasoning, final text and tool arguments; explicit model limits win.
+  defaultOutputTokens: 65536
   text:
     callTimeoutSeconds: 300
     operationTimeoutSeconds: 900
@@ -52,7 +53,6 @@ modelInvocation:
   verification:
     callTimeoutSeconds: 60
     operationTimeoutSeconds: 180
-  agentModelTimeoutSeconds: 300
   agentRunTimeoutSeconds: 259200
   externalAgent:
     callTimeoutSeconds: 3600

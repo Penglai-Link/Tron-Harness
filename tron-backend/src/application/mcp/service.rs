@@ -1,4 +1,5 @@
 mod gateway;
+mod pack;
 mod runtime;
 mod validation;
 
@@ -137,10 +138,15 @@ impl McpService {
         let mut existing = repository
             .list_platform_servers()?
             .into_iter()
-            .map(|server| server.server_code)
-            .collect::<std::collections::BTreeSet<_>>();
+            .map(|server| (server.server_code.clone(), server))
+            .collect::<std::collections::BTreeMap<_, _>>();
         for (declaration, enabled, directory) in declarations {
-            if !existing.insert(declaration.id.clone()) {
+            if let Some(server) = existing.get(&declaration.id) {
+                if let Some(updated) = self.upgraded_pack_entrypoint(server, declaration, directory)
+                {
+                    repository.upsert_platform_server(&updated)?;
+                    existing.insert(declaration.id.clone(), updated);
+                }
                 continue;
             }
             let (transport_kind, url, command, args) = match &declaration.transport {
@@ -161,7 +167,7 @@ impl McpService {
                 ),
             };
             let now = current_timestamp();
-            repository.upsert_platform_server(&PlatformMcpServerRecord {
+            let server = PlatformMcpServerRecord {
                 server_code: declaration.id.clone(),
                 name: declaration.id.clone(),
                 description: None,
@@ -182,7 +188,9 @@ impl McpService {
                 last_health_checked_at: None,
                 created_at: now.clone(),
                 updated_at: now,
-            })?;
+            };
+            repository.upsert_platform_server(&server)?;
+            existing.insert(declaration.id.clone(), server);
         }
         Ok(())
     }

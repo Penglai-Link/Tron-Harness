@@ -314,6 +314,12 @@ impl sdk::ModelTransport for SnapshotTransport {
                 self.providers
                     .record_runtime_snapshot(self.run.as_deref(), "", &self.config, &response)
                     .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
+                if let Some(error) = model_errors::output_limit_failure(
+                    &response,
+                    routed_body.as_ref().unwrap_or(body),
+                ) {
+                    return Err(error);
+                }
                 if let Some(logical_code) = self.embedding_logical_code.as_deref() {
                     let mut normalized = response;
                     if let Some(object) = normalized.as_object_mut() {
@@ -367,6 +373,12 @@ impl sdk::ModelTransport for SnapshotTransport {
                                 .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
                             *saved = next;
                         }
+                    }
+                    if let Some(error) = model_errors::output_limit_failure(
+                        &event,
+                        routed_body.as_ref().unwrap_or(body),
+                    ) {
+                        return Err(error);
                     }
                     sink(event)
                 }),

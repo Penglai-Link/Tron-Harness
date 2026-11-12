@@ -464,13 +464,9 @@ fn product_completion_payload(
                 if let Some(result) = completion.data.get("result") {
                     object.insert("result".into(), result.clone());
                 }
-                if completion.event_name == "RUN_ERROR" {
-                    for key in ["code", "message"] {
-                        if let Some(value) = completion.data.get(key) {
-                            object.insert(key.into(), value.clone());
-                        }
-                    }
-                }
+                // Native failures carry the same diagnostic as persisted history.
+                // Product completion only settles the HTTP request; its localized
+                // generic error must not erase the native failure code/message.
                 // Enrich interrupt metadata with product question IDs, retaining native
                 // interaction records in the result rather than reconstructing execution.
                 if native.sse_event == "RUN_FINISHED" {

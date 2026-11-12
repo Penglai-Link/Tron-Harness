@@ -73,6 +73,7 @@ electron/dist
 electron/resources
 /node_modules/
 /output/
+/capability-packs/**/target/
 
 docs/brainstorm/
 docs/features/

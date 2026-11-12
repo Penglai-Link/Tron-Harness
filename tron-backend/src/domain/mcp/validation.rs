@@ -10,6 +10,7 @@ pub fn normalize_mcp_server_code(value: &str) -> Result<String, McpError> {
     if normalized.chars().any(|character| {
         !(character.is_ascii_lowercase()
             || character.is_ascii_digit()
+            || character == '.'
             || character == '_'
             || character == '-')
     }) {

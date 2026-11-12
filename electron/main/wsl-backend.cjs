@@ -66,12 +66,13 @@ function requestText(url) {
 }
 
 class WslBackend {
-  constructor({ dataDir, getVersion, getVersionServerUrl, frontendDir, sidecarPath, fetchImpl = globalThis.fetch, fetchDownloadImpl = fetchImpl, onStatus = () => {} }) {
+  constructor({ dataDir, getVersion, getVersionServerUrl, frontendDir, sidecarPath, bundledCapabilityPacksDir, fetchImpl = globalThis.fetch, fetchDownloadImpl = fetchImpl, onStatus = () => {} }) {
     this.preferencePath = path.join(dataDir, "backend-environment.json");
     this.getVersion = getVersion;
     this.getVersionServerUrl = getVersionServerUrl;
     this.frontendDir = frontendDir;
     this.sidecarPath = sidecarPath;
+    this.bundledCapabilityPacksDir = bundledCapabilityPacksDir;
     this.platforms = null;
     this.fetch = fetchImpl;
     this.fetchDownload = fetchDownloadImpl;
@@ -268,7 +269,11 @@ class WslBackend {
       if (attempt === 79) throw new Error("wsl-no-free-port");
     }
     const nonce = crypto.randomBytes(16).toString("hex");
-    const child = spawn("wsl.exe", argsFor(distro, ["python3", "-u", "-c", runtime, "serve", info.backendVersion, String(port), nonce]), { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    const bundledPacks = this.bundledCapabilityPacksDir
+      ? await run(argsFor(distro, ["wslpath", "-u", this.bundledCapabilityPacksDir])) : "";
+    const serveArgs = ["python3", "-u", "-c", runtime, "serve", info.backendVersion, String(port), nonce];
+    if (bundledPacks) serveArgs.push(bundledPacks);
+    const child = spawn("wsl.exe", argsFor(distro, serveArgs), { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     let output = "", errors = "";
     child.stdin.on("error", () => {});
     child.stderr.on("data", (chunk) => { if (errors.length < 16000) errors += chunk; });

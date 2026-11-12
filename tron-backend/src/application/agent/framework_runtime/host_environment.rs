@@ -115,6 +115,19 @@ impl FrameworkHost {
                 }
             }
         }
+        // Retire only package-owned MCP entries removed by a new manifest.
+        // Native tool packages must not leave a second, obsolete MCP route.
+        for resource in mcp_ownership.values().filter(|resource| {
+            selected.contains(&resource.pack_id)
+                && !mcp_declarations.iter().any(|(declaration, _, _)| declaration.id == resource.code)
+        }) {
+            if let Some(mcp) = self.0.mcp.get() {
+                if existing_mcp.contains(&resource.code) {
+                    mcp.delete_platform_server(&resource.code).map_err(|error| error.to_string())?;
+                }
+            }
+            mcp_resources.push(CapabilityResource { available: false, ..resource.clone() });
+        }
         if let Some(mcp) = self.0.mcp.get() {
             mcp.register_pack_contributions(&mcp_declarations)
                 .map_err(|e| e.to_string())?;
@@ -265,6 +278,7 @@ impl FrameworkHost {
         let run = options.run.as_ref().ok_or("catalog context unavailable")?;
         let bundled =
             crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US");
+        let mut issues = Vec::new();
         let mut ids = catalog_entries
             .iter()
             .map(|(entry, _)| entry.descriptor.id.clone())
@@ -287,33 +301,82 @@ impl FrameworkHost {
             // Prefer inert metadata: listing settings must not require the
             // credentials, filesystem grants or resources of an Agent run.
             let entries = if let Some(entries) = provider.0.catalog_metadata() {
-                entries.into_iter().map(|entry| (entry, fw::ToolSource::default())).collect()
+                entries
+                    .into_iter()
+                    .map(|entry| (entry, fw::ToolSource::default()))
+                    .collect()
             } else {
-                let mut lease = provider.0.lease(run).await.map_err(|e| e.to_string())?;
-                let entries = lease.tools.iter()
+                let mut lease = match provider.0.lease(run).await {
+                    Ok(lease) => lease,
+                    Err(error) => {
+                        issues.push(crate::domain::agent::ToolCatalogIssue {
+                            blocks_tool: true,
+                            tool_code: None,
+                            tool_name: None,
+                            provider_id: Some(provider_id.to_owned()),
+                            pack_id: Some(pack.clone()),
+                            message: error.to_string(),
+                        });
+                        continue;
+                    }
+                };
+                let entries = lease
+                    .tools
+                    .iter()
                     .map(|tool| (tool.catalog_entry(), tool.source.clone()))
                     .collect::<Vec<_>>();
                 let report = lease.resources.close_async(Duration::from_secs(5)).await;
                 if !report.is_success() {
-                    return Err(format!("catalog lease cleanup failed: {report:?}"));
+                    issues.push(crate::domain::agent::ToolCatalogIssue {
+                        blocks_tool: false,
+                        tool_code: None,
+                        tool_name: None,
+                        provider_id: Some(provider_id.to_owned()),
+                        pack_id: Some(pack.clone()),
+                        message: format!("catalog lease cleanup failed: {report:?}"),
+                    });
                 }
                 entries
             };
             for (entry, mut source) in entries {
                 if bundled.iter().any(|t| {
                     t.tool_code == entry.descriptor.id || t.tool_name == entry.descriptor.call_name
-                }) || !ids.insert(entry.descriptor.id.clone())
-                    || !names.insert(entry.descriptor.call_name.clone())
+                }) || ids.contains(&entry.descriptor.id)
+                    || names.contains(&entry.descriptor.call_name)
                 {
-                    return Err(format!("tool {} conflicts with a bundled tool", entry.descriptor.id));
+                    issues.push(crate::domain::agent::ToolCatalogIssue {
+                        blocks_tool: false,
+                        tool_code: Some(entry.descriptor.id.clone()),
+                        tool_name: Some(entry.descriptor.call_name.clone()),
+                        provider_id: Some(provider_id.to_owned()),
+                        pack_id: Some(pack.clone()),
+                        message: format!(
+                            "Tool {} conflicts with another tool",
+                            entry.descriptor.id
+                        ),
+                    });
+                    continue;
                 }
-                source.plugin_id.get_or_insert_with(|| provider_id.to_owned());
+                ids.insert(entry.descriptor.id.clone());
+                names.insert(entry.descriptor.call_name.clone());
+                source
+                    .plugin_id
+                    .get_or_insert_with(|| provider_id.to_owned());
                 source.pack_id.get_or_insert_with(|| pack.clone());
-                source.provider_id.get_or_insert_with(|| provider_id.to_owned());
+                source
+                    .provider_id
+                    .get_or_insert_with(|| provider_id.to_owned());
                 catalog_entries.push((entry, source));
             }
         }
-        let records = management.register_tool_catalog_entries(&catalog_entries)?;
+        let (records, registration_issues) =
+            management.register_tool_catalog_entries(&catalog_entries)?;
+        issues.extend(registration_issues);
+        for issue in &issues {
+            tracing::warn!(tool_code = ?issue.tool_code, provider_id = ?issue.provider_id,
+                pack_id = ?issue.pack_id, error = %issue.message, "Tool catalog entry could not be loaded");
+        }
+        *self.0.tool_catalog_issues.write().unwrap() = issues;
         let owned = records
             .into_iter()
             .filter_map(|record| {
@@ -334,6 +397,25 @@ impl FrameworkHost {
         resources.register(&owned)?;
         Ok(())
     }
+
+    pub fn tool_catalog_issues(&self) -> Vec<crate::domain::agent::ToolCatalogIssue> {
+        self.0.tool_catalog_issues.read().unwrap().clone()
+    }
+
+    pub async fn refresh_capability_catalog(&self) -> Result<(), String> {
+        let _guard = self.0.config_lock.lock().await;
+        self.ensure_open()?;
+        if let Some(framework) = self.0.framework.get() {
+            let catalog = self.builtin_tool_catalog(&framework)?;
+            self.discover_imported_tools(&framework, catalog).await
+        } else {
+            self.framework()
+                .await
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+    }
+
     pub async fn ensure_capability_catalog(&self) -> Result<(), String> {
         let _guard = self.0.config_lock.lock().await;
         self.ensure_open()?;
@@ -470,10 +552,16 @@ impl FrameworkHost {
                     serde_json::Value::Null,
                 )
                 .map_err(|error| error.to_string())?;
+            let backend_skills = managed.installed().manifest.implementations.iter()
+                .any(|implementation| implementation.extension == "framework.skills");
             let managed = managed
                 .contributions(
                     eliteforge_agent_capability_runtime::CapabilityContributionSelection {
                         mcp: Some(vec![]),
+                        // A package-provided SkillProvider owns runtime parsing;
+                        // keep its directories for the registry, not a second
+                        // filesystem provider with different frontmatter rules.
+                        skills: backend_skills.then_some(vec![]),
                         ..Default::default()
                     },
                 )

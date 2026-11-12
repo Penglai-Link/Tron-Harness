@@ -103,6 +103,7 @@ struct Host {
     navigation: OnceCell<crate::application::navigation::NavigationService>,
     skills: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     installed_packs: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
+    tool_catalog_issues: std::sync::RwLock<Vec<crate::domain::agent::ToolCatalogIssue>>,
     tools_enabled: Arc<std::sync::atomic::AtomicBool>,
     observe_enabled: Arc<std::sync::atomic::AtomicBool>,
     external_agent: RuntimeCell<Agent>,
@@ -806,6 +807,7 @@ impl FrameworkHost {
             navigation: OnceCell::new(),
             skills: Default::default(),
             installed_packs: Default::default(),
+            tool_catalog_issues: Default::default(),
             tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             observe_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             external_agent: RuntimeCell::new(),
@@ -864,6 +866,7 @@ impl FrameworkHost {
             navigation: OnceCell::new(),
             skills: Default::default(),
             installed_packs: Default::default(),
+            tool_catalog_issues: Default::default(),
             tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             observe_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             external_agent: RuntimeCell::new(),
@@ -903,6 +906,8 @@ impl FrameworkHost {
             ));
         }
         let path = PathBuf::from(database);
+        super::desktop_bundles::install(&path.with_extension("capability-packs"))
+            .map_err(AgentError::InvalidConfiguration)?;
         Ok(Self::persistent(path, Some(resources)))
     }
     async fn agent(&self) -> Result<Agent, fw::AgentError> {

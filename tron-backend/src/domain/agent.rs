@@ -44,7 +44,7 @@ pub use management::{
     ManagedAgentSource, ManagedAgentType, ManagedSystemAgentRecord, McpAccessMode,
     PlatformInternalAgentConfig, RuntimeAdapterCapabilityRecord, SystemAgentModelRecord,
     SystemAgentRegistryEntry, SystemAgentStatus, SystemAgentSyncResult, ToolAssignmentMode,
-    ToolAvailabilityState, ToolCatalogRecord, ToolDomainRecord, ToolOperationKind,
+    ToolAvailabilityState, ToolCatalogIssue, ToolCatalogRecord, ToolDomainRecord, ToolOperationKind,
     WorkspaceInternalAgentDefinition, WorkspaceInternalAgentMcpServerAssignment,
     WorkspaceInternalAgentPolicy, WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
 };

@@ -2,7 +2,10 @@ use serde::Serialize;
 
 #[path = "capability_contents.rs"]
 mod contents;
-use contents::{CapabilityContentInfo, builtin_contents, manifest_contents};
+use contents::{CapabilityContentInfo, builtin_contents, installed_contents};
+
+#[path = "capability_readme.rs"]
+mod readme;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,7 +13,9 @@ pub struct CapabilityPackInfo {
     pub id: String,
     pub name: String,
     pub version: String,
+    pub cua_driver_sdk_version: Option<String>,
     pub description: String,
+    pub readme: Option<String>,
     pub provider: String,
     pub updated_at: Option<String>,
     pub effective: bool,
@@ -46,6 +51,19 @@ pub fn installed_capability_packs(
     query_installed_capability_packs(root, locale, true, None)
 }
 
+fn latest_installed(
+    manager: &eliteforge_agent_capability_runtime::CapabilityPackManager,
+) -> Result<Vec<eliteforge_agent_capability_runtime::InstalledCapabilityPack>, String> {
+    // The manager sorts versions in ascending order. Match runtime selection
+    // instead of showing an obsolete manifest retained for pinned executions.
+    Ok(manager.installed().map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|pack| (pack.manifest.id.clone(), pack))
+        .collect::<std::collections::BTreeMap<_, _>>()
+        .into_values()
+        .collect())
+}
+
 pub fn query_installed_capability_packs(
     root: &std::path::Path, locale: &str, include_contents: bool, id: Option<&str>,
 ) -> Result<Vec<CapabilityPackInfo>, String> {
@@ -69,9 +87,12 @@ pub fn query_installed_capability_packs(
     }
     // Imported metadata belongs to its provider; never translate by a colliding
     // built-in call name or activate a plugin merely to display its manifest.
-    for installed in manager.installed().map_err(|error| error.to_string())?.into_iter().filter(|pack| id.is_none_or(|id| pack.manifest.id == id)) {
-        let mut contents = if include_contents { manifest_contents(&installed.manifest) } else { vec![] };
-        if include_contents { contents.extend(contents::navigation_contents(&installed.path, &installed.manifest, locale)?); }
+    for installed in latest_installed(&manager)?.into_iter().filter(|pack| id.is_none_or(|id| pack.manifest.id == id)) {
+        let mut contents = if include_contents {
+            installed_contents(&installed.path, &installed.manifest, locale)?
+        } else {
+            vec![]
+        };
         for item in contents.iter_mut().filter(|item|item.kind=="Tool") {
             if let Some(entry)=installed.manifest.tools.iter().find(|entry|entry.descriptor.call_name==item.name) {
                 let display=entry.descriptor.resolve_display(locale);
@@ -79,6 +100,12 @@ pub fn query_installed_capability_packs(
             }
         }
         packs.push(CapabilityPackInfo {
+            cua_driver_sdk_version: installed_cua_driver_sdk_version(&manager, &installed)?,
+            readme: if include_contents && id.is_some() {
+                readme::installed_readme(&manager, &installed)?
+            } else {
+                None
+            },
             contents,
             id: installed.manifest.id,
             name: installed.manifest.name,
@@ -93,6 +120,33 @@ pub fn query_installed_capability_packs(
     Ok(packs)
 }
 
+fn installed_cua_driver_sdk_version(
+    manager: &eliteforge_agent_capability_runtime::CapabilityPackManager,
+    pack: &eliteforge_agent_capability_runtime::InstalledCapabilityPack,
+) -> Result<Option<String>, String> {
+    if pack.manifest.id != crate::domain::computer_use::PACK_ID
+        || !pack
+            .manifest
+            .resources
+            .iter()
+            .any(|path| path == "upstream.json")
+    {
+        return Ok(None);
+    }
+    // Read this installed version's verified provenance without starting its backend.
+    let bytes = manager
+        .read_resource(pack, "upstream.json")
+        .map_err(|error| error.to_string())?;
+    let upstream: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("Invalid computer-use upstream.json: {error}"))?;
+    Ok(upstream
+        .get("sdkVersion")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|version| !version.is_empty())
+        .map(str::to_owned))
+}
+
 pub fn install_capability_pack(
     root: &std::path::Path,
     bytes: &[u8],
@@ -102,9 +156,10 @@ pub fn install_capability_pack(
     let installed = manager
         .install_bytes(bytes, InstallPolicy::Development)
         .map_err(|error| error.to_string())?;
-    let mut contents = manifest_contents(&installed.manifest);
-    contents.extend(contents::navigation_contents(&installed.path, &installed.manifest, "en-US")?);
+    let contents = installed_contents(&installed.path, &installed.manifest, "en-US")?;
     Ok(CapabilityPackInfo {
+        cua_driver_sdk_version: installed_cua_driver_sdk_version(&manager, &installed)?,
+        readme: None,
         contents,
         id: installed.manifest.id,
         name: installed.manifest.name,
@@ -195,7 +250,9 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             id: id.into(),
             name: name.into(),
             version: version.into(),
+            cua_driver_sdk_version: None,
             description: description.into(),
+            readme: None,
             provider: provider.into(),
             updated_at: updated_at.map(str::to_owned),
             effective: true,
@@ -424,7 +481,7 @@ pub fn installed_extension_implementations(
     use eliteforge_agent_capability_runtime::CapabilityPackManager;
     let mut items = extension_implementation_catalog_with_state(packs, enabled);
     let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
-    for installed in manager.installed().map_err(|error| error.to_string())? {
+    for installed in latest_installed(&manager)? {
         let manifest = installed.manifest;
         for implementation in manifest.implementations {
             let enabled = packs.get(&manifest.id).copied().unwrap_or(false);

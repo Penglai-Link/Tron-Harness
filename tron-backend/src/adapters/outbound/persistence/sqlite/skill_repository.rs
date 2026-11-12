@@ -139,8 +139,7 @@ impl SqliteSkillRegistryRepositorySql<'_> {
         tx.commit().map_err(storage_error)
     }
     fn initialize_agent_skills(&mut self, agent: &str) -> Result<(), SkillError> {
-        self.connection.execute("INSERT OR IGNORE INTO agent_skill_assignments SELECT ?1,skill_name,available FROM registry_skills WHERE provider_pack_id IS NOT NULL",[agent]).map_err(storage_error)?;
-        Ok(())
+        initialize_pack_skill_assignments(self.connection, &serde_json::json!([agent]).to_string())
     }
     fn delete_pack_skills(&mut self, pack: &str) -> Result<Vec<String>, SkillError> {
         let names = self
@@ -468,8 +467,7 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
     fn initialize_agents_skills(&mut self, agents: &[String]) -> Result<(), SkillError> {
         let agents = serde_json::to_string(agents).map_err(|_| SkillError::StorageFailure)?;
         self.connection.call(move |connection| {
-            connection.execute("INSERT OR IGNORE INTO agent_skill_assignments SELECT a.value,s.skill_name,s.available FROM json_each(?1) a CROSS JOIN registry_skills s WHERE s.provider_pack_id IS NOT NULL", [agents]).map_err(storage_error)?;
-            Ok(())
+            initialize_pack_skill_assignments(connection, &agents)
         }, || SkillError::StorageFailure)
     }
     fn initialize_agent_skills(&mut self, agent: &str) -> Result<(), SkillError> {
@@ -528,4 +526,23 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
             || SkillError::StorageFailure,
         )
     }
+}
+
+fn initialize_pack_skill_assignments(connection: &mut Connection, agents: &str) -> Result<(), SkillError> {
+    use crate::domain::computer_use::{PACK_ID, SKILL, CONTROLLERS};
+    let tx = connection.transaction().map_err(storage_error)?;
+    tx.execute(
+        "INSERT OR IGNORE INTO agent_skill_assignments
+         SELECT a.value,s.skill_name,
+                CASE WHEN (s.provider_pack_id=?2 OR s.skill_name=?3) AND a.value NOT IN (?4,?5) THEN 0 ELSE s.available END
+         FROM json_each(?1) a CROSS JOIN registry_skills s WHERE s.provider_pack_id IS NOT NULL",
+        params![agents, PACK_ID, SKILL, CONTROLLERS[0], CONTROLLERS[1]],
+    ).map_err(storage_error)?;
+    tx.execute(
+        "UPDATE agent_skill_assignments SET enabled=0
+         WHERE enabled=1 AND agent_code NOT IN (?3,?4)
+           AND skill_name IN (SELECT skill_name FROM registry_skills WHERE provider_pack_id=?1 OR skill_name=?2)",
+        params![PACK_ID, SKILL, CONTROLLERS[0], CONTROLLERS[1]],
+    ).map_err(storage_error)?;
+    tx.commit().map_err(storage_error)
 }

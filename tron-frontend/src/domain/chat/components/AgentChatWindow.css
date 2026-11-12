@@ -122,3 +122,15 @@
   );
   box-shadow: none;
 }
+
+.ef-chat__run-notice-diagnostic {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.ef-chat__run-notice-diagnostic code { min-width: 0; }
+.ef-chat__run-notice-diagnostic a { text-decoration: underline; text-underline-offset: 2px; }

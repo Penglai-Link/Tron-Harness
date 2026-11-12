@@ -235,7 +235,7 @@ export const shell = {
     },
   },
   settings: {
-    exit: "Exit",
+    backToApp: "Back",
     groups: {
       data: "Data",
       administration: "Administration",

@@ -351,8 +351,8 @@ impl FrameworkHost {
         // configure a run-wide token ceiling.
         request.limits.max_total_tokens = fw::RunLimits::UNLIMITED_TOKENS;
         let invocation = self.invocation_config();
-        request.limits.model_timeout = Duration::from_secs(invocation.agent_model_timeout_seconds);
         request.limits.run_timeout = Duration::from_secs(invocation.agent_run_timeout_seconds);
+        request.limits.model_timeout = request.limits.run_timeout;
         request.limits.max_model_retries = if context.auto_model_route.is_some() {
             2
         } else {
@@ -486,6 +486,7 @@ impl FrameworkHost {
                         stream,
                         &context,
                         registration.clone(),
+                        trace_guard.trace_id(),
                     )
                     .await
                 }
@@ -503,6 +504,7 @@ impl FrameworkHost {
                         stream,
                         &context,
                         registration.clone(),
+                        trace_guard.trace_id(),
                     )
                     .await
                 }

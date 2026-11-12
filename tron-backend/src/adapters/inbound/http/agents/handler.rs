@@ -142,9 +142,13 @@ pub async fn activate_agui_stream(
 }
 
 pub async fn list_tool_domains(
+    State(state): State<AppState>,
     State(agent_management): State<AgentManagementService>,
     auth: RequestAuthContext,
 ) -> Response {
+    if let Err(error) = state.agent_framework.ensure_capability_catalog().await {
+        tracing::warn!(%error, "Serving known tool domains after catalog discovery failed");
+    }
     Json(ApiResponse::success(
         agent_management.list_tool_domains(&auth.locale),
     ))
@@ -165,11 +169,7 @@ pub async fn list_tool_categories(
     auth: RequestAuthContext,
 ) -> Response {
     if let Err(error) = state.agent_framework.ensure_capability_catalog().await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::protocol_error("-1", error)),
-        )
-            .into_response();
+        tracing::warn!(%error, "Serving known categories after catalog discovery failed");
     }
     let mut categories = std::collections::BTreeMap::<String, ToolCategoryView>::new();
     for tool in agent_management.list_tools(None, None, &auth.locale) {
@@ -204,17 +204,14 @@ pub async fn list_tools(
     Query(query): Query<ListToolsQuery>,
 ) -> Response {
     if let Err(error) = state.agent_framework.ensure_capability_catalog().await {
-        return (
-            StatusCode::CONFLICT,
-            Json(ApiResponse::error("CAPABILITY_CATALOG_FAILED", error)),
-        )
-            .into_response();
+        tracing::warn!(%error, "Serving known tools after catalog discovery failed");
     }
     let tools = agent_management.list_tools(
         query.domain_code.as_deref(),
         query.search.as_deref(),
         &auth.locale,
     );
+    let catalog_issues = state.agent_framework.tool_catalog_issues();
     Json(ApiResponse::success(
         tools
             .into_iter()
@@ -223,17 +220,30 @@ pub async fn list_tools(
                 if tool.source.pack_id.is_none() {
                     tool.source.pack_id = owner.as_ref().map(|item| item.pack_id.clone());
                 }
+                let catalog_issue = catalog_issues.iter().find(|issue| {
+                    issue.blocks_tool
+                        && issue.pack_id.as_ref().is_none_or(|pack| tool.source.pack_id.as_ref() == Some(pack))
+                        && issue.provider_id.as_ref().is_none_or(|provider| {
+                            tool.source.provider_id.as_ref() == Some(provider)
+                                || tool.source.plugin_id.as_ref() == Some(provider)
+                        })
+                        && issue.tool_code.as_ref().is_none_or(|code| code == &tool.tool_code)
+                        && issue.tool_name.as_ref().is_none_or(|name| name == &tool.tool_name)
+                });
+                if catalog_issue.is_some() {
+                    tool.availability_state = crate::domain::agent::ToolAvailabilityState::Disabled;
+                }
                 let assignable = tool.availability_state
                     == crate::domain::agent::ToolAvailabilityState::Available;
                 let dude_assignable = !crate::application::agent::dude_workspace_tool(&tool);
                 let dude_replacement_tool_code = crate::application::agent::dude_tool_replacement(&tool.tool_code).map(str::to_owned);
-                let disabled_reason = owner.as_ref().filter(|o| !o.available).map(|o| {
+                let disabled_reason = catalog_issue.map(|issue| issue.message.clone()).or_else(|| owner.as_ref().filter(|o| !o.available).map(|o| {
                     if auth.locale.starts_with("zh") {
                         format!("能力包 {} 已禁用", o.pack_id)
                     } else {
                         format!("Capability pack {} is disabled", o.pack_id)
                     }
-                });
+                }));
                 ToolAssignmentVo {
                     provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
                     assignable,

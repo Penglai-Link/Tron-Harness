@@ -2004,6 +2004,7 @@ export const pages = {
         actionEdit: "Edit",
         commandSummary: "Run: {{command}}",
         searchSummary: "{{name}}: {{query}}",
+        unknownTarget: "Tool call (target unknown)",
       },
       rail: {
         waitingModel: "Waiting for model...",
@@ -2170,7 +2171,8 @@ export const pages = {
       checkpoint: "Compression Checkpoint",
       checkpointReady: "Checkpoint ready",
       noCheckpoint: "No checkpoint",
-      compactMemory: "Compact short-term memory",
+      compactMemory: "Manually compact short-term memory",
+      compactingMemory: "Compacting",
       goalStatuses: {
         ACTIVE: "Running",
         PAUSED: "Paused",
@@ -2396,6 +2398,7 @@ export const pages = {
         latestRequestUsage: "Latest Model Request",
         actualInput: "Actual input",
         input: "Input",
+        output: "Output",
         cached: "Cached",
         reasoning: "Reasoning",
         providerDelta:
@@ -2548,6 +2551,9 @@ export const pages = {
     emptyPacks: "No capability packs are registered.",
     emptyExtensions: "No extension implementations are registered.",
     version: "Version",
+    packVersion: "Package version",
+    cuaDriverSdkVersion: "cua-driver SDK version",
+    versionUndeclared: "Not declared",
     provider: "Provider",
     updatedAt: "Updated",
     effective: "Effective",
@@ -2574,6 +2580,8 @@ export const pages = {
     },
   },
   settingsTools: {
+    catalogIssues: { title: "Some tools could not be loaded", hint: "Other tools remain visible. Fix the affected tool or provider, then refresh." },
+    loadParts: { domains: "Tool domains", tools: "Tool list", permissions: "Tool permissions", categories: "Tool categories", diagnostics: "Tool discovery" },
     categories: { label: "Tool categories", all: "All tools", uncategorized: "Uncategorized", readonly: "Read-only tools", source: "Source", unknown: "Unknown", unknownKind: "Undeclared", unavailable: "Unavailable", pack: "Capability pack", plugin: "Plugin", provider: "Provider", adapter: "Adapter" },
     permissions: {
       title: "Execution permission",
@@ -3296,26 +3304,26 @@ export const pages = {
   },
   settingsGeneral: {
     browserNotifications: {
-      title: "Browser Notifications",
+      title: "System Notifications",
       status: {
         enabled: "Enabled. New notifications appear while this app is in the background.",
         authorized: "Browser permission is granted. Enable notifications to receive background alerts.",
         disabled: "Authorize notifications to receive alerts while this app is in the background.",
         denied: "Notifications are blocked by the browser. Allow them in this site's browser settings.",
         unsupported: "Notifications are unavailable in this browser or context. Use a secure connection and check browser support.",
-        requestFailed: "Could not request browser notification permission. Check browser settings and try again.",
+        requestFailed: "Could not request system notification permission. Check browser settings and try again.",
       },
       test: {
         title: "Tron test notification",
         body: "This is a test notification from Tron.",
         failed: "Could not send the test notification. Check browser permissions and system notification settings.",
-        requireEnabled: "Authorize and enable browser notifications first.",
+        requireEnabled: "Authorize and enable system notifications first.",
       },
       actions: {
         test: "Test notification",
         authorize: "Authorize and enable",
-        enable: "Enable browser notifications",
-        disable: "Turn off browser notifications",
+        enable: "Enable system notifications",
+        disable: "Turn off system notifications",
       },
     },
     update: {
@@ -5493,7 +5501,12 @@ export const pages = {
       title: "User Agreement",
       description:
         "Please read the following compliance statement carefully. Checking the box means that you have read and agree to it.",
-      acknowledge: "Got it",
+      acknowledge: "I have read and agree",
+      confirmTitle: "Please accept the User Agreement",
+      confirmDescription:
+        "Read and accept the User Agreement to continue. Choosing “Agree and continue” will check the agreement box and continue with your action.",
+      confirmAndContinue: "Agree and continue",
+      cancel: "Cancel",
       rules: {
         rule1:
           "You have legally obtained authorization for the model APIs, accounts, keys, quotas, and related services you connect.",

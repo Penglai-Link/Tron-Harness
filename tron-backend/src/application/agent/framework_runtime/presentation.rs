@@ -15,24 +15,24 @@ pub(super) async fn consume_native_agui(
     stream: AgUiStream,
     context: &AgentRunContext,
     service: Option<AgentAguiStreamService>,
-) {
-    consume_native_agui_with_deadline(stream, context, service, REPLAY_WRITE_ACK_TIMEOUT).await;
-}
-
-async fn consume_native_agui_with_deadline(
-    stream: AgUiStream,
-    context: &AgentRunContext,
-    service: Option<AgentAguiStreamService>,
-    deadline: std::time::Duration,
+    trace_id: &str,
 ) {
     let stream_key = context
         .stream_key
         .as_deref()
         .or(context.conversation_code.as_deref())
         .unwrap_or(&context.run_code);
-    consume_native_projected(stream, stream_key, service, deadline, |data, ordinal| {
-        project_native_event(data, context, ordinal)
-    })
+    consume_native_projected(
+        stream,
+        stream_key,
+        service,
+        REPLAY_WRITE_ACK_TIMEOUT,
+        |data, ordinal| {
+            let mut event = project_native_event(data, context, ordinal)?;
+            event.data["metadata"]["tron"]["traceId"] = json!(trace_id);
+            Some(event)
+        },
+    )
     .await;
 }
 

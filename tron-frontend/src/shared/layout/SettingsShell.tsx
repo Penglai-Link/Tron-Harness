@@ -125,7 +125,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
 
   return (
     <div data-tron-settings-shell data-theme-anchor="app-shell" className="tron-skin-canvas tron-settings-frame">
-      <header className="relative z-30 h-[var(--tron-shell-toolbar-height)] shrink-0 pl-4 pr-[var(--tron-shell-right-gap)] sm:pl-6">
+      <header className="relative z-30 h-[var(--tron-shell-toolbar-height)] shrink-0 pl-4 pr-[max(1rem,var(--tron-shell-right-gap))] sm:pl-6">
         <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container)] text-[var(--color-primary)]">
@@ -135,9 +135,15 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
               <p className="truncate text-base font-semibold">{t("shell:settings.title")}</p>
             </div>
           </div>
-          <Link to={returnTo} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}>
-            <ArrowLeft size={14} aria-hidden="true" />
-            {t("shell:settings.exit")}
+          <Link
+            to={returnTo}
+            className={cn(
+              buttonVariants({ variant: "ghost" }),
+              "h-8 gap-2 px-3 text-sm [--tron-button-radius:0.5rem] [--tron-button-font-weight:500] [--tron-button-ghost-fg:var(--color-on-surface-variant)] [--tron-button-ghost-hover-fg:var(--color-on-surface)] motion-reduce:transition-none",
+            )}
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {t("shell:settings.backToApp")}
           </Link>
         </div>
       </header>

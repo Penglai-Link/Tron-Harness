@@ -1,5 +1,5 @@
 use super::*;
-use crate::domain::agent::{ToolAvailabilityState, ToolOperationKind};
+use crate::domain::agent::{ToolAvailabilityState, ToolCatalogIssue, ToolOperationKind};
 use eliteforge_agent_core::ToolDescriptor;
 use std::collections::{BTreeMap, HashSet};
 use tron_harness_capability::{ToolPermission, ToolPermissionSetting, ToolPermissionSource};
@@ -189,31 +189,78 @@ impl AgentManagementService {
             eliteforge_agent_core::ToolCatalogEntry,
             eliteforge_agent_core::ToolSource,
         )],
-    ) -> Result<Vec<ToolCatalogRecord>, String> {
+    ) -> Result<(Vec<ToolCatalogRecord>, Vec<ToolCatalogIssue>), String> {
         let mut records = Vec::new();
+        let mut issues = Vec::new();
         for (entry, source) in entries {
             // Resolve existing call names to their stable platform toolCode so
             // refreshed plugin metadata preserves permissions and assignments.
-            let mut record = self.describe_tool_descriptor(&entry.descriptor)?;
+            let mut record = match self.describe_tool_descriptor(&entry.descriptor) {
+                Ok(record) => record,
+                Err(message) => {
+                    issues.push(ToolCatalogIssue {
+                        blocks_tool: true,
+                        tool_code: Some(entry.descriptor.id.clone()),
+                        tool_name: Some(entry.descriptor.call_name.clone()),
+                        provider_id: source.provider_id.clone(),
+                        pack_id: source.pack_id.clone(),
+                        message,
+                    });
+                    continue;
+                }
+            };
             if let Some(domain) = &entry.domain_code {
                 record.domain_code = domain.clone();
             }
             if entry.category.is_some() {
                 record.category = entry.category.clone();
             }
-            let declared_provider = fixed_tool(&entry.descriptor.call_name)
-                .and_then(|tool| tool.source.provider_id);
+            let declared_provider =
+                fixed_tool(&entry.descriptor.call_name).and_then(|tool| tool.source.provider_id);
             record.source = source.clone();
             if let Some(provider) = declared_provider {
                 record.source.provider_id = Some(provider);
             }
             records.push(record);
         }
-        self.register_catalog_records(&records)?;
-        Ok(records)
+        let errors = self.catalog_validation_errors(&records)?;
+        let mut valid = Vec::new();
+        for (record, error) in records.into_iter().zip(errors) {
+            if let Some(message) = error {
+                issues.push(ToolCatalogIssue {
+                    blocks_tool: true,
+                    tool_code: Some(record.tool_code),
+                    tool_name: Some(record.tool_name),
+                    provider_id: record.source.provider_id,
+                    pack_id: record.source.pack_id,
+                    message,
+                });
+            } else {
+                valid.push(record);
+            }
+        }
+        self.remember_tools(&valid)
+            .map_err(|_| "Could not save tool bindings".to_string())?;
+        Ok((valid, issues))
     }
 
     fn register_catalog_records(&self, records: &[ToolCatalogRecord]) -> Result<(), String> {
+        if let Some(error) = self
+            .catalog_validation_errors(records)?
+            .into_iter()
+            .flatten()
+            .next()
+        {
+            return Err(error);
+        }
+        self.remember_tools(records)
+            .map_err(|_| "Could not save tool bindings".to_string())
+    }
+
+    fn catalog_validation_errors(
+        &self,
+        records: &[ToolCatalogRecord],
+    ) -> Result<Vec<Option<String>>, String> {
         // A provider may reuse an existing category. A new plugin category must
         // be under that plugin or capability pack's stable namespace.
         let mut known: HashSet<String> = [
@@ -235,9 +282,14 @@ impl AgentManagementService {
                 .into_iter()
                 .filter_map(|tool| tool.category.map(|category| category.code)),
         );
+        let mut errors = Vec::with_capacity(records.len());
         for record in records {
             let Some(category) = &record.category else {
-                return Err(format!("Tool {} must declare a category", record.tool_code));
+                errors.push(Some(format!(
+                    "Tool {} must declare a category",
+                    record.tool_code
+                )));
+                continue;
             };
             if category.code.is_empty()
                 || category.code.len() > 128
@@ -247,8 +299,10 @@ impl AgentManagementService {
                     .bytes()
                     .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
             {
-                return Err("Invalid tool category code".into());
+                errors.push(Some("Invalid tool category code".into()));
+                continue;
             }
+            errors.push(None);
             if [
                 &record.source.plugin_id,
                 &record.source.pack_id,
@@ -261,21 +315,24 @@ impl AgentManagementService {
                 known.insert(category.code.clone());
             }
         }
-        for record in records {
+        for (record, error) in records.iter().zip(&mut errors) {
+            if error.is_some() {
+                continue;
+            }
             if let Some(category) = &record.category {
                 if !known.contains(&category.code)
                     && (record.source.plugin_id.is_some() || record.source.pack_id.is_some())
                 {
-                    return Err(format!(
+                    *error = Some(format!(
                         "Tool category {} must use its provider namespace",
                         category.code
                     ));
                 }
             }
         }
-        self.remember_tools(records)
-            .map_err(|_| "Could not save tool bindings".to_string())
+        Ok(errors)
     }
+
     pub(crate) fn register_tool_descriptor(
         &self,
         descriptor: &ToolDescriptor,

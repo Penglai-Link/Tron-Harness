@@ -58,6 +58,9 @@ impl SessionModelRetry {
         // normal three-day expiry for interactive sessions without overflowing
         // its clock or persisted millisecond deadline. Parent deadlines still win.
         request.limits.run_timeout = Duration::from_secs(100 * 365 * 24 * 60 * 60);
+        // Framework requires a finite model deadline as well. Bind it to the
+        // session lifetime; cancellation and parent deadlines remain effective.
+        request.limits.model_timeout = request.limits.run_timeout;
         request.extensions.insert(self);
     }
 }

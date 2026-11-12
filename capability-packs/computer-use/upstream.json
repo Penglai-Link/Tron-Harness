@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/trycua/cua",
+  "revision": "ebea2f86f06add31e6ccac1d7a2f25d5d52de520",
+  "sdkVersion": "0.47.17",
+  "skillSource": "libs/cua-driver/rust/Skills/cua-driver",
+  "files": {
+    "skills/cua-driver/BROWSER.md": "0f248305d83d4dd89236769867f194e4fe08d2a4ca38852079b2cb693765a9a8",
+    "skills/cua-driver/EMBEDDING.md": "a698530dfdbad32056f47612bc6bf8eec4ea185a988836ba41c1396e9cbc2426",
+    "skills/cua-driver/LINUX.md": "54aef8909e10f923134ae411e34feacb4d2d0aaf56feab40602864c9b2568cea",
+    "skills/cua-driver/MACOS.md": "378d6d9ef9543389f98885130b6664c1757654d418eefdfe30872268c09647f0",
+    "skills/cua-driver/README.md": "7b561c189ec2f2c38eed3bc7981935ba45c0a3ae03db4788565e3528efc19e3b",
+    "skills/cua-driver/RECORDING.md": "efe2e955396122e317afa5d309e6b45d8079a5c1a2081a996dcdd7977cd78e99",
+    "skills/cua-driver/RUNTIME.md": "fefc8d106e21ecea13e56512674bd15f97e53525187a9981ece645d385e6b8b1",
+    "skills/cua-driver/SKILL.md": "6c27ccbd3d66c55286472fa674719b4ec263e0c36b1ea559643492160e5856cf",
+    "skills/cua-driver/VISUAL.md": "66aa0fadd643ee4cd0deda751af1f3ebc2cec0b77607eec61c9b2a4ee7d4a256",
+    "skills/cua-driver/WINDOWS.md": "5f34a974d2463e371a1c78133dcae330fa59e27b31af3bf1896348cadcc2995b",
+    "skills/cua-driver/WORKFLOW.md": "2cc65d67634cd9a1c2ccd8e0dc7f30d394569173e1ca437a8fe693fb9f941269",
+    "CUA-LICENSE.md": "c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9"
+  }
+}

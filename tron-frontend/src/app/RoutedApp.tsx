@@ -69,11 +69,11 @@ export default function RoutedApp() {
                 <ProtectedRoute>
                   <AppRoutePage />
                   <UpdateNotification />
+                  <ReleaseNotesDialog />
                 </ProtectedRoute>
               }
             />
           </Routes>
-        <ReleaseNotesDialog />
       </TabPanelRegistryProvider>
     </FilePanelHostProvider>
   );

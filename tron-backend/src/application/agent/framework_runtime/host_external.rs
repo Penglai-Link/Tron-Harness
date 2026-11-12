@@ -249,6 +249,7 @@ impl FrameworkHost {
                         stream,
                         &context,
                         registration.clone(),
+                        trace_guard.trace_id(),
                     )
                     .await
                 }
@@ -266,6 +267,7 @@ impl FrameworkHost {
                         stream,
                         &context,
                         registration.clone(),
+                        trace_guard.trace_id(),
                     )
                     .await
                 }

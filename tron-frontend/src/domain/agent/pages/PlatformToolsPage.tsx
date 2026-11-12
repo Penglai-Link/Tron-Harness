@@ -17,7 +17,7 @@ type CategoryDomain = ToolCatalogDomainRecord & { categoryCode: string; tools: P
 
 export function PlatformToolsPage() {
   const { t } = useTranslation(["pages", "common"]);
-  const { domains, tools, categories, loading, saving, loaded, permissions, dirty, refreshTools, savePermissions, discard, setPermission } = usePlatformToolSettings();
+  const { domains, tools, categories, catalogIssues, loadErrors, loading, saving, loaded, permissions, dirty, refreshTools, savePermissions, discard, setPermission } = usePlatformToolSettings();
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [domainSearch, setDomainSearch] = useState("");
   const [debouncedDomainSearch, setDebouncedDomainSearch] = useState("");
@@ -86,6 +86,23 @@ export function PlatformToolsPage() {
         <Button variant="outline" disabled={!dirty || saving || loading} onClick={discard}>{pageT("permissions.discard", "Discard")}</Button>
         <Button disabled={!dirty || !loaded || loading || saving} onClick={() => void savePermissions()}>{pageT(saving ? "permissions.saving" : "permissions.save", saving ? "Saving…" : "Save")}</Button>
       </div>} />
+
+      {(catalogIssues.length > 0 || loadErrors.length > 0) && (
+        <section role="status" className="rounded-md border border-[var(--color-warning)] p-3 text-sm">
+          <p className="font-medium text-[var(--color-warning)]">{pageT("catalogIssues.title", "Some tools could not be loaded")}</p>
+          <p className="mt-1 text-[var(--color-on-surface-variant)]">{pageT("catalogIssues.hint", "Other tools remain visible. Fix the affected tool or provider, then refresh.")}</p>
+          <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto [overflow-wrap:anywhere]">
+            {loadErrors.map((message) => <li key={message}>{message}</li>)}
+            {catalogIssues.map((issue, index) => (
+              <li key={`${issue.packId}:${issue.providerId}:${issue.toolCode}:${index}`}>
+                <span className="font-medium">{issue.toolName ?? issue.toolCode ?? issue.providerId ?? issue.packId ?? pageT("loadParts.diagnostics", "Tool discovery")}</span>
+                {issue.packId && <span className="ml-2 text-xs text-[var(--color-on-surface-variant)]">{issue.packId}</span>}
+                <p className="mt-0.5 whitespace-pre-wrap text-[var(--color-on-surface-variant)]">{issue.message}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="flex flex-wrap gap-2" role="group" aria-label={pageT("categories.label", "Tool categories")}>
         {[

@@ -324,6 +324,17 @@ pub enum ToolAvailabilityState {
     Disabled,
 }
 
+#[derive(Clone, Debug)]
+pub struct ToolCatalogIssue {
+    /// Discovery warnings (for example a rejected duplicate) do not disable a valid entry.
+    pub blocks_tool: bool,
+    pub tool_code: Option<String>,
+    pub tool_name: Option<String>,
+    pub provider_id: Option<String>,
+    pub pack_id: Option<String>,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCatalogRecord {

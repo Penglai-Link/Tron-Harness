@@ -1,5 +1,6 @@
 export const agentApiEndpoints = {
   getToolDomains: "GET /api/v1/tools/domains",
+  getToolCatalogIssues: "GET /api/v1/tools/catalog-issues",
   getToolCategories: "GET /api/v1/tools/categories",
   getTools: "GET /api/v1/tools",
   listMainAgentMessages: "GET /api/v1/agent/main/messages",

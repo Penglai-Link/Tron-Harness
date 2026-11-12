@@ -3,7 +3,7 @@ import { contextBlockName, type ContextBlockUpdateMode } from "@/shared/context/
 import { ContextBlockHelp } from "@/shared/context/ContextBlockHelp";
 import { useContextBlockCatalog, type ContextBlockCatalog } from "@/shared/context/useContextBlockCatalog";
 import {
-  BookmarkPlus,
+  FileArchive,
   Bot,
   Copy,
   CheckCircle2,
@@ -690,7 +690,7 @@ function contextStatusTone(estimate: ChatTokenEstimateSnapshot | null, breakdown
 function contextStatusLabel(estimate: ChatTokenEstimateSnapshot | null, breakdown: ChatContextBudgetBreakdown | null, translate: (key: string) => string) {
   if (estimate?.overBudget || breakdown?.inputBudgetExceeded) return translate("chat.shortTermMemory.contextPanel.overBudget");
   if (estimate?.compactionTriggerReached || breakdown?.compactionTriggerReached) return translate("chat.shortTermMemory.contextPanel.nearCompaction");
-  return translate("chat.shortTermMemory.contextPanel.healthy");
+  return null;
 }
 
 function contextWindowLimitFromSources(
@@ -1502,19 +1502,21 @@ function ContextOverviewPanel({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {snapshot ? <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
+          {snapshot && statusLabel ? <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
             {statusLabel}
           </Badge> : null}
-          <button
-            aria-label={t("chat.shortTermMemory.compactMemory")}
-            className={iconButtonClass()}
+          <Button
+            aria-label={t(compactionBusy ? "chat.shortTermMemory.compactingMemory" : "chat.shortTermMemory.compactMemory")}
+            aria-busy={compactionBusy || undefined}
             disabled={!session || !onCreateCompaction || compactionBusy}
+            size="icon-sm"
             title={t("chat.shortTermMemory.compactMemory")}
             type="button"
+            variant="ghost"
             onClick={onCreateCompaction}
           >
-            {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <BookmarkPlus size={15} />}
-          </button>
+            {compactionBusy ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <FileArchive aria-hidden="true" />}
+          </Button>
         </div>
       </div>
       <div className="flex min-w-0 items-baseline justify-between gap-3">
@@ -1772,6 +1774,7 @@ function ProviderUsagePanel({
   const providerUsage = usageAudit?.providerUsage ?? null;
   const sessionUsage = sessionProviderUsageFromEvents(events);
   const sessionInput = sessionUsage?.inputTokens ?? fallbackSessionUsage.input;
+  const sessionOutput = sessionUsage?.outputTokens ?? fallbackSessionUsage.output;
 
   return (
     <section className="space-y-3 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
@@ -1784,20 +1787,22 @@ function ProviderUsagePanel({
         <h4 className="mb-1.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
           {t("chat.shortTermMemory.contextPanel.currentSessionUsage")}
         </h4>
-        <div className="grid grid-cols-3 gap-1.5">
-          <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(sessionInput)} />
+        <div className="grid grid-cols-4 gap-1.5">
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.input")} value={formatCompactTokenCount(sessionInput)} />
           <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(sessionUsage?.cachedInputTokens ?? 0)} />
           <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(sessionUsage?.reasoningTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.output")} value={formatCompactTokenCount(sessionOutput)} />
         </div>
       </div>
       <div>
         <h4 className="mb-1.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
           {t("chat.shortTermMemory.contextPanel.latestRequestUsage")}
         </h4>
-        <div className="grid grid-cols-3 gap-1.5">
-          <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(providerUsage?.inputTokens)} />
+        <div className="grid grid-cols-4 gap-1.5">
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.input")} value={formatCompactTokenCount(providerUsage?.inputTokens)} />
           <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(providerUsage?.cachedInputTokens)} />
           <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(providerUsage?.reasoningTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.output")} value={formatCompactTokenCount(providerUsage?.outputTokens)} />
         </div>
       </div>
     </section>

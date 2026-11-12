@@ -625,8 +625,8 @@ impl Runtime {
             .max_total_tokens
             .min(parent.map_or(u64::MAX, |parent| parent.token_ceiling));
         let invocation = host.invocation_config();
-        request.limits.model_timeout = Duration::from_secs(invocation.agent_model_timeout_seconds);
         request.limits.run_timeout = Duration::from_secs(invocation.agent_run_timeout_seconds);
+        request.limits.model_timeout = request.limits.run_timeout;
         request.limits.max_model_retries = if context.auto_model_route.is_some() {
             2
         } else {

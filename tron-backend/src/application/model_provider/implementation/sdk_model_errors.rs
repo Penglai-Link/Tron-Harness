@@ -1,6 +1,22 @@
 use eliteforge_agent_core as fw;
 use serde_json::Value;
 
+/// Preserve a definite output-budget failure before the protocol parser turns
+/// it into a generic abnormal-stop error. Never expose generated arguments.
+pub(super) fn output_limit_failure(event: &Value, request: &Value) -> Option<fw::ModelError> {
+    if event.pointer("/choices/0/finish_reason").and_then(Value::as_str) != Some("length") {
+        return None;
+    }
+    let limit = request
+        .get("max_tokens")
+        .and_then(Value::as_u64)
+        .map(|limit| limit.to_string())
+        .unwrap_or_else(|| "provider default".into());
+    Some(fw::ModelError::Fatal(format!(
+        "model output token limit reached (finish_reason=length, max_tokens={limit}); increase model maxTokens or modelInvocation.defaultOutputTokens"
+    )))
+}
+
 /// A gateway's upstream 401 can describe an unavailable model, rather than a
 /// rejected Person-AI access token. Keep account recovery scoped to real auth
 /// failures so Framework can apply the host-authorized Auto replacement policy.

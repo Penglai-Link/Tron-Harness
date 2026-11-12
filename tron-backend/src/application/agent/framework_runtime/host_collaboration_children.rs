@@ -237,6 +237,10 @@ impl Runtime {
         }
         let presentation = host.presentation_service().map_err(failure)?;
         let notify_host = host.clone();
+        let trace_id = {
+            use opentelemetry::trace::TraceContextExt;
+            opentelemetry::Context::current().span().span_context().trace_id().to_string()
+        };
         crate::app::telemetry::spawn_traced(async move {
             // The handle owns the child until completion; the registry only
             // mirrors its state so parents can wait, steer, answer or cancel.
@@ -245,7 +249,8 @@ impl Runtime {
                 super::super::super::presentation::consume_native_agui(
                     stream,
                     &prepared,
-                    presentation
+                    presentation,
+                    &trace_id,
                 )
             );
             let (status, stored) = match result {

@@ -1,0 +1,14 @@
+{
+  "manifest_version": 1,
+  "id": "tron.computer-use",
+  "name": "Computer Use · Cua Driver",
+  "version": "0.5.0",
+  "framework": "^1.0.0",
+  "skills": ["skills"],
+  "backend": {"executables": {"native": "bin/tron-computer-use"}, "args": ["backend"]},
+  "implementations": [
+    {"id": "tron.computer-use.tools", "extension": "framework.tool-provider", "contract": "^1.0.0"},
+    {"id": "tron.computer-use.skills", "extension": "framework.skills", "contract": "^1.0.0"}
+  ],
+  "resources": ["README.md", "CUA-LICENSE.md", "upstream.json", "build-info.json"]
+}

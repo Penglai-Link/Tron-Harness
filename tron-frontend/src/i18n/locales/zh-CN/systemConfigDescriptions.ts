@@ -10,7 +10,7 @@ export const systemConfigDescriptions = {
   "shortTermMemory_context_providers_dataBlocks_block_targetRatio": "缩减后的目标用量占此块预算的比例。",
   "shortTermMemory_context_providers_dataBlocks_block_minGainTokens": "接受缩减结果所需的最少 token 节省量。",
 
-  "modelInvocation_defaultOutputTokens": "模型未单独配置输出额度时，每次调用使用的默认输出 token 上限。默认 16384，可按模型服务限制调整。",
+  "modelInvocation_defaultOutputTokens": "模型未单独配置输出额度时，每次调用使用的默认输出 token 上限。默认 65536，推理、正文和工具参数共用此额度，可按模型服务限制调整。",
   "modelInvocation_text_callTimeoutSeconds": "独立对话或辅助文本单次模型调用的最长等待时间，单位秒。向量场景按每批请求计时，不是整份文档。",
   "modelInvocation_text_operationTimeoutSeconds": "独立对话或辅助文本一次操作的总等待预算，包含重试和退避，单位秒；不能小于单次调用超时。",
   "modelInvocation_embedding_callTimeoutSeconds": "向量生成单次模型调用的最长等待时间，单位秒。向量场景按每批请求计时，不是整份文档。",
@@ -23,8 +23,7 @@ export const systemConfigDescriptions = {
   "modelInvocation_externalAgent_operationTimeoutSeconds": "外部智能体一次操作的总等待预算，包含重试和退避，单位秒；不能小于单次调用超时。",
   "modelInvocation_embedding_maxBatchInputs": "每次向量请求最多包含的分块条数；与总 token 上限共同决定批次，先达到哪个上限就切批。应不超过模型服务支持的输入条数。",
   "modelInvocation_embedding_maxBatchTokens": "每次向量请求的估算输入 token 总上限，按 Framework 的 UTF-8 字节估算法计算。单个分块超限时明确失败，需要缩小分块或调高上限；应不超过模型服务限制。",
-  "modelInvocation_agentModelTimeoutSeconds": "内置智能体每次模型调用的最长等待时间，单位秒。新运行读取该值，已有运行保留原预算。",
-  "modelInvocation_agentRunTimeoutSeconds": "内置智能体一次运行的最长时间，单位秒；默认 259200 秒（3 天）。不能小于单次模型调用超时，修改后对新运行生效。",
+  "modelInvocation_agentRunTimeoutSeconds": "内置智能体一次运行的最长时间，单位秒；默认 259200 秒（3 天）。修改后对新运行生效。",
   "bindAddress": "后端 HTTP 服务监听的 IP 地址。127.0.0.1 仅允许本机连接；0.0.0.0 监听所有 IPv4 网卡。",
   "port": "后端 HTTP 服务监听的 TCP 端口。前端 API 地址需使用同一端口。",
   "databaseUrl": "Tron 与 Framework 共用的 SQLite 数据库地址。切换地址会切换所读取的数据，已有数据需另行迁移。",

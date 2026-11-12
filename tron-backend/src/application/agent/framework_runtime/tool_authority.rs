@@ -162,6 +162,16 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         let host = HostExecution::from_extensions(&run.extensions)?;
         let mut state = host.state.lock().await;
         let name = &binding.descriptor.call_name;
+        if !crate::domain::computer_use::allows(state.context.agent_code.as_deref().unwrap_or(""))
+            && crate::domain::computer_use::is_tool(
+                &binding.descriptor.id, name, binding.domain_code.as_deref(), binding.source.pack_id.as_deref(),
+            )
+        {
+            state.product_tool_authority.remove(name);
+            state.context.effective_tools.retain(|tool| &tool.tool_name != name);
+            state.context.tools.retain(|tool| &tool.tool_name != name);
+            return Ok(fw::ToolBindingAdmission::Exclude);
+        }
         if self.management.is_some() {
             state.pending_tool_bindings.push(binding.clone());
         }
@@ -351,6 +361,11 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         }
         let host = HostExecution::from_extensions(&invocation.run.extensions)?;
         let state = host.state.lock().await;
+        if !crate::domain::computer_use::allows(state.context.agent_code.as_deref().unwrap_or(""))
+            && crate::domain::computer_use::is_tool(&invocation.descriptor.id, &invocation.descriptor.call_name, None, None)
+        {
+            return Ok(fw::ToolPolicyDecision::Deny("Computer Use is restricted to the main Agent and main Dude".into()));
+        }
         if let Some(management) = &self.management {
             if !management
                 .platform_tool_allowed(&invocation.descriptor.call_name)

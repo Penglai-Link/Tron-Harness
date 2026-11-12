@@ -213,6 +213,7 @@ impl FrameworkHost {
         stream: AgUiStream,
         context: &AgentRunContext,
         registration: NativeRegistration,
+        trace_id: String,
     ) -> Result<fw::RunResult, fw::AgentError> {
         registration.attach(agent.clone(), agent.control(&handle)?)?;
         let context = context.clone();
@@ -227,7 +228,7 @@ impl FrameworkHost {
             let _registration = registration;
             let (result, ()) = tokio::join!(
                 agent.wait(handle),
-                super::super::presentation::consume_native_agui(stream, &context, service)
+                super::super::presentation::consume_native_agui(stream, &context, service, &trace_id)
             );
             result
         })
@@ -241,6 +242,7 @@ impl FrameworkHost {
         stream: AgUiStream,
         context: &AgentRunContext,
         registration: NativeRegistration,
+        trace_id: String,
     ) -> Result<fw::RunResult, fw::AgentError> {
         registration.attach(agent, handle.control())?;
         let context = context.clone();
@@ -254,7 +256,7 @@ impl FrameworkHost {
             let _registration = registration;
             let (result, ()) = tokio::join!(
                 handle.wait(),
-                super::super::presentation::consume_native_agui(stream, &context, service)
+                super::super::presentation::consume_native_agui(stream, &context, service, &trace_id)
             );
             result
         })

@@ -235,7 +235,7 @@ export const shell = {
     },
   },
   settings: {
-    exit: "退出",
+    backToApp: "返回",
     groups: {
       data: "数据",
       administration: "管理",

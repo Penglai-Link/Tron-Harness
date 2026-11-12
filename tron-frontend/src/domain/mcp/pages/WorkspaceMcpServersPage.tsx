@@ -146,6 +146,7 @@ export function WorkspaceMcpServersPage() {
       <PageHeader title={pageT("title", "MCP Servers")} />
 
       <DataTable<WorkspaceMcpServerRecord>
+        tableClassName="table-fixed min-w-[900px]"
         rows={pagination.visibleItems}
         rowKey={(row) => `${activeWorkspaceCode}-${row.serverCode}`}
         pagination={<TablePagination itemLabel={pageT("table.itemLabel", "MCP servers")} {...pagination.paginationProps} />}
@@ -175,8 +176,9 @@ export function WorkspaceMcpServersPage() {
             id: "description",
             header: pageT("table.columns.description", "Description"),
             width: "26%",
+            cellClassName: "overflow-hidden whitespace-normal",
             render: (row) => (
-              <p className="text-[13px] text-[var(--color-on-surface-variant)]">
+              <p className="line-clamp-2 whitespace-normal break-words text-[13px] text-[var(--color-on-surface-variant)] [overflow-wrap:anywhere]" title={row.description}>
                 {row.description || pageT("table.noDescription", "No description available.")}
               </p>
             ),

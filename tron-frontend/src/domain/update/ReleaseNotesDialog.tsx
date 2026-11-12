@@ -90,7 +90,7 @@ export function ReleaseNotesDialog() {
           role="region"
           aria-label={title}
           tabIndex={0}
-          className="min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+          className="min-h-0 overflow-y-auto overscroll-contain focus:outline-none [scrollbar-gutter:stable]"
         >
           <div className="divide-y divide-[var(--color-outline-variant)]">
             {entries.map((entry) => (

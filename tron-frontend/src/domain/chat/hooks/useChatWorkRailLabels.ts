@@ -1,5 +1,5 @@
 import { contextBlockName } from "@/shared/context/contextBlockPresentation";
-import { isRawToolNameOverride, toolCommandLinePreview, toolDisplayName, type ToolActionSummary } from "@personai/agent-ui-chat-core";
+import { isRawToolNameOverride, parseToolPayload, toolCommandLinePreview, toolDisplayName, unwrapGatewayToolCall, type ToolActionSummary } from "@personai/agent-ui-chat-core";
 import type { ChatWorkRailLabels } from "@tron/chat-core";
 import { fetchToolDomains, listTools } from "@/domain/agent/api";
 import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";
@@ -18,7 +18,10 @@ export function useChatWorkRailLabels() {
     const controller = new AbortController();
     const load = getServiceDataSource("agent") === "mock"
       ? Promise.resolve([listToolDomainsMock(), listToolsMock()] as const)
-      : Promise.all([fetchToolDomains(controller.signal), listTools({}, controller.signal)]);
+      : Promise.allSettled([fetchToolDomains(controller.signal), listTools({}, controller.signal)]).then(([domains, tools]) => [
+        domains.status === "fulfilled" ? domains.value : [],
+        tools.status === "fulfilled" ? tools.value : [],
+      ] as const);
     void load.then(([domains, tools]) => {
       if (controller.signal.aborted) return;
       setCatalog({
@@ -44,21 +47,25 @@ export function useChatWorkRailLabels() {
       return i18n.language.startsWith("zh") ? parts.join("，") : new Intl.ListFormat(i18n.language, { style: "short", type: "conjunction" }).format(parts);
     };
     const resolveToolName = (runtimeName: string, args: unknown) => {
-      const commandLine = toolCommandLinePreview(runtimeName, args);
+      const payload = parseToolPayload(args);
+      const unwrapped = unwrapGatewayToolCall(runtimeName, payload ?? args);
+      // A rejected envelope can still identify its target even when the inner
+      // arguments are invalid. Never infer a target when none was recorded.
+      const gatewayTarget = runtimeName.trim() === "tool_execute" && typeof payload?.tool === "string"
+        ? payload.tool.trim() : "";
+      const toolName = gatewayTarget || unwrapped.toolName;
+      const toolArgs = gatewayTarget && unwrapped.toolName === "tool_execute" ? undefined : unwrapped.args;
+      if (toolName.trim() === "tool_execute") return t("chat.management.tool.unknownTarget");
+      const commandLine = toolCommandLinePreview(toolName, toolArgs);
       if (commandLine) {
         return t("chat.management.tool.commandSummary", { command: commandLine });
       }
-      // A catalogue name is only useful when it is actually a localized label:
-      // for the tools whose catalogue entry still equals the raw tool id, fall
-      // back to the presenter title in the active language.
-      const catalogName = catalog.tools.get(runtimeName);
-      const directoryName = catalogName && !isRawToolNameOverride(runtimeName, catalogName, args) ? catalogName : undefined;
-      const name = directoryName ?? toolDisplayName(runtimeName, args, undefined, i18n.language);
-      if (runtimeName === "rag_search") {
-        const payload = typeof args === "string"
-          ? (() => { try { return JSON.parse(args) as { query?: unknown }; } catch { return {}; } })()
-          : args as { query?: unknown } | null;
-        const query = typeof payload?.query === "string" ? payload.query.trim().replace(/\s+/g, " ") : "";
+      const catalogName = catalog.tools.get(toolName)?.trim();
+      const directoryName = catalogName && !isRawToolNameOverride(toolName, catalogName, toolArgs) ? catalogName : undefined;
+      const name = directoryName || toolDisplayName(toolName, toolArgs, undefined, i18n.language);
+      if (toolName === "rag_search") {
+        const search = parseToolPayload(toolArgs);
+        const query = typeof search?.query === "string" ? search.query.trim().replace(/\s+/g, " ") : "";
         if (query) return t("chat.management.tool.searchSummary", { name, query });
       }
       return name;

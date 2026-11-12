@@ -10,7 +10,7 @@ export const systemConfigDescriptions = {
   "shortTermMemory_context_providers_dataBlocks_block_targetRatio": "Target fraction of this block budget after reduction.",
   "shortTermMemory_context_providers_dataBlocks_block_minGainTokens": "Minimum token savings required to accept a reduction.",
 
-  "modelInvocation_defaultOutputTokens": "Default output token limit per call when the model has no explicit limit. Defaults to 16384; adjust to the provider's supported limit.",
+  "modelInvocation_defaultOutputTokens": "Default output token limit per call when the model has no explicit limit. Defaults to 65536, shared by reasoning, text and tool arguments; adjust to the provider's supported limit.",
   "modelInvocation_text_callTimeoutSeconds": "Maximum wait in seconds for one standalone chat or auxiliary text call. Embedding calls are timed per batch, not per document.",
   "modelInvocation_text_operationTimeoutSeconds": "Total budget in seconds for one standalone chat or auxiliary text operation, including retries and backoff. Must be at least the per-call timeout.",
   "modelInvocation_embedding_callTimeoutSeconds": "Maximum wait in seconds for one embedding call. Embedding calls are timed per batch, not per document.",
@@ -23,8 +23,7 @@ export const systemConfigDescriptions = {
   "modelInvocation_externalAgent_operationTimeoutSeconds": "Total budget in seconds for one external agent operation, including retries and backoff. Must be at least the per-call timeout.",
   "modelInvocation_embedding_maxBatchInputs": "Maximum chunks in one embedding request. A batch ends at either this count or the token budget. Keep within provider limits.",
   "modelInvocation_embedding_maxBatchTokens": "Maximum estimated input tokens per embedding batch, using the Framework UTF-8 byte estimate. An oversized single chunk fails explicitly; reduce chunk size or raise the limit within provider limits.",
-  "modelInvocation_agentModelTimeoutSeconds": "Per-call timeout in seconds for native agents. New runs use this value; existing runs retain their budget.",
-  "modelInvocation_agentRunTimeoutSeconds": "Maximum duration of one native agent run in seconds. Defaults to 259200 seconds (3 days). Must be at least the model-call timeout. Applies to new runs.",
+  "modelInvocation_agentRunTimeoutSeconds": "Maximum duration of one native agent run in seconds. Defaults to 259200 seconds (3 days). Applies to new runs.",
   "bindAddress": "IP address the backend HTTP server listens on. 127.0.0.1 allows local connections; 0.0.0.0 listens on all IPv4 interfaces.",
   "port": "TCP port for the backend HTTP server. The frontend API address must use this port.",
   "databaseUrl": "SQLite database address shared by Tron and Framework. Changing it switches the data being read; existing data must be migrated separately.",

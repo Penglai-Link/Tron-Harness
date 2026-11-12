@@ -4,6 +4,7 @@
   "version": 3,
   "variants": {
     "light": {
+      "--tron-tab-active-bg": "var(--color-surface-container)",
       "--tron-table-row-selected-bg": "var(--color-surface-container-low)",
       "--tron-table-row-selected-fg": "var(--color-on-surface)",
       "--tron-table-row-hover-bg": "var(--color-surface-container-low)",
@@ -79,6 +80,7 @@
       "--chart-5": "#997b35"
     },
     "dark": {
+      "--tron-tab-active-bg": "var(--color-surface-container)",
       "--tron-table-row-selected-bg": "var(--color-surface-container-low)",
       "--tron-table-row-selected-fg": "var(--color-on-surface)",
       "--tron-table-row-hover-bg": "var(--color-surface-container-low)",

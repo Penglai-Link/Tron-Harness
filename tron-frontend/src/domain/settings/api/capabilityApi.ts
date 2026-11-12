@@ -16,7 +16,9 @@ export interface CapabilityPackRecord {
   id: string;
   name: string;
   version: string;
+  cuaDriverSdkVersion: string | null;
   description: string;
+  readme: string | null;
   provider: string;
   updatedAt: string | null;
   effective: boolean;

@@ -296,6 +296,11 @@ impl AgentRunContext {
     }
 
     pub fn is_tool_authorized(&self, tool_name: &str) -> bool {
+        if !crate::domain::computer_use::allows(self.agent_code.as_deref().unwrap_or(""))
+            && crate::domain::computer_use::is_tool("", tool_name, None, None)
+        {
+            return false;
+        }
         self.authorized_tools()
             .iter()
             .any(|tool| tool.tool_name == tool_name)
