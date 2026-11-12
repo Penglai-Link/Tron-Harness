@@ -179,9 +179,9 @@ pub async fn list_select_options(
         let code = format!("AUTO:{}", kind.code());
         let label = match (locale, kind) {
             (SupportedLocale::EnUs, crate::domain::model::AutoRouterKind::Embedding) => {
-                "Embedding auto route"
+                "Embedding Automatic Routing"
             }
-            (SupportedLocale::EnUs, _) => "Rerank auto route",
+            (SupportedLocale::EnUs, _) => "Rerank Automatic Routing",
             (_, crate::domain::model::AutoRouterKind::Embedding) => "向量自动路由",
             _ => "重排自动路由",
         };

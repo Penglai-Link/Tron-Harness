@@ -61,6 +61,7 @@ import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/doma
 import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import type { SystemAgentModelRecord, WorkspaceInternalAgentRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
 import { fetchModelSelectOptions } from "@/domain/model/api";
+import { autoModelRoutes } from "@/domain/model/constants/autoModelRoutes";
 import { applyCurrentLocaleHeader } from "@/i18n";
 import type {
   ModelSelectOption,
@@ -1042,7 +1043,7 @@ function normalizeModelSelection(model: ModelSelectOption): ModelSelection {
   };
 }
 
-function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOption | null): ChatModelOption[] {
+function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOption | null, automaticModelLabel: string): ChatModelOption[] {
   if (!selectedAgent || selectedAgent.kind === "internal") {
     const fixedModels = models.map((model) => ({
       accessPlatform: model.accessPlatform ?? null,
@@ -1066,7 +1067,7 @@ function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOpt
       outputCoefficient: model.outputCoefficient ?? null,
       vendor: model.vendor ?? null,
     }));
-    return [autoChatModelOption(selectedAgent?.agentCode ?? mainChatAgentOption.agentCode), ...fixedModels];
+    return [autoChatModelOption(selectedAgent?.agentCode ?? mainChatAgentOption.agentCode, automaticModelLabel), ...fixedModels];
   }
 
   return selectedAgent.models.map((model) => ({
@@ -1093,13 +1094,13 @@ function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOpt
   }));
 }
 
-function autoChatModelOption(agentCode: string): ChatModelOption {
+function autoChatModelOption(agentCode: string, displayName: string): ChatModelOption {
   return {
     accessPlatform: null,
     cacheHitCoefficient: null,
     contextWindowTokens: null,
     defaultReasoningEffort: null,
-    displayName: "Conversation Automatic Routing",
+    displayName,
     enabled: true,
     inputCoefficient: null,
     isDefault: true,
@@ -2872,8 +2873,8 @@ export function ChatManagementPage() {
   const attachmentFileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedAgent = chatAgents.find((agent) => agent.agentCode === selectedAgentCode) ?? null;
   const agentScopedModels = useMemo(
-    () => modelsForAgent(chatModels, selectedAgent),
-    [chatModels, selectedAgent],
+    () => modelsForAgent(chatModels, selectedAgent, t(autoModelRoutes.TEXT.labelKey)),
+    [chatModels, selectedAgent, t],
   );
   const selectedModel = agentScopedModels.find((model) => model.optionCode === selectedModelCode) ?? null;
   const selectedModelAgentCode = inferChatAgentCodeFromModel(selectedModel, selectedAgentCode || mainChatAgentOption.agentCode);

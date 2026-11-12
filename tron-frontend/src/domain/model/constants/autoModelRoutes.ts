@@ -1,6 +1,6 @@
 export const autoModelRoutes = {
-  TEXT: { code: "Chat", labelKey: "automaticRouters.kinds.Chat" },
-  EMBEDDING: { code: "Embedding", labelKey: "automaticRouters.kinds.Embedding" },
-  RERANK: { code: "Rerank", labelKey: "automaticRouters.kinds.Rerank" },
+  TEXT: { code: "Chat", labelKey: "modelAutoRoutes.chat" },
+  EMBEDDING: { code: "Embedding", labelKey: "modelAutoRoutes.embedding" },
+  RERANK: { code: "Rerank", labelKey: "modelAutoRoutes.rerank" },
 };
 export function autoModelRouteCode(type: keyof typeof autoModelRoutes) { return `AUTO:${autoModelRoutes[type].code}`; }
