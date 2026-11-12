@@ -80,7 +80,7 @@ export function toUiMessageWithAgent(value: ChatMessage, agentName?: string): Ui
 }
 
 export function toUiHistory(value: Ui.SessionHistory & { compactionDetails?: Record<string, unknown> }, agentName?: string): Ui.SessionHistory {
-  return { ...value, records: { ...value.records, messages: value.records.messages.map((message) => {
+  const messages = value.records.messages.map((message) => {
     const structured = message.structured;
     // Older external runs stored the entire Tron result as assistant output.
     const internalResult = message.role === "Assistant" && isRecord(structured)
@@ -88,13 +88,31 @@ export function toUiHistory(value: Ui.SessionHistory & { compactionDetails?: Rec
     return { ...message, ...(internalResult ? { structured: null } : {}),
       ...(agentName && message.role === "Assistant" && !message.provenance
         ? { provenance: { sender: { kind: "agent", displayName: agentName } } } : {}) };
-  }), steps: value.records.steps.map((step) => {
-    const blocks = Ui.parseCompactionBlocks(value.compactionDetails?.[step.id]);
-    return {
-      ...step, name: step.name === "framework.context.compaction" ? "agent.context.compaction" : step.name,
-      ...(blocks ? { compaction: { blocks } } : {}),
-    };
-  }) } };
+  });
+  // A run can fail before it produces any transcript record. The live failure
+  // notice is transient, so project the failed run once more into history: the
+  // public renderer keeps an assistant message's run error visible after reload.
+  const assistantRuns = new Set(messages
+    .filter((message) => message.role === "Assistant").map((message) => message.runId));
+  const failedRuns = value.runs
+    .filter((run) => run.status === "Failed" && run.error && !assistantRuns.has(run.id))
+    .map((run): Ui.HistoryMessage => ({
+      annotations: [], requestedSkills: [], id: `failed-run:${run.id}`, runId: run.id,
+      stepId: null, role: "Assistant", phase: null, outputIndex: null,
+      content: [], structured: null, status: "Failed",
+      createdAtMs: run.finishedAtMs ?? run.startedAtMs,
+    }));
+  return { ...value, records: { ...value.records,
+    messages: failedRuns.length
+      ? [...messages, ...failedRuns].sort((left, right) => left.createdAtMs - right.createdAtMs)
+      : messages,
+    steps: value.records.steps.map((step) => {
+      const blocks = Ui.parseCompactionBlocks(value.compactionDetails?.[step.id]);
+      return {
+        ...step, name: step.name === "framework.context.compaction" ? "agent.context.compaction" : step.name,
+        ...(blocks ? { compaction: { blocks } } : {}),
+      };
+    }) } };
 }
 export function toUiInput(input: SendChatMessageInput): MappedInput {
   const model = input.modelSelection;
