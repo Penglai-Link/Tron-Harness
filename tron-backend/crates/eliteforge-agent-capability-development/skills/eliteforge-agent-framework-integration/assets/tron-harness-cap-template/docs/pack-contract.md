@@ -1,6 +1,6 @@
 # 能力包约定
 
-`manifest.json` 位于 ZIP 根目录，使用 `manifest_version: 1`。版本遵循 SemVer；模板默认 `framework: ^1.0.0`，Rust 依赖固定到 `e4e53e9072160925c178f81bf7989cefb07c018f`。每次升级 Framework 都应重新校验生成包。
+`manifest.json` 位于 ZIP 根目录，使用 `manifest_version: 1`。版本遵循 SemVer；模板默认 `framework: ^1.0.0`，Rust 依赖与宿主使用相同的 Framework Git 标签或提交。每次升级 Framework 都应重新校验生成包。
 
 ```mermaid
 flowchart LR

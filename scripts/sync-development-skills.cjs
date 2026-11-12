@@ -21,8 +21,29 @@ function readFiles(directory, prefix = '', files = new Map()) {
 function coreDependency() {
   const manifest = fs.readFileSync(path.join(root, 'tron-backend/Cargo.toml'), 'utf8');
   const dependency = manifest.match(/^eliteforge-agent-core = (\{[^\n]+\})$/m)?.[1];
-  if (!dependency || !dependency.includes('git = ') || !dependency.includes('rev = ')) throw new Error('宿主缺少固定 Git 版本的 core 依赖');
+  if (!dependency || !dependency.includes('git = ') || !/\b(?:rev|tag) = "[^"\n]+"/.test(dependency)) throw new Error('宿主缺少固定 Git 版本的 core 依赖');
   return dependency;
+}
+function alignTemplateDependencies(files, dependency) {
+  const url = dependency.match(/git = "([^"]+)"/)[1];
+  const reference = dependency.match(/\b(rev|tag) = "([^"\n]+)"/);
+  const sourcePrefix = `source = "git+${url}?${reference[1]}=${reference[2]}#`;
+  const lockedSource = fs.readFileSync(path.join(root, 'tron-backend/Cargo.lock'), 'utf8')
+    .split('\n').find(line => line.startsWith(sourcePrefix));
+  if (!lockedSource) throw new Error('请先更新宿主 Cargo.lock，再同步开发技能');
+  for (const [name, data] of files) {
+    let text = data.toString();
+    if (name.endsWith('Cargo.toml') || name.endsWith('Cargo.toml.tpl')) {
+      text = text.split('\n').map(line => line.includes(`git = "${url}"`)
+        ? line.replace(/\b(?:rev|tag) = "[^"\n]+"/, reference[0]) : line).join('\n');
+    } else if (name.endsWith('Cargo.lock')) {
+      text = text.split('\n').map(line => line.startsWith(`source = "git+${url}?`)
+        ? lockedSource : line).join('\n');
+    } else if (name.endsWith('docs/pack-contract.md')) {
+      text = text.replace(/Rust 依赖固定到 `[^`]+`/, 'Rust 依赖与宿主使用相同的 Framework Git 标签或提交');
+    } else continue;
+    files.set(name, Buffer.from(text));
+  }
 }
 function verifySnapshot(files, snapshot) {
   if (snapshot.source !== 'eliteforge-agent-framework/crates/capability/eliteforge-agent-capability-development') throw new Error('快照来源不匹配');
@@ -65,6 +86,7 @@ try {
     });
     if (count !== 2) throw new Error('Framework 开发包的 core 依赖结构已变化，请更新同步命令');
     files.set('Cargo.toml', Buffer.from(manifest));
+    alignTemplateDependencies(files, dependency);
     const snapshot = {
       source: 'eliteforge-agent-framework/crates/capability/eliteforge-agent-capability-development',
       files: Object.fromEntries([...files].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, data]) => [name, digest(data)])),
