@@ -2,7 +2,7 @@ import { autoModelRouteCode } from "@/domain/model/constants/autoModelRoutes";
 import type { RagSettings } from "./RagModel";
 
 export function defaultRagSettings(): RagSettings {
-  return { fulltext: true, vector: true, graph: true, embeddingDimension: 1024,
+  return { fulltext: true, vector: true, graph: false, embeddingDimension: 1024,
     embeddingModelCode: autoModelRouteCode("EMBEDDING"),
     graphModelCode: autoModelRouteCode("TEXT"),
     rerankModelCode: autoModelRouteCode("RERANK"), imageDescriptionModelCode: null };

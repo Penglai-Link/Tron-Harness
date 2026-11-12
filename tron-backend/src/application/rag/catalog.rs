@@ -57,7 +57,7 @@ impl Default for RagSettings {
 impl RagSettings {
     pub fn knowledge_base_default() -> Self {
         Self {
-            graph: true,
+            graph: false,
             embedding_model_code: Some("AUTO:Embedding".into()),
             ..Self::default()
         }
