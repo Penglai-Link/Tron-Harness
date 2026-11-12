@@ -17,6 +17,7 @@ pub(crate) struct NativeModelScope {
     execution: sdk::ModelExecutionScope,
     bindings: Bindings,
     primary: Option<fw::ModelRef>,
+    retry: Arc<super::retry::SessionModelRetry>,
 }
 pub(super) fn protocol(config: &AgentModelConfig) -> &'static str {
     match config.protocol {
@@ -117,9 +118,8 @@ impl NativeModelScope {
         let primary = order.first().cloned().ok_or_else(|| {
             AgentError::InvalidConfiguration("no authorized model bindings".into())
         })?;
-        let mut router =
-            eliteforge_agent_capability_personai::RunScopedFailoverAutoRouter::default();
-        router.max_transient_failures = order.len().saturating_sub(1);
+        let retry = Arc::new(super::retry::SessionModelRetry::default());
+        let router = super::retry::SessionAutoRouter::new(retry.clone());
         let mut execution = sdk::ModelExecutionScope::new(
             runtime,
             Arc::new(fw::ChatAutoRoutingStrategy {
@@ -150,6 +150,7 @@ impl NativeModelScope {
         Ok(Self {
             execution,
             bindings,
+            retry,
             primary: if context.auto_model_route.is_some() {
                 None
             } else {
@@ -158,13 +159,7 @@ impl NativeModelScope {
         })
     }
     pub(crate) fn attach(self, request: &mut fw::RunRequest) {
-        if self.primary.is_none() {
-            // Each authorized candidate can be attempted once. Cancellation,
-            // partial output, fatal errors and run deadlines still stop recovery.
-            let candidates = self.execution.recovery.candidates.len();
-            request.limits.max_model_retries = candidates.saturating_sub(1);
-            request.limits.max_model_calls_per_step = Some(candidates.max(3));
-        }
+        self.retry.attach(request);
         request.model = self.primary;
         self.execution.attach(request);
         request.extensions.insert(self.bindings);

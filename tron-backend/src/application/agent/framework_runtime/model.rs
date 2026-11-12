@@ -93,6 +93,8 @@ impl HostExecution {
 
 #[path = "native_models.rs"]
 mod native;
+#[path = "model_retry.rs"]
+mod retry;
 pub(crate) use native::NativeModelScope;
 pub(super) use native::{compaction_model_reference, risk_review_model, synchronize_selected_model};
 pub(super) struct TronChatModel {
@@ -137,6 +139,9 @@ impl fw::ChatModel for TronChatModel {
                 .with_client(self.client.clone())
                 .generate(&request)
                 .await;
+        }
+        if let Some(retry) = request.extensions.get::<Arc<retry::SessionModelRetry>>() {
+            retry.wait().await;
         }
         let host = HostExecution::from_extensions(&request.extensions)
             .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
@@ -286,6 +291,16 @@ impl fw::ChatModel for TronChatModel {
                         _ => None,
                     };
                     *native_error = Some(error);
+                    if matches!(&classification, fw::ModelError::Provider(error) if error.category == fw::ProviderErrorCategory::Quota)
+                        && let Some(retry) = request.extensions.get::<Arc<retry::SessionModelRetry>>()
+                    {
+                        retry.exhaust(&self.reference);
+                    }
+                    if classification.is_transient()
+                        && let Some(retry) = request.extensions.get::<Arc<retry::SessionModelRetry>>()
+                    {
+                        retry.failed();
+                    }
                     return Err(classification);
                 }
             }
@@ -304,6 +319,9 @@ impl fw::ChatModel for TronChatModel {
         }
         *last_model_failure = None;
         *native_error = None;
+        if let Some(retry) = request.extensions.get::<Arc<retry::SessionModelRetry>>() {
+            retry.succeeded();
+        }
         let (response, request_estimate, usage_audit, total_usage) = response;
         if let Some(session) = response.system_agent_session_id() {
             context.system_agent_session_id = Some(session.into());
