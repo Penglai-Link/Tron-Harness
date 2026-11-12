@@ -1,7 +1,8 @@
 diff --git a/node_modules/@personai/agent-ui-chat-react/dist/index.js b/node_modules/@personai/agent-ui-chat-react/dist/index.js
+index 9c3db6c..93a304f 100644
 --- a/node_modules/@personai/agent-ui-chat-react/dist/index.js
 +++ b/node_modules/@personai/agent-ui-chat-react/dist/index.js
-@@ -1308,6 +1308,14 @@
+@@ -1298,6 +1298,14 @@ function xn({ notices: e, labels: t }) {
  						fallback: t.failed ?? "Run failed",
  						code: e.kind === "runError" || e.kind === "runStopped" ? e.code : void 0
  					}) : null,

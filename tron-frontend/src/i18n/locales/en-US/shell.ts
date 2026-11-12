@@ -263,7 +263,7 @@ export const shell = {
       taskFlows: "Task Flows",
       tools: "Tools",
       skillCenter: "Skills",
-      capabilityPacks: "Capability Packs",
+      capabilityPacks: "Capability Center",
       capabilityConfiguration: "Capability Configuration",
       users: "Users",
       variables: "Variables",

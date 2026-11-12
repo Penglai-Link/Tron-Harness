@@ -137,6 +137,13 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             "Independent external execution with native session ownership and observation events",
         ));
     }
+    if id == eliteforge_agent_capability_development::PACK_ID {
+        items.extend(
+            eliteforge_agent_capability_development::skill_names()
+                .into_iter()
+                .map(|name| content("Skill", name, "")),
+        );
+    }
     if id == tron_harness_capability::PACK_ID {
         items.extend(
             tron_harness_capability::skill_names()

@@ -263,7 +263,7 @@ export const shell = {
       taskFlows: "任务流",
       tools: "工具",
       skillCenter: "技能",
-      capabilityPacks: "能力包",
+      capabilityPacks: "能力中心",
       capabilityConfiguration: "能力配置",
       users: "用户",
       variables: "公共变量",

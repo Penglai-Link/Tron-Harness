@@ -234,6 +234,14 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             Some("2026-10-10"),
         ),
         (
+            eliteforge_agent_capability_development::PACK_ID,
+            "EliteForge Agent Development",
+            "Framework and Agent UI development skills, including the Tron capability scaffold generator",
+            "EliteForge",
+            eliteforge_agent_capability_development::PACK_VERSION,
+            Some("2026-11-12"),
+        ),
+        (
             "tron.harness",
             "Tron Harness",
             "Tron context, business tool policy and bundled theme / memory skills",
@@ -322,6 +330,14 @@ pub(super) fn pack_extension_implementations() -> Vec<ExtensionImplementationInf
             "A2uiService",
             "Publish, expand and manage interactive surfaces",
             "framework.a2ui",
+            "EliteForge",
+        ),
+        (
+            "skill",
+            "Skill",
+            "EliteForge Agent Development Skills",
+            "Embedded Framework integration, Agent UI integration and UI theme guidance",
+            eliteforge_agent_capability_development::PACK_ID,
             "EliteForge",
         ),
         (

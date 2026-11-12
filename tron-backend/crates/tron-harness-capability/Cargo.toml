@@ -11,10 +11,10 @@ publish = false
 
 [dependencies]
 async-trait = "0.1"
-eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-tools-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
+eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-tools-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 
 [build-dependencies]
-eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
+eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }

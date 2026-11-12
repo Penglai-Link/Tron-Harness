@@ -360,6 +360,22 @@ impl FrameworkHost {
         &self,
         bytes: Vec<u8>,
     ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
+        self.import_pack_checked(bytes, None).await
+    }
+    pub async fn import_center_pack(
+        &self,
+        bytes: Vec<u8>,
+        manifest: serde_json::Value,
+        expected_version: Option<String>,
+    ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
+        self.import_pack_checked(bytes, Some((manifest, expected_version)))
+            .await
+    }
+    async fn import_pack_checked(
+        &self,
+        bytes: Vec<u8>,
+        expected: Option<(serde_json::Value, Option<String>)>,
+    ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
         let _guard = self.0.config_lock.lock().await;
         self.ensure_external_idle()?;
         let package_id = {
@@ -375,6 +391,9 @@ impl FrameworkHost {
                 .map_err(|e| e.to_string())?;
             let manifest: serde_json::Value =
                 serde_json::from_str(&data).map_err(|e| e.to_string())?;
+            if let Some((reviewed, installed_version)) = &expected {
+                self.validate_center_import(&manifest, reviewed, installed_version.as_deref())?;
+            }
             manifest
                 .get("id")
                 .and_then(|v| v.as_str())

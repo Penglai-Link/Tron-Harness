@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 publish = false
 
 [dependencies]
-eliteforge-agent-capability-runtime = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
+eliteforge-agent-capability-runtime = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
 serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"

@@ -347,6 +347,8 @@ fn model_provider_error_response(error: ModelProviderError) -> Response {
         }
         ModelProviderError::Unauthorized => (StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_REQUIRED"),
         ModelProviderError::DeviceUnbound => (StatusCode::UNAUTHORIZED, "PERSONAI_DEVICE_UNBOUND"),
+        ModelProviderError::CapabilityPackUnavailable => (StatusCode::NOT_FOUND, "101038005"),
+        ModelProviderError::CapabilityReleaseUnavailable => (StatusCode::NOT_FOUND, "101038004"),
         ModelProviderError::Remote(_) => (StatusCode::BAD_GATEWAY, "MODEL_PROVIDER_REMOTE_FAILED"),
         ModelProviderError::Storage => (
             StatusCode::INTERNAL_SERVER_ERROR,

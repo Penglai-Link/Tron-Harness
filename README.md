@@ -121,11 +121,17 @@ WSL2 · Ubuntu / Debian
 
 Tron 自身也使用能力包装配功能：文件与命令、Agent 协作、网页读取、媒体读取、A2UI 交互，以及 Tron 业务工具、上下文和内置技能，都有对应的能力包。
 
+[EliteForge Agent Development 能力包](https://gitee.com/person-ai/eliteforge-agent-framework/blob/main/crates/capability/eliteforge-agent-capability-development/README.md) 统一维护 Framework 对接、Agent UI 对接和 Agent UI 主题三个开发技能，随 Tron 默认安装并启用，启动后自动登记到技能中心。
+
 [Computer Use 能力包](capability-packs/computer-use/README.md) 将上游 Cua Rust SDK 编译进包内原生程序，通过 Framework 原生工具接口直接调用 SDK，提供桌面界面读取、点击、输入和操作核验，并随包提供同一提交的官方技能。执行 `make capability-computer-use` 生成可导入的 ZIP；用户无需额外安装 `cua-driver`，仍需授予系统权限。Windows + WSL2 使用包内携带的 Windows 原生运行时。
 
 `make desktop-build` 会优先复用已校验的平台和架构对应包，缺少时自动执行 `make capability-computer-use`，再将包放入桌面安装资源。桌面后端启动时自动安装，用户无需手动导入；启停状态和 Agent 授权仍由用户管理。
 
 ### 做出你的第一个扩展
+
+创建 Tron 能力包使用同一份 [Framework 开发技能](tron-backend/crates/eliteforge-agent-capability-development/skills/eliteforge-agent-framework-integration/SKILL.md)：Agent 先执行随技能提供的生成器，预建技能、原生工具、页面、导航、MCP 和资源目录，再填写业务内容，最后校验与构建。生成器直接维护在该技能的 `assets/tron-harness-cap-template/`，需要 Node.js 22+；编译原生工具另需 Rust。无需选择模板类型，也不增加第二个开发能力包。
+
+开发技能以 Framework 源码快照随 Tron 构建，`make development-skills-sync FRAMEWORK_DIR=../eliteforge-agent-framework` 更新快照，`make development-skills-check` 校验；正常构建和运行无需同级源码目录。模板维护者直接修改 Framework 共用技能中的生成器和模板，再同步到 Tron。
 
 仓库提供可直接打包的页面示例。在开发环境准备完成后，运行：
 

@@ -15,6 +15,11 @@ impl FrameworkHost {
             "tron.harness".into(),
             fw::CapabilityPack::registry_skill_sources(&harness),
         ));
+        let development = eliteforge_agent_capability_development::capability_pack();
+        sources.push((
+            eliteforge_agent_capability_development::PACK_ID.into(),
+            fw::CapabilityPack::registry_skill_sources(&development),
+        ));
         let a2ui =
             eliteforge_agent_official_plugin_a2ui::A2uiPack::new().map_err(|e| e.to_string())?;
         sources.push((
@@ -508,6 +513,7 @@ impl FrameworkHost {
                 self.pty(),
             ))
             .capability_pack(eliteforge_agent_capability_tools::agent_collaboration_pack())
+            .capability_pack(eliteforge_agent_capability_development::capability_pack())
             .capability_pack(
                 tron_harness_capability::TronHarness::new(Arc::new(HarnessTools), [])
                     .with_tool_policy(tron_harness_capability::TronToolPolicy(Arc::new(
@@ -590,6 +596,7 @@ impl FrameworkHost {
                 | "framework.media"
                 | "framework.tools.discovery"
                 | "tron.harness"
+                | eliteforge_agent_capability_development::PACK_ID
         )
     }
     pub(super) fn main_selection(
@@ -793,6 +800,13 @@ impl FrameworkHost {
                 .map(str::to_owned)
                 .collect::<Vec<_>>(),
         )]);
+        installed_skills.insert(
+            eliteforge_agent_capability_development::PACK_ID.to_owned(),
+            eliteforge_agent_capability_development::skill_names()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+        );
         let packages = manager
             .installed()
             .map_err(|e| fw::AgentError::InvalidConfiguration(e.to_string()))?

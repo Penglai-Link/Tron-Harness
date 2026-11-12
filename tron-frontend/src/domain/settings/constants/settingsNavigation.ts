@@ -97,7 +97,7 @@ export const settingsNavigation = [
         translationKey: "shell:settings.items.skillCenter",
       },
       {
-        label: "Capability Packs",
+        label: "Capability Center",
         href: "/settings/capability-packs",
         icon: Package,
         translationKey: "shell:settings.items.capabilityPacks",

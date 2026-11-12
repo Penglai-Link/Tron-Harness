@@ -6,28 +6,28 @@ edition = "2024"
 publish = false
 
 [dependencies]
-eliteforge-agent-connector = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-connector-github = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-connector-gitlab = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-connector-gitee = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-capability-chunking = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-capability-auto-routing = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-capability-personai = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-tools-web = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-tools-media = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-tools-discovery = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
+eliteforge-agent-connector = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-connector-github = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-connector-gitlab = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-connector-gitee = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-capability-chunking = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-capability-auto-routing = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-capability-personai = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-tools-web = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-tools-media = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-tools-discovery = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
 
-eliteforge-agent-official-plugin-otel = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490", features = ["runtime"] }
-eliteforge-agent-official-plugin-otel-collector = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
+eliteforge-agent-official-plugin-otel = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f", features = ["runtime"] }
+eliteforge-agent-official-plugin-otel-collector = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
 opentelemetry = { version = "=0.32.0", default-features = false, features = ["trace", "metrics"] }
-eliteforge-agent-official-plugin-a2ui = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-skills = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-plugin-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-agui = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-memory = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-model-http = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-tools-human = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-capability-external = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
+eliteforge-agent-official-plugin-a2ui = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-skills = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-plugin-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-agui = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-memory = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-model-http = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-tools-human = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-capability-external = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
@@ -35,15 +35,16 @@ chrono-tz = "0.10"
 sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
 async-trait = "0.1"
 tokio-util = "0.7"
-eliteforge-agent-official-plugin-tools-mcp = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-capability-tools = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-tools-agents = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
+eliteforge-agent-official-plugin-tools-mcp = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-capability-tools = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-tools-agents = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
 tron-harness-capability = { path = "crates/tron-harness-capability" }
-eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-framework = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490", default-features = false }
-eliteforge-agent-capability-runtime = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-tools-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490" }
-eliteforge-agent-official-plugin-storage-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "3967a848686166acff0f31f5e42a9a42a668a490", features = ["bundled-native"] }
+eliteforge-agent-capability-development = { path = "crates/eliteforge-agent-capability-development" }
+eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-framework = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f", default-features = false }
+eliteforge-agent-capability-runtime = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-tools-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f" }
+eliteforge-agent-official-plugin-storage-local = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", rev = "e4e53e9072160925c178f81bf7989cefb07c018f", features = ["bundled-native"] }
 aes-gcm-siv = "0.11"
 axum = { version = "0.8", features = ["multipart"] }
 async-stream = "0.3"
@@ -51,7 +52,7 @@ base64 = "0.22"
 bcrypt = "0.17"
 flate2 = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "7bf11a4ffb1fc01b00c369d2b16827ac619e6654" }
+crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "a0910f279d91052c8f45fdf5592624341fd98297" }
 cron = "0.12"
 gmcrypto-core = { version = "1.0.0", features = ["sm4-aead"] }
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
@@ -108,7 +109,7 @@ windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 # Cargo's [patch] cannot override a Git source with another rev of that source.
 # Remove this replacement when Framework pins the same SDK revision.
 [replace]
-"https://gitee.com/person-ai/person-ai-index-rust-sdk.git#crab-serverapi:0.4.0" = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "7bf11a4ffb1fc01b00c369d2b16827ac619e6654" }
+"https://gitee.com/person-ai/person-ai-index-rust-sdk.git#crab-serverapi:0.4.0" = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "a0910f279d91052c8f45fdf5592624341fd98297" }
 
 [profile.release]
 # Reduce the distributed sidecar size while retaining panic unwinding for

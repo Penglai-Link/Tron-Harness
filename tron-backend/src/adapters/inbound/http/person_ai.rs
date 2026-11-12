@@ -18,6 +18,16 @@ impl IntoResponse for PersonAiApiError {
     fn into_response(self) -> Response {
         let descriptor = self.0.person_ai_service_descriptor();
         let (status, zh, en) = match descriptor.message_key {
+            "tron.capability.pack_unavailable" => (
+                StatusCode::NOT_FOUND,
+                "此能力包已下架或不存在，请刷新能力中心。本地已安装内容不受影响。",
+                "This pack was withdrawn or does not exist. Refresh the capability center. Your installed pack is unchanged.",
+            ),
+            "tron.capability.release_unavailable" => (
+                StatusCode::NOT_FOUND,
+                "此版本已下架或不存在，请选择其他已上架版本。本地已安装内容不受影响。",
+                "This release was withdrawn or does not exist. Choose another published release. Your installed pack is unchanged.",
+            ),
             "tron.personAi.device_unbound" => (
                 StatusCode::UNAUTHORIZED,
                 "设备已解绑，请重新授权",

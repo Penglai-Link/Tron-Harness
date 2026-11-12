@@ -69,7 +69,7 @@ impl ModelProviderService {
         self.person_ai_profile_session(user).await
     }
 
-    async fn person_ai_profile_session(
+    pub(super) async fn person_ai_profile_session(
         &self,
         user: &str,
     ) -> Result<(AuthorizedClientContext, String), ModelProviderError> {
@@ -115,7 +115,7 @@ impl ModelProviderService {
         let client = CheckinClient::new(base).map_err(server_api_error)?;
         self.person_ai_service_result(client.checkin(&context).await)
     }
-    fn person_ai_service_result<T>(
+    pub(super) fn person_ai_service_result<T>(
         &self,
         result: Result<T, ServerApiError>,
     ) -> Result<T, ModelProviderError> {
@@ -198,6 +198,8 @@ impl ModelProviderError {
             }
             Self::InvalidSelection(_) => ("101026003", "tron.personAi.invalid_request"),
             Self::Storage => ("101026005", "tron.personAi.storage_failed"),
+            Self::CapabilityPackUnavailable => ("101038005", "tron.capability.pack_unavailable"),
+            Self::CapabilityReleaseUnavailable => ("101038004", "tron.capability.release_unavailable"),
             _ => ("101026004", "tron.personAi.request_failed"),
         };
         PersonAiServiceErrorDescriptor { code, message_key }

@@ -218,6 +218,8 @@ help:
 	@echo ""
 	@echo "Tron 能力包（Framework 依赖来自公开 Git 仓库）:"
 	@echo "  make harness-capability-check Compile the Tron capability package"
+	@echo "  make development-skills-check 校验并编译共用开发技能及模板资源"
+	@echo "  make development-skills-sync 从 Framework 同步共用开发技能"
 	@echo "  make capability-computer-use 构建可导入的 Computer Use 能力包（当前系统与架构）"
 	@echo "                    VERSION 留空或与能力包 manifest 版本一致；SKIP_TESTS=true/false（本目标不运行测试）"
 	@echo "                    WSL2 构建需传入 COMPUTER_USE_WINDOWS_PACKAGE=同版本同架构的Windows包路径"
@@ -334,6 +336,16 @@ be-install:
 
 harness-capability-check:
 	$(CARGO) check --manifest-path "$(BACKEND_DIR)/crates/tron-harness-capability/Cargo.toml"
+
+.PHONY: development-skills-check development-skills-sync
+FRAMEWORK_DIR ?= ../eliteforge-agent-framework
+development-skills-check:
+	$(NODE) "scripts/sync-development-skills.cjs" --check
+	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/eliteforge-agent-capability-development/skills/eliteforge-agent-framework-integration
+	$(CARGO) check --manifest-path "$(BACKEND_MANIFEST)" -p eliteforge-agent-capability-development
+
+development-skills-sync:
+	$(NODE) "scripts/sync-development-skills.cjs" --source "$(FRAMEWORK_DIR)"
 
 # Compatibility aliases for existing local scripts.
 agent-capability-check agent-harness-check: harness-capability-check

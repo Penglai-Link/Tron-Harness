@@ -45,6 +45,8 @@ pub enum ModelProviderError {
     AuthenticationRequired,
     Unauthorized,
     DeviceUnbound,
+    CapabilityReleaseUnavailable,
+    CapabilityPackUnavailable,
     Remote(String),
     Storage,
 }
@@ -81,6 +83,8 @@ impl std::fmt::Display for ModelProviderError {
                 formatter.write_str("Person-AI access token was rejected (HTTP 401)")
             }
             Self::DeviceUnbound => formatter.write_str("Person-AI device was unbound; login again"),
+            Self::CapabilityPackUnavailable => formatter.write_str("Capability pack was withdrawn or does not exist"),
+            Self::CapabilityReleaseUnavailable => formatter.write_str("Capability release was withdrawn or does not exist"),
             Self::Remote(message) => formatter.write_str(message),
             Self::Storage => formatter.write_str("model provider storage failed"),
         }

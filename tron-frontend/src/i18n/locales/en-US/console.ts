@@ -85,7 +85,7 @@ export const consoleMessages = {
       mcpServersDetail: "Platform MCP Server Detail",
       mcpServersEdit: "Edit Platform MCP Server",
       tools: "Platform Tools",
-      capabilityPacks: "Capability Packs",
+      capabilityPacks: "Capability Center",
       capabilityPackDetail: "Capability Pack Details",
       capabilityConfiguration: "Capability Configuration",
       taskFlows: "Task Flows",

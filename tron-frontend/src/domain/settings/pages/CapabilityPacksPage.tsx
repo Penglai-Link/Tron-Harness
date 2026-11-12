@@ -1,299 +1,335 @@
-import { capabilityDescription } from "../model/capabilityDescription";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Package } from "lucide-react";
-import { Link } from "react-router";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-import { Badge } from "@/components/ui/badge";
+import { LoaderCircle, PackageSearch, RefreshCw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/toast";
 import { SelectInput } from "@/components/forms";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SelectItem } from "@/components/ui/select";
-import { PageHeader, SurfaceCard } from "@/shared";
-import { notifyCapabilityResourcesChanged } from "@/domain/skill/api";
-import {
-  uninstallCapabilityPack,
-  importCapabilityPack,
-  listCapabilityPacks,
-  setCapabilityPackEnabled,
-  type CapabilityPackRecord,
-} from "../api/capabilityApi";
+import { SearchField } from "@/components/search-field/SearchField";
+import { TablePagination } from "@/components/table-pagination";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
+import { useCapabilityCenter } from "../hooks/useCapabilityCenter";
+import { CapabilityCenterList } from "../components/CapabilityCenterList";
+import { CapabilityReleaseDialog } from "../components/CapabilityReleaseDialog";
+import type { CenterPack, CenterStatus } from "../api/capabilityCenterApi";
 
 export function CapabilityPacksPage() {
-  const { t } = useTranslation(["shell", "pages"]);
-  const [records, setRecords] = useState<CapabilityPackRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const toast = useToast();
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [provider, setProvider] = useState("all");
-  const [status, setStatus] = useState("effective");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation("pages");
+  const { formatNumber } = useLocaleFormatters();
+  const text = (key: string) => t(`capabilityCenter.${key}`);
+  const {
+    query,
+    filters,
+    search,
+    page,
+    categories,
+    mutation,
+    execute,
+    refresh,
+  } = useCapabilityCenter();
+  const [selected, setSelected] = useState<CenterPack | null>(null);
+  const [remove, setRemove] = useState<CenterPack | null>(null);
   const [pendingImport, setPendingImport] = useState<File | null>(null);
-  const load = async (signal?: AbortSignal) => {
-    setLoading(true);
-    setLoadFailed(false);
-    try {
-      setRecords(await listCapabilityPacks(signal));
-    } catch (reason) {
-      if (!signal?.aborted) {
-        setLoadFailed(true);
-        toast.error(reason instanceof Error ? reason.message : String(reason), {
-          title: t("pages:capabilityManagement.loadFailed"),
-        });
-      }
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  };
-  useEffect(() => {
-    const controller = new AbortController();
-    void load(controller.signal);
-    return () => controller.abort();
-  }, []);
-  const pageT = (key: string) => t(`pages:capabilityManagement.${key}`);
-  const providers = useMemo(
-    () => Array.from(new Set(records.map((record) => record.provider))).sort(),
-    [records]
-  );
-  const visibleRecords = records.filter(
-    (record) =>
-      record.kind === "capability" &&
-      (provider === "all" || record.provider === provider) &&
-      (status === "all" || record.effective === (status === "effective"))
-  );
-  const importPack = async (file?: File) => {
-    if (!file || busyId !== null) return;
-    setPendingImport(null);
-    setBusyId("import");
-    try {
-      await importCapabilityPack(file);
-      await load();
-      notifyCapabilityResourcesChanged();
-      toast.success(pageT("importSucceeded"));
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : String(reason), { title: pageT("importFailed") });
-    } finally {
-      setBusyId(null);
-    }
-  };
-  const togglePack = async (record: CapabilityPackRecord) => {
-    setBusyId(record.id);
-    try {
-      await setCapabilityPackEnabled(record.id, !record.effective);
-      toast.success(pageT(record.effective ? "disableSucceeded" : "enableSucceeded"));
-      await load();
-      notifyCapabilityResourcesChanged();
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : String(reason), { title: pageT(record.effective ? "disableFailed" : "enableFailed") });
-    } finally {
-      setBusyId(null);
-    }
+  const input = useRef<HTMLInputElement>(null);
+  const busy = mutation.isPending;
+  const data = page.data;
+  const records = data?.records ?? [];
+  const total = data?.total ?? 0;
+  const openDetail = (pack: CenterPack) => {
+    mutation.reset();
+    setSelected(pack);
   };
 
-  const removePack = async (record: CapabilityPackRecord) => {
-    setBusyId(record.id);
-    try {
-      await uninstallCapabilityPack(record.id);
-      toast.success(pageT("uninstallSucceeded"));
-      await load();
-      notifyCapabilityResourcesChanged();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e), { title: pageT("uninstallFailed") });
-    } finally {
-      setBusyId(null);
-    }
-  };
   return (
-    <div
-      data-theme-part="capability-packs-page"
-      className="space-y-5 [--tron-capability-effective-fg:var(--color-success)] [--tron-capability-inactive-fg:var(--color-on-surface-variant)] [--tron-capability-id-fg:var(--color-on-surface-variant)]"
-    >
-      <ConfirmDialog
-        open={pendingImport !== null}
-        title={pageT("import")}
-        description={`${pendingImport?.name ?? ""} — ${pageT("developmentImportWarning")}`}
-        tone="default"
-        cancelText={pageT("cancelImport")}
-        confirmText={pageT("confirmImport")}
-        onCancel={() => setPendingImport(null)}
-        onConfirm={() => void importPack(pendingImport ?? undefined)}
-      />
-      <PageHeader
-        title={t("shell:settings.items.capabilityPacks")}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <input
-              ref={importInputRef}
-              aria-label={pageT("import")}
-              className="sr-only"
-              type="file"
-              accept=".zip,application/zip"
-              disabled={busyId !== null}
-              onChange={(event) => {
-                setPendingImport(event.currentTarget.files?.[0] ?? null);
-                event.currentTarget.value = "";
-              }}
-            />
+    <div data-theme-part="capability-packs-page" className="min-w-0 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1" aria-label={text("view")}>
+          {(["all", "installed", "updatable"] as const).map((status) => (
             <Button
-              variant="outline"
+              key={status}
               size="sm"
-              disabled={busyId !== null}
-              onClick={() => importInputRef.current?.click()}
+              variant={
+                query.status === status ||
+                (status === "installed" &&
+                  ["enabled", "disabled"].includes(query.status))
+                  ? "secondary"
+                  : "ghost"
+              }
+              aria-pressed={
+                query.status === status ||
+                (status === "installed" &&
+                  ["enabled", "disabled"].includes(query.status))
+              }
+              onClick={() => filters({ status })}
             >
-
-              {pageT("import")}
+              {text(status === "all" ? "discover" : status)}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-
-              {pageT("refresh")}
-            </Button>
-          </div>
-        }
-      />
-      <div className="flex w-full max-w-xl flex-wrap items-center gap-3">
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            ref={input}
+            type="file"
+            accept=".zip,application/zip"
+            aria-label={text("import")}
+            hidden
+            disabled={busy}
+            onChange={(event) => {
+              mutation.reset();
+              setPendingImport(event.target.files?.[0] ?? null);
+              event.target.value = "";
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => input.current?.click()}
+          >
+            <Upload size={14} aria-hidden="true" />
+            {text("import")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page.isFetching || busy}
+            onClick={() => void refresh()}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            {text("refresh")}
+          </Button>
+        </div>
+      </div>
+      <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
+        <SearchField
+          value={query.keyword}
+          onChange={search}
+          ariaLabel={text("search")}
+          placeholder={text("search")}
+          className="min-w-0"
+        />
         <SelectInput
-          className="h-9 min-w-40 flex-1"
-          aria-label={pageT("filterProvider")}
-          value={provider}
-          onValueChange={(value) => setProvider(String(value ?? "all"))}
+          aria-label={text("source")}
+          value={query.source}
+          onValueChange={(v) => filters({ source: String(v ?? "") })}
+          className="w-full"
         >
-          <SelectItem value="all">{pageT("allProviders")}</SelectItem>
-          {providers.map((name) => (
-            <SelectItem key={name} value={name}>
-              {name}
+          <SelectItem value="">{text("allSources")}</SelectItem>
+          <SelectItem value="official">{text("sources.official")}</SelectItem>
+          <SelectItem value="third_party">
+            {text("sources.third_party")}
+          </SelectItem>
+        </SelectInput>
+        <SelectInput
+          aria-label={text("status")}
+          value={query.status}
+          onValueChange={(v) => {
+            if (v) filters({ status: v as CenterStatus });
+          }}
+          className="w-full"
+        >
+          {(
+            ["all", "installed", "updatable", "enabled", "disabled"] as const
+          ).map((s) => (
+            <SelectItem key={s} value={s}>
+              {text(s === "all" ? "allStatuses" : s)}
             </SelectItem>
           ))}
         </SelectInput>
-        <SelectInput
-          className="h-9 w-36"
-          aria-label={pageT("filterStatus")}
-          value={status}
-          onValueChange={(value) => setStatus(String(value ?? "effective"))}
-        >
-          <SelectItem value="effective">{pageT("effective")}</SelectItem>
-          <SelectItem value="inactive">{pageT("inactive")}</SelectItem>
-          <SelectItem value="all">{pageT("allStatuses")}</SelectItem>
-        </SelectInput>
       </div>
-      {loading && records.length === 0 ? (
-        <p className="text-sm text-[var(--color-on-surface-variant)]">
-          {pageT("loading")}
-        </p>
-      ) : null}
-      {!loading && !loadFailed && visibleRecords.length === 0 ? (
-        <SurfaceCard className="text-sm text-[var(--color-on-surface-variant)]">
-          {pageT(records.some((record) => record.kind === "capability") ? "noMatchingPacks" : "emptyPacks")}
-        </SurfaceCard>
-      ) : null}
-      <div className="grid gap-3 xl:grid-cols-2">
-        {visibleRecords.map((record) => (
-          <SurfaceCard
-            data-theme-part="capability-pack-card"
-            data-settings-card
-            key={record.id}
-            className="relative space-y-4 p-4 transition-colors hover:border-[var(--color-outline)]"
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[9rem_minmax(0,1fr)]">
+        <nav
+          aria-label={text("categories")}
+          className="flex min-w-0 flex-wrap content-start gap-1 xl:flex-col xl:items-stretch"
+        >
+          <Button
+            variant={!query.category ? "secondary" : "ghost"}
+            size="sm"
+            className="justify-start"
+            aria-pressed={!query.category}
+            onClick={() => filters({ category: "" })}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container)]">
-                  <Package size={18} />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="truncate text-sm font-semibold">
-                    <Link
-                      className="after:absolute after:inset-0 after:rounded-lg focus-visible:outline focus-visible:outline-2"
-                      to={`/settings/capability-packs/${encodeURIComponent(
-                        record.id
-                      )}`}
-                    >
-                      {record.name}
-                    </Link>
-                  </h2>
-                  <p
-                    data-theme-part="capability-pack-id"
-                    className="mt-1 break-all font-mono text-xs text-[var(--tron-capability-id-fg,var(--color-on-surface-variant))]"
-                  >
-                    {record.id}
-                  </p>
-                </div>
-              </div>
-              <Badge
-                data-theme-part={
-                  record.effective
-                    ? "capability-status-effective"
-                    : "capability-status-inactive"
-                }
-                variant={record.effective ? "success" : "outline"}
-              >
-                {record.effective ? (
-                  <>
-                    <CheckCircle2 size={13} className="mr-1" />
-                    {pageT("effective")}
-                  </>
-                ) : (
-                  pageT("inactive")
-                )}
-              </Badge>
-            </div>
-            <p className="min-h-10 text-sm text-[var(--color-on-surface-variant)]">
-              {capabilityDescription(t, "Pack", record.id, record.description)}
+            {text("allCategories")}
+          </Button>
+          {categories.data?.categories.map((category) => (
+            <Button
+              key={category}
+              variant={query.category === category ? "secondary" : "ghost"}
+              size="sm"
+              className="h-auto min-h-8 justify-start whitespace-normal break-words text-left"
+              aria-pressed={query.category === category}
+              onClick={() => filters({ category })}
+            >
+              {category}
+            </Button>
+          ))}
+          {categories.isError && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto whitespace-normal"
+              onClick={() => void categories.refetch()}
+            >
+              {text("retryCategories")}
+            </Button>
+          )}
+        </nav>
+        <section
+          className="min-w-0"
+          aria-label={text("results")}
+          aria-busy={page.isFetching}
+        >
+          {data?.updateCheckIncomplete && (
+            <p
+              role="status"
+              className="mb-4 text-sm text-[var(--color-warning)]"
+            >
+              {text("incomplete")}
             </p>
-            <dl className="grid grid-cols-3 gap-3 border-t border-[var(--color-outline-variant)] pt-3 text-xs">
-              <div>
-                <dt className="text-[var(--color-on-surface-variant)]">
-                  {pageT("version")}
-                </dt>
-                <dd className="mt-1 font-medium">{record.version}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--color-on-surface-variant)]">
-                  {pageT("provider")}
-                </dt>
-                <dd className="mt-1 font-medium">{record.provider}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--color-on-surface-variant)]">
-                  {pageT("updatedAt")}
-                </dt>
-                <dd className="mt-1 font-medium">{record.updatedAt ?? "—"}</dd>
-              </div>
-            </dl>
-            <div className="flex justify-end gap-2 border-t border-[var(--color-outline-variant)] pt-3">
-              {record.provider === "External" ? (
-                <Button
-                  className="relative z-10"
-                  variant="outline"
-                  size="sm"
-                  disabled={busyId !== null}
-                  onClick={() => void removePack(record)}
-                >
-                  {t("pages:agentSkills.uninstallPack")}
-                </Button>
-              ) : null}
-              <Button
-                className="relative z-10"
-                size="sm"
-                variant={record.effective ? "outline" : "default"}
-                disabled={busyId !== null}
-                onClick={() => void togglePack(record)}
-              >
-                {busyId === record.id
-                  ? pageT("saving")
-                  : record.effective
-                  ? pageT("disable")
-                  : pageT("enable")}
+          )}
+          {page.isError ? (
+            <div role="alert" className="space-y-3 py-8">
+              <p className="text-sm text-[var(--color-error)]">
+                {text("loadFailed")}: {page.error.message}
+              </p>
+              <Button variant="outline" onClick={() => void page.refetch()}>
+                {text("retry")}
               </Button>
             </div>
-          </SurfaceCard>
-        ))}
+          ) : page.isLoading ? (
+            <div
+              role="status"
+              className="flex items-center gap-2 py-16 text-sm text-[var(--color-on-surface-variant)]"
+            >
+              <LoaderCircle
+                size={16}
+                className="animate-spin motion-reduce:animate-none"
+              />
+              {text("loading")}
+            </div>
+          ) : records.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <PackageSearch
+                size={28}
+                className="text-[var(--color-on-surface-variant)]"
+                aria-hidden="true"
+              />
+              <p className="text-sm">
+                {text(query.status === "updatable" ? "noUpdates" : "empty")}
+              </p>
+              {(query.keyword || query.category || query.source) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    filters({ keyword: "", category: "", source: "" })
+                  }
+                >
+                  {text("clearFilters")}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <CapabilityCenterList
+              records={records}
+              busy={busy}
+              onDetail={openDetail}
+              onToggle={(pack) => void execute({ kind: "toggle", pack })}
+              onRemove={(pack) => {
+                mutation.reset();
+                setRemove(pack);
+              }}
+            />
+          )}
+          {!page.isError && data && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] pt-4 text-xs text-[var(--color-on-surface-variant)]">
+              <span>
+                {t("capabilityCenter.range", {
+                  start: formatNumber(
+                    total ? (query.current - 1) * query.size + 1 : 0
+                  ),
+                  end: formatNumber(
+                    Math.min(query.current * query.size, total)
+                  ),
+                  total: formatNumber(total),
+                })}
+              </span>
+              <div className="min-w-0 flex-1">
+                <TablePagination
+                  page={query.current}
+                  pageSize={query.size}
+                  pageSizeOptions={[10, 20, 50]}
+                  pageCount={Math.max(1, Math.ceil(total / query.size))}
+                  totalItems={total}
+                  startItem={total ? (query.current - 1) * query.size + 1 : 0}
+                  endItem={Math.min(query.current * query.size, total)}
+                  showRange={false}
+                  onPageChange={
+                    page.isFetching
+                      ? undefined
+                      : (current) => filters({ current })
+                  }
+                  onPageSizeChange={(size) => filters({ size })}
+                />
+              </div>
+            </div>
+          )}
+        </section>
       </div>
+      {selected && (
+        <CapabilityReleaseDialog
+          key={selected.packId}
+          pack={selected}
+          busy={busy}
+          error={mutation.error}
+          onReviewChange={() => mutation.reset()}
+          onClose={() => setSelected(null)}
+          onInstall={(releaseId, installedVersion) => {
+            void execute({ kind: "install", releaseId, installedVersion }).then(
+              (ok) => {
+                if (ok) setSelected(null);
+              }
+            );
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={!!remove}
+        title={text("uninstallTitle")}
+        description={`${remove?.name ?? ""} — ${text("uninstallNotice")}${
+          mutation.error ? `\n${mutation.error.message}` : ""
+        }`}
+        pending={busy}
+        cancelText={text("cancel")}
+        confirmText={text("uninstall")}
+        pendingText={text("working")}
+        onCancel={() => setRemove(null)}
+        onConfirm={() => {
+          if (remove)
+            void execute({ kind: "uninstall", pack: remove }).then((ok) => {
+              if (ok) setRemove(null);
+            });
+        }}
+      />
+      <ConfirmDialog
+        open={!!pendingImport}
+        title={text("import")}
+        tone="default"
+        description={`${pendingImport?.name ?? ""} — ${text("installNotice")}${
+          mutation.error ? `\n${mutation.error.message}` : ""
+        }`}
+        pending={busy}
+        cancelText={text("cancel")}
+        confirmText={text("confirmImport")}
+        pendingText={text("working")}
+        onCancel={() => setPendingImport(null)}
+        onConfirm={() => {
+          if (pendingImport)
+            void execute({ kind: "import", file: pendingImport }).then((ok) => {
+              if (ok) setPendingImport(null);
+            });
+        }}
+      />
     </div>
   );
 }

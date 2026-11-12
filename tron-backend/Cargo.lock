@@ -1007,7 +1007,13 @@ dependencies = [
 [[package]]
 name = "crab-serverapi"
 version = "0.4.0"
-source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=7bf11a4ffb1fc01b00c369d2b16827ac619e6654#7bf11a4ffb1fc01b00c369d2b16827ac619e6654"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=85a70d4573813596739ec0a9a6c1ce33946f1e98#85a70d4573813596739ec0a9a6c1ce33946f1e98"
+replace = "crab-serverapi 0.4.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=a0910f279d91052c8f45fdf5592624341fd98297)"
+
+[[package]]
+name = "crab-serverapi"
+version = "0.4.0"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=a0910f279d91052c8f45fdf5592624341fd98297#a0910f279d91052c8f45fdf5592624341fd98297"
 dependencies = [
  "aes-gcm 0.10.3",
  "async-trait",
@@ -1032,12 +1038,6 @@ dependencies = [
  "url",
  "uuid",
 ]
-
-[[package]]
-name = "crab-serverapi"
-version = "0.4.0"
-source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=85a70d4573813596739ec0a9a6c1ce33946f1e98#85a70d4573813596739ec0a9a6c1ce33946f1e98"
-replace = "crab-serverapi 0.4.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=7bf11a4ffb1fc01b00c369d2b16827ac619e6654)"
 
 [[package]]
 name = "crc"
@@ -1746,7 +1746,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-capability-auto-routing"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "eliteforge-agent-core",
 ]
@@ -1754,16 +1754,23 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-capability-chunking"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "eliteforge-agent-core",
  "serde_json",
 ]
 
 [[package]]
+name = "eliteforge-agent-capability-development"
+version = "1.0.0"
+dependencies = [
+ "eliteforge-agent-core",
+]
+
+[[package]]
 name = "eliteforge-agent-capability-external"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "eliteforge-agent-core",
  "eliteforge-agent-framework",
@@ -1773,7 +1780,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-capability-macros"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1784,7 +1791,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-capability-personai"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1805,7 +1812,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-capability-runtime"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1833,7 +1840,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-capability-tools"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "eliteforge-agent-core",
  "eliteforge-agent-official-plugin-tools-agents",
@@ -1845,7 +1852,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-connector"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1859,7 +1866,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-context"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1877,7 +1884,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-context-contracts"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -1891,7 +1898,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-core"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-capability-macros",
@@ -1910,7 +1917,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-framework"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-capability-runtime",
@@ -1930,7 +1937,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-memory"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-context",
@@ -1944,7 +1951,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-a2ui"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -1956,7 +1963,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-agent-external"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -1972,7 +1979,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-agui"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "ag-ui",
  "async-trait",
@@ -1987,7 +1994,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-connector-gitee"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1999,7 +2006,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-connector-github"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-connector",
@@ -2010,7 +2017,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-connector-gitlab"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-connector",
@@ -2021,7 +2028,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-model-genai"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -2035,7 +2042,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-model-http"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2057,7 +2064,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-otel"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -2075,7 +2082,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-otel-collector"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "axum",
@@ -2093,7 +2100,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-skills"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -2107,7 +2114,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-storage-local"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "cap-fs-ext",
@@ -2132,7 +2139,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-tools-agents"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -2144,7 +2151,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-tools-discovery"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -2155,7 +2162,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-tools-human"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -2166,7 +2173,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-tools-local"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2191,7 +2198,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-tools-mcp"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -2210,7 +2217,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-tools-media"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2226,7 +2233,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-official-plugin-tools-web"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "eliteforge-agent-core",
@@ -2240,7 +2247,7 @@ dependencies = [
 [[package]]
 name = "eliteforge-agent-plugin-core"
 version = "1.0.0"
-source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=3967a848686166acff0f31f5e42a9a42a668a490#3967a848686166acff0f31f5e42a9a42a668a490"
+source = "git+https://gitee.com/person-ai/eliteforge-agent-framework.git?rev=e4e53e9072160925c178f81bf7989cefb07c018f#e4e53e9072160925c178f81bf7989cefb07c018f"
 dependencies = [
  "async-trait",
  "futures",
@@ -7818,10 +7825,11 @@ dependencies = [
  "bcrypt",
  "chrono",
  "chrono-tz",
- "crab-serverapi 0.4.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=7bf11a4ffb1fc01b00c369d2b16827ac619e6654)",
+ "crab-serverapi 0.4.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=a0910f279d91052c8f45fdf5592624341fd98297)",
  "cron",
  "eliteforge-agent-capability-auto-routing",
  "eliteforge-agent-capability-chunking",
+ "eliteforge-agent-capability-development",
  "eliteforge-agent-capability-external",
  "eliteforge-agent-capability-personai",
  "eliteforge-agent-capability-runtime",
@@ -8580,7 +8588,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

@@ -12,8 +12,11 @@ use axum::{
 };
 use serde::Deserialize;
 
+mod center;
+
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .merge(center::routes())
         .route("/api/v1/capabilities/packs", get(list_capability_packs))
         .route("/api/v1/capabilities/packs/{id}/pages/{page}", get(get_page))
         .route("/api/v1/capabilities/packs/{id}/pages", get(list_pages))

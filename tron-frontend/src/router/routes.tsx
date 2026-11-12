@@ -592,11 +592,11 @@ const registeredRoutes: AppRoute[] = [
     pageId: "settings.capabilityPacks",
     route: "/settings/capability-packs",
     activeNav: "Settings",
-    title: "Capability Packs",
+    title: "Capability Center",
     titleTranslationKey: "console:routeTitles.settings.capabilityPacks",
     archetype: "settings",
     layout: "settings",
-    settingsNav: "Capability Packs",
+    settingsNav: "Capability Center",
   },
   {
     pageId: "settings.capabilityPackDetail",
@@ -607,7 +607,7 @@ const registeredRoutes: AppRoute[] = [
     titleTranslationKey: "console:routeTitles.settings.capabilityPackDetail",
     archetype: "settings",
     layout: "settings",
-    settingsNav: "Capability Packs",
+    settingsNav: "Capability Center",
   },
   {
     pageId: "settings.capabilityConfiguration",
