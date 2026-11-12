@@ -18,8 +18,8 @@
   ${EndIf}
 !macroend
 
-# Keep install-local user data on both upgrades and uninstall. The default
-# electron-builder uninstaller recursively removes the entire installation.
+# Keep install-local user data during upgrades and by default on uninstall.
+# The default electron-builder uninstaller removes the entire installation.
 !macro customRemoveFiles
   SetOutPath "$TEMP"
   FindFirst $0 $1 "$INSTDIR\*"
@@ -48,4 +48,16 @@
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "${TRON_STARTUP_NAME}"
     DeleteRegKey HKCU "${TRON_STARTUP_KEY}"
   ${EndIf}
+!macroend
+
+# electron-builder adds an optional checkbox to the assisted uninstaller and
+# runs this section after customRemoveFiles has preserved the data directory.
+!macro customUnInstallSection
+  Section /o "un.Delete personal data (data) / 删除个人数据"
+    # The installed uninstaller also runs silently during an upgrade.
+    ${IfNot} ${isUpdated}
+      RMDir /r "$INSTDIR\data"
+      RMDir "$INSTDIR"
+    ${EndIf}
+  SectionEnd
 !macroend

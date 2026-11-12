@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SurfaceCard } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import { useUpdater } from "./useUpdater";
+import { openReleaseNotes } from "./releaseNotesEvents";
 
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : String(error || "Update failed");
@@ -74,10 +75,14 @@ export function UpdateSettingsCard() {
         <div>
           <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">{t("settingsGeneral.update.title")}</h2>
         </div>
-        <Button disabled={checking || status.type === "downloading"} size="sm" variant="secondary" onClick={() => void handleCheck()}>
-
-          {checking ? t("update.actions.checking") : t("update.actions.check")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={openReleaseNotes}>
+            {t("update.releaseNotes.view")}
+          </Button>
+          <Button disabled={checking || status.type === "downloading"} size="sm" variant="secondary" onClick={() => void handleCheck()}>
+            {checking ? t("update.actions.checking") : t("update.actions.check")}
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">

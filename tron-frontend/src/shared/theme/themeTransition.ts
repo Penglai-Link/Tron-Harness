@@ -23,7 +23,10 @@ export async function revealTheme(update: () => void): Promise<void> {
 
   // The furthest points from bottom centre are the viewport's top corners.
   const radius = Math.ceil(Math.hypot(window.innerWidth / 2, window.innerHeight)) + 1;
-  root.style.setProperty("--tron-theme-reveal-radius", `${radius}px`);
+  // circle() percentages use the reference box's normalized diagonal. Keeping
+  // that coordinate space avoids Electron mis-scaling px radii on Retina.
+  const referenceRadius = Math.hypot(window.innerWidth, window.innerHeight) / Math.SQRT2;
+  root.style.setProperty("--tron-theme-reveal-radius", `${radius / referenceRadius * 100}%`);
   root.dataset.tronThemeTransition = "";
 
   const cleanup = () => {

@@ -44,9 +44,7 @@ html[data-tron-window-chrome] :is(.tron-shell-frame, .tron-settings-frame) {
 html[data-tron-window-chrome] .tron-shell-frame {
   --tron-shell-toolbar-height: max(3rem, 48px);
 }
-html[data-tron-window-chrome="macos"] :is(.tron-shell-frame, .tron-settings-frame) {
-  --tron-window-controls-left: 88px;
-}
+/* macOS uses native hover controls, so it needs no permanent left inset. */
 html:is([data-tron-window-chrome="windows"], [data-tron-window-chrome="linux"]) :is(.tron-shell-frame, .tron-settings-frame) {
   --tron-window-controls-left: env(titlebar-area-x, 0px);
   --tron-window-controls-right: max(0px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px))));

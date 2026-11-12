@@ -129,6 +129,27 @@ class WslBackend {
     return { distribution: distro, os, version, architecture, home, osType };
   }
 
+  async listInstallations() {
+    const distributions = await this.list();
+    return Promise.all(distributions.map(async (item) => ({
+      ...item,
+      tronInstalled: await run(argsFor(item.name, ["sh", "-c", 'for release in "$HOME"/.tron/desktop/releases/*; do if [ -f "$release/tron-backend" ]; then printf installed; break; fi; done'])) === "installed",
+    })));
+  }
+
+  async uninstall(distro, deleteUserData = false) {
+    if (this.busy || this.session) throw new Error("wsl-operation-in-progress");
+    this.busy = true;
+    try {
+      distributionName(distro);
+      if (!(await this.list()).some((item) => item.name === distro)) throw new Error("invalid-wsl-distribution");
+      this.setStatus("uninstalling", { distribution: distro });
+      await run(argsFor(distro, ["python3", "-c", runtime, "uninstall", deleteUserData === true ? "delete-data" : "keep-data"]), { timeout: 120000 });
+      this.setStatus("idle");
+    } catch (error) { this.setStatus("error", { distribution: distro, message: error.message }); throw error; }
+    finally { this.busy = false; }
+  }
+
   async wslPlatforms() {
     if (!this.platforms) {
       const { stdout } = await execFileAsync(this.sidecarPath, ["--wsl-platforms"], {

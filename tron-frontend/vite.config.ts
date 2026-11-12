@@ -11,6 +11,49 @@ function readProductVersion() {
   return versionProperties.match(/^revision\s*=\s*(\S+)\s*$/m)?.[1] ?? "unknown";
 }
 
+function readReleaseNotes(version: string, file: string) {
+  const changelog = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+  const sections = changelog.split(/^##\s+/m).slice(1);
+  const entries = sections.flatMap((section) => {
+    const [heading, ...lines] = section.split(/\r?\n/);
+    const entryVersion = heading.match(/^\[(\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?)\]/)?.[1];
+    if (!entryVersion) return [];
+    const content = lines.join("\n").trim();
+    if (!content) throw new Error(`${file} must contain release notes for [${entryVersion}]`);
+    return [{ version: entryVersion, content }];
+  });
+  if (!entries.some((entry) => entry.version === version)) {
+    throw new Error(`${file} must contain release notes for [${version}]`);
+  }
+  if (new Set(entries.map((entry) => entry.version)).size !== entries.length) {
+    throw new Error(`${file} contains duplicate release versions`);
+  }
+  return entries.sort((left, right) => compareVersions(right.version, left.version));
+}
+
+function compareVersions(left: string, right: string) {
+  const [leftCore, leftPre] = left.split("+", 1)[0].split(/-(.*)/);
+  const [rightCore, rightPre] = right.split("+", 1)[0].split(/-(.*)/);
+  const coreOrder = leftCore.localeCompare(rightCore, "en", { numeric: true });
+  if (coreOrder) return coreOrder;
+  if (leftPre === undefined || rightPre === undefined) {
+    return Number(leftPre === undefined) - Number(rightPre === undefined);
+  }
+  const leftParts = leftPre.split(".");
+  const rightParts = rightPre.split(".");
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const a = leftParts[index];
+    const b = rightParts[index];
+    if (a === undefined || b === undefined) return leftParts.length - rightParts.length;
+    if (a === b) continue;
+    const aNumeric = /^\d+$/.test(a);
+    const bNumeric = /^\d+$/.test(b);
+    if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;
+    return aNumeric ? a.localeCompare(b, "en", { numeric: true }) : a < b ? -1 : 1;
+  }
+  return 0;
+}
+
 export default defineConfig(({ mode }) => {
   const runtimeEnv = {
     ...loadEnv(mode, fileURLToPath(new URL(".", import.meta.url)), ""),
@@ -19,10 +62,20 @@ export default defineConfig(({ mode }) => {
   const apiBaseUrl = runtimeEnv.VITE_TRON_API_BASE_URL ?? "";
   const backendProxyTarget = runtimeEnv.TRON_FRONTEND_API_PROXY_TARGET ?? DEFAULT_BACKEND_PROXY_TARGET;
   const frontendOutDir = runtimeEnv.TRON_FRONTEND_OUT_DIR;
+  const productVersion = readProductVersion();
+  const releaseNotes = {
+    "zh-CN": readReleaseNotes(productVersion, "CHANGELOG.md"),
+    "en-US": readReleaseNotes(productVersion, "CHANGELOG.en-US.md"),
+  };
+  if (JSON.stringify(releaseNotes["zh-CN"].map((entry) => entry.version))
+    !== JSON.stringify(releaseNotes["en-US"].map((entry) => entry.version))) {
+    throw new Error("Chinese and English changelogs must contain the same release versions");
+  }
 
   return {
     define: {
-      __TRON_APP_VERSION__: JSON.stringify(readProductVersion()),
+      __TRON_APP_VERSION__: JSON.stringify(productVersion),
+      __TRON_RELEASE_NOTES__: JSON.stringify(releaseNotes),
     },
     plugins: [react(), tailwindcss()],
     build: {

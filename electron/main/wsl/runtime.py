@@ -165,6 +165,43 @@ def inspect(version):
     emit({"installed": installed, "dataDir": str(root), "releaseDir": str(release)})
 
 
+def uninstall(delete_user_data=False):
+    home = linux_path(Path.home())
+    root = home / ".tron"
+    desktop = root / "desktop"
+    releases = desktop / "releases"
+    # Refuse redirected installation roots before touching any files.
+    for directory in (root, desktop, releases):
+        if directory.is_symlink():
+            raise ValueError("wsl-uninstall-unsafe-path")
+        if directory == root and not directory.exists():
+            return
+        if directory.exists():
+            linux_path(directory)
+    desktop.mkdir(mode=0o700, exist_ok=True)
+    with (desktop / "install.lock").open("a") as install_lock, (desktop / "backend.lock").open("a") as backend_lock:
+        try:
+            fcntl.flock(install_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(backend_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("wsl-backend-already-running")
+        # Keep the lock files in place so other desktop instances share the
+        # same locks. Business data and managed workspaces live outside releases.
+        if releases.exists():
+            shutil.rmtree(releases)
+        if delete_user_data:
+            # Leave only the shared lock files. Removing them would let a
+            # concurrent desktop instance acquire a different inode's lock.
+            for parent, retained in ((root, {"desktop"}), (desktop, {"install.lock", "backend.lock"})):
+                for entry in parent.iterdir():
+                    if entry.name in retained:
+                        continue
+                    if entry.is_symlink() or not entry.is_dir():
+                        entry.unlink()
+                    else:
+                        shutil.rmtree(entry)
+
+
 def serve(version, port, nonce):
     root, desktop, release = directories(version)
     if not re.fullmatch(r"[0-9a-f]{32}", nonce) or not 1024 <= port <= 65535:
@@ -255,13 +292,18 @@ def serve(version, port, nonce):
 
 try:
     os.umask(0o077)
-    command, version = sys.argv[1:3]
-    if command == "inspect":
-        inspect(version)
+    command = sys.argv[1]
+    if command == "uninstall":
+        option = sys.argv[2] if len(sys.argv) > 2 else "keep-data"
+        if option not in ("keep-data", "delete-data"):
+            raise ValueError("invalid-uninstall-option")
+        uninstall(option == "delete-data")
+    elif command == "inspect":
+        inspect(sys.argv[2])
     elif command == "install":
-        install(version, sys.argv[3])
+        install(sys.argv[2], sys.argv[3])
     elif command == "serve":
-        serve(version, int(sys.argv[3]), sys.argv[4])
+        serve(sys.argv[2], int(sys.argv[3]), sys.argv[4])
     else:
         raise ValueError("unknown-runtime-command")
 except Exception as error:

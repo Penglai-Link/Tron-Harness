@@ -230,10 +230,11 @@ function createMainWindow() {
     backgroundColor: palette.background,
     title: "Tron",
     width: 1440,
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
-    ...(process.platform === "darwin"
-      ? { trafficLightPosition: { x: 12, y: 13 } }
-      : { titleBarOverlay: { height: 40, color: "#00000000", symbolColor: palette.foreground } }),
+    // macOS controls appear on hover without reserving space beside the brand.
+    titleBarStyle: process.platform === "darwin" ? "customButtonsOnHover" : "hidden",
+    ...(process.platform !== "darwin"
+      ? { titleBarOverlay: { height: 40, color: "#00000000", symbolColor: palette.foreground } }
+      : {}),
     ...(["win32", "linux"].includes(process.platform) ? { icon: ICON_PATH } : {}),
     webPreferences: {
       webviewTag: true,
@@ -542,6 +543,7 @@ async function bootstrap() {
 async function selectBackendEnvironment(selection) {
   if (!state.wsl) throw new Error("wsl-windows-only");
   if (state.switchingEnvironment) throw new Error("wsl-operation-in-progress");
+  if (state.wsl.busy) throw new Error("wsl-operation-in-progress");
   if (!["local", "wsl"].includes(selection.mode)) throw new Error("invalid-backend-environment");
   state.switchingEnvironment = true;
   try {
@@ -925,7 +927,13 @@ function registerIpcHandlers() {
     }
     if (command === "listWslDistributions") {
       if (!state.wsl) throw new Error("wsl-windows-only");
-      return state.wsl.list();
+      return state.wsl.listInstallations();
+    }
+    if (command === "uninstallWslBackend") {
+      if (!state.wsl) throw new Error("wsl-windows-only");
+      if (state.environment.mode !== "local") throw new Error("wsl-uninstall-local-only");
+      if (state.switchingEnvironment) throw new Error("wsl-operation-in-progress");
+      return state.wsl.uninstall(request.distribution, request.deleteUserData === true);
     }
     if (command === "selectBackendEnvironment") return selectBackendEnvironment(request);
 
@@ -950,6 +958,17 @@ function registerIpcHandlers() {
 
     if (command === "getAppVersion") {
       return app.getVersion();
+    }
+
+    if (command === "isReleaseNotesAcknowledged" || command === "acknowledgeReleaseNotes") {
+      const version = app.getVersion();
+      if (request.version !== version) throw new Error("release-notes-version-mismatch");
+      const releaseNotes = require("./release-notes.cjs");
+      if (command === "isReleaseNotesAcknowledged") {
+        return releaseNotes.isAcknowledged(desktopDataDir, version);
+      }
+      releaseNotes.acknowledge(desktopDataDir, version);
+      return true;
     }
 
     if (command === "checkUpdate") {

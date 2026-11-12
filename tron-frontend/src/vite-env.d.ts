@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 
 declare const __TRON_APP_VERSION__: string;
+declare const __TRON_RELEASE_NOTES__: Readonly<Record<"zh-CN" | "en-US", readonly {
+  version: string;
+  content: string;
+}[]>>;
 
 interface ImportMetaEnv {
   readonly VITE_TRON_API_BASE_URL?: string;

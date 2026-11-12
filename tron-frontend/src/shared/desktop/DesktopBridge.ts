@@ -33,7 +33,7 @@ export interface BackendEnvironmentState {
   supported: boolean;
   selection: BackendEnvironmentSelection;
   status: {
-    phase: "idle" | "checking" | "dependencies" | "downloading" | "installing" | "installed" | "starting" | "ready" | "error";
+    phase: "idle" | "checking" | "dependencies" | "downloading" | "installing" | "installed" | "starting" | "ready" | "error" | "uninstalling";
     distribution?: string;
     dataDir?: string;
     backendVersion?: string;
@@ -42,7 +42,7 @@ export interface BackendEnvironmentState {
     message?: string;
   };
 }
-export interface WslDistribution { name: string; wslVersion: number }
+export interface WslDistribution { name: string; wslVersion: number; tronInstalled: boolean }
 
 export type UpdateStatusType =
   | "idle"
@@ -393,12 +393,24 @@ export class DesktopBridge {
     return typeof response === "string" ? response : "";
   }
 
+  public async isReleaseNotesAcknowledged(version: string): Promise<boolean> {
+    return await this.requireInvoke()("isReleaseNotesAcknowledged", { version }) === true;
+  }
+
+  public async acknowledgeReleaseNotes(version: string): Promise<void> {
+    await this.requireInvoke()("acknowledgeReleaseNotes", { version });
+  }
+
   public async getBackendEnvironment(): Promise<BackendEnvironmentState> {
     return this.requireInvoke()("getBackendEnvironment", {}) as Promise<BackendEnvironmentState>;
   }
 
   public async listWslDistributions(): Promise<WslDistribution[]> {
     return this.requireInvoke()("listWslDistributions", {}) as Promise<WslDistribution[]>;
+  }
+
+  public async uninstallWslBackend(distribution: string, deleteUserData = false): Promise<void> {
+    await this.requireInvoke()("uninstallWslBackend", { distribution, deleteUserData });
   }
 
   public onBackendEnvironmentStatus(listener: (status: BackendEnvironmentState["status"]) => void): () => void {

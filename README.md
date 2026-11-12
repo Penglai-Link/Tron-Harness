@@ -1,124 +1,246 @@
-# Tron Harness
+<div align="center">
+  <img src="electron/assets/tron.png" alt="Tron 黑洞标志" width="160">
+  <h1>TRON Harness</h1>
+  <p><strong>有个想法？叫上你的「好兄弟」，一起把它做出来。</strong></p>
+  <p>内置个人助手 · 多 Agent 协作 · 能力包扩展 · Windows + WSL2</p>
+  <p>
+    <a href="#buddy">认识好兄弟</a> ·
+    <a href="#wsl2">Windows + WSL2</a> ·
+    <a href="#capability-packs">能力包</a> ·
+    <a href="#quick-start">快速开始</a> ·
+    <a href="#development">参与开发</a>
+  </p>
+</div>
 
-## 概述
+> 「帮我看懂这个项目，拆好任务，能并行的就一起做。遇到需要我决定的事，再叫我。」
 
-本项目是一个支持插件的，通用的多智能体协同工作 Harness 平台。
+打开 Tron，你已经有了一位内置的个人助手——**好兄弟（Dude）**。你可以和它讨论想法、交代任务，让它调用工具、派发工作，再回来查看进展和结果。需要长期跟进的事情，可以交给心跳调度与自动化；值得保留的经验，可以整理成记忆和技能。
 
-本项目采用 **Rust + React + Electron 单体仓库架构**，前端和后端代码位于同一个仓库中。
+**Tron Harness 是一个开源、可扩展的多智能体工作平台。** 它把对话、任务、文件、终端、记忆和知识库放在同一个工作环境中。桌面端支持 macOS、Windows 和 Linux，也可以通过 Web 使用；Windows 用户还可以让 Agent 在 WSL2 中使用 Linux 工具与项目目录。
 
-前端侧重于组件优先开发和强类型；后端则提供模块化、高性能的 Rust 服务。
+项目正在持续开发。下文描述当前源码中的能力，使用前需完成账号授权与模型配置。
 
----
+<a id="buddy"></a>
 
-## 架构概览
+## 好兄弟：你的内置个人助手
 
-- **单体仓库结构**
-  - 前端、后端和APP壳都位于同一个仓库中
-  - 使用统一的开发工作流
-  - 使用统一的构建和发布流程
+**从第一次见面，到下一次继续工作。** 好兄弟是 Tron 自带的个人助手 Agent，拥有自己的身份、会话与任务。你可以设定它的名字、性格和相处方式，也可以创建承担不同职责的 Dude。
 
-- **集成式部署**
-  - 前端构建为静态资源
-  - 构建产物放入后端服务
-  - 后端同时提供 API 端点和前端页面
-  - 只需运行后端，即可访问完整应用
-  - APP壳引入前后端的构建产物，不负责承担业务逻辑的代码实现
+- **把想法变成任务。** 在对话中明确目标，创建任务、安排时间，并持续查看进度与执行结果。
+- **让多个 Agent 分工。** 派发子任务或创建独立协作会话，查看状态、补充要求、回答问题，必要时取消工作。
+- **主动跟进。** 启用后台运行后，Dude 通过心跳、任务提醒和工作反馈继续处理事项，并通过通知报告进展、完成情况或需要你决定的问题。
+- **记住有用的经验。** 内置的「记忆整理」Dude 从历史工作中整理稳定事实与已验证经验；生成的 Skill 默认进入待批准区，批准后安装。
+- **随时了解它在做什么。** 对话、派发会话、任务、后台工作和历史记录都有对应入口。
 
----
-
-## 构建和运行模式
-
-### 使用Make构建
-
-Makefile中集成了前端、后端、WEB继承模式、桌面APP模式的相关构建和运行命令，使用 `make help` 查看使用说明。
-
-### Windows 桌面连接 WSL 后端
-
-先安装并初始化 WSL2 发行版，支持 Ubuntu 24.04+、Debian 13+，以及 x86_64、ARM64。打开 Windows 桌面菜单「Tron → 后端环境…」（快捷键 `Ctrl+Shift+E`），或进入「设置 → 通用 → 后端环境」，选择发行版后连接。首次连接会安装 Linux 运行依赖、下载后端并重启桌面；后续启动复用已安装的同版本后端。
-
-```text
-Windows：Electron 窗口、环境选择和界面偏好
-    │ HTTP / WebSocket（localhost）
-    ▼
-WSL：tron-backend → Framework、Agent、命令、终端、MCP、后台任务
-    └─ ~/.tron：数据库、聊天、附件、日志、托管工作目录和后端版本
+```mermaid
+flowchart LR
+    User[你：目标与反馈] <--> Dude[好兄弟 Dude]
+    Dude --> Tools[工具、文件与终端]
+    Dude --> Agents[子 Agent 与协作会话]
+    Tools --> Results[执行结果]
+    Agents --> Results
+    Results --> Dude
+    Dude --> Tasks[任务进度与通知]
+    Tasks --> User
+    Wake[心跳与任务提醒] --> Dude
+    Memory[记忆与技能] --> Dude
 ```
 
-文件面板选择和操作所连接发行版内的 Linux 目录。切换环境会停止当前后端及其任务；已有数据保留在原环境，不会自动迁移。Windows 桌面退出后，所启动的 WSL 后端也会停止。
+后台工作需要后端保持运行，并使用已配置的模型与工具。心跳间隔、后台启用状态和技能自动批准选项都可以调整。
 
-发布前执行 `make be-build-wsl WSL_ARCH=all`，产物位于 `output/wsl2/<版本>/<Rust target>/`。将其中的 `tron-backend` 二进制上传到 Person-AI 的 Tron 产品版本，按下表登记安装包类型。同架构的二进制可分别登记到 Ubuntu、Debian 类型；桌面会根据实际发行版和架构选择下载接口的 `os_type`。
+<a id="wsl2"></a>
+
+## Windows 界面，WSL2 工作环境
+
+**保留熟悉的 Windows 桌面，把 Linux 工具环境交给 Agent。** Tron 的 Windows 桌面端可以在本机后端与 WSL2 后端之间切换。选择 WSL2 后，Agent 执行、命令、终端、MCP 和后台任务都在所选 Linux 发行版中运行。
+
+```text
+Windows
+└─ Tron 桌面：对话、任务、文件面板、后端环境选择
+      │
+      │ HTTP / WebSocket，经 localhost 连接
+      ▼
+WSL2 · Ubuntu / Debian
+├─ Tron 后端：好兄弟、Agent 协作、能力包、后台任务
+├─ Linux 工作环境：项目目录、命令、终端、MCP
+└─ ~/.tron：数据库、聊天、附件、日志与托管工作目录
+```
+
+### 连接你的发行版
+
+1. 安装并初始化 WSL2 发行版：支持 **Ubuntu 24.04+、Debian 13+**，架构支持 **x86_64、ARM64**。
+2. 进入 **设置 → 通用 → 运行环境 → 配置环境**，打开“切换环境”页签。
+3. 选择发行版并连接。首次连接会安装运行依赖、下载配套后端并重启桌面；后续启动复用已安装的同版本后端。
+4. 在文件面板中选择该发行版内的 Linux 项目目录，开始工作。
+
+首次下载要求 Person-AI 版本服务已提供与桌面版本一致、匹配发行版与架构的后端包。已安装的同版本后端可以离线启动，模型和远程工具仍取决于各自的连接配置。
+
+切换环境会停止当前后端及其任务，数据保留在原环境；Windows 桌面退出时，由它启动的 WSL 后端也会停止。
+
+<a id="capability-packs"></a>
+
+## 能力包：让 Tron 按你的工作方式扩展
+
+**把一组相关能力一起安装、查看和管理。** 能力包（Capability Pack）是 Tron 的核心扩展机制：既能为 Agent 提供执行能力，也能为工作界面增加菜单和页面。
+
+| 包内内容 | 用来做什么 |
+| --- | --- |
+| 工具与插件 | 提供可调用的操作，接入执行逻辑与运行时扩展 |
+| Skills 与配套资源 | 分发工作方法、说明、脚本和参考资料 |
+| MCP 服务 | 将外部工具服务纳入能力管理 |
+| 菜单与目录编排 | 为特定工作场景增加导航入口 |
+| 隔离页面 | 提供包自带的界面，接收宿主主题与语言上下文 |
+| 扩展声明、依赖与权限 | 描述包的组成、依赖关系及权限需求 |
+
+在设置中的能力包管理页面，可以查看包内容、导入、启用、停用和卸载。新导入或升级的外部能力包需要显式启用；Agent 使用相关资源时仍受资源授权和工具权限策略约束。
+
+Tron 自身也使用能力包装配功能：文件与命令、Agent 协作、网页读取、媒体读取、A2UI 交互，以及 Tron 业务工具、上下文和内置技能，都有对应的能力包。
+
+### 做出你的第一个扩展
+
+仓库提供可直接打包的页面示例。在开发环境准备完成后，运行：
+
+```sh
+make capability-pages-example
+```
+
+将生成的 `output/capability-pages-example.zip` 导入能力包管理，启用后选择「页面示例」导航领域，即可查看示例页面。
+
+- [页面示例](tron-backend/examples/capability-packs/pages/README.md)：页面声明、静态资源、主题和语言上下文。
+- [菜单示例](tron-backend/examples/capability-packs/navigation/README.md)：目录领域、菜单定义与默认编排。
+- [Tron Harness 原生能力包](tron-backend/crates/tron-harness-capability/README.md)：宿主上下文、业务工具策略和内嵌技能。
+
+隔离页面通过受限 iframe 加载，目前接收主题与语言上下文；业务 API、工具调用和登录凭据不通过页面桥接开放。页面扩展的具体边界见示例说明。
+
+## 围绕实际工作组织能力
+
+| 你要做的事 | Tron 提供的支持 |
+| --- | --- |
+| 推进一个项目 | 工作区、项目与应用目录、任务看板、可配置任务流程 |
+| 协调多个 Agent | 内置 Agent、子任务与独立协作会话；可接入已安装并配置的 Codex、OpenCode 等外部 Agent |
+| 阅读资料、整理知识 | 会话附件、知识库检索、长期记忆与知识图谱；文档解析和检索需配置相应服务与模型 |
+| 定期完成重复工作 | Cron 自动化、手动触发、执行历史，以及 Dude 的心跳与任务提醒 |
+| 使用自己的模型服务 | Person-AI 模型目录，以及可配置 API 地址、密钥和模型的供应商连接 |
+| 了解执行过程 | 流式对话、工具调用记录、后台任务状态，以及日志、指标与调用链视图 |
+
+<a id="quick-start"></a>
+
+## 快速开始
+
+### 从源码启动
+
+准备 **Git、GNU Make、Node.js 与 npm、Rust/Cargo、sccache**。当前 CI 使用 **Node.js 24、Rust 1.95.0**；Rust 构建还需要对应平台的原生编译工具，Linux CI 额外安装 `libwayland-dev`。仓库的 Cargo 配置已启用 `sccache`，请确保它在 `PATH` 中。
+
+```sh
+git clone https://github.com/Penglai-Link/Tron-Harness.git
+cd Tron-Harness
+make dev-api
+```
+
+`make dev-api` 会安装前后端依赖，启动后端，再启动使用真实 API 的前端开发服务器。首次启动需要下载 npm、Cargo 和 Git 依赖，并编译后端。
+
+打开 [http://localhost:5173](http://localhost:5173)。默认后端端口为 `8080`，前端通过同源 `/api` 代理访问后端。
+
+如果默认端口已被占用，换一组可用端口，Makefile 会同步配置前后端连接：
+
+```sh
+make dev-api PORT=8081 FE_PORT=5174
+```
+
+### 认识你的好兄弟
+
+1. 在「选择用户」页面点击「授权新账号」，按页面提示完成 **Person-AI 账号授权**。
+2. 检查可用模型，按需配置自己的模型供应商，并为助手选择可用的对话模型。
+3. 完成好兄弟的初次设定，或稍后再调整它的名字、性格与相处方式。
+4. 从一个具体目标开始，例如：**「阅读这个项目，告诉我它解决什么问题，并列出值得优先处理的三件事。」**
+5. 需要操作项目文件时，关联对应的应用或工作目录；需要扩展工具时，在能力包、Skills 和 MCP 管理中配置相应资源。
+
+### 选择运行方式
+
+以下命令均从仓库根目录执行；独立运行 Web 或打包桌面前，先执行一次 `make install`。
+
+| 方式 | 命令 | 入口或产物 |
+| --- | --- | --- |
+| 前后端联调 | `make dev-api` | 浏览器访问 `http://localhost:5173`，支持前端热更新 |
+| 集成 Web | `make web-dev` | 构建前端并由后端提供页面，访问 `http://localhost:8080` |
+| 桌面开发 | `make desktop-dev` | 构建前后端并启动 Electron |
+| 桌面安装包 | `make desktop-build` | 当前平台的安装包位于 `electron/dist/` |
+| WSL2 后端 | `make be-build-wsl WSL_ARCH=all` | 需要 Docker Linux 容器，产物位于 `output/wsl2/` |
+
+桌面打包配置提供 macOS 的 `.dmg`、Windows 的 NSIS 安装包，以及 Linux 的 AppImage、deb、rpm。Windows 桌面连接 WSL2 的步骤见[上文](#wsl2)。
+
+<details>
+<summary>后端配置与数据位置</summary>
+
+默认后端配置见 [application.yaml](tron-backend/application.yaml)。本地开发可参考 [环境变量示例](tron-backend/.env.example)，创建 `tron-backend/.env`；`make be-dev` 和 `make web-dev` 会读取该文件。
+
+| 配置 | 用途 |
+| --- | --- |
+| `TRON_BACKEND_BIND_ADDRESS` | 后端监听地址，默认 `127.0.0.1` |
+| `TRON_BACKEND_PORT` | 后端端口，默认 `8080` |
+| `TRON_BACKEND_DATABASE_URL` | SQLite 文件路径或 URI，默认 `$HOME/.tron/tron.sqlite3` |
+| `TRON_BACKEND_GRAPH_STORAGE_PATH` | 图存储位置，默认 `$HOME/.tron/tron.graph.grafeo` |
+
+聊天、附件、技能和其他运行数据使用后端所在环境的存储。WSL2 模式下，默认数据保存在所选发行版内的 `~/.tron`。模型调用和远程工具的数据传输由对应连接配置决定。
+
+</details>
+
+<a id="development"></a>
+
+## 参与开发
+
+Tron 使用 **Rust + React + Electron** 单仓库结构，Agent 运行能力基于 [EliteForge Agent Framework](https://gitee.com/person-ai/eliteforge-agent-framework)。前端负责交互，后端承载业务与 Agent 执行，Electron 管理桌面窗口和后端环境。
+
+```text
+Tron/
+├─ tron-frontend/       React + TypeScript 界面与聊天组件包
+├─ tron-backend/        Rust 服务、业务逻辑与 Agent 运行集成
+│  ├─ crates/           Tron 原生能力包
+│  └─ examples/         能力包示例
+├─ electron/            桌面壳、WSL2 连接与安装包配置
+├─ scripts/             版本同步与 WSL 构建脚本
+└─ Makefile             安装、运行、检查与构建入口
+```
+
+从 [AGENTS.md](AGENTS.md) 开始，并阅读所修改目录下的开发约定。前后端说明分别见[前端技术栈](tron-frontend/docs/前端技术栈.md)和[后端技术栈](tron-backend/docs/后端技术栈.md)。
+
+| 命令 | 用途 |
+| --- | --- |
+| `make help` | 查看全部常用命令与参数 |
+| `make fe-check` | 检查 TypeScript 并构建前端 |
+| `make be-check` | 编译检查后端 |
+| `make desktop-check` | 检查桌面脚本及已有 WSL、更新流程验证 |
+| `make harness-capability-check` | 编译检查 Tron 原生能力包 |
+| `make version-check` | 检查各组件版本是否一致 |
+| `make openapi` | 导出 OpenAPI 描述 |
+
+<details>
+<summary>构建缓存与清理</summary>
+
+Makefile 默认将用户级编译缓存放在 `~/rust-cache/sccache` 和 `~/rust-cache/ccache`，Windows 对应 `%USERPROFILE%/rust-cache/`。可用 `RUST_CACHE_DIR` 覆盖根目录，或分别设置 `SCCACHE_DIR`、`CCACHE_DIR`。
+
+Cargo 产物位于 `tron-backend/target`；前端工作区包由 Turbo 缓存。`make be-clean-package` 仅清理后端 crate 构建产物；`make fe-clean`、`make web-clean`、`make desktop-clean` 分别清理对应产物。`make clean` 执行全部清理，并会清理 Tron 临时文件、桌面依赖；这些命令保留用户级编译缓存以及前端 `.turbo` 和工作区包 `dist`。
+
+</details>
+
+<details>
+<summary>发布桌面安装包与 WSL2 后端</summary>
+
+版本由 `version.properties` 统一管理，使用 `make version VERSION=x.y.z` 更新。PR 以及推送到 `main`、`master` 会触发 CI；手动运行 GitHub Actions 的 `Build packages` 可构建安装包与 x86_64 WSL 后端。
+
+推送与仓库版本一致的 `v<版本号>` 标签后，工作流会在构建成功后创建 Release 草稿，并生成 SHA-256 清单。检查产物后再发布草稿。macOS 包当前使用 ad-hoc 签名，公开分发前需配置正式签名与公证。
+
+Windows 桌面的 WSL 首次下载使用 Person-AI 版本服务。构建 `make be-build-wsl WSL_ARCH=all` 后，将 `output/wsl2/<版本>/<Rust target>/` 中的后端二进制上传至对应 Tron 产品版本，并登记安装包类型：
 
 | 发行版 | x86_64 | ARM64 |
 | --- | --- | --- |
 | Ubuntu | `WSL_UBUNTU_X64` | `WSL_UBUNTU_ARM64` |
 | Debian | `WSL_DEBIAN_X64` | `WSL_DEBIAN_ARM64` |
 
-平台编码由 PersonAI Rust SDK 的 `version::os_type` 常量定义。桌面通过自带后端的 `--wsl-platforms` 命令读取，不在 Electron 中维护数值副本；该命令不启动服务或打开数据库。
+同架构二进制可分别登记为 Ubuntu、Debian 包。版本服务返回的最新版本必须与桌面版本一致，并包含所需平台的包，桌面才能完成首次安装。
 
-下载源使用桌面配置的 Person-AI 版本服务。当前接口只提供最新版本查询，因此首次安装要求服务返回的最新版本与桌面版本一致，且已上传对应 WSL 包；缺少包或版本不一致时会提示原因。已安装的同版本后端可以离线启动。
-
-### GitHub Actions 构建和发布
-
-提交 PR 或推送到 `main`、`master` 时，CI 检查版本、构建前端并检查后端。在 Actions 页面手动运行 `Build packages` 可以下载各平台安装包和 x86_64 WSL 后端。推送与 `version.properties` 中版本一致的标签（例如 `v1.2.3`）也会触发构建，并在全部任务成功后创建 Release 草稿；包含后缀的标签会标记为预发布。检查产物和 SHA-256 后，再手动发布草稿。已有同名 Release 时，创建草稿的任务会失败，不会覆盖已有文件。
-
-macOS 包当前使用 ad-hoc 签名，公开分发前需要配置正式签名和公证。
-
-### 构建缓存
-
-从仓库根目录使用 Makefile 构建。后端通过 `.cargo/config.toml` 中的 `rustc-wrapper = "sccache"` 复用 Rust 编译缓存，构建环境需要提供可执行的 `sccache`。当前配置关闭了 Cargo 增量编译（`incremental = false`）。
-
-| 缓存或产物 | 默认位置 | 复用范围 |
-| --- | --- | --- |
-| Rust 编译缓存 | macOS、Linux：`$HOME/rust-cache/sccache`；Windows：`%USERPROFILE%/rust-cache/sccache` | 同一用户的工作树使用同一个缓存目录；实际命中取决于源码、编译器和编译参数。 |
-| C/C++ 编译缓存目录 | 用户目录下的 `rust-cache/ccache` | Makefile 创建目录并导出 `CCACHE_DIR`；是否使用缓存取决于原生依赖的编译配置，项目未统一设置 `CC`、`CXX` 包装器。 |
-| Cargo 构建产物 | `tron-backend/target` | 当前后端工作树的检查、测试及 debug、release 构建产物，独立于用户级编译缓存。 |
-| 前端工作区包构建缓存 | `tron-frontend/.turbo` | Turbo 缓存 `packages/*` 的构建任务，命中时恢复对应包的 `dist` 产物。 |
-| TypeScript 构建信息 | `tron-frontend/tsconfig.tsbuildinfo`、`tron-frontend/node_modules/.tmp/tsconfig.node.tsbuildinfo` | 前端 TypeScript 项目构建信息。 |
-
-后端检查、测试及包含后端构建的 Web、桌面命令会自动创建用户级缓存目录。可以覆盖缓存根目录，也可以分别指定两类编译缓存的位置：
-
-```sh
-make be-check RUST_CACHE_DIR=/path/to/rust-cache
-make be-check SCCACHE_DIR=/path/to/sccache CCACHE_DIR=/path/to/ccache
-```
-
-这些变量只改变编译缓存位置，Cargo 产物仍位于各工作树的构建目录。直接运行 Cargo 时，缓存路径使用调用方的环境变量或 sccache 默认值；Makefile 的默认路径不会自动生效。
-
-按需清理本地构建产物：
-
-| 命令 | 清理范围 |
-| --- | --- |
-| `make be-clean` | 后端 `target` 和 Tron 临时文件。当前 macOS、Linux 配置会删除 `/tmp/tron*`，Windows 配置会删除 `%TEMP%` 下匹配 `tron*` 的文件和目录。 |
-| `make fe-clean` | 前端应用 `dist`、上述 TypeScript 构建信息及生成的 Vite 配置文件。 |
-| `make web-clean` | 执行前端清理，并重建后端用于集成前端页面的资源目录。 |
-| `make desktop-clean` | 桌面打包产物、生成资源和 `electron/node_modules`；下次桌面构建会重新安装依赖。 |
-| `make clean` | 执行以上全部清理。 |
-
-这些命令会保留用户级 `sccache`、`ccache` 目录，以及前端 `.turbo` 和工作区包的 `dist`。需要清空这些缓存或包产物时，应单独处理对应目录；当前没有清空所有缓存的 Makefile 目标。用户级编译缓存由多个工作树共享，清空后各工作树都需要重新积累缓存。
-
-### 开发模式
-
-- 前端可以通过 Vite 开发服务器独立运行
-- 后端可以通过 Cargo 独立运行
-- 后端存储由后端配置选择。`TRON_BACKEND_DATABASE_URL` 将当前 SQLite 实现指向文件路径或 SQLite URI；默认 SQLite 文件位于 `$HOME/.tron/tron.sqlite3`。
-- 前端组件可选使用默认数据，独立启动。不得默认使用mock数据作为API响应的兜底。
-- API 集成通过 hooks 隔离
-- 前端数据源选择由环境变量控制：
-  - `VITE_TRON_DATA_SOURCE=mock|api` 设置全局默认值
-  - `VITE_TRON_<DOMAIN>_DATA_SOURCE=mock|api` 可覆盖某个路由域，例如 `VITE_TRON_VARIABLE_DATA_SOURCE=api`
-  - 页面组件必须从 `src/domain/<domain>/hooks` 导入路由域数据 hooks；端点契约保存在 `src/domain/<domain>/api` 下，静态数据样例保存在 `src/domain/<domain>/mock/data.ts` 下
-  - 数据 hook 名称必须描述结果形态或访问模式，例如 `useModelList`、`useTaskDetail`、`useAppList`、`useImportApplicationDefaultsBySource`；分页结果使用 `Page`，条件读取使用 `By<Condition>`，而不是通用的 `Query` 后缀
-
-### 生产模式
-
-- 前端构建为静态文件
-- 前端构建产物放入后端服务
-- 后端提供：
-  - REST 或应用 API
-  - 前端静态资源
-  - Web 应用入口
-后端服务启动后，用户可以直接通过后端服务器访问应用界面。
+</details>
 
 ## 许可证
 
-本项目采用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）。第三方组件及资源保留各自的许可证和版权声明。
+Tron Harness 采用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）。第三方组件与资源保留各自的许可证和版权声明。

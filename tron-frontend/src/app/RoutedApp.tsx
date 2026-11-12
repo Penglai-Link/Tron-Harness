@@ -1,4 +1,5 @@
 import { UpdateNotification } from "@/domain/update/UpdateNotification";
+import { ReleaseNotesDialog } from "@/domain/update/ReleaseNotesDialog";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBootstrapAuthSession } from "@/domain/auth";
@@ -72,6 +73,7 @@ export default function RoutedApp() {
               }
             />
           </Routes>
+        <ReleaseNotesDialog />
       </TabPanelRegistryProvider>
     </FilePanelHostProvider>
   );
