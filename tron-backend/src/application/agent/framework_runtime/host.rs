@@ -925,9 +925,29 @@ impl FrameworkHost {
             ));
         }
         let path = PathBuf::from(database);
-        super::desktop_bundles::install(&path.with_extension("capability-packs"))
+        let defaults = super::desktop_bundles::install(&path.with_extension("capability-packs"))
             .map_err(AgentError::InvalidConfiguration)?;
-        Ok(Self::persistent(path, Some(resources)))
+        let host = Self::persistent(path, Some(resources));
+        {
+            let mut packs = host.0.capability_state.write().unwrap();
+            let mut changed = false;
+            for id in defaults {
+                // Desktop bundles start enabled; explicit user choices always win.
+                if let std::collections::btree_map::Entry::Vacant(entry) = packs.entry(id) {
+                    entry.insert(true);
+                    changed = true;
+                }
+            }
+            if changed {
+                persist_capability_state(
+                    &host.0.state_path,
+                    &packs,
+                    &host.0.extension_state.read().unwrap(),
+                )
+                .map_err(AgentError::InvalidConfiguration)?;
+            }
+        }
+        Ok(host)
     }
     async fn agent(&self) -> Result<Agent, fw::AgentError> {
         self.0

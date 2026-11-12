@@ -27,17 +27,17 @@ struct Bundle {
     sha256: String,
 }
 
-pub(super) fn install(root: &Path) -> Result<(), String> {
+pub(super) fn install(root: &Path) -> Result<Vec<String>, String> {
     let Some(directory) =
         std::env::var_os("TRON_BUNDLED_CAPABILITY_PACKS_DIR").filter(|value| !value.is_empty())
     else {
-        return Ok(());
+        return Ok(Vec::new());
     };
     install_from(root, &PathBuf::from(directory))
         .map_err(|error| format!("desktop capability bundle initialization failed: {error}"))
 }
 
-fn install_from(root: &Path, directory: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn install_from(root: &Path, directory: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let directory = directory.canonicalize()?;
     let catalog_path = directory.join("catalog.json");
     if fs::metadata(&catalog_path)?.len() > 1024 * 1024 {
@@ -70,6 +70,7 @@ fn install_from(root: &Path, directory: &Path) -> Result<(), Box<dyn std::error:
     };
     let previous = receipts.clone();
     let installed = manager.installed()?;
+    let mut defaults = Vec::new();
     for bundle in catalog.packs {
         let version = semver::Version::parse(&bundle.version)?;
         let current = installed
@@ -82,6 +83,7 @@ fn install_from(root: &Path, directory: &Path) -> Result<(), Box<dyn std::error:
             continue;
         }
         if current.is_some_and(|pack| pack.manifest.version > version) {
+            defaults.push(bundle.id.clone());
             receipts.insert(bundle.id, bundle.version);
             continue;
         }
@@ -112,6 +114,7 @@ fn install_from(root: &Path, directory: &Path) -> Result<(), Box<dyn std::error:
             manager.install_bytes(&archive, InstallPolicy::Development)?;
             tracing::info!(pack_id = %bundle.id, %version, "Installed desktop bundled capability package");
         }
+        defaults.push(bundle.id.clone());
         receipts.insert(bundle.id, bundle.version);
     }
     if receipts != previous {
@@ -119,5 +122,5 @@ fn install_from(root: &Path, directory: &Path) -> Result<(), Box<dyn std::error:
         fs::write(&temporary, serde_json::to_vec_pretty(&receipts)?)?;
         fs::rename(temporary, receipts_path)?;
     }
-    Ok(())
+    Ok(defaults)
 }
