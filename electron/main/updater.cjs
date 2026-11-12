@@ -233,6 +233,23 @@ function waitForSpawn(child) {
   });
 }
 
+function waitForChildExit(child) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      child.removeListener("error", failed);
+      child.removeListener("close", closed);
+    };
+    const closed = (code, signal) => {
+      cleanup();
+      if (code === 0) resolve();
+      else reject(new Error(`update installer exited with code ${code}${signal ? ` (${signal})` : ""}`));
+    };
+    const failed = (error) => { cleanup(); reject(error); };
+    child.once("error", failed);
+    child.once("close", closed);
+  });
+}
+
 function waitForHelperReady(child) {
   return new Promise((resolve, reject) => {
     let output = "", errors = "";
@@ -302,21 +319,32 @@ async function runApplyUpdate(installerPath, options = {}) {
       return 1;
     }
 
-    const args = ["--updated", "/S", "--force-run"];
+    const args = ["--updated", "/S"];
     if (options.installDir) {
       if (!path.win32.isAbsolute(options.installDir)) throw new Error("invalid update installation directory");
       // NSIS consumes everything after /D= as the directory; keep it last.
       args.push(`/D=${options.installDir}`);
     }
     const child = spawnImpl(filePath, args, {
-      detached: true,
+      detached: false,
       stdio: "ignore",
       windowsHide: true,
       cwd: os.tmpdir()
     });
+    const installerExit = waitForChildExit(child);
     await waitForSpawn(child);
-    child.unref?.();
-    await writeLog(logPath, "update helper spawned NSIS installer");
+    await installerExit;
+    const executablePath = path.join(options.installDir || "", "Tron.exe");
+    if (!options.installDir || !path.win32.isAbsolute(options.installDir)) throw new Error("invalid update installation directory");
+    const app = spawnImpl(executablePath, ["--updated"], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false,
+      cwd: options.installDir
+    });
+    await waitForSpawn(app);
+    app.unref?.();
+    await writeLog(logPath, `update helper installed and launched app: ${executablePath}`);
     return 0;
   } catch (error) {
     await writeLog(logPath, `update helper failed: ${describeError(error)}`);
