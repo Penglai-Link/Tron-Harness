@@ -5,6 +5,16 @@ import { useToast } from "@/components/ui/toast";
 import type { ChatSession } from "../model";
 import { updateChatSession } from "./useChatSessionGroupList";
 
+const defaultModeStorageKey = "tron.chat.executionMode.default";
+
+function readDefaultMode(): ToolExecutionMode {
+  try {
+    return localStorage.getItem(defaultModeStorageKey) === "AUTO_APPROVE" ? "AUTO_APPROVE" : "CONTROLLED";
+  } catch {
+    return "CONTROLLED";
+  }
+}
+
 export function useChatExecutionMode(
   session: ChatSession | undefined,
   draftCode: string,
@@ -12,14 +22,18 @@ export function useChatExecutionMode(
 ) {
   const { t } = useTranslation("pages");
   const toast = useToast();
-  const [draftModes, setDraftModes] = useState<Record<string, ToolExecutionMode>>({});
+  const [defaultMode, setDefaultMode] = useState<ToolExecutionMode>(readDefaultMode);
   const [saving, setSaving] = useState(false);
   const savePending = useRef(false);
-  const mode = draftCode ? draftModes[draftCode] ?? "CONTROLLED" : session?.executionMode ?? "CONTROLLED";
+  const mode = draftCode ? defaultMode : session?.executionMode ?? defaultMode;
   const changeMode = useCallback(async (next: ToolExecutionMode) => {
     if (savePending.current || next === mode) return;
+    const saveDefault = () => {
+      setDefaultMode(next);
+      try { localStorage.setItem(defaultModeStorageKey, next); } catch { /* Storage may be unavailable. */ }
+    };
     if (draftCode) {
-      setDraftModes((current) => ({ ...current, [draftCode]: next }));
+      saveDefault();
       return;
     }
     if (!session) return;
@@ -27,6 +41,7 @@ export function useChatExecutionMode(
     setSaving(true);
     try {
       const updated = await updateChatSession(session.sessionCode, { executionMode: next });
+      saveDefault();
       onSessionUpdated(updated);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("chat.management.composer.executionModeSaveFailed"));
