@@ -303,6 +303,9 @@ impl AgentManagementService {
                 continue;
             }
             errors.push(None);
+            // A package may use its own id as the category root. Accept that
+            // equal name as its namespace; child categories keep the dotted
+            // prefix rule.
             if [
                 &record.source.plugin_id,
                 &record.source.pack_id,
@@ -310,8 +313,9 @@ impl AgentManagementService {
             ]
             .into_iter()
             .flatten()
-            .any(|owner| category.code.starts_with(&format!("{owner}.")))
-            {
+            .any(|owner| {
+                category.code == owner.as_str() || category.code.starts_with(&format!("{owner}."))
+            }) {
                 known.insert(category.code.clone());
             }
         }
