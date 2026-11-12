@@ -2207,6 +2207,7 @@ export const pages = {
         skills: "Skills",
       },
       contextPanel: {
+        structureDetails: "Short-term memory details",
         actualTokens: "Actual usage",
         allocatedTokens: "Allocated",
         configuredTokens: "Configured ceiling",

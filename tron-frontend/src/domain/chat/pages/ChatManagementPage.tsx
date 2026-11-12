@@ -1771,7 +1771,6 @@ function ProviderUsagePanel({
   const { t } = useTranslation("pages");
   const providerUsage = usageAudit?.providerUsage ?? null;
   const sessionUsage = sessionProviderUsageFromEvents(events);
-  const requestEstimate = usageAudit?.requestEstimate ?? null;
   const sessionInput = sessionUsage?.inputTokens ?? fallbackSessionUsage.input;
 
   return (
@@ -1800,22 +1799,6 @@ function ProviderUsagePanel({
           <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(providerUsage?.cachedInputTokens)} />
           <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(providerUsage?.reasoningTokens)} />
         </div>
-        <p className="mt-2 rounded-md bg-[var(--color-surface-container-low)] px-2 py-1.5 text-[10px] leading-4 text-[var(--color-on-surface-variant)]">
-          {requestEstimate ? (
-            <>
-              {t("chat.shortTermMemory.contextPanel.providerDelta", {
-                actual: formatCompactTokenCount(providerUsage?.inputTokens),
-                delta: formatCompactTokenCount(usageAudit?.inputTokenDelta),
-                estimate: formatCompactTokenCount(requestEstimate.estimatedInputTokens),
-              })}
-              <span> {requestEstimate.estimator && requestEstimate.estimator !== "unicode_estimate"
-                ? t("chat.shortTermMemory.contextPanel.vendorTokenizer", { model: requestEstimate.estimator })
-                : t("chat.shortTermMemory.contextPanel.localHeuristic")}</span>
-            </>
-          ) : (
-            t("chat.shortTermMemory.contextPanel.providerUnavailable")
-          )}
-        </p>
       </div>
     </section>
   );
@@ -2237,6 +2220,7 @@ export function RightContextSidebar({
   const contextBlocks = useMemo(() => assembly.snapshot ? buildReportedContextMemoryBlocks(assembly.snapshot, (key, options) => t(key, options), blockCatalog) : [], [assembly.snapshot,t,blockCatalog]);
   return (
     <section className="space-y-3 text-sm">
+      <ProviderUsagePanel events={events} fallbackSessionUsage={usage} usageAudit={usageAudit} />
       <div className="space-y-2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3" data-testid="context-short-term-memory-card">
         <ContextOverviewPanel
           breakdown={budgetBreakdown}
@@ -2248,7 +2232,10 @@ export function RightContextSidebar({
         />
         <div className="pt-2">
           {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
+          <details>
+            <summary className="cursor-pointer text-xs font-medium text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.structureDetails")}</summary>
           {assembly.loading ? <p role="status">{t("chat.shortTermMemory.contextPanel.loadingReport")}</p> : assembly.error ? <div role="alert"><p>{assembly.error.message}</p><button type="button" onClick={() => void assembly.retry()}>{t("chat.shortTermMemory.retry")}</button></div> : assembly.snapshot ? <ContextStructurePanel blocks={contextBlocks} dudeCode={dudeCode} sessionCode={session?.sessionCode ?? ""} /> : <p>{t("chat.shortTermMemory.contextPanel.noReport")}</p>}
+          </details>
         </div>
       </div>
       {latestCompactionStatus?.error ? (
@@ -2259,7 +2246,6 @@ export function RightContextSidebar({
           status={latestCompactionStatus}
         />
       ) : null}
-      <ProviderUsagePanel events={events} fallbackSessionUsage={usage} usageAudit={usageAudit} />
     </section>
   );
 }

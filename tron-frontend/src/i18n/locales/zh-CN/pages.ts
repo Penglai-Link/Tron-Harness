@@ -2132,6 +2132,7 @@ export const pages = {
         skills: "Skills",
       },
       contextPanel: {
+        structureDetails: "短期记忆明细",
         actualTokens: "实际占用",
         allocatedTokens: "实际分配",
         configuredTokens: "配置上限",
