@@ -1,9 +1,9 @@
-use std::future::{Ready, ready};
 use chrono::Utc;
 use socketioxide::{
     SocketIo,
     extract::{SocketRef, State, TryData},
 };
+use std::future::{Ready, ready};
 use tokio::sync::mpsc;
 
 use crate::application::terminal::TERMINAL_SOCKET_NAMESPACE;

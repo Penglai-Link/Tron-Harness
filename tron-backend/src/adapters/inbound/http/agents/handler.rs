@@ -222,13 +222,22 @@ pub async fn list_tools(
                 }
                 let catalog_issue = catalog_issues.iter().find(|issue| {
                     issue.blocks_tool
-                        && issue.pack_id.as_ref().is_none_or(|pack| tool.source.pack_id.as_ref() == Some(pack))
+                        && issue
+                            .pack_id
+                            .as_ref()
+                            .is_none_or(|pack| tool.source.pack_id.as_ref() == Some(pack))
                         && issue.provider_id.as_ref().is_none_or(|provider| {
                             tool.source.provider_id.as_ref() == Some(provider)
                                 || tool.source.plugin_id.as_ref() == Some(provider)
                         })
-                        && issue.tool_code.as_ref().is_none_or(|code| code == &tool.tool_code)
-                        && issue.tool_name.as_ref().is_none_or(|name| name == &tool.tool_name)
+                        && issue
+                            .tool_code
+                            .as_ref()
+                            .is_none_or(|code| code == &tool.tool_code)
+                        && issue
+                            .tool_name
+                            .as_ref()
+                            .is_none_or(|name| name == &tool.tool_name)
                 });
                 if catalog_issue.is_some() {
                     tool.availability_state = crate::domain::agent::ToolAvailabilityState::Disabled;
@@ -236,14 +245,21 @@ pub async fn list_tools(
                 let assignable = tool.availability_state
                     == crate::domain::agent::ToolAvailabilityState::Available;
                 let dude_assignable = !crate::application::agent::dude_workspace_tool(&tool);
-                let dude_replacement_tool_code = crate::application::agent::dude_tool_replacement(&tool.tool_code).map(str::to_owned);
-                let disabled_reason = catalog_issue.map(|issue| issue.message.clone()).or_else(|| owner.as_ref().filter(|o| !o.available).map(|o| {
-                    if auth.locale.starts_with("zh") {
-                        format!("能力包 {} 已禁用", o.pack_id)
-                    } else {
-                        format!("Capability pack {} is disabled", o.pack_id)
-                    }
-                }));
+                let dude_replacement_tool_code =
+                    crate::application::agent::dude_tool_replacement(&tool.tool_code)
+                        .map(str::to_owned);
+                let disabled_reason =
+                    catalog_issue
+                        .map(|issue| issue.message.clone())
+                        .or_else(|| {
+                            owner.as_ref().filter(|o| !o.available).map(|o| {
+                                if auth.locale.starts_with("zh") {
+                                    format!("能力包 {} 已禁用", o.pack_id)
+                                } else {
+                                    format!("Capability pack {} is disabled", o.pack_id)
+                                }
+                            })
+                        });
                 ToolAssignmentVo {
                     provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
                     assignable,
@@ -453,8 +469,11 @@ pub async fn rescan_platform_system_agents(
     State(agent_management): State<AgentManagementService>,
     _auth: RequestAuthContext,
 ) -> Response {
-    let result = tokio::task::spawn_blocking(move || agent_management.rescan_system_agents()).await
-        .unwrap_or(Err(crate::domain::agent::AgentManagementError::StorageFailure));
+    let result = tokio::task::spawn_blocking(move || agent_management.rescan_system_agents())
+        .await
+        .unwrap_or(Err(
+            crate::domain::agent::AgentManagementError::StorageFailure,
+        ));
     match result {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_management_error_response(error),

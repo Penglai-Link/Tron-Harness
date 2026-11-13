@@ -5,7 +5,6 @@ mod service;
 mod vision;
 pub use vision::VisionModelBinding;
 
-
 pub use dto::{
     LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmContentRerankCallCommand,
     LlmEmbeddingBatchCallCommand, LlmEmbeddingBatchCallResult, LlmEmbeddingCallCommand,

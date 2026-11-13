@@ -362,10 +362,7 @@ impl ModelClient for HttpModelClient {
                 .await
                 .map_err(|e| sdk::encode_model_error(&e))?;
             let response = sdk::HttpProtocolClient::new(transport)
-                .generate(
-                    &sdk_config(config)?,
-                    &sdk::ModelRequest::from(request),
-                )
+                .generate(&sdk_config(config)?, &sdk::ModelRequest::from(request))
                 .await
                 .map_err(|e| sdk::encode_model_error(&e))?;
             Ok(crate::domain::agent::ModelResponse::from(response))

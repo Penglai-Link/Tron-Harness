@@ -1,4 +1,3 @@
-
 use std::{
     collections::{BTreeMap, HashMap},
     future::Future,
@@ -24,11 +23,11 @@ use serde_json::Value;
 use tokio::sync::broadcast;
 use url::Url;
 
-mod chat_auto_routes;
-mod route_sources;
-mod person_ai_services;
 mod capability_center;
+mod chat_auto_routes;
+mod person_ai_services;
 mod person_ai_tools;
+mod route_sources;
 mod sdk_models;
 
 use crate::{

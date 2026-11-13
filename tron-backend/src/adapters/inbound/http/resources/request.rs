@@ -2,13 +2,10 @@ use serde::Deserialize;
 
 use crate::{
     application::resource::{
-        ResourceBinaryDownloadCommand,
-        ResourceBinaryUploadCommand, ResourceCreateCommand, ResourceDeleteCommand,
-        ResourceGetQuery, ResourcePageQuery, ResourceUpdateCommand,
+        ResourceBinaryDownloadCommand, ResourceBinaryUploadCommand, ResourceCreateCommand,
+        ResourceDeleteCommand, ResourceGetQuery, ResourcePageQuery, ResourceUpdateCommand,
     },
-    domain::resource::{
-        ResourceError, ResourceKind, ResourceSourceKind, validate_resource_code,
-    },
+    domain::resource::{ResourceError, ResourceKind, ResourceSourceKind, validate_resource_code},
 };
 
 #[derive(Debug, Deserialize)]

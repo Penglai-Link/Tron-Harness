@@ -8,9 +8,7 @@ use serde_json::Value;
 
 use crate::{
     application::{
-        llm::LlmRuntimeService,
-        model_router::LlmModelRouter,
-        prompt::PromptRepository,
+        llm::LlmRuntimeService, model_router::LlmModelRouter, prompt::PromptRepository,
         variable::VariableService,
     },
     domain::prompt::{
@@ -113,7 +111,8 @@ impl PromptService {
                     || prompt.prompt_code == definition.prompt_code
             }) {
                 if current.built_in
-                    && (current.version < definition.version || current.category != definition.category)
+                    && (current.version < definition.version
+                        || current.category != definition.category)
                 {
                     let mut prompt = current.clone();
                     let now = current_timestamp();
@@ -128,9 +127,10 @@ impl PromptService {
                         prompt.prompt_body = translation.prompt_body.clone();
                         prompt.description = Some(translation.description.clone());
                         prompt.version = definition.version;
-                        prompt.variables =
-                            crate::domain::prompt::builtin_prompt_variables(&definition.catalog_key)
-                                .expect("builtin prompt definition must produce its variable contracts");
+                        prompt.variables = crate::domain::prompt::builtin_prompt_variables(
+                            &definition.catalog_key,
+                        )
+                        .expect("builtin prompt definition must produce its variable contracts");
                         prompt.translations = definition
                             .translations
                             .iter()
@@ -147,7 +147,9 @@ impl PromptService {
                     } else {
                         // A locally edited built-in keeps its text when only
                         // its catalog category changes.
-                        prompt.version = prompt.version.checked_add(1)
+                        prompt.version = prompt
+                            .version
+                            .checked_add(1)
                             .ok_or(crate::domain::prompt::PromptError::StorageFailure)?;
                     }
                     prompt.updated_at = now;
@@ -312,7 +314,8 @@ impl PromptService {
         catalog_keys: &[&str],
         locale: &str,
         runtime_values: &HashMap<PromptRuntimeProvider, Value>,
-    ) -> Result<std::collections::BTreeMap<String, String>, crate::domain::prompt::PromptError> {
+    ) -> Result<std::collections::BTreeMap<String, String>, crate::domain::prompt::PromptError>
+    {
         let records = self.all_prompts()?;
         let mut resolved = std::collections::BTreeMap::new();
         for key in catalog_keys {

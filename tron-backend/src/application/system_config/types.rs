@@ -99,5 +99,7 @@ pub struct ShortcutBinding {
 }
 
 pub trait ShortcutDefaultsStore: Send + Sync {
-    fn load(&self) -> Result<std::collections::BTreeMap<String, ShortcutBinding>, SystemConfigError>;
+    fn load(
+        &self,
+    ) -> Result<std::collections::BTreeMap<String, ShortcutBinding>, SystemConfigError>;
 }

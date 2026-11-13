@@ -56,7 +56,9 @@ fn latest_installed(
 ) -> Result<Vec<eliteforge_agent_capability_runtime::InstalledCapabilityPack>, String> {
     // The manager sorts versions in ascending order. Match runtime selection
     // instead of showing an obsolete manifest retained for pinned executions.
-    Ok(manager.installed().map_err(|error| error.to_string())?
+    Ok(manager
+        .installed()
+        .map_err(|error| error.to_string())?
         .into_iter()
         .map(|pack| (pack.manifest.id.clone(), pack))
         .collect::<std::collections::BTreeMap<_, _>>()
@@ -65,38 +67,54 @@ fn latest_installed(
 }
 
 pub fn query_installed_capability_packs(
-    root: &std::path::Path, locale: &str, include_contents: bool, id: Option<&str>,
+    root: &std::path::Path,
+    locale: &str,
+    include_contents: bool,
+    id: Option<&str>,
 ) -> Result<Vec<CapabilityPackInfo>, String> {
     use eliteforge_agent_capability_runtime::CapabilityPackManager;
     let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
     let mut packs = capability_pack_entries(include_contents, id);
     for pack in packs.iter_mut().filter(|_| include_contents) {
-        for item in pack.contents.iter_mut().filter(|item| item.kind == "Plugin") {
+        for item in pack
+            .contents
+            .iter_mut()
+            .filter(|item| item.kind == "Plugin")
+        {
             if let Some(name) = contents::plugin_display_name(&item.name, locale) {
                 item.display_name = name.into();
             }
         }
-        let descriptors=contents::builtin_tool_descriptors(&pack.id);
-        for item in pack.contents.iter_mut().filter(|item|item.kind=="Tool") {
-            if let Some(descriptor)=descriptors.iter().find(|d|d.call_name==item.name) {
-                let display=descriptor.resolve_display(locale);
-                item.description=display.description;
-                item.display_name=display.name;
+        let descriptors = contents::builtin_tool_descriptors(&pack.id);
+        for item in pack.contents.iter_mut().filter(|item| item.kind == "Tool") {
+            if let Some(descriptor) = descriptors.iter().find(|d| d.call_name == item.name) {
+                let display = descriptor.resolve_display(locale);
+                item.description = display.description;
+                item.display_name = display.name;
             }
         }
     }
     // Imported metadata belongs to its provider; never translate by a colliding
     // built-in call name or activate a plugin merely to display its manifest.
-    for installed in latest_installed(&manager)?.into_iter().filter(|pack| id.is_none_or(|id| pack.manifest.id == id)) {
+    for installed in latest_installed(&manager)?
+        .into_iter()
+        .filter(|pack| id.is_none_or(|id| pack.manifest.id == id))
+    {
         let mut contents = if include_contents {
             installed_contents(&installed.path, &installed.manifest, locale)?
         } else {
             vec![]
         };
-        for item in contents.iter_mut().filter(|item|item.kind=="Tool") {
-            if let Some(entry)=installed.manifest.tools.iter().find(|entry|entry.descriptor.call_name==item.name) {
-                let display=entry.descriptor.resolve_display(locale);
-                item.display_name=display.name;item.description=display.description;
+        for item in contents.iter_mut().filter(|item| item.kind == "Tool") {
+            if let Some(entry) = installed
+                .manifest
+                .tools
+                .iter()
+                .find(|entry| entry.descriptor.call_name == item.name)
+            {
+                let display = entry.descriptor.resolve_display(locale);
+                item.display_name = display.name;
+                item.description = display.description;
             }
         }
         packs.push(CapabilityPackInfo {
@@ -466,10 +484,15 @@ pub fn extension_implementation_catalog_with_state(
     extension_implementation_catalog()
         .into_iter()
         .map(|mut implementation| {
-            let pack_enabled = packs.get(&implementation.provider_pack_id).copied().unwrap_or(true);
+            let pack_enabled = packs
+                .get(&implementation.provider_pack_id)
+                .copied()
+                .unwrap_or(true);
             implementation.enabled = match implementation.configuration {
                 ExtensionConfiguration::Required => true,
-                ExtensionConfiguration::Extension => extension_enabled(&implementation.extension_point),
+                ExtensionConfiguration::Extension => {
+                    extension_enabled(&implementation.extension_point)
+                }
                 ExtensionConfiguration::CapabilityPack => pack_enabled,
             };
             implementation.effective = match implementation.extension_point.as_str() {

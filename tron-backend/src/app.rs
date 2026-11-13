@@ -29,10 +29,11 @@ use crate::{
             persistence::{
                 GrafeoStoreCore, SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
-                SqliteChatRepository, SqliteConnectionRepository, SqliteDirectoryRepository, SqliteMcpRepository, SqliteMemoryWorkDomainRepository,
-                SqliteModelRepository, SqliteNavigationRepository, SqliteProjectRepository,
-                SqlitePromptRepository, SqliteRagRepository, SqliteResourceRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteTopicRepository, SqliteVariableRepository,
+                SqliteChatRepository, SqliteConnectionRepository, SqliteDirectoryRepository,
+                SqliteMcpRepository, SqliteMemoryWorkDomainRepository, SqliteModelRepository,
+                SqliteNavigationRepository, SqliteProjectRepository, SqlitePromptRepository,
+                SqliteRagRepository, SqliteResourceRepository, SqliteSkillRegistryRepository,
+                SqliteTaskRepository, SqliteTopicRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository,
             },
             resource_storage::LocalObjectStorage,
@@ -65,8 +66,8 @@ use crate::{
     application::skill::SkillRegistryService,
     application::system_config::SystemConfigService,
     application::task::TaskService,
-    application::topic::TopicService,
     application::terminal::TerminalService,
+    application::topic::TopicService,
     application::variable::VariableService,
     application::workspace::WorkspaceService,
     config::{AppConfig, ResourceStorageProfile},
@@ -291,7 +292,8 @@ impl AppState {
                 Arc::new(eliteforge_agent_official_plugin_connector_gitlab::GitLabProvider),
                 Arc::new(eliteforge_agent_official_plugin_connector_gitee::GiteeProvider),
             ],
-        ).expect("connector providers should initialize");
+        )
+        .expect("connector providers should initialize");
         let resources = build_resource_service(
             &config.database_url,
             workspaces.clone(),
@@ -312,7 +314,11 @@ impl AppState {
         let topics = TopicService::new(
             SqliteTopicRepository::connect(&config.database_url)
                 .expect("topic SQLite repository should initialize"),
-            projects.clone(), directories.clone(), integrations.clone(), resources.clone(), tasks.clone(),
+            projects.clone(),
+            directories.clone(),
+            integrations.clone(),
+            resources.clone(),
+            tasks.clone(),
         );
         let mcp = build_mcp_service(
             &config.database_url,
@@ -362,7 +368,8 @@ impl AppState {
             ),
         );
         let prompts = prompts.with_llm_runtime(llm_runtime.clone());
-        let llm_router = LlmModelRouter::new(model_providers.clone()).with_configured_providers(models.clone());
+        let llm_router =
+            LlmModelRouter::new(model_providers.clone()).with_configured_providers(models.clone());
         let prompts = prompts.with_llm_router(llm_router.clone());
         let graph_core = if config.graph_storage_path == ":memory:" {
             if let Some(core) = GLOBAL_GRAPH_CORE.get() {
@@ -396,7 +403,11 @@ impl AppState {
                     source: crate::domain::rag::RagError::StorageFailure,
                 })?;
         }
-        let memory_repository = rag.repository_handle().lock().expect("RAG repository").memory_repository();
+        let memory_repository = rag
+            .repository_handle()
+            .lock()
+            .expect("RAG repository")
+            .memory_repository();
         let rag = rag.with_memory_repository(memory_repository);
         let knowledge_bases = crate::application::knowledge_base::KnowledgeBaseService::new(
             knowledge_base_repository,
@@ -434,7 +445,9 @@ impl AppState {
         .expect("initialize Framework storage configuration");
         agent_framework.bind_runtime_config(runtime_config.clone());
         agent_framework.bind_memories(memory.clone());
-        agent_framework.bind_navigation(navigation.clone()).expect("capability navigation catalog");
+        agent_framework
+            .bind_navigation(navigation.clone())
+            .expect("capability navigation catalog");
         agent_framework.bind_prompt_service(prompts.clone());
         agent_framework
             .bind_personai(model_providers.clone())
@@ -447,14 +460,16 @@ impl AppState {
         mcp.bind_capabilities(capability_resources.clone());
         agent_management.bind_mcp(mcp.clone());
         skills.bind_capabilities(capability_resources.clone());
-        agent_framework
-            .bind_skills(
-                skills.clone(),
-                capability_resources,
-                mcp.clone(),
-                rag.clone(),
-            )
-            .expect("capability resource catalog");
+        if let Err(error) = agent_framework.bind_skills(
+            skills.clone(),
+            capability_resources,
+            mcp.clone(),
+            rag.clone(),
+        ) {
+            // A capability cache failure must not prevent the profile from
+            // opening; the next startup or pack change retries reconciliation.
+            tracing::error!(%error, "capability resource reconciliation failed");
+        }
         if let Ok(runtime) = tokio::runtime::Handle::try_current() {
             let indexer =
                 crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone());
@@ -481,8 +496,12 @@ impl AppState {
         agent_framework
             .bind_knowledge_bases(knowledge_bases.clone())
             .expect("initial knowledge-base binding");
-        agent_framework.bind_topics(topics.clone()).expect("initial topic binding");
-        agent_framework.bind_integrations(integrations.clone()).expect("initial connector binding");
+        agent_framework
+            .bind_topics(topics.clone())
+            .expect("initial topic binding");
+        agent_framework
+            .bind_integrations(integrations.clone())
+            .expect("initial connector binding");
         agent_framework
             .bind_presentation(agent_presentation.clone())
             .expect("initial presentation binding");
@@ -664,8 +683,10 @@ impl AppState {
         )))
         .with_runtime_config(runtime_config)
         .with_shortcut_defaults(Arc::new(
-            crate::adapters::outbound::persistence::sqlite::SqliteShortcutDefaults::connect(&config.database_url)
-                .expect("shortcut defaults storage"),
+            crate::adapters::outbound::persistence::sqlite::SqliteShortcutDefaults::connect(
+                &config.database_url,
+            )
+            .expect("shortcut defaults storage"),
         ));
         let skin_root = std::path::Path::new(&config.application_config_path)
             .parent()
@@ -674,9 +695,12 @@ impl AppState {
         let skins = crate::application::skin::SkinService::new(Arc::new(
             crate::adapters::outbound::skin::FileSkinStore::new(skin_root),
         ));
-        let disk_usage = crate::adapters::outbound::observability::disk_usage::LocalDiskUsage::new(&config);
+        let disk_usage =
+            crate::adapters::outbound::observability::disk_usage::LocalDiskUsage::new(&config);
         let account_sync = crate::application::profile::ProfileAccountSync::new(
-            profiles.clone(), model_providers.clone(), runtime_http_client.clone(),
+            profiles.clone(),
+            model_providers.clone(),
+            runtime_http_client.clone(),
         );
         Ok(Self(Arc::new(AppStateInner {
             dude_memory,

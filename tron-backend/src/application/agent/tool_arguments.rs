@@ -29,9 +29,12 @@ pub(super) fn normalize(response: &mut ModelResponse, tools: &[EffectiveTool]) {
                 if let Some(tool) = tools.iter().find(|tool| tool.tool_name == name) {
                     let mut normalized = arguments;
                     if let Some(items) = normalized.get_mut("items") {
-                        normalize_value(items, &serde_json::json!({
-                            "type": "array", "items": tool.input_schema,
-                        }));
+                        normalize_value(
+                            items,
+                            &serde_json::json!({
+                                "type": "array", "items": tool.input_schema,
+                            }),
+                        );
                     } else {
                         normalize_value(&mut normalized, &tool.input_schema);
                     }

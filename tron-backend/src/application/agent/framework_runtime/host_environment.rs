@@ -1,11 +1,21 @@
 //! One plugin environment per profile; Agent bindings only select capabilities.
 use super::*;
 use eliteforge_agent_framework::FrameworkBuilder;
+
+/// Skills removed from the registry by the latest reconciliation.
+#[derive(Default)]
+pub(super) struct ReconcileReport {
+    pub removed_skills: Vec<String>,
+}
+
 impl FrameworkHost {
-    pub fn sync_capability_resources(&self) -> Result<(), String> {
+    /// Project current capability-pack skills and MCP declarations into the
+    /// profile. Packs are authoritative; this runs at startup and after every
+    /// install, upgrade or uninstall so stale resources cannot survive.
+    pub(super) fn reconcile_capability_resources(&self) -> Result<ReconcileReport, String> {
         use crate::application::capability::CapabilityResource;
         let Some(skills) = self.0.skill_registry.get() else {
-            return Ok(());
+            return Ok(ReconcileReport::default());
         };
         let (state, _) = self.capability_state();
         let mut sources: Vec<(String, Vec<fw::CapabilitySkillSource>)> = Vec::new();
@@ -98,7 +108,12 @@ impl FrameworkHost {
                     {
                         *program = pack.path.join(&*program).display().to_string();
                     }
-                    mcp_declarations.push((declaration.clone(), active, pack.path.clone()));
+                    mcp_declarations.push((
+                        declaration.clone(),
+                        active,
+                        pack.path.clone(),
+                        pack.manifest.id.clone(),
+                    ));
                     existing_mcp.insert(declaration.id.clone());
                     let resource = CapabilityResource {
                         pack_id: pack.manifest.id.clone(),
@@ -124,14 +139,20 @@ impl FrameworkHost {
         // Native tool packages must not leave a second, obsolete MCP route.
         for resource in mcp_ownership.values().filter(|resource| {
             selected.contains(&resource.pack_id)
-                && !mcp_declarations.iter().any(|(declaration, _, _)| declaration.id == resource.code)
+                && !mcp_declarations
+                    .iter()
+                    .any(|(declaration, _, _, _)| declaration.id == resource.code)
         }) {
             if let Some(mcp) = self.0.mcp.get() {
                 if existing_mcp.contains(&resource.code) {
-                    mcp.delete_platform_server(&resource.code).map_err(|error| error.to_string())?;
+                    mcp.delete_platform_server(&resource.code)
+                        .map_err(|error| error.to_string())?;
                 }
             }
-            mcp_resources.push(CapabilityResource { available: false, ..resource.clone() });
+            mcp_resources.push(CapabilityResource {
+                available: false,
+                ..resource.clone()
+            });
         }
         if let Some(mcp) = self.0.mcp.get() {
             mcp.register_pack_contributions(&mcp_declarations)
@@ -140,6 +161,11 @@ impl FrameworkHost {
         if let Some(resources) = self.0.capability_resources.get() {
             resources.register(&mcp_resources)?;
         }
+        // Embedded skills live at a stable per-pack path. Rebuilding that path
+        // makes the current binary authoritative; installed packages are read
+        // directly from their selected version.
+        let mut desired = Vec::new();
+        let mut embedded_packs = std::collections::BTreeSet::new();
         for (id, items) in sources {
             let active = state.get(&id).copied().unwrap_or(Self::builtin_pack(&id));
             let mut directories = Vec::new();
@@ -147,42 +173,33 @@ impl FrameworkHost {
                 let directory = match source {
                     fw::CapabilitySkillSource::Directory(path) => path,
                     fw::CapabilitySkillSource::Embedded(embedded) => {
-                        let safe = id
-                            .as_bytes()
-                            .iter()
-                            .map(|b| format!("{b:02x}"))
-                            .collect::<String>();
-                        let root = self
-                            .0
-                            .path
-                            .with_extension("skills-catalog")
-                            .join(safe)
-                            .join(embedded.content_hash);
-                        for file in embedded.files {
-                            let relative = Path::new(file.path);
-                            if relative.is_absolute()
-                                || relative
-                                    .components()
-                                    .any(|c| !matches!(c, std::path::Component::Normal(_)))
-                            {
-                                return Err("invalid embedded skill path".into());
-                            }
-                            let path = root.join(relative);
-                            fs::create_dir_all(path.parent().unwrap())
-                                .map_err(|e| e.to_string())?;
-                            fs::write(&path, file.contents).map_err(|e| e.to_string())?;
-                        }
-                        root
+                        embedded_packs.insert(pack_cache_component(&id));
+                        self.prepare_embedded_skill_root(&id, &embedded)?
                     }
                 };
                 directories.push(directory);
             }
-            skills
-                .register_pack_directories(&id, &directories, active)
-                .map_err(|e| e.to_string())?;
+            desired.push((id, directories, active));
         }
+        self.prune_embedded_skill_roots(&embedded_packs)?;
+        let removed_skills = skills
+            .reconcile_pack_directories(&desired)
+            .map_err(|e| e.to_string())?;
         skills.rescan_registry().map_err(|e| e.to_string())?;
         if let Some(resources) = self.0.capability_resources.get() {
+            let registry_skills = skills
+                .list_registry(crate::domain::skill::RegistrySkillListQuery { search: None })
+                .map_err(|e| e.to_string())?;
+            let skill_owners = registry_skills
+                .iter()
+                .filter_map(|skill| {
+                    skill
+                        .provider_pack_id
+                        .clone()
+                        .map(|pack| (skill.skill_name.clone(), pack))
+                })
+                .collect::<BTreeMap<_, _>>();
+            resources.retain_kind("skill", &skill_owners)?;
             let tools = self
                 .0
                 .agent_management
@@ -205,10 +222,7 @@ impl FrameworkHost {
                     }
                 }
             }
-            for skill in skills
-                .list_registry(crate::domain::skill::RegistrySkillListQuery { search: None })
-                .map_err(|e| e.to_string())?
-            {
+            for skill in registry_skills {
                 if let Some(pack_id) = skill.provider_pack_id {
                     owned.push(CapabilityResource {
                         pack_id,
@@ -220,8 +234,112 @@ impl FrameworkHost {
             }
             resources.register(&owned)?;
         }
+        Ok(ReconcileReport { removed_skills })
+    }
+
+    /// Materialise embedded skills at a stable per-package path.
+    ///
+    /// The current binary is authoritative: the previous directory is replaced
+    /// only after the new copy is complete, and removed content-hash children
+    /// are deleted so no earlier version remains addressable.
+    fn prepare_embedded_skill_root(
+        &self,
+        pack: &str,
+        bundle: &fw::EmbeddedCapabilitySkills,
+    ) -> Result<PathBuf, String> {
+        if bundle.files.is_empty() {
+            return Err(format!(
+                "capability package `{pack}` has no embedded skills"
+            ));
+        }
+        let root = self
+            .0
+            .path
+            .with_extension("skills-catalog")
+            .join(pack_cache_component(pack));
+        let destination = root.join("skills");
+        let staging = root.join(".skills-next");
+        if staging.exists() {
+            fs::remove_dir_all(&staging).map_err(|e| e.to_string())?;
+        }
+        fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+        for file in bundle.files {
+            let relative = Path::new(file.path);
+            if relative.as_os_str().is_empty()
+                || relative.is_absolute()
+                || relative
+                    .components()
+                    .any(|component| !matches!(component, std::path::Component::Normal(_)))
+            {
+                let _ = fs::remove_dir_all(&staging);
+                return Err("invalid embedded skill path".into());
+            }
+            let path = staging.join(relative);
+            if let Some(parent) = path.parent() {
+                if let Err(error) = fs::create_dir_all(parent) {
+                    let _ = fs::remove_dir_all(&staging);
+                    return Err(error.to_string());
+                }
+            }
+            if let Err(error) = fs::write(&path, file.contents) {
+                let _ = fs::remove_dir_all(&staging);
+                return Err(error.to_string());
+            }
+        }
+        let retired = root.join(".skills-old");
+        if retired.exists() {
+            fs::remove_dir_all(&retired).map_err(|e| e.to_string())?;
+        }
+        if destination.exists() {
+            fs::rename(&destination, &retired).map_err(|e| e.to_string())?;
+        }
+        if let Err(error) = fs::rename(&staging, &destination) {
+            let _ = fs::remove_dir_all(&staging);
+            if retired.exists() {
+                let _ = fs::rename(&retired, &destination);
+            }
+            return Err(error.to_string());
+        }
+        if retired.exists() {
+            fs::remove_dir_all(&retired).map_err(|e| e.to_string())?;
+        }
+        // Older builds addressed embedded skills by content hash; keep only
+        // the current directory so removed versions cannot be read.
+        for entry in fs::read_dir(&root).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            if path != destination {
+                if path.is_dir() {
+                    fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+                } else {
+                    fs::remove_file(&path).map_err(|e| e.to_string())?;
+                }
+            }
+        }
+        Ok(destination)
+    }
+
+    /// Remove skill directories for packages that are no longer embedded.
+    fn prune_embedded_skill_roots(
+        &self,
+        desired: &std::collections::BTreeSet<String>,
+    ) -> Result<(), String> {
+        let catalog = self.0.path.with_extension("skills-catalog");
+        if !catalog.exists() {
+            return Ok(());
+        }
+        for entry in fs::read_dir(&catalog).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if !entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+                continue;
+            }
+            if !desired.contains(&entry.file_name().to_string_lossy().to_string()) {
+                fs::remove_dir_all(entry.path()).map_err(|e| e.to_string())?;
+            }
+        }
         Ok(())
     }
+
     fn builtin_tool_catalog(
         &self,
         framework: &Framework,
@@ -464,11 +582,9 @@ impl FrameworkHost {
                 "tron.continuation-loop",
                 eliteforge_agent_framework::ContinuationLoop,
             ))
-            .capability_pack(
-                eliteforge_agent_capability_external::external_agent_pack(
-                    super::super::external::HostExternalAgent,
-                ),
-            )
+            .capability_pack(eliteforge_agent_capability_external::external_agent_pack(
+                super::super::external::HostExternalAgent,
+            ))
             .plugin(eliteforge_agent_framework::GoalPlugin)
             .plugin(fw::AgentLoopPlugin::named(
                 "tron.summary-loop",
@@ -558,7 +674,11 @@ impl FrameworkHost {
                     serde_json::Value::Null,
                 )
                 .map_err(|error| error.to_string())?;
-            let backend_skills = managed.installed().manifest.implementations.iter()
+            let backend_skills = managed
+                .installed()
+                .manifest
+                .implementations
+                .iter()
                 .any(|implementation| implementation.extension == "framework.skills");
             let managed = managed
                 .contributions(
@@ -884,4 +1004,11 @@ impl fw::ToolMiddleware for OptionalToolAudit {
             next.run().await
         }
     }
+}
+
+pub(super) fn pack_cache_component(pack: &str) -> String {
+    pack.as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }

@@ -55,13 +55,20 @@ impl ShortTermMemoryConfig {
         max_output_tokens: Option<u32>,
     ) -> ModelContextBudgetPlan {
         let shares = &self.context.providers.shares;
-        let ratio = |id: &str| ContextBlockBudgetConfig { max_tokens: None, max_ratio_bps: shares.get(id).copied() };
+        let ratio = |id: &str| ContextBlockBudgetConfig {
+            max_tokens: None,
+            max_ratio_bps: shares.get(id).copied(),
+        };
         ContextBlockBudgets {
             seed_prompt_prefix: ratio("seed_prompt_prefix"),
             conversation_history_summary: ratio("conversation_history_summary"),
             current_session_working_state: ratio("current_session_working_state"),
-            tool_schema: ContextBlockBudgetConfig { max_tokens: None, max_ratio_bps: Some(10_000) },
-        }.plan(
+            tool_schema: ContextBlockBudgetConfig {
+                max_tokens: None,
+                max_ratio_bps: Some(10_000),
+            },
+        }
+        .plan(
             context_window_tokens.unwrap_or(self.context.default_context_window_tokens),
             max_output_tokens.unwrap_or(0),
         )

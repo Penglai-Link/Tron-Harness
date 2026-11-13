@@ -314,7 +314,13 @@ where
                             .push(stage(range, channel, started, rows.len(), None));
                         if channel == "vector" {
                             rows.retain(|row| relevance.accepts_vector(row.storage_score));
-                            result.stages.push(stage(range, "vector_relevance", started, rows.len(), None));
+                            result.stages.push(stage(
+                                range,
+                                "vector_relevance",
+                                started,
+                                rows.len(),
+                                None,
+                            ));
                         }
                         merge_rrf(&mut merged, rows, channel);
                     }
@@ -418,9 +424,9 @@ where
             let mut rerank_error = None;
             match order {
                 Ok(order)
-                    if order.iter().all(|(index, score)| {
-                            *index < result.hits.len() && score.is_finite()
-                        })
+                    if order
+                        .iter()
+                        .all(|(index, score)| *index < result.hits.len() && score.is_finite())
                         && order
                             .iter()
                             .map(|(index, _)| index)
@@ -468,13 +474,19 @@ where
         if !reranked {
             relevance.filter_fallback(&mut result.hits);
         } else {
-            result.hits.sort_by(|a, b| b.score.total_cmp(&a.score)
-                .then_with(|| a.row.target_code.cmp(&b.row.target_code)));
+            result.hits.sort_by(|a, b| {
+                b.score
+                    .total_cmp(&a.score)
+                    .then_with(|| a.row.target_code.cmp(&b.row.target_code))
+            });
         }
         result.stages.push(RagRetrievalStage {
-            corpus_id: String::new(), channel: "relevance_filter".into(),
-            status: "COMPLETED".into(), hit_count: result.hits.len(),
-            duration_ms: 0, error: None,
+            corpus_id: String::new(),
+            channel: "relevance_filter".into(),
+            status: "COMPLETED".into(),
+            hit_count: result.hits.len(),
+            duration_ms: 0,
+            error: None,
         });
         result.hits.truncate(limit);
         Ok(result)
@@ -518,7 +530,9 @@ fn merge_rrf(merged: &mut BTreeMap<String, RagEvidence>, rows: Vec<RagSearchRow>
         if !seen.insert(key.clone()) {
             continue;
         }
-        let vector_similarity = (channel == "vector").then_some(row.storage_score).flatten()
+        let vector_similarity = (channel == "vector")
+            .then_some(row.storage_score)
+            .flatten()
             .filter(|score| score.is_finite());
         let evidence = merged.entry(key).or_insert_with(|| RagEvidence {
             row,
@@ -531,7 +545,11 @@ fn merge_rrf(merged: &mut BTreeMap<String, RagEvidence>, rows: Vec<RagSearchRow>
             selected_blocks: BTreeSet::new(),
         });
         if let Some(score) = vector_similarity {
-            evidence.vector_similarity = Some(evidence.vector_similarity.map_or(score, |current| current.max(score)));
+            evidence.vector_similarity = Some(
+                evidence
+                    .vector_similarity
+                    .map_or(score, |current| current.max(score)),
+            );
         }
         evidence.score += 1.0 / (60.0 + rank as f64 + 1.0);
         evidence.channels.insert(channel.into());

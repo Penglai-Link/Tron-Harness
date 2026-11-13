@@ -174,8 +174,6 @@ fn project_native_event(
     Some(AgentAguiProtocolEvent { sse_event, data })
 }
 
-
-
 fn project_native_group_event(
     mut data: Value,
     session: &str,

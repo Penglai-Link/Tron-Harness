@@ -82,12 +82,22 @@ impl DudeMemoryAgentRuntime for NativeDudeMemoryAgentRuntime {
                     // The model proposes facts/artifacts; only the host may persist
                     // them after evidence validation. Names narrow saved authority;
                     // the host resolves the actual schemas and permissions.
-                    tools: ["memory_search", "memory_get", "dude_memory_search", "dude_memory_get"]
-                        .into_iter().map(|name| crate::domain::agent::EffectiveTool {
-                            tool_name: name.into(), domain_code: None,
-                            description: String::new(), input_schema: serde_json::Value::Null,
-                            skill_name: None, required_variable_keys: Vec::new(),
-                        }).collect(),
+                    tools: [
+                        "memory_search",
+                        "memory_get",
+                        "dude_memory_search",
+                        "dude_memory_get",
+                    ]
+                    .into_iter()
+                    .map(|name| crate::domain::agent::EffectiveTool {
+                        tool_name: name.into(),
+                        domain_code: None,
+                        description: String::new(),
+                        input_schema: serde_json::Value::Null,
+                        skill_name: None,
+                        required_variable_keys: Vec::new(),
+                    })
+                    .collect(),
                     attachments: Vec::new(),
                     page_context: None,
                     supports_user_input_requests: false,
@@ -288,7 +298,11 @@ impl DudeMemoryRunner {
         for proposal in &plan.memories {
             let latest = self.service.get_batch(user, batch_code)?;
             let proposal_key = proposal_key(proposal)?;
-            if latest.memory_receipts.iter().any(|receipt| receipt.proposal_key == proposal_key) {
+            if latest
+                .memory_receipts
+                .iter()
+                .any(|receipt| receipt.proposal_key == proposal_key)
+            {
                 continue;
             }
             let receipt = self.write_memory(&batch, proposal).await?;
@@ -531,7 +545,9 @@ impl DudeMemoryRunner {
     }
 }
 fn proposal_key(proposal: &MemoryProposal) -> Result<String, DudeMemoryError> {
-    Ok(hex::encode(Sha256::digest(serde_json::to_vec(proposal).map_err(invalid)?)))
+    Ok(hex::encode(Sha256::digest(
+        serde_json::to_vec(proposal).map_err(invalid)?,
+    )))
 }
 fn validate_plan(batch: &MemoryBatch, plan: &ConsolidationPlan) -> Result<(), DudeMemoryError> {
     if plan.memories.len() > 64 || plan.skills.len() > 8 {

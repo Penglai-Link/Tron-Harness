@@ -65,9 +65,14 @@ impl SkillRegistryService {
         let mut repo = self.repository.lock().unwrap();
         let skills = repo.list_registry_skills()?;
         for name in names {
-            if skills.iter().any(|skill| skill.skill_name == *name
-                && !crate::domain::computer_use::skill_allowed(agent, name, skill.provider_pack_id.as_deref()))
-            {
+            if skills.iter().any(|skill| {
+                skill.skill_name == *name
+                    && !crate::domain::computer_use::skill_allowed(
+                        agent,
+                        name,
+                        skill.provider_pack_id.as_deref(),
+                    )
+            }) {
                 return Err(SkillError::Unavailable);
             }
             if !skills
@@ -113,7 +118,13 @@ impl SkillRegistryService {
             .into_iter()
             .find(|s| s.skill_name == name)
             .ok_or(SkillError::NotFound)?;
-        if agents.iter().any(|agent| !crate::domain::computer_use::skill_allowed(agent, name, skill.provider_pack_id.as_deref())) {
+        if agents.iter().any(|agent| {
+            !crate::domain::computer_use::skill_allowed(
+                agent,
+                name,
+                skill.provider_pack_id.as_deref(),
+            )
+        }) {
             return Err(SkillError::Unavailable);
         }
         if (!skill.available || !self.skill_available(name)) && !agents.is_empty() {

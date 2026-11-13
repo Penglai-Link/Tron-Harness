@@ -59,9 +59,10 @@ impl Tool for ProductivityTool {
                 self.name,
                 &request.input,
                 context,
-                &self
-                    .resources
-                    .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code()),
+                &self.resources.for_agent_in_workspace(
+                    context.agent_code.as_deref(),
+                    context.execution_workspace_code(),
+                ),
             )?
         } else {
             let name = self.name;

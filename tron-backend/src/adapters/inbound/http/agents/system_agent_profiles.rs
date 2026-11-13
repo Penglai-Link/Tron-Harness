@@ -57,16 +57,18 @@ pub async fn create(
     auth: RequestAuthContext,
     Json(request): Json<CreateSystemAgentRequest>,
 ) -> Response {
-    match state.agent_management.create_system_agent_profile_with_settings(
-        &request.agent_code,
-        &request.name,
-        &request.base_agent_code,
-        &request.model_id,
-        request.reasoning_effort,
-        request.avatar_id,
-        request.fast_mode,
-        Some(request.description),
-    ) {
+    match state
+        .agent_management
+        .create_system_agent_profile_with_settings(
+            &request.agent_code,
+            &request.name,
+            &request.base_agent_code,
+            &request.model_id,
+            request.reasoning_effort,
+            request.avatar_id,
+            request.fast_mode,
+            Some(request.description),
+        ) {
         Ok(record) => (
             StatusCode::CREATED,
             Json(ApiResponse::success(CreateSystemAgentResponse {
@@ -83,15 +85,17 @@ pub async fn update(
     Path(code): Path<String>,
     Json(request): Json<UpdateSystemAgentRequest>,
 ) -> Response {
-    match state.agent_management.update_system_agent_profile_with_settings(
-        &code,
-        &request.name,
-        &request.model_id,
-        request.reasoning_effort,
-        request.avatar_id,
-        request.fast_mode,
-        request.description,
-    ) {
+    match state
+        .agent_management
+        .update_system_agent_profile_with_settings(
+            &code,
+            &request.name,
+            &request.model_id,
+            request.reasoning_effort,
+            request.avatar_id,
+            request.fast_mode,
+            request.description,
+        ) {
         Ok(record) => Json(ApiResponse::success(UpdateSystemAgentResponse {
             agent_code: record.agent_code,
         }))

@@ -18,15 +18,22 @@ use super::{
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SchedulePreviewQuery { cron_expression: String }
+pub struct SchedulePreviewQuery {
+    cron_expression: String,
+}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SchedulePreviewView { execution_times: Vec<i64> }
+struct SchedulePreviewView {
+    execution_times: Vec<i64>,
+}
 
 pub async fn preview_schedule(Query(query): Query<SchedulePreviewQuery>) -> Response {
     match crate::application::automation::preview_schedule(&query.cron_expression) {
-        Ok(execution_times) => Json(ApiResponse::success(SchedulePreviewView { execution_times })).into_response(),
+        Ok(execution_times) => Json(ApiResponse::success(SchedulePreviewView {
+            execution_times,
+        }))
+        .into_response(),
         Err(error) => automation_error_response(error),
     }
 }

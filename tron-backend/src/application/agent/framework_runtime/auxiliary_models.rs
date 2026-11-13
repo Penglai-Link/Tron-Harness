@@ -44,7 +44,9 @@ pub(crate) fn attach_auxiliary_model(
         ))),
         vec![eliteforge_agent_official_plugin_model_http::model_descriptor(&wire)],
     )
-    .with_protocol(eliteforge_agent_official_plugin_model_http::model_protocol(&wire));
+    .with_protocol(eliteforge_agent_official_plugin_model_http::model_protocol(
+        &wire,
+    ));
     let runtime = sdk::ModelRuntime::new(sdk::ModelRuntimeUpdate::new(
         "tron.auxiliary",
         0,

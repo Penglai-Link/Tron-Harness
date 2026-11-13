@@ -17,6 +17,7 @@ MAX_MANIFEST = 256 * 1024
 IMAGE = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 FONT = {'.woff', '.woff2', '.ttf', '.otf'}
 CSS = {'.css'}
+SAFE_CSS_FUNCTIONS = set('url var rgb rgba hsl hsla hwb lab lch oklab oklch color color-mix linear-gradient repeating-linear-gradient radial-gradient repeating-radial-gradient conic-gradient repeating-conic-gradient blur brightness contrast drop-shadow grayscale hue-rotate invert opacity saturate sepia translate translatex translatey translatez translate3d scale scalex scaley scale3d rotate rotatex rotatey rotatez rotate3d skew skewx skewy matrix matrix3d cubic-bezier steps calc min max clamp'.split())
 VISUAL_CSS = set('color background background-color background-image background-position background-size background-repeat background-blend-mode border border-color border-style border-width border-radius outline outline-color outline-style outline-width box-shadow text-shadow opacity filter backdrop-filter mix-blend-mode animation animation-name animation-duration animation-delay animation-direction animation-fill-mode animation-iteration-count animation-play-state animation-timing-function transition transition-property transition-duration transition-delay transition-timing-function transform content font-family font-style font-weight text-decoration text-decoration-color text-decoration-style text-decoration-line -webkit-text-stroke -webkit-text-fill-color'.split())
 
 
@@ -45,7 +46,7 @@ def manifest(raw):
     require(isinstance(data, dict), 'Manifest must be an object')
     require(not set(data) - {'id', 'name', 'version', 'variants', 'layout', 'resources'}, 'Unknown manifest field')
     require(isinstance(data.get('id'), str) and re.fullmatch(r'[a-z0-9-]{1,64}', data['id']), 'Invalid id')
-    require(data['id'] not in ('default', 'brand', 'light', 'matrix-dark', 'matrix-particles'), 'Use a new id, not a built-in id')
+    require(data['id'] not in ('default', 'brand', 'matrix', 'light', 'matrix-dark', 'matrix-particles'), 'Use a new id, not a built-in or retired id')
     require(isinstance(data.get('name'), str) and data['name'].strip() and len(data['name'].encode()) <= 120, 'Invalid name')
     require(type(data.get('version')) is int and data['version'] == 3, 'version must be 3')
     variants = data.get('variants')
@@ -105,6 +106,39 @@ def read_file(path, limit):
     return path.read_bytes()
 
 
+def strip_comments(source, filename):
+    out = []
+    index = 0
+    quote = None
+    while index < len(source):
+        char = source[index]
+        if quote:
+            out.append(char)
+            if char == '\\' and index + 1 < len(source):
+                out.append(source[index + 1])
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in ('"', "'"):
+            quote = char
+            out.append(char)
+            index += 1
+            continue
+        if source.startswith('/*', index):
+            end = source.find('*/', index + 2)
+            require(end >= 0, f'{filename}: unclosed CSS comment')
+            out.append(' ')
+            index = end + 2
+            continue
+        out.append(char)
+        index += 1
+    require(quote is None, f'{filename}: unclosed CSS string')
+    return ''.join(out)
+
+
 def css_resources(raw, filename):
     try:
         source = raw.decode('utf-8')
@@ -112,16 +146,16 @@ def css_resources(raw, filename):
         raise ValueError(f'{filename}: CSS must be UTF-8') from error
     require(len(raw) <= 1024 * 1024, f'{filename}: CSS exceeds 1 MiB')
     require('\\' not in source, f'{filename}: CSS escapes are not supported')
-    require(not re.search(r'@\s*(?!keyframes\b|-webkit-keyframes\b)[\w-]+|!important|expression\s*\(|javascript:', source, re.I), f'{filename}: forbidden at-rule or unsafe CSS')
-    refs = []
-    for value in re.findall(r"""url\(\s*['"]?([^)'"]+)['"]?\s*\)""", source, re.I):
-        require(safe_path(value), f'{filename}: unsafe url() resource: {value}')
-        refs.append(value)
     names = r'global|app-shell|sidebar|page|panel|card|chat|chat-message|dialog'
     effect_selector = re.compile(r'\[data-theme-effect-layer(?:\s*=\s*([\"\']?)(' + names + r')\1)?\s*\](?:::before|::after)?')
     geometry = set('position inset inset-block inset-inline top right bottom left width height min-width min-height max-width max-height transform-origin pointer-events'.split())
-    # Preserve quoted selector values, and ignore delimiters inside strings/comments.
-    clean = re.sub(r"\"[^\"]*\"|'[^']*'|/\*.*?\*/", lambda match: ' ' if match.group().startswith('/*') else match.group(), source, flags=re.S)
+    # Preserve quoted selector values, and reject unterminated comments.
+    clean = strip_comments(source, filename)
+    require(not re.search(r'!important|expression\s*\(|javascript:', clean, re.I), f'{filename}: forbidden at-rule or unsafe CSS')
+    refs = []
+    for value in re.findall(r"""url\(\s*['"]?([^)'"]+)['"]?\s*\)""", clean, re.I):
+        require(safe_path(value), f'{filename}: unsafe url() resource: {value}')
+        refs.append(value)
     stack = []
     start = 0
     def declaration(text):
@@ -134,6 +168,9 @@ def css_resources(raw, filename):
         require(separator and (prop.startswith('--') or prop in VISUAL_CSS or (overlay and prop in geometry)), f'{filename}: property {prop} can change component geometry')
         require(not (overlay and prop == 'position') or value == 'absolute', f'{filename}: effect position must be absolute')
         require(not (overlay and prop == 'pointer-events') or value == 'none', f'{filename}: effect cannot intercept input')
+        require(not re.search(r'!important|expression\s*\(|javascript:|behavior\s*:', value, re.I), f'{filename}: unsafe value for {prop}')
+        for function in re.findall(r'([A-Za-z][A-Za-z0-9-]*)\s*\(', value):
+            require(function.lower() in SAFE_CSS_FUNCTIONS, f'{filename}: unsupported CSS function {function}')
     for token in re.finditer(r"\"[^\"]*\"|'[^']*'|[{};]", clean):
         delimiter = token.group()
         if delimiter not in ('{', '}', ';'):
@@ -144,6 +181,7 @@ def css_resources(raw, filename):
                 require(not stack and re.fullmatch(r'@(?:-webkit-)?keyframes\s+[a-zA-Z0-9_-]+', prelude), f'{filename}: invalid keyframes')
                 stack.append(('keyframes', False))
             else:
+                require('@' not in prelude, f'{filename}: invalid selector prelude or nested at-rule')
                 require(not stack or (len(stack) == 1 and stack[-1][0] == 'keyframes'), f'{filename}: nested CSS is not supported')
                 if stack:
                     require(re.fullmatch(r'from|to|(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)%', prelude), f'{filename}: invalid keyframe selector')

@@ -36,10 +36,19 @@ impl LogQuery {
         self.level = clean(self.level.take());
         self.before_log_id = clean(self.before_log_id.take());
         self.after_log_id = clean(self.after_log_id.take());
-        if self.after_log_id.as_ref().is_some_and(|id| log_position(id).is_none()) || (self.before_log_id.is_some() && self.after_log_id.is_some()) {
+        if self
+            .after_log_id
+            .as_ref()
+            .is_some_and(|id| log_position(id).is_none())
+            || (self.before_log_id.is_some() && self.after_log_id.is_some())
+        {
             return Err(ObservabilityError::InvalidLogQuery);
         }
-        if self.before_log_id.as_ref().is_some_and(|id| log_position(id).is_none()) {
+        if self
+            .before_log_id
+            .as_ref()
+            .is_some_and(|id| log_position(id).is_none())
+        {
             return Err(ObservabilityError::InvalidLogQuery);
         }
         self.trace_id = clean(self.trace_id.take()).map(|s| s.to_ascii_lowercase());
@@ -64,8 +73,11 @@ impl LogQuery {
         Ok(())
     }
     pub fn matches(&self, r: &ApplicationLog) -> bool {
-        self.workspace_code.as_ref().is_none_or(|code| ["tron.workspace.code", "workspace_code", "workspaceCode"].iter().any(|key| r.attributes.get(*key) == Some(code)))
-            && self.level.as_ref().is_none_or(|s| r.level == *s)
+        self.workspace_code.as_ref().is_none_or(|code| {
+            ["tron.workspace.code", "workspace_code", "workspaceCode"]
+                .iter()
+                .any(|key| r.attributes.get(*key) == Some(code))
+        }) && self.level.as_ref().is_none_or(|s| r.level == *s)
             && self
                 .trace_id
                 .as_ref()
@@ -99,7 +111,9 @@ pub fn log_position(id: &str) -> Option<(&str, u64)> {
     let (file, line) = id.rsplit_once(':')?;
     let date = file.strip_prefix("tron-backend.")?.strip_suffix(".jsonl")?;
     let parsed = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
-    if parsed.format("%Y-%m-%d").to_string() != date { return None; }
+    if parsed.format("%Y-%m-%d").to_string() != date {
+        return None;
+    }
     let line: u64 = line.parse().ok()?;
     (line > 0).then_some((file, line))
 }

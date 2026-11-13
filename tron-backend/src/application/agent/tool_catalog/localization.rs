@@ -58,7 +58,8 @@ pub(super) fn localize_tool_record(
             scope["description"] = match locale {
                 SupportedLocale::ZhCn => "选择用户或工作领域记忆。",
                 _ => "Choose user or work-domain memory.",
-            }.into();
+            }
+            .into();
         }
     } else if record.domain_code == "dude_task" {
         let scope = match locale {
@@ -81,13 +82,21 @@ pub(super) fn localize_tool_record(
     // These are explicit host aliases for official local bindings. Resources
     // come from that provider, while Tron keeps its stable ACL identities.
     if matches!(definition.module_owner, "coding" | "terminal") {
-        static CATALOG: std::sync::OnceLock<Vec<eliteforge_agent_core::ToolDescriptor>> = std::sync::OnceLock::new();
-        if let Some(descriptor)=CATALOG.get_or_init(eliteforge_agent_official_plugin_tools_local::local_tool_catalog).iter().find(|d|d.call_name==record.tool_name) {
-            record.display=descriptor.display.clone();
-            let resolved=descriptor.resolve_display(match locale {SupportedLocale::ZhCn=>"zh-CN",SupportedLocale::EnUs=>"en-US"});
-            record.name=resolved.name;
-            record.description=resolved.description;
-            record.input_schema=resolved.input_schema;
+        static CATALOG: std::sync::OnceLock<Vec<eliteforge_agent_core::ToolDescriptor>> =
+            std::sync::OnceLock::new();
+        if let Some(descriptor) = CATALOG
+            .get_or_init(eliteforge_agent_official_plugin_tools_local::local_tool_catalog)
+            .iter()
+            .find(|d| d.call_name == record.tool_name)
+        {
+            record.display = descriptor.display.clone();
+            let resolved = descriptor.resolve_display(match locale {
+                SupportedLocale::ZhCn => "zh-CN",
+                SupportedLocale::EnUs => "en-US",
+            });
+            record.name = resolved.name;
+            record.description = resolved.description;
+            record.input_schema = resolved.input_schema;
         }
     }
     record

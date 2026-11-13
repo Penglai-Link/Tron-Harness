@@ -1,6 +1,6 @@
 use super::*;
 use super::{
-    candidate::{CandidateIndex, persist_command,quality_configuration},
+    candidate::{CandidateIndex, persist_command, quality_configuration},
     snapshot::QualitySnapshot,
 };
 use crate::{
@@ -84,7 +84,14 @@ impl KnowledgeQualityService {
             ready.embedding_provider_model = tested.prepared.vectors.provider_model.clone();
             ready.task_id = Some(tested.task_id.clone());
             ready.stage = Some(IngestionStage::Publishing);
-            let configuration = quality_configuration(config,&run.id,&candidate.settings,&ready,ready.embedding_model_code.as_deref(),ready.embedding_space_fingerprint.as_deref());
+            let configuration = quality_configuration(
+                config,
+                &run.id,
+                &candidate.settings,
+                &ready,
+                ready.embedding_model_code.as_deref(),
+                ready.embedding_space_fingerprint.as_deref(),
+            );
             let mut task = IngestionTask::queued(
                 tested.task_id,
                 snapshot.library.id.clone(),
@@ -96,13 +103,40 @@ impl KnowledgeQualityService {
                 hash(&configuration.to_string()),
                 configuration,
             );
-            if let Some(id)=&tested.graph_id {
-                if tested.graph_context.configuration_hash!=task.input_config_hash{return Err(KnowledgeBaseError::Conflict);}
-                let graph=candidate.rag.graph_infrastructure().ok_or_else(||invalid("候选图谱未配置"))?;
-                self.host.rag.copy_graph_generation("PLATFORM",graph,id,&tested.graph_context,&tested.prepared,&super::runtime::QualityCheckpoint(candidate.rag.runtime_handle().budget)).map_err(invalid)?;
+            if let Some(id) = &tested.graph_id {
+                if tested.graph_context.configuration_hash != task.input_config_hash {
+                    return Err(KnowledgeBaseError::Conflict);
+                }
+                let graph = candidate
+                    .rag
+                    .graph_infrastructure()
+                    .ok_or_else(|| invalid("候选图谱未配置"))?;
+                self.host
+                    .rag
+                    .copy_graph_generation(
+                        "PLATFORM",
+                        graph,
+                        id,
+                        &tested.graph_context,
+                        &tested.prepared,
+                        &super::runtime::QualityCheckpoint(candidate.rag.runtime_handle().budget),
+                    )
+                    .map_err(invalid)?;
             }
-            repository.persist_ingest(persist_command(user,&snapshot.library.id,&tested.original,&tested.source,&task.id,&candidate.settings,
-                &tested.prepared,"STAGING",tested.graph_id.as_deref().map(|id|(id,&tested.graph_context))))?;
+            repository.persist_ingest(persist_command(
+                user,
+                &snapshot.library.id,
+                &tested.original,
+                &tested.source,
+                &task.id,
+                &candidate.settings,
+                &tested.prepared,
+                "STAGING",
+                tested
+                    .graph_id
+                    .as_deref()
+                    .map(|id| (id, &tested.graph_context)),
+            ))?;
             task.kind = IngestionKind::Indexing;
             task.state = "READY".into();
             task.stage = IngestionStage::Publishing;

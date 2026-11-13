@@ -239,7 +239,11 @@ impl Runtime {
         let notify_host = host.clone();
         let trace_id = {
             use opentelemetry::trace::TraceContextExt;
-            opentelemetry::Context::current().span().span_context().trace_id().to_string()
+            opentelemetry::Context::current()
+                .span()
+                .span_context()
+                .trace_id()
+                .to_string()
         };
         crate::app::telemetry::spawn_traced(async move {
             // The handle owns the child until completion; the registry only

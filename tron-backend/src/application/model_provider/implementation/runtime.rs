@@ -264,8 +264,6 @@ fn runtime_resolution_error(error: ModelProviderError) -> ModelError {
     }
 }
 
-
-
 pub(super) fn person_ai_agent_config(
     runtime_model_code: impl Into<String>,
     model_name: impl Into<String>,

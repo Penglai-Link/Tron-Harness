@@ -9,8 +9,14 @@ pub struct ChatSessionTitle {
 /// A sidebar container; directory scope includes registered descendants.
 #[derive(Clone, Debug)]
 pub enum ChatContainer {
-    Project { workspace_code: String, project_code: String },
-    Directory { workspace_code: String, directory_code: String },
+    Project {
+        workspace_code: String,
+        project_code: String,
+    },
+    Directory {
+        workspace_code: String,
+        directory_code: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,9 +27,23 @@ pub struct ChatContainerSnapshot {
 }
 
 pub trait ChatRepository: Send {
-    fn archived_containers(&mut self, kind: super::ArchivedContainerKind, workspace_code: Option<&str>, offset: u32, limit: u32) -> Result<(Vec<super::ArchivedContainer>, u64), super::ArchiveError>;
-    fn restore_archived_container(&mut self, kind: super::ArchivedContainerKind, code: &str) -> Result<(), super::ArchiveError>;
-    fn validate_annotation_sources(&mut self, session: &str, annotations: &[eliteforge_agent_core::MessageAnnotation]) -> Result<(), ChatError>;
+    fn archived_containers(
+        &mut self,
+        kind: super::ArchivedContainerKind,
+        workspace_code: Option<&str>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<(Vec<super::ArchivedContainer>, u64), super::ArchiveError>;
+    fn restore_archived_container(
+        &mut self,
+        kind: super::ArchivedContainerKind,
+        code: &str,
+    ) -> Result<(), super::ArchiveError>;
+    fn validate_annotation_sources(
+        &mut self,
+        session: &str,
+        annotations: &[eliteforge_agent_core::MessageAnnotation],
+    ) -> Result<(), ChatError>;
     fn session_titles(&mut self, codes: &[String]) -> Result<Vec<ChatSessionTitle>, ChatError>;
     fn sessions_by_codes(&mut self, codes: &[String]) -> Result<Vec<ChatSession>, ChatError>;
     fn pending_input_counts(
@@ -79,9 +99,17 @@ pub trait ChatRepository: Send {
         working_directory_code: Option<&str>,
         reference_code: &str,
     ) -> Result<(), ChatError>;
-    fn container_snapshot(&mut self, container: &ChatContainer) -> Result<ChatContainerSnapshot, ChatError>;
+    fn container_snapshot(
+        &mut self,
+        container: &ChatContainer,
+    ) -> Result<ChatContainerSnapshot, ChatError>;
     /// Recheck the snapshot in the write transaction before changing any rows.
-    fn mutate_container(&mut self, container: &ChatContainer, expected: &ChatContainerSnapshot, delete: bool) -> Result<(), ChatError>;
+    fn mutate_container(
+        &mut self,
+        container: &ChatContainer,
+        expected: &ChatContainerSnapshot,
+        delete: bool,
+    ) -> Result<(), ChatError>;
     fn update_session_run(
         &mut self,
         session_code: &str,

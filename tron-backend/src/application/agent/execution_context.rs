@@ -3,7 +3,10 @@ use crate::domain::agent::{AgentExecutionScope, AgentMessage};
 /// Execution metadata is mandatory request data, placed after history by the SDK layout. It is rebuilt for
 /// every invocation and never depends on lossy history/checkpoint compaction.
 pub fn execution_context_message(scope: &AgentExecutionScope) -> Option<AgentMessage> {
-    if scope.applications.is_empty() && scope.local_directory.is_none() && scope.workspace_code.is_none() {
+    if scope.applications.is_empty()
+        && scope.local_directory.is_none()
+        && scope.workspace_code.is_none()
+    {
         return None;
     }
     let mut message = AgentMessage::context_block(

@@ -101,7 +101,11 @@ impl AgentManagementService {
                     .iter()
                     .filter(|tool| {
                         crate::domain::computer_use::tool_allowed(&agent_code, tool)
-                            && mode.includes_policy(tool, &selected, &policy.selected_category_codes)
+                            && mode.includes_policy(
+                                tool,
+                                &selected,
+                                &policy.selected_category_codes,
+                            )
                     })
                     .map(|tool| tool.tool_code.clone())
                     .collect(),
@@ -176,7 +180,14 @@ impl AgentManagementService {
         }
         self.validate_selected_categories(&command.selected_category_codes)?;
         if !crate::domain::computer_use::allows(agent_code)
-            && command.selected_category_codes.as_ref().is_some_and(|categories| categories.iter().any(|code| code == crate::domain::computer_use::DOMAIN))
+            && command
+                .selected_category_codes
+                .as_ref()
+                .is_some_and(|categories| {
+                    categories
+                        .iter()
+                        .any(|code| code == crate::domain::computer_use::DOMAIN)
+                })
         {
             return Err(AgentManagementError::InternalAgentPolicyInvalid);
         }

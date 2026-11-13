@@ -37,7 +37,10 @@ impl AutomaticRouteModel {
         };
         family
             && (kind != AutoRouterKind::SpeechRecognition
-                || matches!(self.protocol.as_str(), "personai" | "OpenAiCompatible" | "Responses" | "Gemini"))
+                || matches!(
+                    self.protocol.as_str(),
+                    "personai" | "OpenAiCompatible" | "Responses" | "Gemini"
+                ))
             && (kind != AutoRouterKind::Chat
                 || (self.context_window_tokens.is_some_and(|n| n > 0)
                     && (!self.binding_id.starts_with("PERSON_AI:")

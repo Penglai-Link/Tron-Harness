@@ -151,9 +151,11 @@ impl DudeMemoryService {
         {
             return Err(DudeMemoryError::Conflict);
         }
-        if previous.memory_receipts.iter().any(|old| {
-            old.proposal_key == receipt.proposal_key
-        }) {
+        if previous
+            .memory_receipts
+            .iter()
+            .any(|old| old.proposal_key == receipt.proposal_key)
+        {
             return Ok(previous);
         }
         let mut next = previous.clone();

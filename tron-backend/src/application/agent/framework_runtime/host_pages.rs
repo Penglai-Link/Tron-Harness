@@ -59,7 +59,15 @@ fn assets(root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
         out: &mut BTreeMap<String, Vec<u8>>,
         total: &mut usize,
     ) -> Result<(), String> {
-        if dir.strip_prefix(root).map_err(|e| e.to_string())?.components().count() > 16 { return Err("page asset directory nesting exceeds 16".into()); }
+        if dir
+            .strip_prefix(root)
+            .map_err(|e| e.to_string())?
+            .components()
+            .count()
+            > 16
+        {
+            return Err("page asset directory nesting exceeds 16".into());
+        }
         for item in fs::read_dir(dir).map_err(|e| e.to_string())? {
             let item = item.map_err(|e| e.to_string())?;
             let kind = item.file_type().map_err(|e| e.to_string())?;

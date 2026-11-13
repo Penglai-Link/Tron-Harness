@@ -65,7 +65,6 @@ fn index_preparation_error(error: String) -> KnowledgeBaseError {
     }
 }
 
-
 impl AppRagService {
     pub(crate) async fn execute_document_task(
         &self,

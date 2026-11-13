@@ -6,7 +6,13 @@ pub(super) fn supported_system_agents_from_config(
     config: &SystemAgentConfig,
 ) -> Vec<SupportedSystemAgentDefinition> {
     vec![
-        SupportedSystemAgentDefinition { agent_code: "dsh".into(), name: "DeepSeek Harness".into(), description: "DeepSeek Harness CLI agent runtime.".into(), runtime_type: AgentRuntimeType::DshHeadless, command_name: resolve_dsh_command(&config.dsh_command) },
+        SupportedSystemAgentDefinition {
+            agent_code: "dsh".into(),
+            name: "DeepSeek Harness".into(),
+            description: "DeepSeek Harness CLI agent runtime.".into(),
+            runtime_type: AgentRuntimeType::DshHeadless,
+            command_name: resolve_dsh_command(&config.dsh_command),
+        },
         SupportedSystemAgentDefinition {
             agent_code: "codex".into(),
             name: "Codex".into(),
@@ -21,7 +27,10 @@ pub(super) fn supported_system_agents_from_config(
             runtime_type: AgentRuntimeType::OpenCodeRun,
             command_name: config.opencode_command.clone(),
         },
-    ].into_iter().filter(|agent| agent.agent_code != "dsh" || !agent.command_name.trim().is_empty()).collect()
+    ]
+    .into_iter()
+    .filter(|agent| agent.agent_code != "dsh" || !agent.command_name.trim().is_empty())
+    .collect()
 }
 
 impl AgentManagementService {
@@ -101,7 +110,9 @@ impl AgentManagementService {
                 base_agent_code: None,
                 model_id: None,
                 name: supported.name.clone(),
-                description: existing_entry.map(|entry| entry.description.clone()).unwrap_or_else(|| supported.description.clone()),
+                description: existing_entry
+                    .map(|entry| entry.description.clone())
+                    .unwrap_or_else(|| supported.description.clone()),
                 runtime_type: supported.runtime_type,
                 command_name: supported.command_name.clone(),
                 source: ManagedAgentSource::System,
@@ -443,18 +454,35 @@ fn managed_system_record(
 }
 
 fn resolve_dsh_command(command: &str) -> String {
-    if command != "dsh" { return command.into(); }
-    if let Ok(output) = std::process::Command::new(if cfg!(windows) { "where" } else { "which" }).arg(command).output() {
+    if command != "dsh" {
+        return command.into();
+    }
+    if let Ok(output) = std::process::Command::new(if cfg!(windows) { "where" } else { "which" })
+        .arg(command)
+        .output()
+    {
         if output.status.success() {
-            if let Some(path) = String::from_utf8_lossy(&output.stdout).lines().find(|path| !path.trim().is_empty()) { return path.trim().into(); }
+            if let Some(path) = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .find(|path| !path.trim().is_empty())
+            {
+                return path.trim().into();
+            }
         }
     }
     #[cfg(target_os = "macos")]
     {
         let suffix = "DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh";
         let mut roots = vec![std::path::PathBuf::from("/Applications")];
-        if let Some(home) = std::env::var_os("HOME") { roots.push(std::path::PathBuf::from(home).join("Applications")); }
-        for root in roots { let path = root.join(suffix); if path.is_file() { return path.to_string_lossy().into_owned(); } }
+        if let Some(home) = std::env::var_os("HOME") {
+            roots.push(std::path::PathBuf::from(home).join("Applications"));
+        }
+        for root in roots {
+            let path = root.join(suffix);
+            if path.is_file() {
+                return path.to_string_lossy().into_owned();
+            }
+        }
     }
     command.into()
 }

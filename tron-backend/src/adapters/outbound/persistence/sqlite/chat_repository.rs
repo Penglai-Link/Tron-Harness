@@ -2,7 +2,10 @@
 //! history are stored through Framework services on the injected connection.
 use super::framework_storage::{blocking, chat_error};
 use crate::{
-    application::{agent::FrameworkHost, chat::{ChatContainer, ChatContainerSnapshot, ChatRepository}},
+    application::{
+        agent::FrameworkHost,
+        chat::{ChatContainer, ChatContainerSnapshot, ChatRepository},
+    },
     domain::chat::*,
 };
 use eliteforge_agent_core as fw;
@@ -10,8 +13,8 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-mod container;
 mod archives;
+mod container;
 
 pub struct SqliteChatRepository {
     host: FrameworkHost,
@@ -55,8 +58,7 @@ fn session_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionProjection> {
     })
 }
 fn chat_session_from_row(row: SessionProjection) -> Result<ChatSession, ChatError> {
-    let link: Link =
-        serde_json::from_str(&row.link_json).map_err(|_| ChatError::StorageFailure)?;
+    let link: Link = serde_json::from_str(&row.link_json).map_err(|_| ChatError::StorageFailure)?;
     let status = match row.status.as_str() {
         "Active" | "ACTIVE" => ChatSessionStatus::Active,
         "Archived" | "ARCHIVED" => ChatSessionStatus::Archived,
@@ -167,19 +169,27 @@ impl SqliteChatRepository {
             Ok(Self { host })
         })
     }
-    fn delete_session_internal(&mut self, id: &str, heartbeat_retention: bool) -> Result<(), ChatError> {
+    fn delete_session_internal(
+        &mut self,
+        id: &str,
+        heartbeat_retention: bool,
+    ) -> Result<(), ChatError> {
         blocking(self.delete_session_records(id, heartbeat_retention))
     }
-    async fn delete_session_records(&self, id: &str, heartbeat_retention: bool) -> Result<(), ChatError> {
-            let link = self.link(id).await?;
-            let db = self.host.shared_database().await.map_err(chat_error)?;
-            let sessions = self
-                .framework()
-                .await?
-                .sessions()
-                .map_err(|_| ChatError::StorageFailure)?;
-            let code = id.to_owned();
-            db.transaction(async {
+    async fn delete_session_records(
+        &self,
+        id: &str,
+        heartbeat_retention: bool,
+    ) -> Result<(), ChatError> {
+        let link = self.link(id).await?;
+        let db = self.host.shared_database().await.map_err(chat_error)?;
+        let sessions = self
+            .framework()
+            .await?
+            .sessions()
+            .map_err(|_| ChatError::StorageFailure)?;
+        let code = id.to_owned();
+        db.transaction(async {
                 let record=sessions.get(id).await?;
                 if heartbeat_retention && record.status!=fw::SessionStatus::Archived {return Err(fw::StateError::Invalid("session must be archived".into()));}
                 if self.framework().await.map_err(|e|fw::StateError::Backend(e.to_string()))?.goals().map_err(|e|fw::StateError::Backend(e.to_string()))?.active(id).await?.is_some_and(|goal| goal.status == fw::GoalStatus::Active) {
@@ -368,8 +378,16 @@ impl SqliteChatRepository {
             after = page.last().unwrap().sequence;
             result.extend(page);
         }
-        let deleted = self.framework().await?.history().map_err(|_| ChatError::StorageFailure)?
-            .deleted_runs(session).await.map_err(chat_error)?.into_iter().collect::<std::collections::HashSet<_>>();
+        let deleted = self
+            .framework()
+            .await?
+            .history()
+            .map_err(|_| ChatError::StorageFailure)?
+            .deleted_runs(session)
+            .await
+            .map_err(chat_error)?
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
         result.retain(|event| event.run_id.is_none_or(|run| !deleted.contains(&run)));
         Ok(result)
     }
@@ -391,18 +409,44 @@ impl SqliteChatRepository {
     }
 }
 impl ChatRepository for SqliteChatRepository {
-    fn archived_containers(&mut self, kind: crate::application::chat::ArchivedContainerKind, workspace_code: Option<&str>, offset: u32, limit: u32) -> Result<(Vec<crate::application::chat::ArchivedContainer>, u64), crate::application::chat::ArchiveError> {
+    fn archived_containers(
+        &mut self,
+        kind: crate::application::chat::ArchivedContainerKind,
+        workspace_code: Option<&str>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<
+        (Vec<crate::application::chat::ArchivedContainer>, u64),
+        crate::application::chat::ArchiveError,
+    > {
         self.read_archived_containers(kind, workspace_code, offset, limit)
     }
-    fn restore_archived_container(&mut self, kind: crate::application::chat::ArchivedContainerKind, code: &str) -> Result<(), crate::application::chat::ArchiveError> {
+    fn restore_archived_container(
+        &mut self,
+        kind: crate::application::chat::ArchivedContainerKind,
+        code: &str,
+    ) -> Result<(), crate::application::chat::ArchiveError> {
         self.restore_container_registration(kind, code)
     }
-    fn validate_annotation_sources(&mut self, session: &str, annotations: &[fw::MessageAnnotation]) -> Result<(), ChatError> {
-        if annotations.is_empty() { return Ok(()); }
+    fn validate_annotation_sources(
+        &mut self,
+        session: &str,
+        annotations: &[fw::MessageAnnotation],
+    ) -> Result<(), ChatError> {
+        if annotations.is_empty() {
+            return Ok(());
+        }
         blocking(async {
-            self.framework().await?.history().map_err(|_| ChatError::StorageFailure)?
-                .validate_annotation_sources(session, annotations).await
-                .map_err(|error| match error { fw::StateError::Invalid(_) => ChatError::AnnotationsInvalid, other => chat_error(other) })
+            self.framework()
+                .await?
+                .history()
+                .map_err(|_| ChatError::StorageFailure)?
+                .validate_annotation_sources(session, annotations)
+                .await
+                .map_err(|error| match error {
+                    fw::StateError::Invalid(_) => ChatError::AnnotationsInvalid,
+                    other => chat_error(other),
+                })
         })
     }
 
@@ -582,11 +626,16 @@ impl ChatRepository for SqliteChatRepository {
     fn get_session(&mut self, id: &str) -> Result<ChatSession, ChatError> {
         blocking(self.session(id))
     }
-    fn find_source_session(&mut self,user:&str,source:&str)->Result<Option<ChatSession>,ChatError>{
-        let user=user.to_owned();let source=source.to_owned();
-        blocking(async{
+    fn find_source_session(
+        &mut self,
+        user: &str,
+        source: &str,
+    ) -> Result<Option<ChatSession>, ChatError> {
+        let user = user.to_owned();
+        let source = source.to_owned();
+        blocking(async {
             self.framework().await?;
-            let database=self.host.shared_database().await.map_err(chat_error)?;
+            let database = self.host.shared_database().await.map_err(chat_error)?;
             let row=database.call_read(move|connection|->Result<Option<SessionProjection>,ChatError>{
                 connection.query_row(&format!("{SESSION_PROJECTION_SQL} WHERE json_extract(l.business_json,'$.user_code')=?1 AND json_extract(l.business_json,'$.source_code')=?2 AND json_extract(s.record,'$.status') IN ('Active','ACTIVE') LIMIT 1"),params![user,source],session_row).optional().map_err(|_|ChatError::StorageFailure)
             }).await.map_err(|_|ChatError::StorageFailure)?;
@@ -737,10 +786,18 @@ impl ChatRepository for SqliteChatRepository {
             }).await.map_err(|_| ChatError::StorageFailure)?
         })
     }
-    fn container_snapshot(&mut self, container: &ChatContainer) -> Result<ChatContainerSnapshot, ChatError> {
+    fn container_snapshot(
+        &mut self,
+        container: &ChatContainer,
+    ) -> Result<ChatContainerSnapshot, ChatError> {
         blocking(self.read_container_snapshot(container))
     }
-    fn mutate_container(&mut self, container: &ChatContainer, expected: &ChatContainerSnapshot, delete: bool) -> Result<(), ChatError> {
+    fn mutate_container(
+        &mut self,
+        container: &ChatContainer,
+        expected: &ChatContainerSnapshot,
+        delete: bool,
+    ) -> Result<(), ChatError> {
         blocking(self.apply_container_mutation(container, expected, delete))
     }
     fn update_session_run(

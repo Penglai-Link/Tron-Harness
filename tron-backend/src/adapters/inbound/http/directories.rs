@@ -19,7 +19,10 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/directories", get(list).post(register))
         .route("/api/v1/directories/pick", post(pick))
         .route("/api/v1/directories/pick-path", post(pick_path))
-        .route("/api/v1/directories/{directory_code}/archive", post(archive))
+        .route(
+            "/api/v1/directories/{directory_code}/archive",
+            post(archive),
+        )
         .route("/api/v1/directories/browse", get(browse))
         .route(
             "/api/v1/directories/{directory_code}",
@@ -168,21 +171,52 @@ async fn register(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BrowseRequest { workspace_code: String, path: Option<String> }
+struct BrowseRequest {
+    workspace_code: String,
+    path: Option<String>,
+}
 #[derive(Serialize)]
-struct BrowseEntry { name: String, path: String }
+struct BrowseEntry {
+    name: String,
+    path: String,
+}
 #[derive(Serialize)]
-struct BrowseResponse { path: String, parent: Option<String>, entries: Vec<BrowseEntry> }
-async fn browse(State(state): State<AppState>, Query(request): Query<BrowseRequest>, headers: HeaderMap) -> Response {
-    match state.directories.browse(&request.workspace_code, request.path.as_deref()) {
-        Ok(page) => Json(ApiResponse::protocol_success(BrowseResponse { path: page.path, parent: page.parent, entries: page.entries.into_iter().map(|entry| BrowseEntry { name: entry.name, path: entry.path }).collect() })).into_response(),
+struct BrowseResponse {
+    path: String,
+    parent: Option<String>,
+    entries: Vec<BrowseEntry>,
+}
+async fn browse(
+    State(state): State<AppState>,
+    Query(request): Query<BrowseRequest>,
+    headers: HeaderMap,
+) -> Response {
+    match state
+        .directories
+        .browse(&request.workspace_code, request.path.as_deref())
+    {
+        Ok(page) => Json(ApiResponse::protocol_success(BrowseResponse {
+            path: page.path,
+            parent: page.parent,
+            entries: page
+                .entries
+                .into_iter()
+                .map(|entry| BrowseEntry {
+                    name: entry.name,
+                    path: entry.path,
+                })
+                .collect(),
+        }))
+        .into_response(),
         Err(error) => error_response(error, &headers),
     }
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct PickDirectoryRequest { workspace_code: String }
+struct PickDirectoryRequest {
+    workspace_code: String,
+}
 
 async fn pick(
     State(state): State<AppState>,
@@ -194,19 +228,37 @@ async fn pick(
         Ok(locale) => locale,
         Err(response) => return response,
     };
-    match state.directories.pick_and_register(&request.workspace_code, if locale == SupportedLocale::EnUs { "en-US" } else { "zh-CN" }).await {
-        Ok(item) => Json(ApiResponse::protocol_success(item.map(PickDirectoryResponse::from))).into_response(),
+    match state
+        .directories
+        .pick_and_register(
+            &request.workspace_code,
+            if locale == SupportedLocale::EnUs {
+                "en-US"
+            } else {
+                "zh-CN"
+            },
+        )
+        .await
+    {
+        Ok(item) => Json(ApiResponse::protocol_success(
+            item.map(PickDirectoryResponse::from),
+        ))
+        .into_response(),
         Err(error) => error_response(error, &headers),
     }
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct PickDirectoryPathRequest { workspace_code: String }
+struct PickDirectoryPathRequest {
+    workspace_code: String,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PickDirectoryPathResponse { path: Option<String> }
+struct PickDirectoryPathResponse {
+    path: Option<String>,
+}
 
 async fn pick_path(
     State(state): State<AppState>,
@@ -215,21 +267,67 @@ async fn pick_path(
     Json(request): Json<PickDirectoryPathRequest>,
 ) -> Result<Json<ApiResponse<PickDirectoryPathResponse>>, Response> {
     let locale = native_picker_locale(peer, &headers)?;
-    let path = state.directories.pick_path(&request.workspace_code, if locale == SupportedLocale::EnUs { "en-US" } else { "zh-CN" })
-        .await.map_err(|error| error_response(error, &headers))?;
-    Ok(Json(ApiResponse::protocol_success(PickDirectoryPathResponse { path })))
+    let path = state
+        .directories
+        .pick_path(
+            &request.workspace_code,
+            if locale == SupportedLocale::EnUs {
+                "en-US"
+            } else {
+                "zh-CN"
+            },
+        )
+        .await
+        .map_err(|error| error_response(error, &headers))?;
+    Ok(Json(ApiResponse::protocol_success(
+        PickDirectoryPathResponse { path },
+    )))
 }
 
-fn native_picker_locale(peer: std::net::SocketAddr, headers: &HeaderMap) -> Result<SupportedLocale, Response> {
+fn native_picker_locale(
+    peer: std::net::SocketAddr,
+    headers: &HeaderMap,
+) -> Result<SupportedLocale, Response> {
     // This opens a dialog on the execution machine, so only a local browser may
     // invoke it. The custom header prevents cross-origin simple form requests.
-    let locale = SupportedLocale::from_request(headers.get("accept-language").and_then(|value| value.to_str().ok()));
-    let local_origin = headers.get("origin").and_then(|value| value.to_str().ok())
+    let locale = SupportedLocale::from_request(
+        headers
+            .get("accept-language")
+            .and_then(|value| value.to_str().ok()),
+    );
+    let local_origin = headers
+        .get("origin")
+        .and_then(|value| value.to_str().ok())
         .and_then(|value| url::Url::parse(value).ok())
-        .is_some_and(|url| matches!(url.scheme(), "http" | "https") &&
-            url.host_str().is_some_and(|host| host == "localhost" || host.trim_matches(['[', ']']).parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())));
-    if !peer.ip().is_loopback() || !local_origin || headers.get("x-tron-native-picker").and_then(|v| v.to_str().ok()) != Some("1") {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::protocol_error("DIRECTORY_PICKER_LOCAL_ONLY", if locale == SupportedLocale::EnUs { "Open Tron locally to choose a directory." } else { "请在本机打开 Tron 后选择目录。" }))).into_response());
+        .is_some_and(|url| {
+            matches!(url.scheme(), "http" | "https")
+                && url.host_str().is_some_and(|host| {
+                    host == "localhost"
+                        || host
+                            .trim_matches(['[', ']'])
+                            .parse::<std::net::IpAddr>()
+                            .is_ok_and(|ip| ip.is_loopback())
+                })
+        });
+    if !peer.ip().is_loopback()
+        || !local_origin
+        || headers
+            .get("x-tron-native-picker")
+            .and_then(|v| v.to_str().ok())
+            != Some("1")
+    {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::protocol_error(
+                "DIRECTORY_PICKER_LOCAL_ONLY",
+                if locale == SupportedLocale::EnUs {
+                    "Open Tron locally to choose a directory."
+                } else {
+                    "请在本机打开 Tron 后选择目录。"
+                },
+            )),
+        )
+            .into_response());
     }
     Ok(locale)
 }
@@ -251,8 +349,12 @@ async fn archive(
     Path(code): Path<String>,
     headers: HeaderMap,
 ) -> Response {
-    match tokio::task::spawn_blocking(move || state.directories.archive(&code, &state.chats)).await {
-        Ok(Ok(session_codes)) => Json(ApiResponse::protocol_success(ArchiveDirectoryResponse { session_codes })).into_response(),
+    match tokio::task::spawn_blocking(move || state.directories.archive(&code, &state.chats)).await
+    {
+        Ok(Ok(session_codes)) => Json(ApiResponse::protocol_success(ArchiveDirectoryResponse {
+            session_codes,
+        }))
+        .into_response(),
         Ok(Err(crate::application::directory::DirectoryArchiveError::Directory(error))) => {
             error_response(error, &headers)
         }
@@ -265,13 +367,26 @@ async fn archive(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteDirectoryResponse { session_codes: Vec<String> }
+struct DeleteDirectoryResponse {
+    session_codes: Vec<String>,
+}
 
-async fn delete(State(state): State<AppState>, Path(code): Path<String>, headers: HeaderMap) -> Response {
+async fn delete(
+    State(state): State<AppState>,
+    Path(code): Path<String>,
+    headers: HeaderMap,
+) -> Response {
     match tokio::task::spawn_blocking(move || state.directories.delete(&code, &state.chats)).await {
-        Ok(Ok(session_codes)) => Json(ApiResponse::protocol_success(DeleteDirectoryResponse { session_codes })).into_response(),
-        Ok(Err(crate::application::directory::DirectoryArchiveError::Directory(error))) => error_response(error, &headers),
-        Ok(Err(crate::application::directory::DirectoryArchiveError::Chat(error))) => crate::adapters::inbound::http::chats::error_mapper::chat_error_response(error),
+        Ok(Ok(session_codes)) => Json(ApiResponse::protocol_success(DeleteDirectoryResponse {
+            session_codes,
+        }))
+        .into_response(),
+        Ok(Err(crate::application::directory::DirectoryArchiveError::Directory(error))) => {
+            error_response(error, &headers)
+        }
+        Ok(Err(crate::application::directory::DirectoryArchiveError::Chat(error))) => {
+            crate::adapters::inbound::http::chats::error_mapper::chat_error_response(error)
+        }
         Err(_) => error_response(DirectoryError::StorageFailure, &headers),
     }
 }
@@ -308,11 +423,14 @@ pub(crate) fn error_response(error: DirectoryError, headers: &HeaderMap) -> Resp
             "未找到该目录。",
         ),
         DirectoryError::PickerBusy => (
-            StatusCode::CONFLICT, "DIRECTORY_PICKER_BUSY",
-            "A folder picker is already open.", "文件夹选择器已打开。",
+            StatusCode::CONFLICT,
+            "DIRECTORY_PICKER_BUSY",
+            "A folder picker is already open.",
+            "文件夹选择器已打开。",
         ),
         DirectoryError::PickerUnavailable => (
-            StatusCode::SERVICE_UNAVAILABLE, "DIRECTORY_PICKER_UNAVAILABLE",
+            StatusCode::SERVICE_UNAVAILABLE,
+            "DIRECTORY_PICKER_UNAVAILABLE",
             "The system folder picker is unavailable. Open Tron on a computer with a desktop session.",
             "系统文件夹选择器不可用，请在有桌面环境的电脑上打开 Tron。",
         ),

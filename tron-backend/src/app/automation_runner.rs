@@ -54,26 +54,45 @@ impl AutomationExecutionRunner for MainAgentAutomationRunner {
         let agent = self.agent.clone();
         let framework = self.framework.clone();
         crate::app::telemetry::spawn_traced(async move {
-            use opentelemetry::{Context, KeyValue, trace::{FutureExt, TraceContextExt, Status}};
+            use opentelemetry::{
+                Context, KeyValue,
+                trace::{FutureExt, Status, TraceContextExt},
+            };
             use tracing::Instrument;
             // Each scheduled occurrence owns a fresh root; manual runs retain their HTTP parent.
-            let parent = if execution.trigger_source == crate::domain::automation::AutomationTriggerSource::Scheduler {
+            let parent = if execution.trigger_source
+                == crate::domain::automation::AutomationTriggerSource::Scheduler
+            {
                 Context::new()
-            } else { Context::current() };
+            } else {
+                Context::current()
+            };
             let telemetry = match framework.telemetry().await {
                 Ok(telemetry) => telemetry,
                 Err(error) => {
                     tracing::error!(?error, "Automation tracing unavailable");
-                    let _ = automations.complete_execution(&automation.automation_code, &execution.execution_code,
-                        AutomationExecutionStatus::Failed, Some("Telemetry unavailable".into()), None);
+                    let _ = automations.complete_execution(
+                        &automation.automation_code,
+                        &execution.execution_code,
+                        AutomationExecutionStatus::Failed,
+                        Some("Telemetry unavailable".into()),
+                        None,
+                    );
                     return;
                 }
             };
-            let guard = telemetry.begin_operation("tron.automation.execute", &parent, vec![
-                KeyValue::new("tron.workspace.code", automation.workspace_code.clone()),
-                KeyValue::new("tron.automation.code", automation.automation_code.clone()),
-                KeyValue::new("tron.automation.execution.code", execution.execution_code.clone()),
-            ]);
+            let guard = telemetry.begin_operation(
+                "tron.automation.execute",
+                &parent,
+                vec![
+                    KeyValue::new("tron.workspace.code", automation.workspace_code.clone()),
+                    KeyValue::new("tron.automation.code", automation.automation_code.clone()),
+                    KeyValue::new(
+                        "tron.automation.execution.code",
+                        execution.execution_code.clone(),
+                    ),
+                ],
+            );
             let context = guard.0.clone();
             let ids = context.span().span_context().clone();
             let log_span = tracing::info_span!("automation.execute", trace_id=%ids.trace_id(), span_id=%ids.span_id());
@@ -87,8 +106,14 @@ impl AutomationExecutionRunner for MainAgentAutomationRunner {
                 models,
                 agent,
             )
-            .instrument(log_span).with_context(context.clone()).await;
-            if result.is_err() { context.span().set_status(Status::error("Automation execution failed")); }
+            .instrument(log_span)
+            .with_context(context.clone())
+            .await;
+            if result.is_err() {
+                context
+                    .span()
+                    .set_status(Status::error("Automation execution failed"));
+            }
             let (status, summary, session_code) = match result {
                 Ok(result) => (
                     AutomationExecutionStatus::Success,
@@ -109,7 +134,11 @@ impl AutomationExecutionRunner for MainAgentAutomationRunner {
             } else {
                 tracing::info!(trace_id=%ids.trace_id(), span_id=%ids.span_id(), "Automation execution finished");
             }
-            guard.complete(if status == AutomationExecutionStatus::Failed { "error" } else { "completed" });
+            guard.complete(if status == AutomationExecutionStatus::Failed {
+                "error"
+            } else {
+                "completed"
+            });
             drop(guard);
         });
     }
@@ -240,7 +269,7 @@ async fn run_automation_with_main_agent(
         .send_message(
             &session.session_code,
             SendChatMessageCommand {
-            annotations: Vec::new(),
+                annotations: Vec::new(),
                 requested_skills: Vec::new(),
                 a2ui_action_id: None,
                 a2ui_metadata: None,

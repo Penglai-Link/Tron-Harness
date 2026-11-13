@@ -37,5 +37,4 @@ impl ResourceKind {
     pub fn is_file_kind(&self) -> bool {
         matches!(self, Self::File | Self::Image | Self::Pdf)
     }
-
 }

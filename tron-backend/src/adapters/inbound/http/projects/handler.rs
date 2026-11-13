@@ -1,6 +1,9 @@
 use super::{
     error_mapper::project_error_response,
-    request::{ArchiveProjectRequest, DeleteProjectRequest, ProjectCodeRequest, ProjectWorkspaceRequest, SaveProjectRequest},
+    request::{
+        ArchiveProjectRequest, DeleteProjectRequest, ProjectCodeRequest, ProjectWorkspaceRequest,
+        SaveProjectRequest,
+    },
 };
 use crate::{app::AppState, application::project::SaveProjectCommand, response::ApiResponse};
 use axum::{
@@ -44,22 +47,50 @@ pub async fn save_project(
 }
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ArchiveProjectResponse { session_codes: Vec<String> }
+struct ArchiveProjectResponse {
+    session_codes: Vec<String>,
+}
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteProjectResponse { session_codes: Vec<String> }
+struct DeleteProjectResponse {
+    session_codes: Vec<String>,
+}
 
-pub async fn archive_project(State(state): State<AppState>, Json(request): Json<ArchiveProjectRequest>) -> Response {
-    match tokio::task::spawn_blocking(move || state.projects.mutate_container(&request.project_code, &state.chats, false)).await {
-        Ok(Ok(session_codes)) => Json(ApiResponse::success(ArchiveProjectResponse { session_codes })).into_response(),
+pub async fn archive_project(
+    State(state): State<AppState>,
+    Json(request): Json<ArchiveProjectRequest>,
+) -> Response {
+    match tokio::task::spawn_blocking(move || {
+        state
+            .projects
+            .mutate_container(&request.project_code, &state.chats, false)
+    })
+    .await
+    {
+        Ok(Ok(session_codes)) => Json(ApiResponse::success(ArchiveProjectResponse {
+            session_codes,
+        }))
+        .into_response(),
         Ok(Err(error)) => container_error_response(error),
         Err(_) => project_error_response(crate::domain::project::ProjectError::StorageFailure),
     }
 }
 
-pub async fn delete_project(State(state): State<AppState>, Json(request): Json<DeleteProjectRequest>) -> Response {
-    match tokio::task::spawn_blocking(move || state.projects.mutate_container(&request.project_code, &state.chats, true)).await {
-        Ok(Ok(session_codes)) => Json(ApiResponse::success(DeleteProjectResponse { session_codes })).into_response(),
+pub async fn delete_project(
+    State(state): State<AppState>,
+    Json(request): Json<DeleteProjectRequest>,
+) -> Response {
+    match tokio::task::spawn_blocking(move || {
+        state
+            .projects
+            .mutate_container(&request.project_code, &state.chats, true)
+    })
+    .await
+    {
+        Ok(Ok(session_codes)) => Json(ApiResponse::success(DeleteProjectResponse {
+            session_codes,
+        }))
+        .into_response(),
         Ok(Err(error)) => container_error_response(error),
         Err(_) => project_error_response(crate::domain::project::ProjectError::StorageFailure),
     }
@@ -67,7 +98,11 @@ pub async fn delete_project(State(state): State<AppState>, Json(request): Json<D
 
 fn container_error_response(error: crate::application::project::ProjectContainerError) -> Response {
     match error {
-        crate::application::project::ProjectContainerError::Project(error) => project_error_response(error),
-        crate::application::project::ProjectContainerError::Chat(error) => crate::adapters::inbound::http::chats::error_mapper::chat_error_response(error),
+        crate::application::project::ProjectContainerError::Project(error) => {
+            project_error_response(error)
+        }
+        crate::application::project::ProjectContainerError::Chat(error) => {
+            crate::adapters::inbound::http::chats::error_mapper::chat_error_response(error)
+        }
     }
 }

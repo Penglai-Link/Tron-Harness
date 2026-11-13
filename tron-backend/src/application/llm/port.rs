@@ -113,8 +113,11 @@ pub trait LlmRuntimeModelResolver: Send + Sync {
 
 pub trait LlmRuntimeClient: Send + Sync {
     fn transcribe<'a>(
-        &'a self, _config: &'a RuntimeModelConfig, _audio: Vec<u8>,
-        _mime: &'a str, _file_name: &'a str,
+        &'a self,
+        _config: &'a RuntimeModelConfig,
+        _audio: Vec<u8>,
+        _mime: &'a str,
+        _file_name: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(async { Err("speech recognition is unsupported".into()) })
     }
@@ -312,8 +315,6 @@ pub trait LlmRuntimeClient: Send + Sync {
         top_n: Option<usize>,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>>;
 }
-
-
 
 fn unsupported_observed<T>() -> eliteforge_agent_framework::ObservedModelResult<T> {
     eliteforge_agent_framework::ObservedModelResult {

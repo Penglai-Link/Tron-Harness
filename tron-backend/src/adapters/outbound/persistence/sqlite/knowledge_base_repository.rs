@@ -4,21 +4,18 @@ use crate::application::knowledge_base::{
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Serialize, de::DeserializeOwned};
 mod agent_grants;
-mod settings;
 pub(super) mod deletion;
 mod intake;
 mod quality;
 mod quality_publication;
-pub(crate) use quality::{StoredChunkContext,OptimizedDocumentPublication,stored_contexts};
+mod settings;
+pub(crate) use quality::{OptimizedDocumentPublication, StoredChunkContext, stored_contexts};
 mod platform_catalog;
 struct SqliteKnowledgeBaseRepositorySql<'a> {
     connection: &'a mut Connection,
 }
 /// Document payloads for one knowledge base in id order.
-fn document_payload(
-    connection: &Connection,
-    id: &str,
-) -> Result<Vec<String>, KnowledgeBaseError> {
+fn document_payload(connection: &Connection, id: &str) -> Result<Vec<String>, KnowledgeBaseError> {
     let mut statement = connection
         .prepare("SELECT payload_json FROM knowledge_base_documents WHERE knowledge_base_id=?1 ORDER BY id")
         .map_err(storage)?;

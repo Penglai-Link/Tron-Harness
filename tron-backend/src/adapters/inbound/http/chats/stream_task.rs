@@ -19,8 +19,6 @@ impl ChatStreamForwardingGate {
         }
     }
 
-
-
     fn close(&self) {
         self.open.store(false, Ordering::Release);
     }

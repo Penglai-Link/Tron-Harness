@@ -19,8 +19,14 @@ pub fn register_dude_tools(
     tasks: TaskService,
     _host: FrameworkHost,
 ) -> Result<(), ToolError> {
-    registry.register(Arc::new(SoulTool { dudes: dudes.clone(), update: false }))?;
-    registry.register(Arc::new(SoulTool { dudes: dudes.clone(), update: true }))?;
+    registry.register(Arc::new(SoulTool {
+        dudes: dudes.clone(),
+        update: false,
+    }))?;
+    registry.register(Arc::new(SoulTool {
+        dudes: dudes.clone(),
+        update: true,
+    }))?;
     registry.register(Arc::new(DudeWorkChangeTool {
         dudes: dudes.clone(),
         tasks: tasks.clone(),
@@ -71,19 +77,34 @@ impl Tool for DudeNotify {
 #[serde(deny_unknown_fields)]
 struct SoulReadInput {}
 
-struct SoulTool { dudes:DudeService, update:bool }
+struct SoulTool {
+    dudes: DudeService,
+    update: bool,
+}
 impl Tool for SoulTool {
-    fn name(&self)->&str {if self.update {"dude_soul_update"} else {"dude_soul_read"}}
-    fn exec(&self, request:ToolRequest, context:&AgentRunContext)->Result<ToolExecutionResult,ToolError> {
-        let code=work_changes::owner(context)?;
-        let result=if self.update {
-            let input=serde_json::from_value(request.input).map_err(|e|ToolError::ExecutionFailed(format!("Invalid soul update: {e}")))?;
-            self.dudes.update_soul_from_user(context,input)
+    fn name(&self) -> &str {
+        if self.update {
+            "dude_soul_update"
+        } else {
+            "dude_soul_read"
+        }
+    }
+    fn exec(
+        &self,
+        request: ToolRequest,
+        context: &AgentRunContext,
+    ) -> Result<ToolExecutionResult, ToolError> {
+        let code = work_changes::owner(context)?;
+        let result = if self.update {
+            let input = serde_json::from_value(request.input)
+                .map_err(|e| ToolError::ExecutionFailed(format!("Invalid soul update: {e}")))?;
+            self.dudes.update_soul_from_user(context, input)
         } else {
             let _: SoulReadInput = serde_json::from_value(request.input)
-                .map_err(|e|ToolError::ExecutionFailed(format!("Invalid soul read: {e}")))?;
+                .map_err(|e| ToolError::ExecutionFailed(format!("Invalid soul read: {e}")))?;
             self.dudes.soul(code)
-        }.map_err(|e|ToolError::ExecutionFailed(e.to_string()))?;
+        }
+        .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
         // Do not expose the private onboarding session/user to the model.
         Ok(ToolExecutionResult::observation(ToolObservation { tool_name:self.name().into(), output:serde_json::json!({"name":result.name,"markdown":result.markdown,"state":result.state}).to_string() }))
     }

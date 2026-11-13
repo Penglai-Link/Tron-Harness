@@ -22,8 +22,8 @@ pub mod resources;
 pub mod skills;
 pub mod system_config;
 pub mod tasks;
-pub mod topics;
 pub mod terminals;
+pub mod topics;
 pub mod variables;
 
 pub mod skins;

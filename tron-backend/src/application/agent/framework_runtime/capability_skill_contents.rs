@@ -24,7 +24,9 @@ fn collect(
     if depth > 16 {
         return Err("capability skill directory nesting exceeds 16 levels".into());
     }
-    let directory = directory.canonicalize().map_err(|error| error.to_string())?;
+    let directory = directory
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
     if !directory.starts_with(package) {
         return Err("capability skill directory escapes its package".into());
     }
@@ -42,7 +44,11 @@ fn collect(
     }
     for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
-        if entry.file_type().map_err(|error| error.to_string())?.is_dir() {
+        if entry
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+        {
             collect(package, &entry.path(), depth + 1, skills)?;
         }
     }

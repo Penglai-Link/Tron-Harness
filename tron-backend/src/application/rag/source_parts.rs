@@ -112,8 +112,6 @@ pub(crate) fn parts(metadata: &Value, text: &str, fallback: &str) -> Option<Vec<
     Some(parts)
 }
 
-
-
 pub(crate) fn select(
     metadata: &Value,
     text: &str,

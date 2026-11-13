@@ -699,9 +699,8 @@ impl AgentRunContextBuilder {
         context.execution_scope.workspace_code = execution_workspace
             .as_ref()
             .map(|value| value.workspace_code.clone());
-        context.execution_scope.workspace_name = execution_workspace
-            .as_ref()
-            .map(|value| value.name.clone());
+        context.execution_scope.workspace_name =
+            execution_workspace.as_ref().map(|value| value.name.clone());
         if page_context.is_some() {
             context.execution_scope.page_context =
                 crate::application::agent::page_context::normalized(page_context.as_ref());
@@ -828,7 +827,10 @@ fn runtime_selection_for_agent(
             command_name: required_runtime_command_name(resolved_agent)?,
             working_directory: local_directory,
         }),
-        AgentRuntimeType::DshHeadless => Ok(RuntimeAdapterSelection::DshHeadless { command_name: required_runtime_command_name(resolved_agent)?, working_directory: local_directory }),
+        AgentRuntimeType::DshHeadless => Ok(RuntimeAdapterSelection::DshHeadless {
+            command_name: required_runtime_command_name(resolved_agent)?,
+            working_directory: local_directory,
+        }),
         AgentRuntimeType::OpenCodeRun => Ok(RuntimeAdapterSelection::OpenCodeRun {
             command_name: required_runtime_command_name(resolved_agent)?,
             working_directory: local_directory,

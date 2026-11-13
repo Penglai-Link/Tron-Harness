@@ -8,15 +8,22 @@ use axum::{
 pub fn project_error_response(error: ProjectError) -> Response {
     if error == ProjectError::DuplicateName {
         let descriptor = crate::application::project::duplicate_name_descriptor();
-        let en = crate::shared::auth_holder::AuthHolder::get().is_some_and(|auth|
+        let en = crate::shared::auth_holder::AuthHolder::get().is_some_and(|auth| {
             crate::shared::locale::SupportedLocale::from_raw(&auth.locale)
-                == crate::shared::locale::SupportedLocale::EnUs);
+                == crate::shared::locale::SupportedLocale::EnUs
+        });
         let message = match descriptor.message_key {
-            "tron.projects.duplicate_name" if en => "An active topic with this name already exists in this workspace. Choose another name.",
+            "tron.projects.duplicate_name" if en => {
+                "An active topic with this name already exists in this workspace. Choose another name."
+            }
             "tron.projects.duplicate_name" => "当前工作空间已有同名的未归档主题，请使用其他名称。",
             _ => unreachable!("unknown project error message"),
         };
-        return (StatusCode::CONFLICT, Json(ApiResponse::protocol_error(descriptor.code, message))).into_response();
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse::protocol_error(descriptor.code, message)),
+        )
+            .into_response();
     }
     let (status, code, message) = match error {
         ProjectError::NotFound => (

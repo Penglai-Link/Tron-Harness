@@ -171,27 +171,46 @@ pub(super) struct HarnessTools;
 #[async_trait]
 impl fw::ToolProvider for HarnessTools {
     fn catalog_metadata(&self) -> Option<Vec<fw::ToolCatalogEntry>> {
-        let mut entries = crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US")
-            .into_iter()
-            .filter(|tool| official_id(&tool.tool_name).is_none())
-            .map(|tool| fw::ToolCatalogEntry {
-                descriptor: fw::ToolDescriptor::new(
-                    id(&tool.tool_name), tool.tool_name, tool.description, tool.input_schema,
-                ).with_operation_kind(match tool.operation_kind {
-                    crate::domain::agent::ToolOperationKind::Query => fw::ToolOperationKind::Query,
-                    crate::domain::agent::ToolOperationKind::Command => fw::ToolOperationKind::Command,
-                    crate::domain::agent::ToolOperationKind::Unknown => fw::ToolOperationKind::Unknown,
-                }),
-                domain_code: Some(tool.domain_code),
-                category: tool.category,
-            }).collect::<Vec<_>>();
+        let mut entries =
+            crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US")
+                .into_iter()
+                .filter(|tool| official_id(&tool.tool_name).is_none())
+                .map(|tool| fw::ToolCatalogEntry {
+                    descriptor: fw::ToolDescriptor::new(
+                        id(&tool.tool_name),
+                        tool.tool_name,
+                        tool.description,
+                        tool.input_schema,
+                    )
+                    .with_operation_kind(match tool.operation_kind {
+                        crate::domain::agent::ToolOperationKind::Query => {
+                            fw::ToolOperationKind::Query
+                        }
+                        crate::domain::agent::ToolOperationKind::Command => {
+                            fw::ToolOperationKind::Command
+                        }
+                        crate::domain::agent::ToolOperationKind::Unknown => {
+                            fw::ToolOperationKind::Unknown
+                        }
+                    }),
+                    domain_code: Some(tool.domain_code),
+                    category: tool.category,
+                })
+                .collect::<Vec<_>>();
         let ask = crate::application::agent::ask_user_definition("en-US");
         entries.push(fw::ToolCatalogEntry {
             descriptor: fw::ToolDescriptor::new(
-                id(&ask.tool_name), ask.tool_name, ask.description, ask.input_schema,
-            ).with_operation_kind(fw::ToolOperationKind::Command).with_single_input(),
+                id(&ask.tool_name),
+                ask.tool_name,
+                ask.description,
+                ask.input_schema,
+            )
+            .with_operation_kind(fw::ToolOperationKind::Command)
+            .with_single_input(),
             domain_code: Some("user_interaction".into()),
-            category: Some(crate::application::agent::tool_catalog::builtin_category("interaction")),
+            category: Some(crate::application::agent::tool_catalog::builtin_category(
+                "interaction",
+            )),
         });
         Some(entries)
     }
@@ -290,7 +309,9 @@ impl fw::ToolProvider for HarnessTools {
             binding.source.provider_id =
                 Some(crate::application::agent::tool_catalog::HARNESS_TOOL_PROVIDER_ID.to_owned());
             if tool.tool_name == crate::application::agent::CHAT_ASK_USER_TOOL {
-                binding.descriptor = binding.descriptor.with_operation_kind(fw::ToolOperationKind::Command);
+                binding.descriptor = binding
+                    .descriptor
+                    .with_operation_kind(fw::ToolOperationKind::Command);
                 binding.category = Some(crate::application::agent::tool_catalog::builtin_category(
                     "interaction",
                 ));

@@ -154,8 +154,6 @@ impl LlmModelRouter {
 
 impl super::router::ModelRouter for LlmModelRouter {}
 
-
-
 pub(crate) fn runtime_from_agent(
     config: crate::domain::agent::AgentModelConfig,
 ) -> RuntimeModelConfig {

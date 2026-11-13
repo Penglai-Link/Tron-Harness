@@ -76,7 +76,9 @@ pub(in crate::application::agent::business_tools) fn resolve_workspace_code(
         ));
     }
     if context.is_owning_dude() || workspace_code != context.execution_workspace_code().trim() {
-        return Err(ToolError::ExecutionFailed("workspaceCode is outside the current authorized execution scope".into()));
+        return Err(ToolError::ExecutionFailed(
+            "workspaceCode is outside the current authorized execution scope".into(),
+        ));
     }
     Ok(workspace_code.to_string())
 }

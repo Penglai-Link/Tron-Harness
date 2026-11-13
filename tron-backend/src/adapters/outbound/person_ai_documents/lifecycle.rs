@@ -185,13 +185,29 @@ pub(super) fn progress(task: &ParseTask) -> Result<TaskProgress, KnowledgeBaseEr
 
 fn failure_reason(task: &ParseTask) -> String {
     let nonempty = |value: &str| !value.trim().is_empty();
-    task.error_message.as_deref().filter(|value| nonempty(value))
-        .or_else(|| task.result.as_ref()?.get("error")?.as_str().filter(|value| nonempty(value)))
-        .or_else(|| task.result.as_ref()?.get("segments")?.as_array()?.iter()
-            .filter_map(|segment| segment.get("error")?.as_str())
-            .find(|value| nonempty(value)))
+    task.error_message
+        .as_deref()
+        .filter(|value| nonempty(value))
+        .or_else(|| {
+            task.result
+                .as_ref()?
+                .get("error")?
+                .as_str()
+                .filter(|value| nonempty(value))
+        })
+        .or_else(|| {
+            task.result
+                .as_ref()?
+                .get("segments")?
+                .as_array()?
+                .iter()
+                .filter_map(|segment| segment.get("error")?.as_str())
+                .find(|value| nonempty(value))
+        })
         .unwrap_or("请检查解析结果")
-        .chars().take(512).collect()
+        .chars()
+        .take(512)
+        .collect()
 }
 pub(super) fn result_manifest(task: &ParseTask) -> Result<&Value, KnowledgeBaseError> {
     task.result

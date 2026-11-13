@@ -16,7 +16,11 @@ use crate::{
 };
 
 pub trait ConnectionRepository: Send + Sync {
-    fn list(&self, workspace_code: &str, user_code: &str) -> Result<Vec<StoredConnection>, ConnectionError>;
+    fn list(
+        &self,
+        workspace_code: &str,
+        user_code: &str,
+    ) -> Result<Vec<StoredConnection>, ConnectionError>;
     fn get(&self, code: &str) -> Result<StoredConnection, ConnectionError>;
     fn save(&self, connection: &StoredConnection) -> Result<(), ConnectionError>;
     fn delete(&self, code: &str) -> Result<(), ConnectionError>;
@@ -54,7 +58,12 @@ impl ConnectionResolver for HostResolver {
             .cipher
             .decrypt(
                 &encrypted,
-                credential_aad(&stored.workspace_code, &stored.owner_user_code, &stored.connection_code).as_bytes(),
+                credential_aad(
+                    &stored.workspace_code,
+                    &stored.owner_user_code,
+                    &stored.connection_code,
+                )
+                .as_bytes(),
             )
             .map_err(|_| ConnectorError::Authentication)?;
         Ok((
@@ -77,7 +86,9 @@ pub struct IntegrationService {
 }
 
 impl IntegrationService {
-    pub(crate) fn connector_service(&self) -> Arc<ConnectorService> { self.connectors.clone() }
+    pub(crate) fn connector_service(&self) -> Arc<ConnectorService> {
+        self.connectors.clone()
+    }
     pub fn new(
         repository: impl ConnectionRepository + 'static,
         cipher: Arc<dyn VariableCipher>,
@@ -103,8 +114,14 @@ impl IntegrationService {
         self.connectors.providers()
     }
 
-    pub fn list(&self, workspace_code: &str, user_code: &str) -> Result<Vec<ConnectionView>, ConnectionError> {
-        if user_code.is_empty() { return Err(ConnectionError::NotFound); }
+    pub fn list(
+        &self,
+        workspace_code: &str,
+        user_code: &str,
+    ) -> Result<Vec<ConnectionView>, ConnectionError> {
+        if user_code.is_empty() {
+            return Err(ConnectionError::NotFound);
+        }
         Ok(self
             .repository
             .list(workspace_code, user_code)?
@@ -128,7 +145,9 @@ impl IntegrationService {
         endpoint: &str,
         token: Option<&str>,
     ) -> Result<ConnectionView, ConnectionError> {
-        if user_code.is_empty() { return Err(ConnectionError::NotFound); }
+        if user_code.is_empty() {
+            return Err(ConnectionError::NotFound);
+        }
         let name = name.trim();
         let endpoint = endpoint.trim().trim_end_matches('/');
         if name.is_empty()
@@ -172,8 +191,14 @@ impl IntegrationService {
                     .value()
             ),
         };
-        let stored_workspace = existing.as_ref().map(|value| value.workspace_code.as_str()).unwrap_or(workspace_code);
-        let stored_owner = existing.as_ref().map(|value| value.owner_user_code.as_str()).unwrap_or(user_code);
+        let stored_workspace = existing
+            .as_ref()
+            .map(|value| value.workspace_code.as_str())
+            .unwrap_or(workspace_code);
+        let stored_owner = existing
+            .as_ref()
+            .map(|value| value.owner_user_code.as_str())
+            .unwrap_or(user_code);
         let encrypted_credential = match token.filter(|token| !token.trim().is_empty()) {
             Some(token) => {
                 let encrypted = self
@@ -203,7 +228,12 @@ impl IntegrationService {
         Ok(stored.into())
     }
 
-    pub fn delete(&self, workspace_code: &str, user_code: &str, code: &str) -> Result<(), ConnectionError> {
+    pub fn delete(
+        &self,
+        workspace_code: &str,
+        user_code: &str,
+        code: &str,
+    ) -> Result<(), ConnectionError> {
         let _ = workspace_code;
         if user_code.is_empty() {
             return Err(ConnectionError::NotFound);
@@ -292,10 +322,13 @@ impl IntegrationService {
         }
         let encrypted: EncryptedVariableValue = serde_json::from_str(&stored.encrypted_credential)
             .map_err(|_| ConnectionError::StorageFailure)?;
-        let token = self.cipher.decrypt(
-            &encrypted,
-            credential_aad(workspace_code, user_code, code).as_bytes(),
-        ).map_err(|_| ConnectionError::EncryptionUnavailable)?;
+        let token = self
+            .cipher
+            .decrypt(
+                &encrypted,
+                credential_aad(workspace_code, user_code, code).as_bytes(),
+            )
+            .map_err(|_| ConnectionError::EncryptionUnavailable)?;
         Ok((stored, token))
     }
 }

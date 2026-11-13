@@ -36,8 +36,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             "选择工作目录"
         };
         let selected = rfd::FileDialog::new().set_title(title).pick_folder();
-        let path = selected.as_ref().map(|path| path.to_str().ok_or_else(||
-            std::io::Error::other("directory path is not valid UTF-8"))).transpose()?;
+        let path = selected
+            .as_ref()
+            .map(|path| {
+                path.to_str()
+                    .ok_or_else(|| std::io::Error::other("directory path is not valid UTF-8"))
+            })
+            .transpose()?;
         println!("{}", serde_json::to_string(&path)?);
         return Ok(());
     }

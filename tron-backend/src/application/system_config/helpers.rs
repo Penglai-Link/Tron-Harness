@@ -296,7 +296,9 @@ fn path_segments(path: &str) -> Vec<String> {
             segments.last_mut().unwrap().push(character);
         }
     }
-    if escaped { segments.last_mut().unwrap().push('\\'); }
+    if escaped {
+        segments.last_mut().unwrap().push('\\');
+    }
     segments
 }
 
@@ -310,12 +312,25 @@ pub(super) fn effective_context_value(
     use serde_json::json;
     let effective = AppConfig::effective_config(content, path)
         .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
-    set_value_at_path(&mut value, "modelInvocation", json!(effective.model_invocation))?;
+    set_value_at_path(
+        &mut value,
+        "modelInvocation",
+        json!(effective.model_invocation),
+    )?;
     set_value_at_path(&mut value, "ragRetrieval", json!(effective.rag_retrieval))?;
     for (field, command) in [
-        ("systemAgents.codexCommand", effective.system_agents.codex_command),
-        ("systemAgents.opencodeCommand", effective.system_agents.opencode_command),
-        ("systemAgents.dshCommand", effective.system_agents.dsh_command),
+        (
+            "systemAgents.codexCommand",
+            effective.system_agents.codex_command,
+        ),
+        (
+            "systemAgents.opencodeCommand",
+            effective.system_agents.opencode_command,
+        ),
+        (
+            "systemAgents.dshCommand",
+            effective.system_agents.dsh_command,
+        ),
     ] {
         set_value_at_path(&mut value, field, json!(command))?;
     }
@@ -329,11 +344,19 @@ pub(super) fn effective_context_value(
         })
     };
     let providers = &config.context.providers;
-    let data_blocks = providers.data_blocks.iter().map(|(id, block)| {
-        let value = policy(&block.policy);
-        (id.clone(), value)
-    }).collect::<serde_json::Map<_, _>>();
-    if let Some(context) = value.get_mut("shortTermMemory").and_then(|memory| memory.get_mut("context")).and_then(Value::as_mapping_mut) {
+    let data_blocks = providers
+        .data_blocks
+        .iter()
+        .map(|(id, block)| {
+            let value = policy(&block.policy);
+            (id.clone(), value)
+        })
+        .collect::<serde_json::Map<_, _>>();
+    if let Some(context) = value
+        .get_mut("shortTermMemory")
+        .and_then(|memory| memory.get_mut("context"))
+        .and_then(Value::as_mapping_mut)
+    {
         context.remove(Value::String("blocks".into()));
     }
     for (field, projected) in [
@@ -347,7 +370,10 @@ pub(super) fn effective_context_value(
                 "maxAuxiliaryCallsPerStep": providers.max_auxiliary_calls_per_step
             }),
         ),
-        ("shortTermMemory.goalLoop.maxRuns", json!(config.goal_loop.max_runs)),
+        (
+            "shortTermMemory.goalLoop.maxRuns",
+            json!(config.goal_loop.max_runs),
+        ),
         (
             "shortTermMemory.compaction.autoEnabled",
             json!(config.compaction.auto_enabled),

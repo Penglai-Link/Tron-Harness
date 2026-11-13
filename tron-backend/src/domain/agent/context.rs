@@ -307,8 +307,6 @@ impl AgentRunContext {
     }
 }
 
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct AutoModelCandidate {
     pub selection: crate::domain::model_provider::ModelSelection,

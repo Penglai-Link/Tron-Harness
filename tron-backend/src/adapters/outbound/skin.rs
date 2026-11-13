@@ -358,16 +358,11 @@ fn parse_skin(bytes: &[u8]) -> Result<Skin, SkinError> {
         return Err(SkinError::Invalid);
     }
     let skin: Skin = serde_json::from_slice(bytes).map_err(|_| SkinError::Invalid)?;
-    if !matches!(skin.version, 1 | 2) {
+    if skin.version != 3 {
         return Err(SkinError::Incompatible(format!(
-            "skin.json: unsupported theme format version {}",
+            "skin.json: unsupported theme format version {}; only version 3 is supported",
             skin.version
         )));
-    }
-    if skin.resources.css.is_some() && skin.version != 2 {
-        return Err(SkinError::Incompatible(
-            "skin.json: resources.css requires theme format version 2".into(),
-        ));
     }
     if skin
         .resources

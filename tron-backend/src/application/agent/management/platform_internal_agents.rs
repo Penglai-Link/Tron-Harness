@@ -251,7 +251,14 @@ impl AgentManagementService {
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.validate_selected_categories(&command.selected_category_codes)?;
         if !crate::domain::computer_use::allows(code)
-            && command.selected_category_codes.as_ref().is_some_and(|categories| categories.iter().any(|code| code == crate::domain::computer_use::DOMAIN))
+            && command
+                .selected_category_codes
+                .as_ref()
+                .is_some_and(|categories| {
+                    categories
+                        .iter()
+                        .any(|code| code == crate::domain::computer_use::DOMAIN)
+                })
         {
             return Err(AgentManagementError::InternalAgentPolicyInvalid);
         }
@@ -305,7 +312,9 @@ impl AgentManagementService {
                 .tool(tool_code, "en-US")
                 .ok_or_else(|| AgentManagementError::InternalToolUnknown(tool_code.clone()))?;
             if !crate::domain::computer_use::tool_allowed(code, &tool) {
-                return Err(AgentManagementError::InternalToolAssignmentStale(tool_code.clone()));
+                return Err(AgentManagementError::InternalToolAssignmentStale(
+                    tool_code.clone(),
+                ));
             }
             if tool.availability_state != crate::domain::agent::ToolAvailabilityState::Available {
                 return Err(AgentManagementError::InternalToolAssignmentStale(
@@ -347,11 +356,11 @@ fn platform_view(
         .iter()
         .filter(|tool| {
             crate::domain::computer_use::tool_allowed(&config.agent_code, tool)
-            && config.tool_assignment_mode.selects_policy(
-                tool,
-                &config.selected_tool_codes,
-                &config.selected_category_codes,
-            )
+                && config.tool_assignment_mode.selects_policy(
+                    tool,
+                    &config.selected_tool_codes,
+                    &config.selected_category_codes,
+                )
         })
         .map(|tool| tool.tool_code.clone())
         .collect::<Vec<_>>();
@@ -384,9 +393,15 @@ fn platform_view(
 
 fn restrict_desktop_assignment(config: &mut PlatformInternalAgentConfig) {
     if !crate::domain::computer_use::allows(&config.agent_code) {
-        config.selected_tool_codes.retain(|code| !crate::domain::computer_use::is_tool(code, code, None, None));
-        config.selected_category_codes.retain(|code| code != crate::domain::computer_use::DOMAIN);
-        config.selected_server_codes.retain(|code| code != "tron.computer-use.cua-driver");
+        config
+            .selected_tool_codes
+            .retain(|code| !crate::domain::computer_use::is_tool(code, code, None, None));
+        config
+            .selected_category_codes
+            .retain(|code| code != crate::domain::computer_use::DOMAIN);
+        config
+            .selected_server_codes
+            .retain(|code| code != "tron.computer-use.cua-driver");
     }
 }
 

@@ -9,11 +9,13 @@ use crate::domain::agent::{AgentModelProtocol, EffectiveTool, ModelRequest, Prep
 pub fn tool_schema_payload(protocol: AgentModelProtocol, tools: &[EffectiveTool]) -> Value {
     let tools = tools
         .iter()
-        .map(|tool| eliteforge_agent_official_plugin_model_http::EffectiveTool {
-            tool_name: tool.tool_name.clone(),
-            description: tool.description.clone(),
-            input_schema: tool.input_schema.clone(),
-        })
+        .map(
+            |tool| eliteforge_agent_official_plugin_model_http::EffectiveTool {
+                tool_name: tool.tool_name.clone(),
+                description: tool.description.clone(),
+                input_schema: tool.input_schema.clone(),
+            },
+        )
         .collect::<Vec<_>>();
     eliteforge_agent_official_plugin_model_http::tool_schema_payload(protocol.into(), &tools)
 }

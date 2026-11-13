@@ -114,7 +114,10 @@ impl Default for ContextProvidersConfig {
                 ("knowledge_base", 400),
                 ("dude_environment", 50),
                 ("dude_wakeup", 50),
-            ].into_iter().map(|(id, share)| (id.into(), share)).collect(),
+            ]
+            .into_iter()
+            .map(|(id, share)| (id.into(), share))
+            .collect(),
             data_blocks: [
                 ("page_context", Some(2048)),
                 ("application_context", Some(16_000)),
@@ -135,7 +138,13 @@ impl Default for ContextProvidersConfig {
                     ContextDataBlockConfig {
                         max_tokens,
                         policy: ContextProviderPolicy::new(
-                            if matches!(id, "skills.catalog" | "runtime_identity" | "tool_domains" | "agent_directory") {
+                            if matches!(
+                                id,
+                                "skills.catalog"
+                                    | "runtime_identity"
+                                    | "tool_domains"
+                                    | "agent_directory"
+                            ) {
                                 ContextReductionStrategy::Keep
                             } else {
                                 ContextReductionStrategy::Bound
@@ -197,7 +206,9 @@ impl ContextProvidersConfig {
         for id in order {
             if !shares.contains_key(id) {
                 shares.insert(id.clone(), 1);
-                if let Some(history) = shares.get_mut("current_session_history") { *history = history.saturating_sub(1); }
+                if let Some(history) = shares.get_mut("current_session_history") {
+                    *history = history.saturating_sub(1);
+                }
             }
         }
         shares
@@ -216,27 +227,29 @@ impl ContextProvidersConfig {
         .map(str::to_owned)
         .chain(self.data_blocks.keys().cloned())
         .collect::<Vec<_>>();
-        let required = required.into_iter().collect::<std::collections::BTreeSet<_>>();
+        let required = required
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
         let actual = self.order.iter().collect::<std::collections::BTreeSet<_>>();
         if self.order.iter().any(|id| id.trim().is_empty())
             || actual.len() != self.order.len()
             || required.iter().any(|id| !actual.contains(id))
         {
-            return Err("context order must contain every configured context block exactly once".into());
+            return Err(
+                "context order must contain every configured context block exactly once".into(),
+            );
         }
         if self.order.first().map(String::as_str) != Some("seed_prompt_prefix") {
             return Err("fixed instructions must be first".into());
         }
-        eliteforge_agent_memory::ContextShareAllocation::new(self.shares.clone()).map_err(|error| error.to_string())?;
+        eliteforge_agent_memory::ContextShareAllocation::new(self.shares.clone())
+            .map_err(|error| error.to_string())?;
         let expected_data = Self::default().data_blocks;
         if expected_data
             .keys()
             .any(|id| !self.data_blocks.contains_key(id))
         {
-            return Err(
-                "every data context block requires an explicit policy"
-                    .into(),
-            );
+            return Err("every data context block requires an explicit policy".into());
         }
         for (id, block) in &self.data_blocks {
             if id.trim().is_empty()
@@ -245,9 +258,7 @@ impl ContextProvidersConfig {
                     ContextReductionStrategy::Keep | ContextReductionStrategy::Bound
                 )
             {
-                return Err(
-                    "context data requires an explicit keep or bound strategy".into(),
-                );
+                return Err("context data requires an explicit keep or bound strategy".into());
             }
         }
         for policy in [&self.checkpoint, &self.working] {

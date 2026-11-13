@@ -109,7 +109,9 @@ impl ModelInvocationConfig {
             return Err("agentRunTimeoutSeconds必须大于零".into());
         }
         if tokio::time::Instant::now()
-            .checked_add(std::time::Duration::from_secs(self.agent_run_timeout_seconds))
+            .checked_add(std::time::Duration::from_secs(
+                self.agent_run_timeout_seconds,
+            ))
             .is_none()
         {
             return Err("agentRunTimeoutSeconds超出支持范围".into());

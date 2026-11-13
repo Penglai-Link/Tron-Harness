@@ -196,13 +196,16 @@ impl ModelProviderService {
             }
             ExternalAuthorizationPoll::Completed(credentials) => {
                 let validated_identity = async {
-                    let identity = if let Some(expected) = command.expected_person_ai_user_id.as_deref() {
-                        let identity = self.fetch_person_ai_identity(&credentials).await?;
-                        if identity.0 != expected {
-                            return Err(ModelProviderError::AuthorizationAccountMismatch);
-                        }
-                        Some(identity)
-                    } else { None };
+                    let identity =
+                        if let Some(expected) = command.expected_person_ai_user_id.as_deref() {
+                            let identity = self.fetch_person_ai_identity(&credentials).await?;
+                            if identity.0 != expected {
+                                return Err(ModelProviderError::AuthorizationAccountMismatch);
+                            }
+                            Some(identity)
+                        } else {
+                            None
+                        };
                     let (catalog, multimedia_catalog) = self
                         .fetch_catalog_snapshot(stored.provider_code, &credentials)
                         .await?;

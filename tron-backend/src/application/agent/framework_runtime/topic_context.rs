@@ -51,7 +51,9 @@ impl fw::ContextContributor for TopicContributor {
             }
         };
         block.source_version = Some(format!("{}:{}", code, memo.revision));
-        let marker = fw::Message::user("[部分主题说明或引用未显示；如有 topic_read 权限，可获取授权范围内的完整信息。]");
+        let marker = fw::Message::user(
+            "[部分主题说明或引用未显示；如有 topic_read 权限，可获取授权范围内的完整信息。]",
+        );
         let marker_cost = input.estimator.message(input.model, &marker).await?;
         let budget = input.budget.max_tokens.saturating_sub(marker_cost);
         let head = fw::Message::user(format!("[主题 {code}，版本 {}]", memo.revision));
@@ -104,7 +106,8 @@ impl fw::ContextContributor for TopicContributor {
                 .estimator
                 .message(input.model, &fw::Message::user(text))
                 .await?
-                .saturating_add(used) <= budget
+                .saturating_add(used)
+                <= budget
             {
                 low = mid;
             } else {
@@ -112,7 +115,10 @@ impl fw::ContextContributor for TopicContributor {
             }
         }
         if low > 0 {
-            let notes = fw::Message::user(format!("{prefix}{}", characters[..low].iter().collect::<String>()));
+            let notes = fw::Message::user(format!(
+                "{prefix}{}",
+                characters[..low].iter().collect::<String>()
+            ));
             used += input.estimator.message(input.model, &notes).await?;
             block.messages.push(notes);
         }

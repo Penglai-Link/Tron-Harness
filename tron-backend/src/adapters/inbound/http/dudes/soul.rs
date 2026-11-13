@@ -140,9 +140,19 @@ async fn begin(
             .chats
             .list_user_input_requests(code)
             .map_err(|_| DudeError::Storage)?;
-        let native = s.agent_framework.pending_native_interactions(code).await.map_err(|_| DudeError::Storage)?;
-        if let Some(interaction) = native.iter().find(|i| matches!(i.request.kind, eliteforge_agent_core::InteractionKind::Input)) {
-            s.dudes.record_soul_question(code, &interaction.request.id.to_string())?;
+        let native = s
+            .agent_framework
+            .pending_native_interactions(code)
+            .await
+            .map_err(|_| DudeError::Storage)?;
+        if let Some(interaction) = native.iter().find(|i| {
+            matches!(
+                i.request.kind,
+                eliteforge_agent_core::InteractionKind::Input
+            )
+        }) {
+            s.dudes
+                .record_soul_question(code, &interaction.request.id.to_string())?;
         }
         if let Some(question) = requests
             .iter()
@@ -157,9 +167,10 @@ async fn begin(
                 e.dedup_key.starts_with("soul-awakening:") && e.status == DudeEventStatus::Failed
             })
             .max_by_key(|e| e.created_at);
-        let no_question = native.is_empty() && requests
-            .iter()
-            .all(|r| r.status != crate::domain::chat::ChatUserInputRequestStatus::Pending);
+        let no_question = native.is_empty()
+            && requests
+                .iter()
+                .all(|r| r.status != crate::domain::chat::ChatUserInputRequestStatus::Pending);
         let empty = s
             .chats
             .list_messages(code)
@@ -178,10 +189,15 @@ async fn begin(
 }
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BeginAwakeningRequest { a2ui: Option<AwakeningA2uiCapabilitiesRequest> }
+struct BeginAwakeningRequest {
+    a2ui: Option<AwakeningA2uiCapabilitiesRequest>,
+}
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct AwakeningA2uiCapabilitiesRequest { version: String, catalog_ids: Vec<String> }
+struct AwakeningA2uiCapabilitiesRequest {
+    version: String,
+    catalog_ids: Vec<String>,
+}
 async fn defer(
     State(s): State<AppState>,
     auth: RequestAuthContext,

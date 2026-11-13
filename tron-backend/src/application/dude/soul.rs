@@ -3,7 +3,6 @@ use super::*;
 use crate::domain::agent::AgentRunContext;
 use serde::Deserialize;
 
-
 impl DudeService {
     pub(crate) fn runtime_name(&self, code: &str, workspace: &str) -> Option<String> {
         if !workspace.is_empty() {
@@ -215,9 +214,18 @@ impl SoulUpdate {
     fn validate(&self) -> Result<(), DudeError> {
         if (self.name.is_none() && self.initial_soul.is_none() && self.edits.is_empty())
             || (self.initial_soul.is_some() && !self.edits.is_empty())
-            || self.name.as_ref().is_some_and(|v| v.trim().is_empty() || v.chars().count() > 100)
-            || self.initial_soul.as_ref().is_some_and(|v| v.trim().is_empty() || v.len() > 16 * 1024)
-            || self.edits.iter().any(|e| e.old == e.new || e.old.len() > 16 * 1024 || e.new.len() > 16 * 1024)
+            || self
+                .name
+                .as_ref()
+                .is_some_and(|v| v.trim().is_empty() || v.chars().count() > 100)
+            || self
+                .initial_soul
+                .as_ref()
+                .is_some_and(|v| v.trim().is_empty() || v.len() > 16 * 1024)
+            || self
+                .edits
+                .iter()
+                .any(|e| e.old == e.new || e.old.len() > 16 * 1024 || e.new.len() > 16 * 1024)
         {
             return Err(DudeError::Invalid);
         }

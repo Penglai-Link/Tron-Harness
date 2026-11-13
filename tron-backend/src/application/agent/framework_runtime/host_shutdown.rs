@@ -245,7 +245,9 @@ impl FrameworkHost {
         }
         if let Some(database) = self.0.database.get() {
             if let Err(error) = database.close().await {
-                report.errors.push(format!("application database close failed: {error}"));
+                report
+                    .errors
+                    .push(format!("application database close failed: {error}"));
             }
         }
         if let Some(telemetry) = self.0.telemetry.get() {

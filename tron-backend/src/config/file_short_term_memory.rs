@@ -195,7 +195,9 @@ impl ContextProvidersFileConfig {
                 config.data_blocks.insert(id, block);
             }
         }
-        if let Some(shares) = self.shares { config.shares = shares; }
+        if let Some(shares) = self.shares {
+            config.shares = shares;
+        }
         if let Some(order) = self.order {
             config.order = order;
         }

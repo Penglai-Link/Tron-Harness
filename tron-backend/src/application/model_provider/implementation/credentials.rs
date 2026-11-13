@@ -116,9 +116,12 @@ impl ModelProviderService {
         // Recover credentials marked by older versions as a rejected account
         // before attempting an unrelated access-token refresh.
         if retry_rejected_access {
-            if let Some(recovered) = self.recover_encryption_key_for_match(
-                &self.sdk_attempt_for_row(&row, &credentials.token),
-            ).await? {
+            if let Some(recovered) = self
+                .recover_encryption_key_for_match(
+                    &self.sdk_attempt_for_row(&row, &credentials.token),
+                )
+                .await?
+            {
                 return Ok(recovered);
             }
         }
@@ -139,9 +142,6 @@ impl ModelProviderService {
         )
         .await
     }
-
-
-
 
     pub(super) async fn refresh_credentials_for_match(
         &self,

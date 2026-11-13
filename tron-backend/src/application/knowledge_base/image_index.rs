@@ -74,8 +74,6 @@ pub(crate) fn append_image_chunks(
     Ok(())
 }
 
-
-
 impl KnowledgeBaseService {
     /// Index configuration changes never submit a parser job for existing documents.
     pub fn supplement_corpus_indexes(

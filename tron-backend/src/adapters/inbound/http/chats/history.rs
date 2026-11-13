@@ -131,9 +131,7 @@ pub async fn read_history(
     }
     .await;
     match result {
-        Ok(history) => {
-            Json(ApiResponse::success(history)).into_response()
-        }
+        Ok(history) => Json(ApiResponse::success(history)).into_response(),
         Err(error) => history_error(error, locale),
     }
 }

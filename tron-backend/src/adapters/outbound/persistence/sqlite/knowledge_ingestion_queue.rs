@@ -8,20 +8,42 @@ mod publication_cleanup;
 mod publication_indexes;
 
 pub(crate) fn retire_knowledge_index(
-    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,kb:&str,source:&str,
-)->Result<(),IngestionQueueError>{
-    publication_indexes::retire_indexes(tx,kb,source)?;
-    tx.execute(&format!("DELETE FROM \"rag_{kb}_units\" WHERE source_code=?1"),[source]).map_err(storage)?;
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    kb: &str,
+    source: &str,
+) -> Result<(), IngestionQueueError> {
+    publication_indexes::retire_indexes(tx, kb, source)?;
+    tx.execute(
+        &format!("DELETE FROM \"rag_{kb}_units\" WHERE source_code=?1"),
+        [source],
+    )
+    .map_err(storage)?;
     Ok(())
 }
 pub(crate) fn validate_knowledge_vectors(
-    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,kb:&str,source:&str,count:usize,dimension:usize,
-)->Result<(),IngestionQueueError>{publication_indexes::validate_vectors(tx,kb,source,count,dimension)}
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    kb: &str,
+    source: &str,
+    count: usize,
+    dimension: usize,
+) -> Result<(), IngestionQueueError> {
+    publication_indexes::validate_vectors(tx, kb, source, count, dimension)
+}
 pub(crate) fn optimized_publication_cleanup(
-    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,task:&IngestionTask,current:&Value,ready:&Value,
-)->Result<PublicationCleanup,IngestionQueueError>{
-    publication_cleanup::remove_old_generations(tx,task,current,ready["activeSourceCode"].as_str().ok_or(IngestionQueueError::Conflict)?)?;
-    publication_cleanup::detach_optimization_resources(tx,task,ready)
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    task: &IngestionTask,
+    current: &Value,
+    ready: &Value,
+) -> Result<PublicationCleanup, IngestionQueueError> {
+    publication_cleanup::remove_old_generations(
+        tx,
+        task,
+        current,
+        ready["activeSourceCode"]
+            .as_str()
+            .ok_or(IngestionQueueError::Conflict)?,
+    )?;
+    publication_cleanup::detach_optimization_resources(tx, task, ready)
 }
 
 struct SqliteKnowledgeIngestionQueueSql<'a> {
@@ -230,12 +252,18 @@ fn clear_lease(task: &mut IngestionTask) {
 }
 
 impl SqliteKnowledgeIngestionQueueSql<'_> {
-    fn latest_for_library(&self, library: &str) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
+    fn latest_for_library(
+        &self,
+        library: &str,
+    ) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
         let mut stmt = self.connection.prepare("SELECT payload_json FROM (SELECT payload_json, ROW_NUMBER() OVER (PARTITION BY document_id ORDER BY rowid DESC) AS rank FROM knowledge_base_ingestion_tasks WHERE knowledge_base_id=?1) WHERE rank=1").map_err(storage)?;
-        let tasks = stmt.query_map([library], |row| row.get::<_, String>(0)).map_err(storage)?;
+        let tasks = stmt
+            .query_map([library], |row| row.get::<_, String>(0))
+            .map_err(storage)?;
         let mut latest = std::collections::BTreeMap::new();
         for task in tasks {
-            let task: IngestionTask = serde_json::from_str(&task.map_err(storage)?).map_err(storage)?;
+            let task: IngestionTask =
+                serde_json::from_str(&task.map_err(storage)?).map_err(storage)?;
             latest.insert(task.document_id.clone(), task);
         }
         Ok(latest)
@@ -248,15 +276,20 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
             .map(|r| serde_json::from_str(&r.map_err(storage)?).map_err(storage))
             .collect()
     }
-    fn index_tasks_for_user(&self, user: &str) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError> {
+    fn index_tasks_for_user(
+        &self,
+        user: &str,
+    ) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError> {
         let mut stmt = self.connection.prepare("SELECT t.payload_json, json_extract(d.payload_json,'$.name') FROM knowledge_base_ingestion_tasks t JOIN knowledge_base_documents d ON d.id=t.document_id AND d.knowledge_base_id=t.knowledge_base_id JOIN knowledge_bases k ON k.id=t.knowledge_base_id WHERE k.owner_user_code=?1 AND json_extract(t.payload_json,'$.kind')='INDEXING' ORDER BY t.rowid DESC").map_err(storage)?;
-        stmt.query_map([user], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
-            .map_err(storage)?
-            .map(|row| {
-                let (raw, title) = row.map_err(storage)?;
-                Ok((serde_json::from_str(&raw).map_err(storage)?, title))
-            })
-            .collect()
+        stmt.query_map([user], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(storage)?
+        .map(|row| {
+            let (raw, title) = row.map_err(storage)?;
+            Ok((serde_json::from_str(&raw).map_err(storage)?, title))
+        })
+        .collect()
     }
     fn pending(&self, stage: IngestionStage, now: i64) -> Result<bool, IngestionQueueError> {
         let stages = if stage == IngestionStage::Parsing {
@@ -623,15 +656,22 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
             return Err(IngestionQueueError::Conflict);
         }
         if update.embedding_identity != task.embedding_identity {
-            let identity = update.embedding_identity.as_ref().ok_or(IngestionQueueError::Conflict)?;
+            let identity = update
+                .embedding_identity
+                .as_ref()
+                .ok_or(IngestionQueueError::Conflict)?;
             if task.embedding_identity.is_some()
                 || task.stage != IngestionStage::Embedding
                 || task.embedding_resource_code.is_some()
                 || task.completed_units != 0
                 || identity.model_code.trim().is_empty()
                 || identity.fingerprint.trim().is_empty()
-                || task.embedding_model_code().is_some_and(|code| code != identity.model_code)
-                || task.embedding_fingerprint().is_some_and(|fingerprint| fingerprint != identity.fingerprint)
+                || task
+                    .embedding_model_code()
+                    .is_some_and(|code| code != identity.model_code)
+                || task
+                    .embedding_fingerprint()
+                    .is_some_and(|fingerprint| fingerprint != identity.fingerprint)
             {
                 return Err(IngestionQueueError::Conflict);
             }
@@ -817,10 +857,16 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
 }
 
 impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
-    fn latest_for_library(&self, library: &str, _documents: &[String]) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
+    fn latest_for_library(
+        &self,
+        library: &str,
+        _documents: &[String],
+    ) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
         let library = library.to_owned();
         self.connection.call(
-            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.latest_for_library(&library),
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.latest_for_library(&library)
+            },
             || storage("database worker stopped"),
         )
     }
@@ -833,10 +879,15 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
             || storage("database worker stopped"),
         )
     }
-    fn index_tasks_for_user(&self, user: &str) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError> {
+    fn index_tasks_for_user(
+        &self,
+        user: &str,
+    ) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError> {
         let user = user.to_owned();
         self.connection.call(
-            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.index_tasks_for_user(&user),
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.index_tasks_for_user(&user)
+            },
             || storage("database worker stopped"),
         )
     }

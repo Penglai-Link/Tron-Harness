@@ -31,8 +31,13 @@ impl SystemConfigService {
         self
     }
 
-    pub fn shortcut_defaults(&self) -> Result<std::collections::BTreeMap<String, super::ShortcutBinding>, SystemConfigError> {
-        self.shortcut_defaults.as_ref().ok_or(SystemConfigError::ReadFailed)?.load()
+    pub fn shortcut_defaults(
+        &self,
+    ) -> Result<std::collections::BTreeMap<String, super::ShortcutBinding>, SystemConfigError> {
+        self.shortcut_defaults
+            .as_ref()
+            .ok_or(SystemConfigError::ReadFailed)?
+            .load()
     }
 
     pub fn get(&self) -> Result<SystemConfigDocument, SystemConfigError> {
@@ -88,12 +93,25 @@ impl SystemConfigService {
         }
 
         if saving_shares {
-            if let Some(context) = next_value.get_mut("shortTermMemory").and_then(|memory| memory.get_mut("context")).and_then(serde_yaml::Value::as_mapping_mut) {
+            if let Some(context) = next_value
+                .get_mut("shortTermMemory")
+                .and_then(|memory| memory.get_mut("context"))
+                .and_then(serde_yaml::Value::as_mapping_mut)
+            {
                 context.remove(serde_yaml::Value::String("blocks".into()));
-                if let Some(providers) = context.get_mut(serde_yaml::Value::String("providers".into())).and_then(serde_yaml::Value::as_mapping_mut) {
+                if let Some(providers) = context
+                    .get_mut(serde_yaml::Value::String("providers".into()))
+                    .and_then(serde_yaml::Value::as_mapping_mut)
+                {
                     providers.remove(serde_yaml::Value::String("pluginOverrides".into()));
-                    if let Some(blocks) = providers.get_mut(serde_yaml::Value::String("dataBlocks".into())).and_then(serde_yaml::Value::as_mapping_mut) {
-                        for block in blocks.values_mut().filter_map(serde_yaml::Value::as_mapping_mut) {
+                    if let Some(blocks) = providers
+                        .get_mut(serde_yaml::Value::String("dataBlocks".into()))
+                        .and_then(serde_yaml::Value::as_mapping_mut)
+                    {
+                        for block in blocks
+                            .values_mut()
+                            .filter_map(serde_yaml::Value::as_mapping_mut)
+                        {
                             block.remove(serde_yaml::Value::String("maxTokens".into()));
                         }
                     }

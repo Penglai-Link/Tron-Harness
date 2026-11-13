@@ -71,19 +71,23 @@ macro_rules! adapter {
                 ))
             }
             fn parse_stream_event(&self, body: &Value) -> Result<Option<ModelStreamEvent>, String> {
-                Ok(sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
-                    .unwrap()
-                    .parse_stream_event(body)?
-                    .map(ModelStreamEvent::from))
+                Ok(
+                    sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
+                        .unwrap()
+                        .parse_stream_event(body)?
+                        .map(ModelStreamEvent::from),
+                )
             }
             fn parse_stream_terminal_response(
                 &self,
                 body: &Value,
             ) -> Result<Option<ModelResponse>, String> {
-                Ok(sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
-                    .unwrap()
-                    .parse_stream_terminal_response(body)?
-                    .map(ModelResponse::from))
+                Ok(
+                    sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
+                        .unwrap()
+                        .parse_stream_terminal_response(body)?
+                        .map(ModelResponse::from),
+                )
             }
             fn parse_usage(&self, body: &Value) -> Option<ModelTokenUsage> {
                 sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)

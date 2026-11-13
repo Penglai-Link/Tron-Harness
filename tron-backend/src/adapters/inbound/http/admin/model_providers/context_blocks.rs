@@ -59,24 +59,31 @@ pub(super) async fn list(
             )
         })?;
     let config = state.short_term_memory.framework_context_config();
-    let blocks = crate::application::short_term_memory::context_block_catalog(contributors, &config.context.providers)
-        .into_iter()
-        .map(|(id, entry)| {
-            let text = entry.metadata.resolve(locale.as_str());
-            let compression = &entry.metadata.compression;
-            let compression = (!compression.id.is_empty()).then(|| {
-                let text = compression.resolve(locale.as_str());
-                ContextBlockCompressionVo { id: compression.id.clone(), display_name: text.display_name, description: text.description }
-            });
-            ContextBlockMetadataVo {
-                id,
+    let blocks = crate::application::short_term_memory::context_block_catalog(
+        contributors,
+        &config.context.providers,
+    )
+    .into_iter()
+    .map(|(id, entry)| {
+        let text = entry.metadata.resolve(locale.as_str());
+        let compression = &entry.metadata.compression;
+        let compression = (!compression.id.is_empty()).then(|| {
+            let text = compression.resolve(locale.as_str());
+            ContextBlockCompressionVo {
+                id: compression.id.clone(),
                 display_name: text.display_name,
                 description: text.description,
-                update_mode: entry.metadata.update_mode,
-                compression,
-                provider_id: entry.provider_id,
             }
-        })
-        .collect();
+        });
+        ContextBlockMetadataVo {
+            id,
+            display_name: text.display_name,
+            description: text.description,
+            update_mode: entry.metadata.update_mode,
+            compression,
+            provider_id: entry.provider_id,
+        }
+    })
+    .collect();
     Ok(Json(ApiResponse::protocol_success(blocks)))
 }

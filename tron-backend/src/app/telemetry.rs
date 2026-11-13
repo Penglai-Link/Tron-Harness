@@ -26,13 +26,20 @@ impl ErrorRedactor for TronErrorRedactor {
     }
 }
 
-pub(crate) fn record_error(context: &Context, kind: &str, error: &(dyn std::error::Error + 'static)) {
+pub(crate) fn record_error(
+    context: &Context,
+    kind: &str,
+    error: &(dyn std::error::Error + 'static),
+) {
     let report = eliteforge_agent_core::ErrorReport::from_error(kind, error, &TronErrorRedactor);
     if let Ok(report) = serde_json::to_string(&report) {
-        context.span().add_event("agent.error", vec![
-            KeyValue::new("error.type", kind.to_owned()),
-            KeyValue::new("agent.error.report", report),
-        ]);
+        context.span().add_event(
+            "agent.error",
+            vec![
+                KeyValue::new("error.type", kind.to_owned()),
+                KeyValue::new("agent.error.report", report),
+            ],
+        );
     }
 }
 
@@ -94,7 +101,10 @@ impl LocalTelemetry {
             .ok_or(ObservabilityError::Storage)?
             .0
             .clone();
-        let query_database = eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(path).await.map_err(|_| ObservabilityError::Storage)?;
+        let query_database =
+            eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(path)
+                .await
+                .map_err(|_| ObservabilityError::Storage)?;
         // These indexes serve Tron-specific observability views. The reusable
         // telemetry store owns only host-neutral schema and indexes.
         query_database.call(|connection| connection.execute_batch(
@@ -171,16 +181,35 @@ impl LocalTelemetry {
         )
         .map_err(|_| ObservabilityError::Storage)
     }
-    pub(crate) fn begin_operation(&self, name: &str, parent: &Context, attributes: Vec<KeyValue>) -> TraceGuard {
+    pub(crate) fn begin_operation(
+        &self,
+        name: &str,
+        parent: &Context,
+        attributes: Vec<KeyValue>,
+    ) -> TraceGuard {
         let tracer = self.runtime.traces.tracer("tron.background");
-        let metadata = attributes.iter().map(|kv| (kv.key.to_string(), kv.value.to_string())).collect();
-        TraceGuard::tracked(parent.with_value(self.runtime.clone()).with_span(tracer.span_builder(name.to_owned())
-            .with_attributes(attributes).start_with_context(&tracer, parent)), self.store.clone(), name, parent, metadata)
+        let metadata = attributes
+            .iter()
+            .map(|kv| (kv.key.to_string(), kv.value.to_string()))
+            .collect();
+        TraceGuard::tracked(
+            parent.with_value(self.runtime.clone()).with_span(
+                tracer
+                    .span_builder(name.to_owned())
+                    .with_attributes(attributes)
+                    .start_with_context(&tracer, parent),
+            ),
+            self.store.clone(),
+            name,
+            parent,
+            metadata,
+        )
     }
 
     pub fn begin_http(&self, method: &str, path: &str, parent: &Context) -> Context {
         let tracer = self.runtime.traces.tracer("tron.http");
-        let span = tracer.span_builder(format!("{method} {path}"))
+        let span = tracer
+            .span_builder(format!("{method} {path}"))
             .with_kind(SpanKind::Server)
             .with_attributes([
                 KeyValue::new("tron.trace.page", "true"),
@@ -196,8 +225,14 @@ impl LocalTelemetry {
         context: &crate::domain::agent::AgentRunContext,
         request: &mut eliteforge_agent_core::RunRequest,
     ) -> Result<TraceGuard, ObservabilityError> {
-        let root =
-            Context::current().with_value(self.runtime.clone()).with_span(self.runtime.traces.tracer("tron").start_with_context("tron.session.run", &Context::current()));
+        let root = Context::current()
+            .with_value(self.runtime.clone())
+            .with_span(
+                self.runtime
+                    .traces
+                    .tracer("tron")
+                    .start_with_context("tron.session.run", &Context::current()),
+            );
         for (key, value) in [
             ("tron.workspace.code", context.workspace_code.as_str()),
             ("tron.session.code", request.session_id.as_str()),
@@ -246,9 +281,20 @@ impl LocalTelemetry {
             ("tron.workspace.code", context.workspace_code.as_str()),
             ("tron.session.code", request.session_id.as_str()),
             ("tron.run.code", context.run_code.as_str()),
-            ("tron.agent.code", context.agent_code.as_deref().unwrap_or("main-agent")),
-        ] { dude_attributes.insert(key.into(), value.into()); }
-        Ok(TraceGuard::tracked(root, self.store.clone(), "tron.session.run", &Context::current(), dude_attributes))
+            (
+                "tron.agent.code",
+                context.agent_code.as_deref().unwrap_or("main-agent"),
+            ),
+        ] {
+            dude_attributes.insert(key.into(), value.into());
+        }
+        Ok(TraceGuard::tracked(
+            root,
+            self.store.clone(),
+            "tron.session.run",
+            &Context::current(),
+            dude_attributes,
+        ))
     }
     pub async fn close(&self) -> Result<(), String> {
         let report = self
@@ -263,55 +309,117 @@ impl LocalTelemetry {
             Err(format!("{report:?}"))
         }
     }
-
 }
-pub struct TraceGuard(pub(super) Context, Option<Arc<dyn TelemetryStore>>, std::sync::atomic::AtomicBool, eliteforge_agent_core::TelemetrySpan);
+pub struct TraceGuard(
+    pub(super) Context,
+    Option<Arc<dyn TelemetryStore>>,
+    std::sync::atomic::AtomicBool,
+    eliteforge_agent_core::TelemetrySpan,
+);
 impl TraceGuard {
-    fn tracked(context: Context, store: Arc<dyn TelemetryStore>, name: &str, parent: &Context, mut attributes: BTreeMap<String, String>) -> Self {
+    fn tracked(
+        context: Context,
+        store: Arc<dyn TelemetryStore>,
+        name: &str,
+        parent: &Context,
+        mut attributes: BTreeMap<String, String>,
+    ) -> Self {
         attributes.insert("agent.operation.outcome".into(), "unknown".into());
         attributes.insert("agent.operation.active".into(), "true".into());
         attributes.insert("tron.operation.active".into(), "true".into());
         if name == "tron.session.run" {
             attributes.insert("agent.telemetry.exclude_self".into(), "true".into());
         }
-        if let Err(error) = crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(store.register_trace(TelemetryTrace {
-            trace_id: context.span().span_context().trace_id().to_string(), started_at: now(), attributes: attributes.clone(), ..Default::default()
-        })) { tracing::error!(%error, "Trace registration persistence failed"); }
+        if let Err(error) =
+            crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(
+                store.register_trace(TelemetryTrace {
+                    trace_id: context.span().span_context().trace_id().to_string(),
+                    started_at: now(),
+                    attributes: attributes.clone(),
+                    ..Default::default()
+                }),
+            )
+        {
+            tracing::error!(%error, "Trace registration persistence failed");
+        }
         let ids = context.span().span_context().clone();
         let snapshot = eliteforge_agent_core::TelemetrySpan {
-            trace_id: ids.trace_id().to_string(), span_id: ids.span_id().to_string(),
-            parent_span_id: parent.span().span_context().is_valid().then(|| parent.span().span_context().span_id().to_string()),
-            name: name.into(), started_at: now(), ended_at: now(),
-            attributes: attributes.clone(), ..Default::default()
+            trace_id: ids.trace_id().to_string(),
+            span_id: ids.span_id().to_string(),
+            parent_span_id: parent
+                .span()
+                .span_context()
+                .is_valid()
+                .then(|| parent.span().span_context().span_id().to_string()),
+            name: name.into(),
+            started_at: now(),
+            ended_at: now(),
+            attributes: attributes.clone(),
+            ..Default::default()
         };
         // Keep a queryable running entry until the completed OTel span arrives.
-        if let Err(error) = crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(store.write_spans(vec![snapshot.clone()])) {
+        if let Err(error) =
+            crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(
+                store.write_spans(vec![snapshot.clone()]),
+            )
+        {
             tracing::error!(%error, "Running span persistence failed");
         }
-        Self(context, Some(store), std::sync::atomic::AtomicBool::new(true), snapshot)
+        Self(
+            context,
+            Some(store),
+            std::sync::atomic::AtomicBool::new(true),
+            snapshot,
+        )
     }
     pub(crate) fn trace_id(&self) -> String {
         self.0.span().span_context().trace_id().to_string()
     }
 
     pub(crate) fn complete(&self, outcome: &str) {
-        if !self.2.swap(false, std::sync::atomic::Ordering::AcqRel) { return; }
-        self.0.span().set_attribute(KeyValue::new("agent.operation.outcome", outcome.to_owned()));
+        if !self.2.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            return;
+        }
+        self.0
+            .span()
+            .set_attribute(KeyValue::new("agent.operation.outcome", outcome.to_owned()));
         if let Some(store) = &self.1 {
             let mut snapshot = self.3.clone();
             snapshot.ended_at = now();
             snapshot.status_code = if outcome == "error" { 2 } else { 0 };
-            snapshot.attributes.insert("agent.operation.outcome".into(), outcome.into());
-            snapshot.attributes.insert("agent.operation.active".into(), "false".into());
-            snapshot.attributes.insert("tron.operation.active".into(), "false".into());
-            if let Err(error) = crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(store.write_spans(vec![snapshot])) {
+            snapshot
+                .attributes
+                .insert("agent.operation.outcome".into(), outcome.into());
+            snapshot
+                .attributes
+                .insert("agent.operation.active".into(), "false".into());
+            snapshot
+                .attributes
+                .insert("tron.operation.active".into(), "false".into());
+            if let Err(error) =
+                crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(
+                    store.write_spans(vec![snapshot]),
+                )
+            {
                 tracing::error!(%error, "Completed span persistence failed");
             }
-            if let Err(error) = crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(store.register_trace(TelemetryTrace {
-                trace_id: self.0.span().span_context().trace_id().to_string(), started_at: now(), ended_at: Some(now()),
-                status_code: if outcome == "error" { 2 } else { 0 },
-                attributes: BTreeMap::from([("agent.operation.outcome".into(), outcome.to_owned()), ("tron.operation.active".into(), "false".into())]), ..Default::default()
-            })) { tracing::error!(%error, "Trace completion persistence failed"); }
+            if let Err(error) =
+                crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(
+                    store.register_trace(TelemetryTrace {
+                        trace_id: self.0.span().span_context().trace_id().to_string(),
+                        started_at: now(),
+                        ended_at: Some(now()),
+                        status_code: if outcome == "error" { 2 } else { 0 },
+                        attributes: BTreeMap::from([
+                            ("agent.operation.outcome".into(), outcome.to_owned()),
+                            ("tron.operation.active".into(), "false".into()),
+                        ]),
+                        ..Default::default()
+                    }),
+                )
+            {
+                tracing::error!(%error, "Trace completion persistence failed");
+            }
         }
     }
 }
@@ -350,8 +458,6 @@ impl Drop for TraceGuard {
     }
 }
 
-
-
 /// OTel context is thread-local; capture it before crossing a Tokio task boundary.
 pub(crate) fn spawn_traced<F>(future: F) -> tokio::task::JoinHandle<F::Output>
 where
@@ -360,17 +466,28 @@ where
 {
     {
         use tracing::Instrument;
-        tokio::spawn(future.instrument(tracing::Span::current()).with_context(Context::current()))
+        tokio::spawn(
+            future
+                .instrument(tracing::Span::current())
+                .with_context(Context::current()),
+        )
     }
 }
 
 /// Use the active Profile's provider without a process-global tracer.
 pub(crate) fn child_operation(name: &str, attributes: Vec<KeyValue>) -> Context {
     let parent = Context::current();
-    let Some(runtime) = parent.get::<Arc<OtelRuntimeService>>() else { return Context::new(); };
-    if !parent.span().span_context().is_valid() { return Context::new(); }
+    let Some(runtime) = parent.get::<Arc<OtelRuntimeService>>() else {
+        return Context::new();
+    };
+    if !parent.span().span_context().is_valid() {
+        return Context::new();
+    }
     let tracer = runtime.traces.tracer("tron.business");
-    let span = tracer.span_builder(name.to_owned()).with_attributes(attributes).start_with_context(&tracer, &parent);
+    let span = tracer
+        .span_builder(name.to_owned())
+        .with_attributes(attributes)
+        .start_with_context(&tracer, &parent);
     parent.with_span(span)
 }
 
@@ -384,20 +501,32 @@ pub(crate) fn completed_operation(
     attributes: Vec<KeyValue>,
     failed: bool,
 ) {
-    let Some(runtime) = parent.get::<Arc<OtelRuntimeService>>() else { return; };
-    if !parent.span().span_context().is_valid() { return; }
+    let Some(runtime) = parent.get::<Arc<OtelRuntimeService>>() else {
+        return;
+    };
+    if !parent.span().span_context().is_valid() {
+        return;
+    }
     let tracer = runtime.traces.tracer("tron.business");
-    let mut span = tracer.span_builder(name.to_owned())
+    let mut span = tracer
+        .span_builder(name.to_owned())
         .with_start_time(started)
         .with_attributes(attributes)
         .start_with_context(&tracer, parent);
-    if failed { span.set_status(opentelemetry::trace::Status::error("Database operation failed")); }
+    if failed {
+        span.set_status(opentelemetry::trace::Status::error(
+            "Database operation failed",
+        ));
+    }
     span.end_with_timestamp(ended);
 }
 
 /// Preserve the request's Profile and parent span on blocking business workers.
 pub(crate) fn spawn_blocking_traced<F, R>(operation: F) -> tokio::task::JoinHandle<R>
-where F: FnOnce() -> R + Send + 'static, R: Send + 'static {
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
     let context = Context::current();
     let log_span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {

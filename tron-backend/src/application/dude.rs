@@ -1,7 +1,7 @@
 //! Dude orchestration ports; the host retains execution independently of UI streams.
+mod notification_tools;
 pub(crate) mod soul;
 mod tools;
-mod notification_tools;
 mod work_changes;
 use crate::application::agent::{
     AgentManagementService, CreateWorkspaceInternalAgentCommand,
@@ -129,8 +129,17 @@ pub trait DudeRepository: Send {
     ) -> Result<PlatformNotification, DudeError>;
     fn notifications(&mut self) -> Result<Vec<PlatformNotification>, DudeError>;
     /// Current notification records visible to this Dude and session owner.
-    fn scoped_notifications(&mut self, _dude: &str, _user: &str, _id: Option<&str>, _current: usize, _size: usize, _include_archived: bool)
-        -> Result<(usize, Vec<PlatformNotification>), DudeError> { Err(DudeError::Storage) }
+    fn scoped_notifications(
+        &mut self,
+        _dude: &str,
+        _user: &str,
+        _id: Option<&str>,
+        _current: usize,
+        _size: usize,
+        _include_archived: bool,
+    ) -> Result<(usize, Vec<PlatformNotification>), DudeError> {
+        Err(DudeError::Storage)
+    }
     fn update_notification(
         &mut self,
         id: &str,

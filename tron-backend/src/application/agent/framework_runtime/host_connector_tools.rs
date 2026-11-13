@@ -18,7 +18,9 @@ impl fw::ToolProvider for HostConnectorTools {
     fn catalog_metadata(&self) -> Option<Vec<fw::ToolCatalogEntry>> {
         let mut entries = connector_tool_catalog();
         for entry in &mut entries {
-            entry.category = Some(crate::application::agent::tool_catalog::builtin_category("tron.connector.tools.platform"));
+            entry.category = Some(crate::application::agent::tool_catalog::builtin_category(
+                "tron.connector.tools.platform",
+            ));
         }
         entries.push(fw::ToolCatalogEntry {
             descriptor: crate::application::topic::topic_read_tool_descriptor(),
@@ -135,7 +137,10 @@ impl ConnectorToolAuthority for Authority {
             if !context.is_tool_authorized(capability.call_name()) {
                 return Err(ConnectorError::Forbidden);
             }
-            (user.to_owned(), context.execution_workspace_code().to_owned())
+            (
+                user.to_owned(),
+                context.execution_workspace_code().to_owned(),
+            )
         };
         if !host
             .integrations
@@ -224,7 +229,8 @@ impl fw::Tool for TopicRead {
                 "projectCode": &project, "revision": memo.revision,
                 "notes": notes, "references": &references,
                 "nextOffset": (next < memo.references.len()).then_some(next),
-            }).to_string();
+            })
+            .to_string();
             if candidate.len() > MAX_OUTPUT_BYTES {
                 references.pop();
                 if references.is_empty() {
@@ -238,7 +244,8 @@ impl fw::Tool for TopicRead {
             "projectCode": project, "revision": memo.revision,
             "notes": notes,
             "references": references, "nextOffset": (next < memo.references.len()).then_some(next),
-        }).to_string();
+        })
+        .to_string();
         if output.len() > MAX_OUTPUT_BYTES {
             return Err(fail("topic notes exceed the output limit"));
         }

@@ -12,10 +12,8 @@ use std::{
 };
 
 use crate::{
-    application::workspace::WorkspaceService,
-    config::ResourceConfig,
-    domain::resource::ResourceError,
-    shared::event_bus::EventBusHandle,
+    application::workspace::WorkspaceService, config::ResourceConfig,
+    domain::resource::ResourceError, shared::event_bus::EventBusHandle,
 };
 
 use super::{ObjectStorage, ResourceRepository};
@@ -103,12 +101,7 @@ impl ResourceService {
         storage_profiles: std::collections::BTreeMap<String, Arc<dyn ObjectStorage>>,
         event_bus: EventBusHandle,
     ) -> Result<Self, ResourceError> {
-        let mut service = Self::new(
-            repository,
-            workspaces,
-            config,
-            storage_profiles,
-        )?;
+        let mut service = Self::new(repository, workspaces, config, storage_profiles)?;
         service.event_bus = event_bus;
         Ok(service)
     }

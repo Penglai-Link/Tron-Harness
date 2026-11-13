@@ -13,12 +13,22 @@ pub(crate) fn initialize_business(connection: &Connection) -> rusqlite::Result<(
     initialize(connection, "business", business)?;
     // Initialize additive module storage from the same schema source. No existing
     // navigation rows or user layouts are rebuilt or migrated.
-    let packs = business.split_once("-- tron:navigation-packs:start\n").expect("navigation pack schema").1
-        .split_once("-- tron:navigation-packs:end").expect("navigation pack schema end").0;
+    let packs = business
+        .split_once("-- tron:navigation-packs:start\n")
+        .expect("navigation pack schema")
+        .1
+        .split_once("-- tron:navigation-packs:end")
+        .expect("navigation pack schema end")
+        .0;
     let tx = business_transaction(connection, TransactionBehavior::Immediate)?;
     tx.execute_batch(packs)?;
-    let shortcuts = business.split_once("-- tron:shortcut-defaults:start\n").expect("shortcut defaults schema").1
-        .split_once("-- tron:shortcut-defaults:end").expect("shortcut defaults schema end").0;
+    let shortcuts = business
+        .split_once("-- tron:shortcut-defaults:start\n")
+        .expect("shortcut defaults schema")
+        .1
+        .split_once("-- tron:shortcut-defaults:end")
+        .expect("shortcut defaults schema end")
+        .0;
     tx.execute_batch(shortcuts)?;
     tx.commit()
 }

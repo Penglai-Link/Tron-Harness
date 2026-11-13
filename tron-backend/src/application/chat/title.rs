@@ -164,8 +164,6 @@ fn title_generation_error_code(error: &LlmRuntimeError) -> &'static str {
     }
 }
 
-
-
 pub(super) fn should_generate_manual_session_title(session: &ChatSession) -> bool {
     session.source_type == ChatSessionSourceType::Manual
         && session.task_code.is_none()

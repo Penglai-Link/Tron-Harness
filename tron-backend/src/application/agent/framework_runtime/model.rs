@@ -96,7 +96,9 @@ mod native;
 #[path = "model_retry.rs"]
 mod retry;
 pub(crate) use native::NativeModelScope;
-pub(super) use native::{compaction_model_reference, risk_review_model, synchronize_selected_model};
+pub(super) use native::{
+    compaction_model_reference, risk_review_model, synchronize_selected_model,
+};
 pub(super) struct TronChatModel {
     reference: fw::ModelRef,
     config: crate::domain::agent::AgentModelConfig,
@@ -214,13 +216,24 @@ impl fw::ChatModel for TronChatModel {
         let callback_overflow = overflow.clone();
         let sink = host.sink.clone();
         let callback: ModelStreamSink = Arc::new(move |event| {
-            if matches!(event.kind, crate::domain::agent::ModelStreamEventKind::Text | crate::domain::agent::ModelStreamEventKind::Reasoning | crate::domain::agent::ModelStreamEventKind::ReasoningSummary)
-                && (event.delta.is_empty() || (event.kind != crate::domain::agent::ModelStreamEventKind::Text && event.delta.trim().is_empty())) {
+            if matches!(
+                event.kind,
+                crate::domain::agent::ModelStreamEventKind::Text
+                    | crate::domain::agent::ModelStreamEventKind::Reasoning
+                    | crate::domain::agent::ModelStreamEventKind::ReasoningSummary
+            ) && (event.delta.is_empty()
+                || (event.kind != crate::domain::agent::ModelStreamEventKind::Text
+                    && event.delta.trim().is_empty()))
+            {
                 return;
             }
             // Raw chain-of-thought is internal evidence: present the reasoning
             // summary to streams, never the raw reasoning itself.
-            if matches!(event.kind, crate::domain::agent::ModelStreamEventKind::Reasoning | crate::domain::agent::ModelStreamEventKind::ToolCallDelta) {
+            if matches!(
+                event.kind,
+                crate::domain::agent::ModelStreamEventKind::Reasoning
+                    | crate::domain::agent::ModelStreamEventKind::ToolCallDelta
+            ) {
                 return;
             }
             if event.delta.len() > 256 * 1024 || sender.try_send(event.clone()).is_err() {
@@ -292,12 +305,14 @@ impl fw::ChatModel for TronChatModel {
                     };
                     *native_error = Some(error);
                     if matches!(&classification, fw::ModelError::Provider(error) if error.category == fw::ProviderErrorCategory::Quota)
-                        && let Some(retry) = request.extensions.get::<Arc<retry::SessionModelRetry>>()
+                        && let Some(retry) =
+                            request.extensions.get::<Arc<retry::SessionModelRetry>>()
                     {
                         retry.exhaust(&self.reference);
                     }
                     if classification.is_transient()
-                        && let Some(retry) = request.extensions.get::<Arc<retry::SessionModelRetry>>()
+                        && let Some(retry) =
+                            request.extensions.get::<Arc<retry::SessionModelRetry>>()
                     {
                         retry.failed();
                     }
@@ -345,15 +360,17 @@ impl fw::ChatModel for TronChatModel {
         }
         let message =
             super::messages::encode(&response.assistant).map_err(fw::ModelError::Fatal)?;
-        let persisted_messages: std::borrow::Cow<'_, [crate::domain::agent::AgentMessage]> =
-            if matches!(response.finish, crate::domain::agent::ModelFinish::Final | crate::domain::agent::ModelFinish::Continue) {
-                let mut messages = context.messages.as_ref().clone();
-                messages.extend(response.transcript_messages());
-                turn.apply_model_response(&response, messages.len());
-                std::borrow::Cow::Owned(messages)
-            } else {
-                std::borrow::Cow::Borrowed(&context.messages)
-            };
+        let persisted_messages: std::borrow::Cow<'_, [crate::domain::agent::AgentMessage]> = if matches!(
+            response.finish,
+            crate::domain::agent::ModelFinish::Final | crate::domain::agent::ModelFinish::Continue
+        ) {
+            let mut messages = context.messages.as_ref().clone();
+            messages.extend(response.transcript_messages());
+            turn.apply_model_response(&response, messages.len());
+            std::borrow::Cow::Owned(messages)
+        } else {
+            std::borrow::Cow::Borrowed(&context.messages)
+        };
         let provider_identity = provider_scope(context)?;
         let continuation = turn
             .checkpoint(&persisted_messages)
@@ -369,34 +386,67 @@ impl fw::ChatModel for TronChatModel {
             reasoning_tokens: usage.reasoning_tokens.map(u64::from),
         });
         let mut tool_index = 0;
-        let output_items = response.output_items.iter().filter_map(|item| match item {
-            crate::domain::agent::ModelOutputItem::Message { output_index, item_id, phase, text } => Some(fw::ModelOutputItem::Message { output_index: *output_index, item_id: item_id.clone(), phase: phase.clone(), content: text.clone().into() }),
-            crate::domain::agent::ModelOutputItem::ReasoningSummary { output_index, text } => Some(fw::ModelOutputItem::ReasoningSummary { output_index: *output_index, text: text.clone() }),
-            crate::domain::agent::ModelOutputItem::ToolCall { output_index, .. } => { let call = message.tool_calls.get(tool_index).cloned(); tool_index += 1; call.map(|call| fw::ModelOutputItem::ToolCall { output_index: *output_index, call }) },
-        }).collect();
-        let segmented_content = (!response.output_items.is_empty()).then(|| fw::Content::from(response.output_text()));
+        let output_items = response
+            .output_items
+            .iter()
+            .filter_map(|item| match item {
+                crate::domain::agent::ModelOutputItem::Message {
+                    output_index,
+                    item_id,
+                    phase,
+                    text,
+                } => Some(fw::ModelOutputItem::Message {
+                    output_index: *output_index,
+                    item_id: item_id.clone(),
+                    phase: phase.clone(),
+                    content: text.clone().into(),
+                }),
+                crate::domain::agent::ModelOutputItem::ReasoningSummary { output_index, text } => {
+                    Some(fw::ModelOutputItem::ReasoningSummary {
+                        output_index: *output_index,
+                        text: text.clone(),
+                    })
+                }
+                crate::domain::agent::ModelOutputItem::ToolCall { output_index, .. } => {
+                    let call = message.tool_calls.get(tool_index).cloned();
+                    tool_index += 1;
+                    call.map(|call| fw::ModelOutputItem::ToolCall {
+                        output_index: *output_index,
+                        call,
+                    })
+                }
+            })
+            .collect();
+        let segmented_content =
+            (!response.output_items.is_empty()).then(|| fw::Content::from(response.output_text()));
         let result = fw::ChatResponse {
             output_items,
-            disposition: Some(match response.finish { crate::domain::agent::ModelFinish::Final => fw::ModelDisposition::Final, crate::domain::agent::ModelFinish::ToolCalls => fw::ModelDisposition::ToolCalls, crate::domain::agent::ModelFinish::Continue => fw::ModelDisposition::Continue }),
-            public_content: segmented_content.clone().or_else(|| Some(fw::Content(
-                message
-                    .content
-                    .0
-                    .iter()
-                    .filter(|block| match block {
-                        fw::ContentBlock::Json { value } => {
-                            !value.get("tronMessagePart").is_some_and(|part| {
-                                matches!(
-                                    part.get("type").and_then(serde_json::Value::as_str),
-                                    Some("reasoning" | "reasoningSummary" | "toolCall")
-                                )
-                            })
-                        }
-                        _ => true,
-                    })
-                    .cloned()
-                    .collect(),
-            ))),
+            disposition: Some(match response.finish {
+                crate::domain::agent::ModelFinish::Final => fw::ModelDisposition::Final,
+                crate::domain::agent::ModelFinish::ToolCalls => fw::ModelDisposition::ToolCalls,
+                crate::domain::agent::ModelFinish::Continue => fw::ModelDisposition::Continue,
+            }),
+            public_content: segmented_content.clone().or_else(|| {
+                Some(fw::Content(
+                    message
+                        .content
+                        .0
+                        .iter()
+                        .filter(|block| match block {
+                            fw::ContentBlock::Json { value } => {
+                                !value.get("tronMessagePart").is_some_and(|part| {
+                                    matches!(
+                                        part.get("type").and_then(serde_json::Value::as_str),
+                                        Some("reasoning" | "reasoningSummary" | "toolCall")
+                                    )
+                                })
+                            }
+                            _ => true,
+                        })
+                        .cloned()
+                        .collect(),
+                ))
+            }),
             reasoning: {
                 let text: String = response
                     .assistant
@@ -428,16 +478,39 @@ impl fw::ChatModel for TronChatModel {
     }
 }
 
-async fn emit_model_event(stream: &dyn fw::ChatStream, event: crate::domain::agent::ModelStreamEvent) {
+async fn emit_model_event(
+    stream: &dyn fw::ChatStream,
+    event: crate::domain::agent::ModelStreamEvent,
+) {
     use crate::domain::agent::ModelStreamEventKind;
     match event.kind {
-        ModelStreamEventKind::Text => if let Some(index) = event.output_index { stream.message_delta(index, &event.delta).await } else { stream.text_delta(&event.delta).await },
+        ModelStreamEventKind::Text => {
+            if let Some(index) = event.output_index {
+                stream.message_delta(index, &event.delta).await
+            } else {
+                stream.text_delta(&event.delta).await
+            }
+        }
         ModelStreamEventKind::ReasoningSummary => stream.reasoning_delta(&event.delta).await,
-        ModelStreamEventKind::Reasoning => {},
-        ModelStreamEventKind::MessageStart => if let Some(index) = event.output_index { stream.message_start(index, event.phase.as_deref()).await },
-        ModelStreamEventKind::MessageEnd => if let Some(index) = event.output_index { stream.message_end(index, event.phase.as_deref(), &event.delta).await },
-        ModelStreamEventKind::ToolCallDelta => {},
-        ModelStreamEventKind::ToolBoundary => if let Some(index) = event.output_index { stream.tool_boundary(index).await },
+        ModelStreamEventKind::Reasoning => {}
+        ModelStreamEventKind::MessageStart => {
+            if let Some(index) = event.output_index {
+                stream.message_start(index, event.phase.as_deref()).await
+            }
+        }
+        ModelStreamEventKind::MessageEnd => {
+            if let Some(index) = event.output_index {
+                stream
+                    .message_end(index, event.phase.as_deref(), &event.delta)
+                    .await
+            }
+        }
+        ModelStreamEventKind::ToolCallDelta => {}
+        ModelStreamEventKind::ToolBoundary => {
+            if let Some(index) = event.output_index {
+                stream.tool_boundary(index).await
+            }
+        }
     }
 }
 

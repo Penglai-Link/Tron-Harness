@@ -13,7 +13,8 @@ pub(super) struct KnowledgeBaseContributor {
 #[async_trait]
 impl fw::ContextContributor for KnowledgeBaseContributor {
     fn layout_metadata(&self) -> fw::ContextBlockMetadata {
-        crate::application::short_term_memory::native_context_block_metadata(self.block_id()).expect("native knowledge base metadata")
+        crate::application::short_term_memory::native_context_block_metadata(self.block_id())
+            .expect("native knowledge base metadata")
     }
     fn block_id(&self) -> &str {
         "knowledge_base"

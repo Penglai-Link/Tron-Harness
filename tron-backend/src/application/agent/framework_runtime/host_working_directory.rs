@@ -27,7 +27,11 @@ impl StagedSessionDirectories {
     pub(crate) fn commit(mut self) -> Result<(), String> {
         let mut failure = None;
         for (_, staged) in self.paths.drain(..) {
-            let result = if staged.is_symlink() { fs::remove_file(&staged) } else { fs::remove_dir_all(&staged) };
+            let result = if staged.is_symlink() {
+                fs::remove_file(&staged)
+            } else {
+                fs::remove_dir_all(&staged)
+            };
             if let Err(error) = result {
                 tracing::error!(path = %staged.display(), %error, "could not remove staged directory after committed deletion");
                 failure = Some(format!("{}: {error}", staged.display()));
@@ -118,33 +122,70 @@ impl FrameworkHost {
         sessions: Vec<(String, Option<String>)>,
     ) -> Result<StagedSessionDirectories, String> {
         let root = self.0.path.with_extension("workspaces");
-        let directories = sessions.into_iter().map(|(session, user)| self.managed_working_directory("sessions", user.as_deref(), &session)).collect::<Vec<_>>();
+        let directories = sessions
+            .into_iter()
+            .map(|(session, user)| {
+                self.managed_working_directory("sessions", user.as_deref(), &session)
+            })
+            .collect::<Vec<_>>();
         tokio::task::spawn_blocking(move || {
             let mut staged = StagedSessionDirectories { paths: Vec::new() };
             'directory: for directory in directories {
-                for parent in [root.clone(), root.join("sessions"), directory.parent().unwrap().to_owned()] {
+                for parent in [
+                    root.clone(),
+                    root.join("sessions"),
+                    directory.parent().unwrap().to_owned(),
+                ] {
                     match fs::symlink_metadata(&parent) {
-                        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
-                        Ok(_) => return Err(format!("session working directory parent is not managed: {}", parent.display())),
-                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue 'directory,
-                        Err(error) => return Err(format!("could not inspect session working directory: {error}")),
+                        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+                        }
+                        Ok(_) => {
+                            return Err(format!(
+                                "session working directory parent is not managed: {}",
+                                parent.display()
+                            ));
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                            continue 'directory;
+                        }
+                        Err(error) => {
+                            return Err(format!(
+                                "could not inspect session working directory: {error}"
+                            ));
+                        }
                     }
                 }
                 match fs::symlink_metadata(&directory) {
                     Ok(metadata) if metadata.is_dir() || metadata.file_type().is_symlink() => {}
-                    Ok(_) => return Err(format!("session working path is not a directory: {}", directory.display())),
+                    Ok(_) => {
+                        return Err(format!(
+                            "session working path is not a directory: {}",
+                            directory.display()
+                        ));
+                    }
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                    Err(error) => return Err(format!("could not inspect session working directory: {error}")),
+                    Err(error) => {
+                        return Err(format!(
+                            "could not inspect session working directory: {error}"
+                        ));
+                    }
                 }
-                let target = directory.with_file_name(format!(".deleting-{:032x}", rand::random::<u128>()));
+                let target =
+                    directory.with_file_name(format!(".deleting-{:032x}", rand::random::<u128>()));
                 match fs::rename(&directory, &target) {
                     Ok(()) => staged.paths.push((directory, target)),
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(format!("could not stage session working directory: {error}")),
+                    Err(error) => {
+                        return Err(format!(
+                            "could not stage session working directory: {error}"
+                        ));
+                    }
                 }
             }
             Ok(staged)
-        }).await.map_err(|error| error.to_string())?
+        })
+        .await
+        .map_err(|error| error.to_string())?
     }
 
     pub(super) fn delegated_execution_scope(

@@ -6,10 +6,10 @@ pub(crate) mod agui_translate;
 mod business_tools;
 mod canonical_event;
 mod dto;
-pub(crate) mod page_context;
 mod error;
 mod execution_context;
 pub(crate) mod framework_runtime;
+pub(crate) mod page_context;
 mod tool_arguments;
 pub use execution_context::{
     execution_context_message, project_instructions_message, refresh_execution_context,
@@ -19,7 +19,8 @@ pub use framework_runtime::{
     SubagentRecord, SubagentView, ThreadFeedback, ThreadFeedbackSink, capability_pack_catalog,
     capability_pack_catalog_with_state, extension_implementation_catalog,
     extension_implementation_catalog_with_state, install_capability_pack,
-    installed_capability_packs, installed_extension_implementations, query_installed_capability_packs,
+    installed_capability_packs, installed_extension_implementations,
+    query_installed_capability_packs,
 };
 mod history;
 mod invocation;

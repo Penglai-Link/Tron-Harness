@@ -12,8 +12,8 @@ mod automatic_routing;
 mod provider_models;
 mod speech;
 mod speech_sessions;
-pub use speech::SpeechInputError;
 pub use automatic_routing::{AutomaticRouteModel, AutomaticRoutingSettingsError};
+pub use speech::SpeechInputError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeModelConfig {

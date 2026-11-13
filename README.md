@@ -129,9 +129,9 @@ Tron 自身也使用能力包装配功能：文件与命令、Agent 协作、网
 
 ### 做出你的第一个扩展
 
-创建 Tron 能力包使用同一份 [Framework 开发技能](tron-backend/crates/eliteforge-agent-capability-development/skills/eliteforge-agent-framework-integration/SKILL.md)：Agent 先执行随技能提供的生成器，预建技能、原生工具、页面、导航、MCP 和资源目录，再填写业务内容，最后校验与构建。生成器直接维护在该技能的 `assets/tron-harness-cap-template/`，需要 Node.js 22+；编译原生工具另需 Rust。无需选择模板类型，也不增加第二个开发能力包。
+创建 Tron 能力包使用同一份 [Framework 开发技能](https://gitee.com/person-ai/eliteforge-agent-framework/blob/main/crates/capability/eliteforge-agent-capability-development/skills/eliteforge-agent-framework-integration/SKILL.md)：Agent 先执行随技能提供的生成器，预建技能、原生工具、页面、导航、MCP 和资源目录，再填写业务内容，最后校验与构建。生成器直接维护在该技能的 `assets/tron-harness-cap-template/`，需要 Node.js 22+；编译原生工具另需 Rust。无需选择模板类型，也不增加第二个开发能力包。
 
-开发技能以 Framework 源码快照随 Tron 构建，`make development-skills-sync FRAMEWORK_DIR=../eliteforge-agent-framework` 更新快照，`make development-skills-check` 校验；正常构建和运行无需同级源码目录。模板维护者直接修改 Framework 共用技能中的生成器和模板，再同步到 Tron。
+Tron 直接依赖 Framework 的开发能力包，技能及模板只在 Framework 维护。发布 Framework 更新后，更新 Tron 的依赖锁定版本并重新构建，无需复制或同步技能源码。
 
 仓库提供可直接打包的页面示例。在开发环境准备完成后，运行：
 

@@ -233,7 +233,10 @@ impl<R: RagSearchRepository + Clone + Send + Sync, E: RagSearchRuntime> RagServi
                 .warnings
                 .push("当前授权及已发布范围内没有命中证据".into());
         }
-        let reranked = result.stages.iter().any(|stage| stage.channel == "rerank" && stage.status == "COMPLETED");
+        let reranked = result
+            .stages
+            .iter()
+            .any(|stage| stage.channel == "rerank" && stage.status == "COMPLETED");
         let evidence = result
             .hits
             .into_iter()

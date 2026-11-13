@@ -27,8 +27,10 @@ pub(super) fn read_session_attachment_range(
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .ok_or(ResourceError::InvalidInput)?;
-    let resources =
-        resources.for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code());
+    let resources = resources.for_agent_in_workspace(
+        context.agent_code.as_deref(),
+        context.execution_workspace_code(),
+    );
     let result = resources.read_chat_session_attachment_range(
         &context.workspace_code,
         session,
@@ -97,8 +99,10 @@ pub(super) fn resolve_input_file_bounded(
     resources: &ResourceService,
     limit: u64,
 ) -> Result<ResolvedInputFile, ToolError> {
-    let resources =
-        resources.for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code());
+    let resources = resources.for_agent_in_workspace(
+        context.agent_code.as_deref(),
+        context.execution_workspace_code(),
+    );
     let limit = limit.min(MAX_INPUT_FILE_BYTES);
     let reference = match (input.get("fileRef"), input.get("path")) {
         (Some(_), Some(_)) => {

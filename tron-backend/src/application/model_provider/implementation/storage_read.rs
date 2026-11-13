@@ -242,7 +242,8 @@ pub(super) fn read_chat_catalog_models(
                 provider_code: ModelProviderCode::from_storage(&provider_code)
                     .ok_or(rusqlite::Error::InvalidQuery)?,
                 catalog_model_type: ProviderCatalogModelType::Chat,
-                dimension: None, tags: serde_json::from_str(&row.get::<_, String>(15)?).unwrap_or_default(),
+                dimension: None,
+                tags: serde_json::from_str(&row.get::<_, String>(15)?).unwrap_or_default(),
                 model_id: None,
                 model_code: row.get(1)?,
                 model_name: row.get(2)?,
@@ -327,23 +328,29 @@ pub(super) fn select_embedding_instance(
     model_code: &str,
     ordinal: u64,
 ) -> Result<Option<String>, ModelProviderError> {
-    let count: i64 = connection.query_row(
-        "SELECT COUNT(*) FROM provider_multimedia_catalog_models
+    let count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM provider_multimedia_catalog_models
          WHERE provider_code = 'PersonAi' AND media_type = 6
            AND status = 'Available' AND model_code = ?1",
-        [model_code], |row| row.get(0),
-    ).map_err(|_| ModelProviderError::Storage)?;
+            [model_code],
+            |row| row.get(0),
+        )
+        .map_err(|_| ModelProviderError::Storage)?;
     if count == 0 {
         return Ok(None);
     }
-    connection.query_row(
-        "SELECT model_id FROM provider_multimedia_catalog_models
+    connection
+        .query_row(
+            "SELECT model_id FROM provider_multimedia_catalog_models
          WHERE provider_code = 'PersonAi' AND media_type = 6
            AND status = 'Available' AND model_code = ?1
          ORDER BY model_id LIMIT 1 OFFSET ?2",
-        params![model_code, (ordinal % count as u64) as i64],
-        |row| row.get::<_, String>(0),
-    ).map(Some).map_err(|_| ModelProviderError::Storage)
+            params![model_code, (ordinal % count as u64) as i64],
+            |row| row.get::<_, String>(0),
+        )
+        .map(Some)
+        .map_err(|_| ModelProviderError::Storage)
 }
 
 pub(super) fn read_catalog_model(

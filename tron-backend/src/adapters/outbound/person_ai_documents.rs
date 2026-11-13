@@ -4,9 +4,7 @@ use crate::application::{
     knowledge_base::{
         KnowledgeBaseError,
         ingestion::{IngestionTask, ParseEndpointCapacity},
-        local_documents::{
-            MAX_EXPANDED_BYTES,
-        },
+        local_documents::MAX_EXPANDED_BYTES,
         parsing::{
             KnowledgeDocumentParser, OcrMode, ParseCheckpoint, ParsedAsset, ParsingCapabilities,
             ParsingTier, StructuredParse,
@@ -47,7 +45,9 @@ impl PersonAiDocumentParser {
     }
 
     fn mode(&self, tier: Option<ParsingTier>) -> ParseMode {
-        use eliteforge_agent_capability_personai::{PersonAiDocumentParsingIntent as Intent, personai_document_parse_mode};
+        use eliteforge_agent_capability_personai::{
+            PersonAiDocumentParsingIntent as Intent, personai_document_parse_mode,
+        };
         personai_document_parse_mode(if tier == Some(ParsingTier::Advanced) {
             Intent::Layout
         } else if self.ocr_mode == OcrMode::Ocr {
@@ -187,7 +187,8 @@ impl PersonAiDocumentParser {
         // Supplier Markdown may include large inline image data. The artifact
         // budget bounds those bytes; the separate text budget applies after
         // image payloads are removed, before chunking/embedding.
-        let markdown = download(&client, &context, &task.id, markdown_id, MAX_EXPANDED_BYTES).await?;
+        let markdown =
+            download(&client, &context, &task.id, markdown_id, MAX_EXPANDED_BYTES).await?;
         let middle = download(&client, &context, &task.id, middle_id, MAX_EXPANDED_BYTES).await?;
         let assets = if let Ok(zip_id) = output_id(file, "zip") {
             let archive = download_to_temp(&client, &context, &task.id, zip_id).await?;
@@ -201,7 +202,8 @@ impl PersonAiDocumentParser {
             .map_err(|_| KnowledgeBaseError::Storage("平台 Markdown 结果不是 UTF-8".into()))?;
         attach_segment_source_ranges(&mut middle, file)?;
         let paths = assets.iter().map(|asset| asset.path.clone()).collect();
-        let mut document = crate::application::knowledge_base::parsing::normalize_parse_middle(&middle, &paths)?;
+        let mut document =
+            crate::application::knowledge_base::parsing::normalize_parse_middle(&middle, &paths)?;
         document.format = Path::new(filename)
             .extension()
             .and_then(|extension| extension.to_str())
@@ -227,21 +229,55 @@ impl PersonAiDocumentParser {
 
 /// Person-AI declares zero-based source ranges in the settled result manifest.
 /// Preserve them in the cached middle artifact; segment size is never a page offset.
-fn attach_segment_source_ranges(middle: &mut Value, file: &Value) -> Result<(), KnowledgeBaseError> {
-    let Some(parts) = middle.as_array_mut() else { return Ok(()); };
-    let Some(segments) = file["segments"].as_array() else { return Ok(()); };
+fn attach_segment_source_ranges(
+    middle: &mut Value,
+    file: &Value,
+) -> Result<(), KnowledgeBaseError> {
+    let Some(parts) = middle.as_array_mut() else {
+        return Ok(());
+    };
+    let Some(segments) = file["segments"].as_array() else {
+        return Ok(());
+    };
     for part in parts {
-        if part["data"]["metadata"]["file_suffix"] != "pdf" { continue; }
-        let seq = part["seq"].as_u64().ok_or_else(|| KnowledgeBaseError::Invalid("解析分段序号无效".into()))?;
-        let matches = segments.iter().filter(|segment| segment["seq"].as_u64() == Some(seq)).collect::<Vec<_>>();
-        if matches.len() != 1 { return Err(KnowledgeBaseError::Invalid("解析分段来源范围缺失或重复".into())); }
-        let range = matches[0]["page_range"].as_array().filter(|range| range.len() == 2)
+        if part["data"]["metadata"]["file_suffix"] != "pdf" {
+            continue;
+        }
+        let seq = part["seq"]
+            .as_u64()
+            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段序号无效".into()))?;
+        let matches = segments
+            .iter()
+            .filter(|segment| segment["seq"].as_u64() == Some(seq))
+            .collect::<Vec<_>>();
+        if matches.len() != 1 {
+            return Err(KnowledgeBaseError::Invalid(
+                "解析分段来源范围缺失或重复".into(),
+            ));
+        }
+        let range = matches[0]["page_range"]
+            .as_array()
+            .filter(|range| range.len() == 2)
             .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段来源范围无效".into()))?;
-        let start = range[0].as_u64().ok_or_else(|| KnowledgeBaseError::Invalid("解析分段起始页无效".into()))?;
-        let end = range[1].as_u64().ok_or_else(|| KnowledgeBaseError::Invalid("解析分段结束页无效".into()))?;
-        let pages = part["data"]["pages"].as_array().ok_or_else(|| KnowledgeBaseError::Invalid("解析分段页信息缺失".into()))?;
-        if end <= start || end - start != pages.len() as u64 || pages.iter().enumerate().any(|(i,page)|page["page_idx"].as_u64()!=Some(i as u64)) {
-            return Err(KnowledgeBaseError::Invalid("解析分段与原始页范围不一致".into()));
+        let start = range[0]
+            .as_u64()
+            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段起始页无效".into()))?;
+        let end = range[1]
+            .as_u64()
+            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段结束页无效".into()))?;
+        let pages = part["data"]["pages"]
+            .as_array()
+            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段页信息缺失".into()))?;
+        if end <= start
+            || end - start != pages.len() as u64
+            || pages
+                .iter()
+                .enumerate()
+                .any(|(i, page)| page["page_idx"].as_u64() != Some(i as u64))
+        {
+            return Err(KnowledgeBaseError::Invalid(
+                "解析分段与原始页范围不一致".into(),
+            ));
         }
         part["source_page_start"] = start.into();
     }

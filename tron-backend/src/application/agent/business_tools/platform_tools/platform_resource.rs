@@ -66,7 +66,10 @@ impl Tool for PlatformResourceQueryTool {
         let actor = required_actor(context)?;
         let output = self
             .resources
-            .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code())
+            .for_agent_in_workspace(
+                context.agent_code.as_deref(),
+                context.execution_workspace_code(),
+            )
             .query_resources(
                 actor,
                 ResourcePageQuery {
@@ -107,7 +110,10 @@ impl Tool for PlatformResourceGetTool {
         let input: PlatformResourceCodeInput = parse_tool_input(request.input)?;
         let output = self
             .resources
-            .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code())
+            .for_agent_in_workspace(
+                context.agent_code.as_deref(),
+                context.execution_workspace_code(),
+            )
             .get_resource(
                 required_actor(context)?,
                 ResourceGetQuery {
@@ -148,7 +154,10 @@ impl Tool for PlatformResourceCreateTool {
         let input: PlatformResourceCreateInput = parse_tool_input(request.input)?;
         let output = self
             .resources
-            .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code())
+            .for_agent_in_workspace(
+                context.agent_code.as_deref(),
+                context.execution_workspace_code(),
+            )
             .create_file_resource_from_agent_path(
                 required_actor(context)?,
                 ResourceCreateCommand {
@@ -193,7 +202,10 @@ impl Tool for PlatformResourceUpdateTool {
         let input: PlatformResourceUpdateInput = parse_tool_input(request.input)?;
         let output = self
             .resources
-            .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code())
+            .for_agent_in_workspace(
+                context.agent_code.as_deref(),
+                context.execution_workspace_code(),
+            )
             .update_resource(
                 required_actor(context)?,
                 ResourceUpdateCommand {
@@ -227,7 +239,10 @@ impl Tool for PlatformResourceDeleteTool {
         let input: PlatformResourceCodeInput = parse_tool_input(request.input)?;
         let output = self
             .resources
-            .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code())
+            .for_agent_in_workspace(
+                context.agent_code.as_deref(),
+                context.execution_workspace_code(),
+            )
             .delete_resource(
                 required_actor(context)?,
                 ResourceDeleteCommand {
@@ -284,11 +299,17 @@ impl Tool for PlatformResourceBinaryTool {
         let output = match input.action {
             PlatformResourceBinaryAction::Upload => self
                 .resources
-                .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code())
+                .for_agent_in_workspace(
+                    context.agent_code.as_deref(),
+                    context.execution_workspace_code(),
+                )
                 .handle_agent_binary_upload(actor, PLATFORM_SCOPE, command),
             PlatformResourceBinaryAction::Download => self
                 .resources
-                .for_agent_in_workspace(context.agent_code.as_deref(), context.execution_workspace_code())
+                .for_agent_in_workspace(
+                    context.agent_code.as_deref(),
+                    context.execution_workspace_code(),
+                )
                 .handle_agent_binary_download(actor, PLATFORM_SCOPE, command),
         }
         .map_err(service_tool_error)?;

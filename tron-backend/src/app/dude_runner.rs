@@ -277,7 +277,8 @@ impl PlatformDudeExecutor {
             event.payload["content"].as_str().map(str::to_owned)
         } else {
             None
-        }.unwrap_or_else(|| format!("{:?}", event.source));
+        }
+        .unwrap_or_else(|| format!("{:?}", event.source));
         let agent = self
             .agent()
             .with_runtime_input(crate::application::dude::soul::runtime_input_kind(event.source), serde_json::json!({"source":format!("{:?}",event.source),"eventId":event.event_id,"ownerDudeCode":event.dude_code,"taskCode":event.task_code,"payload":event.payload,"onboarding":event.dedup_key.starts_with("soul-awakening:") && event.payload["onboarding"] == true}))
@@ -314,7 +315,12 @@ impl PlatformDudeExecutor {
                     attachments: vec![],
                     client_capabilities: Some(crate::domain::chat::ChatClientCapabilities {
                         user_input_requests: true,
-                        a2ui: event.payload.get("a2ui").filter(|v| !v.is_null()).cloned().and_then(|v| serde_json::from_value(v).ok()),
+                        a2ui: event
+                            .payload
+                            .get("a2ui")
+                            .filter(|v| !v.is_null())
+                            .cloned()
+                            .and_then(|v| serde_json::from_value(v).ok()),
                     }),
                     resume: vec![],
                 },
@@ -396,7 +402,7 @@ pub(super) fn start(state: AppState) {
             .await
             {
                 Ok(Ok(count)) if count > 0 => tracing::info!(count, "Expired Dude tasks removed"),
-                Ok(Ok(_)) => {},
+                Ok(Ok(_)) => {}
                 Ok(Err(error)) => tracing::error!(?error, "Dude task retention failed"),
                 Err(error) => tracing::error!(%error, "Dude task retention worker failed"),
             }

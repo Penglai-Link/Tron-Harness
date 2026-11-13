@@ -479,8 +479,11 @@ impl ShortTermMemoryService {
                 .unwrap_or(self.framework_context_config().goal_loop.max_runs);
             let goal = db
                 .transaction(async {
-                    let session = framework.sessions().map_err(|e| fw::StateError::Backend(e.to_string()))?
-                        .get(&command.session_code).await?;
+                    let session = framework
+                        .sessions()
+                        .map_err(|e| fw::StateError::Backend(e.to_string()))?
+                        .get(&command.session_code)
+                        .await?;
                     if session.status != fw::SessionStatus::Active {
                         return Err(fw::StateError::Conflict);
                     }
@@ -536,15 +539,26 @@ impl ShortTermMemoryService {
         blocking(async {
             let goal = self.resolve_goal(&command).await?;
             let framework = self.framework().await?;
-            let goals = framework.goals().map_err(|_| ShortTermMemoryError::StorageFailure)?;
-            let sessions = framework.sessions().map_err(|_| ShortTermMemoryError::StorageFailure)?;
+            let goals = framework
+                .goals()
+                .map_err(|_| ShortTermMemoryError::StorageFailure)?;
+            let sessions = framework
+                .sessions()
+                .map_err(|_| ShortTermMemoryError::StorageFailure)?;
             let db = self.host.shared_database().await.map_err(error)?;
-            let result = db.transaction(async {
-                if sessions.get(&command.session_code).await?.status != fw::SessionStatus::Active {
-                    return Err(fw::StateError::Conflict);
-                }
-                goals.transition(&goal.id, goal.revision, status, None).await
-            }).await.map_err(error)?;
+            let result = db
+                .transaction(async {
+                    if sessions.get(&command.session_code).await?.status
+                        != fw::SessionStatus::Active
+                    {
+                        return Err(fw::StateError::Conflict);
+                    }
+                    goals
+                        .transition(&goal.id, goal.revision, status, None)
+                        .await
+                })
+                .await
+                .map_err(error)?;
             self.view(result).await
         })
     }
@@ -643,13 +657,9 @@ impl ShortTermMemoryService {
                     vec![]
                 };
                 let goal = self.get_active_goal(&memory.session_code)?;
-                super::assembler::working_state_message(
-                    goal.as_ref(),
-                    &todos,
-                    memory.todo_enabled,
-                )
-                .into_iter()
-                .collect()
+                super::assembler::working_state_message(goal.as_ref(), &todos, memory.todo_enabled)
+                    .into_iter()
+                    .collect()
             }
             // The shared Framework history coordinator fills this destination
             // from its persisted summary and immutable transcript snapshot.
@@ -777,7 +787,10 @@ impl ShortTermMemoryService {
                 "history" => &[fw::HISTORY_BLOCK],
                 _ => std::slice::from_ref(&block),
             };
-            let messages = view["messages"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+            let messages = view["messages"]
+                .as_array()
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
             let mut selected = Vec::new();
             let mut found = false;
             let mut offset = 0;
@@ -793,9 +806,7 @@ impl ShortTermMemoryService {
                     offset = offset.saturating_add(count);
                 }
             }
-            if !found
-                && !matches!(block, "systemPrompt" | "applicationContext" | "history")
-            {
+            if !found && !matches!(block, "systemPrompt" | "applicationContext" | "history") {
                 return Ok(None);
             }
             let mut detail = json!({"blockCode":block,"messages":selected});
@@ -818,7 +829,11 @@ impl ShortTermMemoryService {
         note: Option<String>,
     ) -> Result<Value, ShortTermMemoryError> {
         self.ensure_session_async(session).await?;
-        let framework = self.host.runtime_framework().await.map_err(|_| ShortTermMemoryError::StorageFailure)?;
+        let framework = self
+            .host
+            .runtime_framework()
+            .await
+            .map_err(|_| ShortTermMemoryError::StorageFailure)?;
         let services = framework
             .services()
             .map_err(|_| ShortTermMemoryError::StorageFailure)?;
@@ -852,7 +867,10 @@ impl ShortTermMemoryService {
                 max_input_tokens: self.model_context_budget_plan(model).effective_input_budget
                     as usize,
                 max_summary_bytes: eliteforge_agent_memory::summary_byte_guard(
-                    self.model_context_budget_plan(model).block_budgets.conversation_history_summary.effective_limit_tokens as usize
+                    self.model_context_budget_plan(model)
+                        .block_budgets
+                        .conversation_history_summary
+                        .effective_limit_tokens as usize,
                 ),
                 max_model_calls: 16,
             },

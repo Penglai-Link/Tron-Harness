@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    application::workspace::{WorkspaceRepository, WorkspaceReadRepository},
+    application::workspace::{WorkspaceReadRepository, WorkspaceRepository},
     domain::workspace::{
         Workspace, WorkspaceError, WorkspaceStatus, workspace_status_from_storage,
         workspace_status_to_storage,
@@ -234,7 +234,9 @@ fn storage_error(_error: rusqlite::Error) -> WorkspaceError {
     WorkspaceError::StorageFailure
 }
 
-struct SqliteWorkspaceReader { connection: super::framework_storage::SharedDatabase }
+struct SqliteWorkspaceReader {
+    connection: super::framework_storage::SharedDatabase,
+}
 impl WorkspaceReadRepository for SqliteWorkspaceReader {
     fn is_active(&self, workspace_code: &str) -> Result<bool, WorkspaceError> {
         let code = workspace_code.to_owned();

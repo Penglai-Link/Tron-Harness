@@ -91,11 +91,15 @@ pub struct IngestionTask {
 
 impl IngestionTask {
     pub fn embedding_model_code(&self) -> Option<&str> {
-        self.embedding_identity.as_ref().map(|identity| identity.model_code.as_str())
+        self.embedding_identity
+            .as_ref()
+            .map(|identity| identity.model_code.as_str())
             .or_else(|| self.configuration["embeddingModel"].as_str())
     }
     pub fn embedding_fingerprint(&self) -> Option<&str> {
-        self.embedding_identity.as_ref().map(|identity| identity.fingerprint.as_str())
+        self.embedding_identity
+            .as_ref()
+            .map(|identity| identity.fingerprint.as_str())
             .or_else(|| self.configuration["embeddingFingerprint"].as_str())
     }
     /// Attempt-specific staging prevents a fenced-out writer from replacing a
@@ -207,12 +211,21 @@ pub struct PublicationCleanup {
 pub trait KnowledgeIngestionQueue: Send + Sync {
     fn for_document(&self, document: &str) -> Result<Vec<IngestionTask>, IngestionQueueError>;
     /// One authorized index-task snapshot for the RAG task page.
-    fn index_tasks_for_user(&self, user: &str) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError>;
-    fn latest_for_library(&self, library: &str, documents: &[String]) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
+    fn index_tasks_for_user(
+        &self,
+        user: &str,
+    ) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError>;
+    fn latest_for_library(
+        &self,
+        library: &str,
+        documents: &[String],
+    ) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
         let mut latest = std::collections::BTreeMap::new();
         for document in documents {
             if let Some(task) = self.for_document(document)?.into_iter().next() {
-                if task.knowledge_base_id == library { latest.insert(document.clone(), task); }
+                if task.knowledge_base_id == library {
+                    latest.insert(document.clone(), task);
+                }
             }
         }
         Ok(latest)

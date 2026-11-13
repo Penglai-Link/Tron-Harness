@@ -77,8 +77,6 @@ struct ProtocolFrame {
 const MAX_PROTOCOL_BUFFER_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PROTOCOL_BUFFER_FRAMES: usize = 8192;
 
-
-
 impl AgentAguiStreamService {
     pub fn new(sink: Arc<AguiEventSink>) -> Self {
         Self {

@@ -140,7 +140,18 @@ pub(super) fn parse_person_ai_account_info(
         vip_level: optional_account_number(fields, &["vip_level", "vipLevel"])
             .and_then(|value| i32::try_from(value).ok()),
         // Person-AI defines remaining_tokens as the account's remaining points balance.
-        remaining_points: ["remaining_tokens", "remainingTokens"].iter().find_map(|name| fields.get(*name).and_then(|value| match value { Value::Number(n) => n.as_f64(), Value::String(s) => s.trim().parse::<f64>().ok(), _ => None }).filter(|n| n.is_finite())),
+        remaining_points: ["remaining_tokens", "remainingTokens"]
+            .iter()
+            .find_map(|name| {
+                fields
+                    .get(*name)
+                    .and_then(|value| match value {
+                        Value::Number(n) => n.as_f64(),
+                        Value::String(s) => s.trim().parse::<f64>().ok(),
+                        _ => None,
+                    })
+                    .filter(|n| n.is_finite())
+            }),
     })
 }
 

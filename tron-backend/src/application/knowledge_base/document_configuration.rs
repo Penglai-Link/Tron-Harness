@@ -106,7 +106,12 @@ impl KnowledgeBaseService {
         if let Some(c) = &config {
             c.validate()
                 .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
-            if !self.chunk_strategies.descriptors().iter().any(|d| d.id == c.mode.strategy_id()) {
+            if !self
+                .chunk_strategies
+                .descriptors()
+                .iter()
+                .any(|d| d.id == c.mode.strategy_id())
+            {
                 return Err(KnowledgeBaseError::Invalid("切片策略未注册".into()));
             }
         }
@@ -148,8 +153,12 @@ impl KnowledgeBaseService {
             "UPLOADED"
         }
         .into();
-        doc.error = fidelity::blocked(&doc)
-            .then(|| format!("解析质量校验失败，索引未发布：{}；请核对原件及图片",fidelity::failure_reason(&doc)));
+        doc.error = fidelity::blocked(&doc).then(|| {
+            format!(
+                "解析质量校验失败，索引未发布：{}；请核对原件及图片",
+                fidelity::failure_reason(&doc)
+            )
+        });
         Ok(doc)
     }
 }

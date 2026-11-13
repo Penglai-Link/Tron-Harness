@@ -200,7 +200,8 @@ fn chain_step(
     // response can be restored with an equivalent framework-assigned ID.
     let mut provider_message = message.clone();
     provider_message.output_group_id = None;
-    serde_json::to_writer(DigestWriter(&mut hasher), &provider_message).map_err(|error| error.to_string())?;
+    serde_json::to_writer(DigestWriter(&mut hasher), &provider_message)
+        .map_err(|error| error.to_string())?;
     Ok(hasher.finalize().into())
 }
 
@@ -213,8 +214,6 @@ fn continuation_digest_bytes(messages: &[AgentMessage]) -> Result<ChainDigest, S
     }
     Ok(chain.unwrap_or_else(empty_chain))
 }
-
-
 
 fn hex_digest(digest: &ChainDigest) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()

@@ -247,7 +247,8 @@ impl TopicService {
                 }
             }
             TopicReferenceKind::Repository => {
-                if !connection_code.is_some_and(|code| self.integrations.contains(&workspace, actor, code))
+                if !connection_code
+                    .is_some_and(|code| self.integrations.contains(&workspace, actor, code))
                 {
                     return Err(TopicError::InvalidReference);
                 }

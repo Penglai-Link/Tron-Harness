@@ -4,9 +4,8 @@ use serde_json::{Value, json};
 
 use crate::{
     application::rag::{
-        RagDebugSourceRecord, RagDebugSourceRequest, RagDebugSourceResult,
-        RagDebugTextUnitRecord, RagDiagnosticWarningRecord, RagDiagnosticsRepository,
-        RagSearchTraceWrite,
+        RagDebugSourceRecord, RagDebugSourceRequest, RagDebugSourceResult, RagDebugTextUnitRecord,
+        RagDiagnosticWarningRecord, RagDiagnosticsRepository, RagSearchTraceWrite,
     },
     domain::rag::RagError,
 };

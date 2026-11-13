@@ -37,9 +37,32 @@ pub(crate) fn dude_tool_replacement(code: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn dude_workspace_tool(tool: &ToolCatalogRecord) -> bool {
-    matches!(tool.tool_code.as_str(), "memory.search" | "memory.get" | "memory.save" | "memory.delete")
-        || tool.input_schema.pointer("/properties/workspaceCode").is_some()
-        || matches!(tool.domain_code.as_str(), "harness_rag" | "harness_app" | "harness_resource" | "harness_variable" | "harness_automation" | "harness_workspace" | "harness_prompt" | "harness_mcp" | "harness_worktree" | "chat_attachment" | "word" | "excel" | "fs" | "search" | "terminal" | "command")
+    matches!(
+        tool.tool_code.as_str(),
+        "memory.search" | "memory.get" | "memory.save" | "memory.delete"
+    ) || tool
+        .input_schema
+        .pointer("/properties/workspaceCode")
+        .is_some()
+        || matches!(
+            tool.domain_code.as_str(),
+            "harness_rag"
+                | "harness_app"
+                | "harness_resource"
+                | "harness_variable"
+                | "harness_automation"
+                | "harness_workspace"
+                | "harness_prompt"
+                | "harness_mcp"
+                | "harness_worktree"
+                | "chat_attachment"
+                | "word"
+                | "excel"
+                | "fs"
+                | "search"
+                | "terminal"
+                | "command"
+        )
 }
 
 pub(crate) fn is_fixed_code(code: &str) -> bool {
@@ -52,7 +75,12 @@ pub(crate) fn is_fixed_code(code: &str) -> bool {
 
 pub(crate) fn localize_plugin_display(record: &mut ToolCatalogRecord, locale: &str) {
     if let Some(display) = &record.display {
-        let resolved = display.resolve(locale, &record.name, &record.description, &record.input_schema);
+        let resolved = display.resolve(
+            locale,
+            &record.name,
+            &record.description,
+            &record.input_schema,
+        );
         record.name = resolved.name;
         record.description = resolved.description;
         record.input_schema = resolved.input_schema;
@@ -185,13 +213,15 @@ impl BusinessToolCatalog {
 
 pub(crate) use localization::{materialize_schema, translate};
 
-
-
 pub(crate) fn official_remote_descriptors() -> Vec<eliteforge_agent_core::ToolDescriptor> {
     let mut tools = eliteforge_agent_capability_personai::personai_tool_catalog();
     tools.extend(eliteforge_agent_official_plugin_tools_media::media_tool_catalog());
     tools.push(eliteforge_agent_official_plugin_tools_web::web_read_descriptor());
-    tools.extend(eliteforge_agent_connector::connector_tool_catalog().into_iter().map(|entry| entry.descriptor));
+    tools.extend(
+        eliteforge_agent_connector::connector_tool_catalog()
+            .into_iter()
+            .map(|entry| entry.descriptor),
+    );
     tools.push(crate::application::topic::topic_read_tool_descriptor());
     tools
 }
@@ -237,25 +267,39 @@ fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
         eliteforge_agent_official_plugin_tools_web::web_tool_category(),
         source("WebToolsPlugin", "framework.web.tools", "framework.web"),
     ));
-    entries.extend(eliteforge_agent_connector::connector_tool_catalog().into_iter().map(|entry| (
-        entry.descriptor,
-        builtin_category("tron.connector.tools.platform"),
-        eliteforge_agent_core::ToolSource {
-            provider_id: Some("ConnectorTools".into()),
-            plugin_id: Some("tron.connector.tools".into()),
-            pack_id: Some("framework.connector".into()),
-            adapter_id: Some("tron.connector.tools".into()),
-        },
-    )));
+    entries.extend(
+        eliteforge_agent_connector::connector_tool_catalog()
+            .into_iter()
+            .map(|entry| {
+                (
+                    entry.descriptor,
+                    builtin_category("tron.connector.tools.platform"),
+                    eliteforge_agent_core::ToolSource {
+                        provider_id: Some("ConnectorTools".into()),
+                        plugin_id: Some("tron.connector.tools".into()),
+                        pack_id: Some("framework.connector".into()),
+                        adapter_id: Some("tron.connector.tools".into()),
+                    },
+                )
+            }),
+    );
     entries.push((
         crate::application::topic::topic_read_tool_descriptor(),
         builtin_category("tron.connector.tools.topic"),
-        eliteforge_agent_core::ToolSource { provider_id: Some("TopicTools".into()), plugin_id: Some("tron.connector.tools".into()), pack_id: None, adapter_id: Some("tron.connector.tools".into()) },
+        eliteforge_agent_core::ToolSource {
+            provider_id: Some("TopicTools".into()),
+            plugin_id: Some("tron.connector.tools".into()),
+            pack_id: None,
+            adapter_id: Some("tron.connector.tools".into()),
+        },
     ));
     entries
         .into_iter()
         .map(|(tool, category, source)| {
-            let resolved = tool.resolve_display(match locale { SupportedLocale::ZhCn => "zh-CN", SupportedLocale::EnUs => "en-US" });
+            let resolved = tool.resolve_display(match locale {
+                SupportedLocale::ZhCn => "zh-CN",
+                SupportedLocale::EnUs => "en-US",
+            });
             let domain = if tool.call_name == "topic_read" {
                 "topic"
             } else if tool.call_name.starts_with("connector_") {
@@ -280,7 +324,12 @@ fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
                     eliteforge_agent_core::ToolOperationKind::Unknown => ToolOperationKind::Unknown,
                 },
                 input_schema: resolved.input_schema,
-                module_owner: if tool.call_name == "topic_read" { "Tron" } else { "Framework" }.into(),
+                module_owner: if tool.call_name == "topic_read" {
+                    "Tron"
+                } else {
+                    "Framework"
+                }
+                .into(),
                 availability_state: ToolAvailabilityState::Available,
                 sample_result_summary: String::new(),
             }

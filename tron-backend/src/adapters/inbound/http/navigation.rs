@@ -136,9 +136,13 @@ fn child_display_name(
 pub(crate) fn navigation_error_response(error: NavigationError, locale: &str) -> Response {
     if let NavigationError::MaxDepthExceeded { depth, max_depth } = &error {
         let message = if locale.starts_with("en") {
-            format!("Cannot save menu arrangement: the resulting tree has {depth} levels, exceeding the current limit of {max_depth}. Move the group to a shallower level or increase navigation.maxDepth in settings.")
+            format!(
+                "Cannot save menu arrangement: the resulting tree has {depth} levels, exceeding the current limit of {max_depth}. Move the group to a shallower level or increase navigation.maxDepth in settings."
+            )
         } else {
-            format!("无法保存菜单编排：调整后共 {depth} 层，超过当前上限 {max_depth} 层。请将分组移到更浅的层级，或在设置中提高 navigation.maxDepth。")
+            format!(
+                "无法保存菜单编排：调整后共 {depth} 层，超过当前上限 {max_depth} 层。请将分组移到更浅的层级，或在设置中提高 navigation.maxDepth。"
+            )
         };
         return (
             StatusCode::BAD_REQUEST,
@@ -146,7 +150,8 @@ pub(crate) fn navigation_error_response(error: NavigationError, locale: &str) ->
                 "NAVIGATION_MAX_DEPTH_EXCEEDED",
                 message,
             )),
-        ).into_response();
+        )
+            .into_response();
     }
     if let NavigationError::DuplicateDomainItems(codes) = error {
         let codes = codes.join(", ");

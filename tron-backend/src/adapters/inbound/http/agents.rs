@@ -9,5 +9,5 @@ pub mod routes;
 mod workspace_grants;
 
 mod system_agent_profiles;
-mod tool_permissions;
 mod tool_catalog_issues;
+mod tool_permissions;

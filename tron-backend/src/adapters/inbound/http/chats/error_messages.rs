@@ -65,7 +65,10 @@ pub(super) fn message(code: &str, detail: &str) -> String {
             "主题不属于当前工作空间或已不可用，请重新选择。",
             "The topic is unavailable in this workspace. Select another topic.",
         ),
-        "CHAT_DIRECTORY_FIXED" => ("目录会话的工作目录不可更改。", "Directory chats must use their own directory."),
+        "CHAT_DIRECTORY_FIXED" => (
+            "目录会话的工作目录不可更改。",
+            "Directory chats must use their own directory.",
+        ),
         "CHAT_DIRECTORY_INVALID" => (
             "目录不属于当前空间或已不可用，请重新选择。",
             "The directory is unavailable in this space. Select another directory.",

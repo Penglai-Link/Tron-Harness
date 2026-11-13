@@ -83,7 +83,9 @@ pub async fn restore_app(State(apps): State<AppService>, Path(app_code): Path<St
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteAppResponse { app_code: String }
+struct DeleteAppResponse {
+    app_code: String,
+}
 
 pub async fn delete_app(State(apps): State<AppService>, Path(app_code): Path<String>) -> Response {
     match apps.delete_app(&app_code) {

@@ -13,15 +13,20 @@ pub(super) fn project(
         if message.role != fw::Role::User {
             continue;
         }
-        let mut source = messages::decode(message)
-            .map_err(fw::AgentError::InvalidConfiguration)?;
+        let mut source = messages::decode(message).map_err(fw::AgentError::InvalidConfiguration)?;
         // A new input without a snapshot clears the current location. Never
         // fall back to a former message, including after a steer or restart.
-        current = source.parts.iter().filter(|part| is_snapshot(part)).cloned().collect();
+        current = source
+            .parts
+            .iter()
+            .filter(|part| is_snapshot(part))
+            .cloned()
+            .collect();
         if !current.is_empty() {
             source.parts.retain(|part| !is_snapshot(part));
             message.content = messages::encode(&source)
-                .map_err(fw::AgentError::InvalidConfiguration)?.content;
+                .map_err(fw::AgentError::InvalidConfiguration)?
+                .content;
         }
     }
     Ok(if current.is_empty() {

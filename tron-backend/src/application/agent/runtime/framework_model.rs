@@ -4,14 +4,21 @@ use super::*;
 use crate::domain::agent::{TokenEstimateSnapshot, TokenUsageAuditSnapshot};
 
 impl ReactAgent {
-    pub(crate) async fn framework_tool_catalog_update(&self, context: &AgentRunContext, bindings: &[eliteforge_agent_core::ToolBinding]) -> Result<Option<serde_json::Value>, AgentError> {
+    pub(crate) async fn framework_tool_catalog_update(
+        &self,
+        context: &AgentRunContext,
+        bindings: &[eliteforge_agent_core::ToolBinding],
+    ) -> Result<Option<serde_json::Value>, AgentError> {
         match &self.short_term_memory {
-            Some(memory) => memory.admitted_tool_catalog_update(context, bindings).await.map_err(short_term_memory_error),
+            Some(memory) => memory
+                .admitted_tool_catalog_update(context, bindings)
+                .await
+                .map_err(short_term_memory_error),
             None => Ok(None),
         }
     }
-    pub(crate) fn framework_dudes(&self)->Option<crate::application::dude::DudeService> {
-        self.framework_host.as_ref().and_then(|h|h.dudes())
+    pub(crate) fn framework_dudes(&self) -> Option<crate::application::dude::DudeService> {
+        self.framework_host.as_ref().and_then(|h| h.dudes())
     }
 
     pub(crate) fn framework_memories(&self) -> Option<crate::app::AppMemoryService> {
@@ -80,7 +87,9 @@ impl ReactAgent {
         context: &mut AgentRunContext,
         turn_state: &mut TurnStateAdapter,
     ) -> Result<PreparedModelContext, AgentError> {
-        if context.is_owning_dude() { context.model.responses_stateful_enabled = false; }
+        if context.is_owning_dude() {
+            context.model.responses_stateful_enabled = false;
+        }
         if let Some(inspector) = self.directory_inspector.clone() {
             if crate::application::agent::refresh_execution_context(context, inspector).await? {
                 // Stateful providers must replay the updated prefix, not retain stale cwd facts.
@@ -208,12 +217,29 @@ impl ReactAgent {
         let first_delta_at = Arc::new(Mutex::new(None::<std::time::Instant>));
         let output_started = Arc::new(Mutex::new(false));
         let stream_sink = sink.map(|sink| {
-            let forward = self.model_stream_event_sink(context, turn_state_kind, sink, Arc::clone(&output_started));
+            let forward = self.model_stream_event_sink(
+                context,
+                turn_state_kind,
+                sink,
+                Arc::clone(&output_started),
+            );
             let first_delta_at = Arc::clone(&first_delta_at);
             Arc::new(move |event: ModelStreamEvent| {
                 use crate::domain::agent::ModelStreamEventKind as Kind;
-                if !event.delta.is_empty() && matches!(event.kind, Kind::Text | Kind::Reasoning | Kind::ReasoningSummary | Kind::ToolCallDelta | Kind::ToolBoundary) {
-                    first_delta_at.lock().unwrap().get_or_insert_with(std::time::Instant::now);
+                if !event.delta.is_empty()
+                    && matches!(
+                        event.kind,
+                        Kind::Text
+                            | Kind::Reasoning
+                            | Kind::ReasoningSummary
+                            | Kind::ToolCallDelta
+                            | Kind::ToolBoundary
+                    )
+                {
+                    first_delta_at
+                        .lock()
+                        .unwrap()
+                        .get_or_insert_with(std::time::Instant::now);
                 }
                 forward(event);
             }) as ModelStreamSink

@@ -87,11 +87,17 @@ pub struct TraceSort {
     pub direction: TraceSortDirection,
 }
 #[derive(Clone, Copy, Debug, Deserialize, utoipa::ToSchema)]
-pub enum TraceCategory { Page, Agent }
+pub enum TraceCategory {
+    Page,
+    Agent,
+}
 
 #[derive(Clone, Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct TraceAgentOption { pub code: String, pub name: String }
+pub struct TraceAgentOption {
+    pub code: String,
+    pub name: String,
+}
 #[derive(Clone, Debug, Default)]
 pub struct TraceFilters {
     pub span_id: Option<String>,
@@ -146,7 +152,9 @@ pub struct TraceMetrics {
     pub p95_duration_ms: f64,
 }
 pub trait TraceRepository: Send + Sync {
-    fn agent_options(&self, _workspace: &str) -> Result<Vec<TraceAgentOption>, ObservabilityError> { Ok(Vec::new()) }
+    fn agent_options(&self, _workspace: &str) -> Result<Vec<TraceAgentOption>, ObservabilityError> {
+        Ok(Vec::new())
+    }
     fn metrics(&self, query: &TraceQuery) -> Result<TraceMetrics, ObservabilityError>;
     fn query(&self, query: &TraceQuery) -> Result<TracePage, ObservabilityError>;
     fn detail(&self, workspace: &str, trace: &str) -> Result<TraceDetail, ObservabilityError>;
@@ -155,14 +163,39 @@ pub trait TraceRepository: Send + Sync {
 pub struct ObservabilityService(pub Arc<dyn super::ObservabilityRepository>);
 impl ObservabilityService {
     pub fn query(&self, mut query: TraceQuery) -> Result<TracePage, ObservabilityError> {
-        query.filters.span_id = query.filters.span_id.map(|id| id.trim().to_ascii_lowercase()).filter(|id| !id.is_empty());
-        if query.filters.span_id.as_ref().is_some_and(|id| id.len() != 16 || !id.bytes().all(|b| b.is_ascii_hexdigit()) || id.bytes().all(|b| b == b'0')) {
+        query.filters.span_id = query
+            .filters
+            .span_id
+            .map(|id| id.trim().to_ascii_lowercase())
+            .filter(|id| !id.is_empty());
+        if query.filters.span_id.as_ref().is_some_and(|id| {
+            id.len() != 16
+                || !id.bytes().all(|b| b.is_ascii_hexdigit())
+                || id.bytes().all(|b| b == b'0')
+        }) {
             return Err(ObservabilityError::InvalidQuery);
         }
         query.filters.keyword = query.filters.keyword.trim().to_lowercase();
-        if query.filters.keyword.len() > 256 || query.filters.keyword_aliases.len() > 500
-            || query.filters.agent_code.as_ref().is_some_and(|v| v.len() > 256)
-            || query.filters.status.as_ref().is_some_and(|v| !["Running", "Completed", "Error", "Cancelled", "Unknown", "Waiting", "Interrupted"].contains(&v.as_str())) {
+        if query.filters.keyword.len() > 256
+            || query.filters.keyword_aliases.len() > 500
+            || query
+                .filters
+                .agent_code
+                .as_ref()
+                .is_some_and(|v| v.len() > 256)
+            || query.filters.status.as_ref().is_some_and(|v| {
+                ![
+                    "Running",
+                    "Completed",
+                    "Error",
+                    "Cancelled",
+                    "Unknown",
+                    "Waiting",
+                    "Interrupted",
+                ]
+                .contains(&v.as_str())
+            })
+        {
             return Err(ObservabilityError::InvalidQuery);
         }
         query.trace_id = query

@@ -1,8 +1,6 @@
 use std::io::Write;
 
-use crate::domain::resource::{
-    ChatSessionAttachmentRecord, ResourceError, ResourceFileRecord,
-};
+use crate::domain::resource::{ChatSessionAttachmentRecord, ResourceError, ResourceFileRecord};
 
 pub trait ResourceRepository: Send {
     fn list_files(&mut self) -> Result<Vec<ResourceFileRecord>, ResourceError>;

@@ -1,15 +1,10 @@
-use axum::{
-    Router,
-    routing::post,
-};
+use axum::{Router, routing::post};
 
 use crate::{app::AppState, application::resource::ResourceService};
 
-use super::{
-    handler::{
-        commit_body_limit, create_resource, delete_resource, download_binary, get_resource,
-        page_resources, update_resource, upload_binary, upload_body_limit,
-    },
+use super::handler::{
+    commit_body_limit, create_resource, delete_resource, download_binary, get_resource,
+    page_resources, update_resource, upload_binary, upload_body_limit,
 };
 
 pub fn routes(resources: &ResourceService) -> Router<AppState> {
@@ -27,5 +22,4 @@ pub fn routes(resources: &ResourceService) -> Router<AppState> {
             post(upload_binary).layer(upload_body_limit(resources.max_binary_bytes())),
         )
         .route("/api/v1/resources/download-binary", post(download_binary))
-
 }

@@ -80,5 +80,4 @@ impl DirectoryRepository for SqliteDirectoryRepository {
             Ok(())
         }, || DirectoryError::StorageFailure)
     }
-
 }

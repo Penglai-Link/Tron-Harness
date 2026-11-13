@@ -43,34 +43,34 @@ mod host_execution;
 #[path = "host_sudo.rs"]
 mod host_sudo;
 pub(crate) use host_sudo::{PendingSudoInput, SudoInputError};
+#[path = "host_connector_tools.rs"]
+mod connector_tools;
 #[path = "host_external.rs"]
 mod host_external;
-#[path = "host_navigation.rs"]
-pub(super) mod host_navigation;
+#[path = "host_history.rs"]
+mod host_history;
 #[path = "host_import.rs"]
 mod host_import;
-#[path = "host_pages.rs"]
-pub(super) mod host_pages;
 #[path = "host_interactions.rs"]
 mod host_interactions;
+#[path = "host_navigation.rs"]
+pub(super) mod host_navigation;
+#[path = "host_pages.rs"]
+pub(super) mod host_pages;
 #[path = "host_run.rs"]
 mod host_run;
 #[path = "host_shutdown.rs"]
 mod host_shutdown;
 #[path = "host_snapshot.rs"]
 mod host_snapshot;
-#[path = "host_history.rs"]
-mod host_history;
 #[path = "host_storage.rs"]
 mod host_storage;
-#[path = "host_working_directory.rs"]
-mod host_working_directory;
 #[path = "host_summary.rs"]
 mod host_summary;
+#[path = "host_working_directory.rs"]
+mod host_working_directory;
 #[path = "host_remote_tools.rs"]
 pub(super) mod remote_tools;
-#[path = "host_connector_tools.rs"]
-mod connector_tools;
 use capability_state::{load_capability_state, persist_capability_state};
 
 #[derive(Clone)]
@@ -143,10 +143,7 @@ impl FrameworkHost {
         self.0
             .telemetry
             .get_or_try_init(|| async {
-                crate::app::telemetry::LocalTelemetry::open(
-                    &self.telemetry_database_path(),
-                )
-                .await
+                crate::app::telemetry::LocalTelemetry::open(&self.telemetry_database_path()).await
             })
             .await
     }
@@ -161,12 +158,23 @@ impl FrameworkHost {
         Ok(self.telemetry().await?.service())
     }
 
-    pub async fn reset_observability(&self) -> Result<(), crate::application::observability::ObservabilityError> {
+    pub async fn reset_observability(
+        &self,
+    ) -> Result<(), crate::application::observability::ObservabilityError> {
         use crate::application::observability::ObservabilityError;
-        self.ensure_open().map_err(|_| ObservabilityError::Storage)?;
+        self.ensure_open()
+            .map_err(|_| ObservabilityError::Storage)?;
         let telemetry = self.telemetry().await?;
-        telemetry.runtime.force_flush().await.map_err(|_| ObservabilityError::Storage)?;
-        telemetry.store.clear().await.map_err(|_| ObservabilityError::Storage)
+        telemetry
+            .runtime
+            .force_flush()
+            .await
+            .map_err(|_| ObservabilityError::Storage)?;
+        telemetry
+            .store
+            .clear()
+            .await
+            .map_err(|_| ObservabilityError::Storage)
     }
 
     pub async fn collector_connection(
@@ -189,7 +197,9 @@ impl FrameworkHost {
             .unwrap_or_else(|_| panic!("agent management already bound"));
     }
     pub fn bind_prompt_service(&self, service: crate::application::prompt::PromptService) {
-        self.0.prompt_service.set(service)
+        self.0
+            .prompt_service
+            .set(service)
             .unwrap_or_else(|_| panic!("prompt service already bound"));
     }
 
@@ -210,7 +220,15 @@ impl FrameworkHost {
             .capability_resources
             .set(resources)
             .map_err(|_| "capability resources already bound")?;
-        self.sync_capability_resources()
+        // Framework extractions are rebuilt from current packages on demand;
+        // drop copies made by earlier binaries so only current content remains.
+        let _ = fs::remove_dir_all(
+            self.0
+                .path
+                .with_extension("skills")
+                .join("capability-packs"),
+        );
+        self.reconcile_capability_resources().map(|_| ())
     }
     pub(crate) fn bind_collaboration(
         &self,
@@ -297,11 +315,22 @@ impl FrameworkHost {
         self.0.knowledge_bases.get().cloned()
     }
 
-    pub fn bind_topics(&self, service: crate::application::topic::TopicService) -> Result<(), AgentError> {
-        self.0.topics.set(service).map_err(|_| AgentError::InvalidConfiguration("topic service is already bound".into()))
+    pub fn bind_topics(
+        &self,
+        service: crate::application::topic::TopicService,
+    ) -> Result<(), AgentError> {
+        self.0
+            .topics
+            .set(service)
+            .map_err(|_| AgentError::InvalidConfiguration("topic service is already bound".into()))
     }
-    pub fn bind_integrations(&self, service: crate::application::connector::IntegrationService) -> Result<(), AgentError> {
-        self.0.integrations.set(service).map_err(|_| AgentError::InvalidConfiguration("connector service is already bound".into()))
+    pub fn bind_integrations(
+        &self,
+        service: crate::application::connector::IntegrationService,
+    ) -> Result<(), AgentError> {
+        self.0.integrations.set(service).map_err(|_| {
+            AgentError::InvalidConfiguration("connector service is already bound".into())
+        })
     }
 
     pub(crate) fn topics(&self) -> Option<crate::application::topic::TopicService> {
@@ -434,32 +463,44 @@ impl FrameworkHost {
                 &self.0.extension_state.read().unwrap(),
             )?;
         }
-        if let Some(navigation) = self.0.navigation.get() { navigation.set_pack_enabled(&pack.id, false)?; }
+        if let Some(navigation) = self.0.navigation.get() {
+            navigation.set_pack_enabled(&pack.id, false)?;
+        }
         if let Some(resources) = self.0.capability_resources.get() {
             resources.transition(&pack.id, false, &[])?;
-        }
-        self.sync_pack_indexes(&pack.id, false).await?;
-        if let (Some(skills), Some(rag)) = (self.0.skill_registry.get(), self.0.rag.get()) {
-            let indexer =
-                crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone());
-            indexer
-                .remove_pack_skills(&pack.id)
-                .await
-                .map_err(|e| e.to_string())?;
         }
         if let Some(resources) = self.0.capability_resources.get() {
             resources.remove(&pack.id)?;
         }
-        if let Err(error) = self.sync_capability_resources() {
-            // Conflicting imports remain disabled and can be removed or retried.
-            self.invalidate_environment().await?;
-            return Err(error);
-        }
+        let report = self.reconcile_capability_resources()?;
+        self.remove_retired_skill_indexes(&report.removed_skills)
+            .await;
         self.sync_pack_indexes(&pack.id, false).await?;
         self.sync_navigation_packs()?;
         self.invalidate_environment().await?;
         self.framework().await.map_err(|e| e.to_string())?;
         Ok(pack)
+    }
+    async fn remove_retired_skill_indexes(&self, names: &[String]) {
+        let (Some(skills), Some(rag)) = (self.0.skill_registry.get(), self.0.rag.get()) else {
+            return;
+        };
+        let Ok(active) =
+            skills.list_registry(crate::domain::skill::RegistrySkillListQuery { search: None })
+        else {
+            return;
+        };
+        let active = active
+            .into_iter()
+            .map(|skill| skill.skill_name)
+            .collect::<std::collections::BTreeSet<_>>();
+        let indexer =
+            crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone());
+        for name in names.iter().filter(|name| !active.contains(*name)) {
+            if let Err(error) = indexer.remove_skill_index(name).await {
+                tracing::warn!(skill = %name, %error, "failed to remove retired skill index");
+            }
+        }
     }
     async fn sync_pack_indexes(&self, id: &str, enabled: bool) -> Result<(), String> {
         if let (Some(skills), Some(rag)) = (self.0.skill_registry.get(), self.0.rag.get()) {
@@ -525,7 +566,9 @@ impl FrameworkHost {
             vec![]
         };
         let result = async {
-            if let Some(navigation) = self.0.navigation.get() { navigation.set_pack_enabled(id, enabled)?; }
+            if let Some(navigation) = self.0.navigation.get() {
+                navigation.set_pack_enabled(id, enabled)?;
+            }
             if let Some(resources) = self.0.capability_resources.get() {
                 resources.transition(id, enabled, &agents)?;
             }
@@ -546,7 +589,9 @@ impl FrameworkHost {
         .await;
         if let Err(error) = result {
             packs.insert(id.into(), false);
-            if let Some(navigation) = self.0.navigation.get() { let _ = navigation.set_pack_enabled(id, false); }
+            if let Some(navigation) = self.0.navigation.get() {
+                let _ = navigation.set_pack_enabled(id, false);
+            }
             if let Some(resources) = self.0.capability_resources.get() {
                 let _ = resources.transition(id, false, &agents);
             }
@@ -583,7 +628,9 @@ impl FrameworkHost {
         let mut packs = self.0.capability_state.read().unwrap().clone();
         let extensions = self.0.extension_state.read().unwrap().clone();
         packs.insert(id.into(), false);
-        if let Some(navigation) = self.0.navigation.get() { navigation.set_pack_enabled(id, false)?; }
+        if let Some(navigation) = self.0.navigation.get() {
+            navigation.set_pack_enabled(id, false)?;
+        }
         persist_capability_state(&self.0.state_path, &packs, &extensions)?;
         *self.0.capability_state.write().unwrap() = packs;
         if let Some(resources) = self.0.capability_resources.get() {
@@ -612,31 +659,24 @@ impl FrameworkHost {
                 .remove(id, &version.manifest.version)
                 .map_err(|e| e.to_string())?;
         }
-        if let Some(skills) = self.0.skill_registry.get() {
-            if let Some(rag) = self.0.rag.get() {
-                crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone())
-                    .remove_pack_skills(id)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            } else {
-                skills.delete_pack_skills(id).map_err(|e| e.to_string())?;
-            }
-        }
         if let Some(resources) = self.0.capability_resources.get() {
             resources.remove(id)?;
         }
-        if let Some(navigation) = self.0.navigation.get() { navigation.remove_pack(id)?; }
-        self.0.skills.write().unwrap().remove(id);
-        // Retain provider IDs as a disabled deny list until the initialized environment closes.
-        let safe = id
-            .as_bytes()
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>();
-        let cache = self.0.path.with_extension("skills-catalog").join(&safe);
-        if cache.exists() {
-            fs::remove_dir_all(cache).map_err(|e| e.to_string())?;
+        if let Some(navigation) = self.0.navigation.get() {
+            navigation.remove_pack(id)?;
         }
+        self.0.skills.write().unwrap().remove(id);
+        match self.reconcile_capability_resources() {
+            Ok(report) => {
+                self.remove_retired_skill_indexes(&report.removed_skills)
+                    .await;
+            }
+            Err(error) => {
+                tracing::error!(%error, pack = id, "capability resources failed to reconcile after uninstall");
+            }
+        }
+        // The framework keeps a separate extraction of embedded package skills.
+        let safe = host_environment::pack_cache_component(id);
         let cache = self
             .0
             .path
@@ -983,8 +1023,20 @@ impl FrameworkHost {
         self.internal_agent_profile(workspace, code, false).await
     }
 
-    async fn internal_agent_profile(&self, workspace: &str, code: &str, onboarding: bool) -> Result<Agent, fw::AgentError> {
-        let key = (workspace.to_owned(), if onboarding { format!("{}::onboarding", code.to_ascii_lowercase()) } else { code.to_ascii_lowercase() });
+    async fn internal_agent_profile(
+        &self,
+        workspace: &str,
+        code: &str,
+        onboarding: bool,
+    ) -> Result<Agent, fw::AgentError> {
+        let key = (
+            workspace.to_owned(),
+            if onboarding {
+                format!("{}::onboarding", code.to_ascii_lowercase())
+            } else {
+                code.to_ascii_lowercase()
+            },
+        );
         let cell = self
             .0
             .internal_agents
@@ -1003,8 +1055,12 @@ impl FrameworkHost {
                 .map_err(fw::AgentError::InvalidConfiguration)?;
             if onboarding {
                 let providers = selection.tool_providers.as_deref().unwrap_or_default();
-                if !providers.iter().any(|p| p == "tron.harness.tools") || !providers.iter().any(|p| p == "agent.a2ui") {
-                    return Err(fw::AgentError::InvalidConfiguration("Soul onboarding requires Tron tools and A2UI".into()));
+                if !providers.iter().any(|p| p == "tron.harness.tools")
+                    || !providers.iter().any(|p| p == "agent.a2ui")
+                {
+                    return Err(fw::AgentError::InvalidConfiguration(
+                        "Soul onboarding requires Tron tools and A2UI".into(),
+                    ));
                 }
                 selection.tool_providers = Some(vec![
                     "tron.harness.tools".into(),
@@ -1015,7 +1071,9 @@ impl FrameworkHost {
                 ]);
                 selection.skills_from_host = false;
                 // A2UI negotiation uses SkillAccess even when no skill tools are leased.
-                selection.skills = Some(vec![eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into()]);
+                selection.skills = Some(vec![
+                    eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into(),
+                ]);
                 selection.context_sources = Some(vec![]);
             }
             framework.agent(selection).build().await

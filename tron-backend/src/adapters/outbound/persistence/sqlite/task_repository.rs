@@ -521,7 +521,12 @@ fn replace_code_links_row(
         connection
             .execute(
                 &insert_sql,
-                params![*next_id, task_code, entry.code, timestamp_to_millis(&entry.linked_at)],
+                params![
+                    *next_id,
+                    task_code,
+                    entry.code,
+                    timestamp_to_millis(&entry.linked_at)
+                ],
             )
             .map_err(storage_error)?;
         *next_id += 1;
@@ -533,7 +538,8 @@ fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
     let priority: String = row.get(10)?;
     let task_type: String = row.get(11)?;
     let source_type: String = row.get(12)?;
-    let progress: i64 = row.get(16)?;    Ok(Task {
+    let progress: i64 = row.get(16)?;
+    Ok(Task {
         id: SnowflakeId::new(row.get(0)?),
         task_code: row.get(1)?,
         workspace_code: row.get(2)?,
@@ -567,8 +573,6 @@ fn storage_error(error: rusqlite::Error) -> TaskError {
     tracing::error!("task sqlite error: {error}");
     TaskError::StorageFailure
 }
-
-
 
 fn task_mapping_error(error: TaskError) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))

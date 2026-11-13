@@ -10,10 +10,19 @@ impl SqliteRagRepositorySql<'_> {
     ) -> Result<Option<RagRecordTask>, RagError> {
         self.record_task_inner(user, id, false)
     }
-    pub(super) fn record_task_summary(&self, user: &str, id: &str) -> Result<Option<RagRecordTask>, RagError> {
+    pub(super) fn record_task_summary(
+        &self,
+        user: &str,
+        id: &str,
+    ) -> Result<Option<RagRecordTask>, RagError> {
         self.record_task_inner(user, id, true)
     }
-    fn record_task_inner(&self, user: &str, id: &str, summary: bool) -> Result<Option<RagRecordTask>, RagError> {
+    fn record_task_inner(
+        &self,
+        user: &str,
+        id: &str,
+        summary: bool,
+    ) -> Result<Option<RagRecordTask>, RagError> {
         let row: Option<(String, String)> = self
             .connection
             .query_row(
@@ -50,9 +59,15 @@ impl SqliteRagRepositorySql<'_> {
     pub(super) fn record_task_summaries(&self, user: &str) -> Result<Vec<RagRecordTask>, RagError> {
         self.record_tasks_inner(user, true)
     }
-    fn record_tasks_inner(&self, user: &str, summary: bool) -> Result<Vec<RagRecordTask>, RagError> {
-        let mut statement = self.connection.prepare(
-            "WITH ranked AS (
+    fn record_tasks_inner(
+        &self,
+        user: &str,
+        summary: bool,
+    ) -> Result<Vec<RagRecordTask>, RagError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "WITH ranked AS (
                 SELECT payload_json,state,rowid AS sequence,
                     ROW_NUMBER() OVER (PARTITION BY corpus_id,
                         json_extract(payload_json,'$.sourceCode'),
@@ -64,8 +79,9 @@ impl SqliteRagRepositorySql<'_> {
             ) SELECT CASE WHEN ?2 THEN json_set(payload_json,
                 '$.payload',json_object('title',json_extract(payload_json,'$.payload.title')),
                 '$.checkpoint.vectors.vectors',json('[]')) ELSE payload_json END,state
-              FROM ranked WHERE attempt=1 OR recency<=200 ORDER BY sequence DESC"
-        ).map_err(super::storage_error)?;
+              FROM ranked WHERE attempt=1 OR recency<=200 ORDER BY sequence DESC",
+            )
+            .map_err(super::storage_error)?;
         let rows = statement
             .query_map(params![user, summary], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -90,7 +106,10 @@ impl SqliteRagRepositorySql<'_> {
             .ok_or(RagError::CorpusNotFound)?;
         self.index_counts_for(&corpus)
     }
-    pub(super) fn index_counts_for(&self, corpus: &crate::domain::rag::RagCorpusRecord) -> Result<RagIndexCounts, RagError> {
+    pub(super) fn index_counts_for(
+        &self,
+        corpus: &crate::domain::rag::RagCorpusRecord,
+    ) -> Result<RagIndexCounts, RagError> {
         let Some(table) = corpus.storage_binding.sqlite_table_for_segment("textUnit") else {
             return Ok(RagIndexCounts::default());
         };
@@ -120,7 +139,8 @@ impl SqliteRagRepositorySql<'_> {
         {
             vector_count+=self.connection.query_row(&format!("SELECT COUNT(*) FROM {} vec JOIN {table} units ON units.id=vec.rowid {join} WHERE {active}",super::sql_plan::quote_identifier(&vec_name)?),[],|row|row.get::<_,usize>(0)).map_err(super::storage_error)?;
         }
-        let settings = crate::application::rag::RagSettings::from_capabilities(&corpus.capabilities)?;
+        let settings =
+            crate::application::rag::RagSettings::from_capabilities(&corpus.capabilities)?;
         let metadata_column = super::sql_plan::quote_identifier(
             plan.source_metadata_column.as_deref().unwrap_or("metadata"),
         )?;
@@ -133,7 +153,9 @@ impl SqliteRagRepositorySql<'_> {
                 AND units.scope_type=g.scope_type AND units.scope_code=g.scope_code \
                 AND json_extract({source_alias}.{metadata_column},'$.graphGenerationId')=g.generation_id)"),
                 [&corpus.corpus_id],|row|row.get(0)).map_err(super::storage_error)?
-        } else {0};
+        } else {
+            0
+        };
         let mut statement = self.connection.prepare(&format!("SELECT DISTINCT {source_alias}.{metadata_column} FROM {table} units {join} WHERE {active}")).map_err(super::storage_error)?;
         let saved = statement
             .query_map([], |row| row.get::<_, String>(0))

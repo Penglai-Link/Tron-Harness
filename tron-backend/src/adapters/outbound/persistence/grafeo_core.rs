@@ -107,8 +107,14 @@ impl GrafeoStoreCore {
     }
 
     fn create_indexes(&self, session: &Session) -> Result<(), grafeo::Error> {
-        create_index(session, "CREATE INDEX idx_tron_rag_node_id FOR (n:TronRagNode) ON (n.nodeId)")?;
-        create_index(session, "CREATE INDEX idx_tron_rag_node_generation FOR (n:TronRagNode) ON (n.nodeGeneration)")?;
+        create_index(
+            session,
+            "CREATE INDEX idx_tron_rag_node_id FOR (n:TronRagNode) ON (n.nodeId)",
+        )?;
+        create_index(
+            session,
+            "CREATE INDEX idx_tron_rag_node_generation FOR (n:TronRagNode) ON (n.nodeGeneration)",
+        )?;
         create_index(
             session,
             &format!("CREATE INDEX {NODE_CODE_INDEX} FOR (n:{GRAPH_NODE_LABEL}) ON (n.nodeCode)"),

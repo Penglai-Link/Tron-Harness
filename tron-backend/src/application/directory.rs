@@ -14,8 +14,15 @@ pub trait DirectoryRepository: Send + Sync {
     fn rename(&self, directory_code: &str, name: &str) -> Result<(), DirectoryError>;
 }
 
-pub struct DirectoryBrowserEntry { pub name: String, pub path: String }
-pub struct DirectoryBrowserPage { pub path: String, pub parent: Option<String>, pub entries: Vec<DirectoryBrowserEntry> }
+pub struct DirectoryBrowserEntry {
+    pub name: String,
+    pub path: String,
+}
+pub struct DirectoryBrowserPage {
+    pub path: String,
+    pub parent: Option<String>,
+    pub entries: Vec<DirectoryBrowserEntry>,
+}
 
 #[async_trait::async_trait]
 pub trait DirectoryPicker: Send + Sync {
@@ -97,34 +104,76 @@ impl DirectoryService {
         Ok(directory)
     }
 
-    pub fn browse(&self, workspace_code: &str, requested: Option<&str>) -> Result<DirectoryBrowserPage, DirectoryError> {
+    pub fn browse(
+        &self,
+        workspace_code: &str,
+        requested: Option<&str>,
+    ) -> Result<DirectoryBrowserPage, DirectoryError> {
         self.check_workspace(workspace_code)?;
-        let selected = requested.filter(|path| !path.trim().is_empty()).map(std::path::PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(std::path::PathBuf::from))
+        let selected = requested
+            .filter(|path| !path.trim().is_empty())
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .or_else(|| std::env::var_os("USERPROFILE"))
+                    .map(std::path::PathBuf::from)
+            })
             .ok_or(DirectoryError::PathInvalid)?;
-        if !selected.is_absolute() { return Err(DirectoryError::PathInvalid); }
+        if !selected.is_absolute() {
+            return Err(DirectoryError::PathInvalid);
+        }
         let selected = std::fs::canonicalize(selected).map_err(|_| DirectoryError::PathInvalid)?;
-        let path = selected.to_str().ok_or(DirectoryError::PathInvalid)?.to_owned();
-        let parent = selected.parent().and_then(|parent| parent.to_str()).map(str::to_owned);
+        let path = selected
+            .to_str()
+            .ok_or(DirectoryError::PathInvalid)?
+            .to_owned();
+        let parent = selected
+            .parent()
+            .and_then(|parent| parent.to_str())
+            .map(str::to_owned);
         let mut entries = Vec::new();
         for entry in std::fs::read_dir(&selected).map_err(|_| DirectoryError::PathInvalid)? {
             let entry = entry.map_err(|_| DirectoryError::PathInvalid)?;
-            if !entry.path().is_dir() { continue; }
-            let (Some(name), Some(path)) = (entry.file_name().to_str().map(str::to_owned), entry.path().to_str().map(str::to_owned)) else { continue; };
+            if !entry.path().is_dir() {
+                continue;
+            }
+            let (Some(name), Some(path)) = (
+                entry.file_name().to_str().map(str::to_owned),
+                entry.path().to_str().map(str::to_owned),
+            ) else {
+                continue;
+            };
             entries.push(DirectoryBrowserEntry { name, path });
         }
-        entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.name.cmp(&b.name)));
-        Ok(DirectoryBrowserPage { path, parent, entries })
+        entries.sort_by(|a, b| {
+            a.name
+                .to_lowercase()
+                .cmp(&b.name.to_lowercase())
+                .then_with(|| a.name.cmp(&b.name))
+        });
+        Ok(DirectoryBrowserPage {
+            path,
+            parent,
+            entries,
+        })
     }
 
-    pub async fn pick_and_register(&self, workspace_code: &str, locale: &str) -> Result<Option<DirectoryView>, DirectoryError> {
+    pub async fn pick_and_register(
+        &self,
+        workspace_code: &str,
+        locale: &str,
+    ) -> Result<Option<DirectoryView>, DirectoryError> {
         match self.pick_path(workspace_code, locale).await? {
             Some(path) => self.register(workspace_code, &path).map(Some),
             None => Ok(None),
         }
     }
 
-    pub async fn pick_path(&self, workspace_code: &str, locale: &str) -> Result<Option<String>, DirectoryError> {
+    pub async fn pick_path(
+        &self,
+        workspace_code: &str,
+        locale: &str,
+    ) -> Result<Option<String>, DirectoryError> {
         self.check_workspace(workspace_code)?;
         self.picker.pick(locale).await
     }
@@ -191,14 +240,21 @@ impl DirectoryService {
     ) -> Result<Vec<String>, DirectoryArchiveError> {
         let directory = self.repository.get(code)?;
         self.check_workspace(&directory.workspace_code)?;
-        chats.archive_directory(&directory.workspace_code, code).map_err(DirectoryArchiveError::Chat)
+        chats
+            .archive_directory(&directory.workspace_code, code)
+            .map_err(DirectoryArchiveError::Chat)
     }
-    pub fn delete(&self, code: &str, chats: &crate::application::chat::ChatService) -> Result<Vec<String>, DirectoryArchiveError> {
+    pub fn delete(
+        &self,
+        code: &str,
+        chats: &crate::application::chat::ChatService,
+    ) -> Result<Vec<String>, DirectoryArchiveError> {
         let directory = self.repository.get(code)?;
         self.check_workspace(&directory.workspace_code)?;
-        chats.delete_directory(&directory.workspace_code, code).map_err(DirectoryArchiveError::Chat)
+        chats
+            .delete_directory(&directory.workspace_code, code)
+            .map_err(DirectoryArchiveError::Chat)
     }
-
 }
 
 pub enum DirectoryArchiveError {

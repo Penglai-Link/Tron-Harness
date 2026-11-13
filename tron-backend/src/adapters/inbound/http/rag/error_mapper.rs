@@ -10,8 +10,12 @@ pub fn rag_error_response(error: RagError) -> Response {
     if let RagError::EmbeddingFailure(_) = &error {
         return (
             StatusCode::BAD_GATEWAY,
-            Json(ApiResponse::error("RAG_EMBEDDING_FAILED", error.to_string())),
-        ).into_response();
+            Json(ApiResponse::error(
+                "RAG_EMBEDDING_FAILED",
+                error.to_string(),
+            )),
+        )
+            .into_response();
     }
     let (status, code, message) = match error {
         RagError::SchemaIncompatible => (

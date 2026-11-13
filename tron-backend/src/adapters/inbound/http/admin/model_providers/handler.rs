@@ -172,7 +172,14 @@ pub async fn poll_reauthorization_session(
         Ok(profile) => profile,
         Err(_) => return model_provider_error_response(ModelProviderError::AuthenticationRequired),
     };
-    poll_authorization(state, provider_code, session_id, Some(profile), Some(headers)).await
+    poll_authorization(
+        state,
+        provider_code,
+        session_id,
+        Some(profile),
+        Some(headers),
+    )
+    .await
 }
 
 async fn poll_authorization(
@@ -189,7 +196,9 @@ async fn poll_authorization(
         .model_providers
         .poll_authorization_session(CompleteProviderAuthorizationCommand {
             session_id: session_id.clone(),
-            expected_person_ai_user_id: expected_profile.as_ref().map(|profile| profile.person_ai_user_id.clone()),
+            expected_person_ai_user_id: expected_profile
+                .as_ref()
+                .map(|profile| profile.person_ai_user_id.clone()),
         })
         .await
     {
@@ -204,7 +213,8 @@ async fn poll_authorization(
                     // activate, rename or switch a local profile.
                     profile_id = Some(profile.profile_id.clone());
                 } else {
-                    if let Err(error) = state.workspaces.ensure_default_workspace(user_id, username) {
+                    if let Err(error) = state.workspaces.ensure_default_workspace(user_id, username)
+                    {
                         return model_provider_profile_error(format!(
                             "failed to initialize default workspace: {error}"
                         ));
@@ -244,9 +254,12 @@ async fn poll_authorization(
             }
         }
         Err(ModelProviderError::AuthorizationAccountMismatch) => {
-            let locale = crate::shared::locale::resolve_request_locale(headers.as_ref()
-                .and_then(|headers| headers.get(axum::http::header::ACCEPT_LANGUAGE))
-                .and_then(|value| value.to_str().ok()));
+            let locale = crate::shared::locale::resolve_request_locale(
+                headers
+                    .as_ref()
+                    .and_then(|headers| headers.get(axum::http::header::ACCEPT_LANGUAGE))
+                    .and_then(|value| value.to_str().ok()),
+            );
             (StatusCode::CONFLICT, Json(ApiResponse::<EmptyData>::error(
                 "MODEL_PROVIDER_AUTH_ACCOUNT_MISMATCH",
                 if locale.starts_with("zh") {
@@ -324,9 +337,9 @@ fn model_provider_error_response(error: ModelProviderError) -> Response {
         ModelProviderError::AuthorizationEnded(_) => {
             (StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_ENDED")
         }
-        ModelProviderError::AuthorizationAccountMismatch => (
-            StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_ACCOUNT_MISMATCH",
-        ),
+        ModelProviderError::AuthorizationAccountMismatch => {
+            (StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_ACCOUNT_MISMATCH")
+        }
         ModelProviderError::InvalidServerBaseUrl => {
             (StatusCode::BAD_REQUEST, "MODEL_PROVIDER_SERVER_URL_INVALID")
         }

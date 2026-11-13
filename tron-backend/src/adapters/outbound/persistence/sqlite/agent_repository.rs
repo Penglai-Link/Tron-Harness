@@ -46,25 +46,29 @@ impl SqliteAgentRunRepository {
             .shared_database()
             .await
             .map_err(|_| AgentRunHistoryError::StorageFailure)?
-            .call_read(move |c| -> Result<Vec<(String, Option<String>)>, AgentRunHistoryError> {
-                let mut statement = c.prepare(&sql).map_err(|_| AgentRunHistoryError::StorageFailure)?;
-                let rows = statement
-                    .query_map(rusqlite::params_from_iter(parameters.iter()), |row| {
-                        Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-                    })
-                    .map_err(|_| AgentRunHistoryError::StorageFailure)?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|_| AgentRunHistoryError::StorageFailure)?;
-                Ok(rows)
-            })
+            .call_read(
+                move |c| -> Result<Vec<(String, Option<String>)>, AgentRunHistoryError> {
+                    let mut statement = c
+                        .prepare(&sql)
+                        .map_err(|_| AgentRunHistoryError::StorageFailure)?;
+                    let rows = statement
+                        .query_map(rusqlite::params_from_iter(parameters.iter()), |row| {
+                            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                        })
+                        .map_err(|_| AgentRunHistoryError::StorageFailure)?
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|_| AgentRunHistoryError::StorageFailure)?;
+                    Ok(rows)
+                },
+            )
             .await
             .map_err(|_| AgentRunHistoryError::StorageFailure)?;
         // The latest display event per run wins, matching the prior fold that
         // inserted every event into a map keyed by run code.
         let mut records = std::collections::BTreeMap::new();
         for (event_json, run_json) in raw {
-            let event: fw::SessionEvent =
-                serde_json::from_str(&event_json).map_err(|_| AgentRunHistoryError::StorageFailure)?;
+            let event: fw::SessionEvent = serde_json::from_str(&event_json)
+                .map_err(|_| AgentRunHistoryError::StorageFailure)?;
             let mut record: AgentRunHistoryRecord = serde_json::from_value(event.payload)
                 .map_err(|_| AgentRunHistoryError::StorageFailure)?;
             let native: fw::ManagedRun = run_json

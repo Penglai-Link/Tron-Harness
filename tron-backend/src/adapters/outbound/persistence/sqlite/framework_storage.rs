@@ -136,7 +136,9 @@ impl SharedDatabase {
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .retain(|_, handle| {
-                handle.upgrade().is_some_and(|open| !Arc::ptr_eq(&open, &self.0))
+                handle
+                    .upgrade()
+                    .is_some_and(|open| !Arc::ptr_eq(&open, &self.0))
             });
         self.runtime().close().await
     }
@@ -146,11 +148,7 @@ impl SharedDatabase {
         operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T, E> + Send + 'static,
         failure: impl FnOnce() -> E,
     ) -> Result<T, E> {
-        self.tracked_call(
-            operation,
-            |boxed| self.0.call_blocking(boxed),
-            failure,
-        )
+        self.tracked_call(operation, |boxed| self.0.call_blocking(boxed), failure)
     }
     /// Read-only queries run on the WAL reader pool instead of queueing
     /// behind the serialized write connection. Falls back to `call` inside a
@@ -161,11 +159,7 @@ impl SharedDatabase {
         operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T, E> + Send + 'static,
         failure: impl FnOnce() -> E,
     ) -> Result<T, E> {
-        self.tracked_call(
-            operation,
-            |boxed| self.0.call_read_blocking(boxed),
-            failure,
-        )
+        self.tracked_call(operation, |boxed| self.0.call_read_blocking(boxed), failure)
     }
     fn tracked_call<T: Send + 'static, E: Send + 'static>(
         &self,
@@ -177,8 +171,12 @@ impl SharedDatabase {
     ) -> Result<T, E> {
         let caller = std::panic::Location::caller();
         // Closure types retain the repository method, unlike a shared generic span name.
-        let operation_name = std::any::type_name_of_val(&operation).trim_end_matches("::{{closure}}");
-        let short_name = operation_name.split("::sqlite::").last().unwrap_or(operation_name);
+        let operation_name =
+            std::any::type_name_of_val(&operation).trim_end_matches("::{{closure}}");
+        let short_name = operation_name
+            .split("::sqlite::")
+            .last()
+            .unwrap_or(operation_name);
         let span_name = format!("db.sqlite.{short_name}");
         let attributes = vec![
             opentelemetry::KeyValue::new("code.function.name", operation_name.to_owned()),
@@ -200,8 +198,14 @@ impl SharedDatabase {
         });
         let failed = result.is_err();
         if failed || started_instant.elapsed() >= std::time::Duration::from_millis(25) {
-            crate::app::telemetry::completed_operation(&span_name, &parent, started,
-                std::time::SystemTime::now(), attributes, failed);
+            crate::app::telemetry::completed_operation(
+                &span_name,
+                &parent,
+                started,
+                std::time::SystemTime::now(),
+                attributes,
+                failed,
+            );
         }
         result
     }
@@ -221,9 +225,7 @@ fn configure_space(connection: &mut rusqlite::Connection, path: &str) -> rusqlit
     if file_bytes > 0 {
         if let Some(dir) = file.parent() {
             if let Ok(available) = fs2::available_space(dir) {
-                let needed = file_bytes
-                    .saturating_mul(2)
-                    .saturating_add(8 * 1024 * 1024);
+                let needed = file_bytes.saturating_mul(2).saturating_add(8 * 1024 * 1024);
                 if available < needed {
                     tracing::warn!(
                         available_mb = available / 1024 / 1024,

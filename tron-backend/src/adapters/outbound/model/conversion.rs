@@ -13,8 +13,8 @@
 //!   (`domain_code`, `skill_name`, `required_variable_keys`) are dropped, as
 //!   serde ignored them.
 use crate::domain::agent::{
-    AgentMessage, AgentMessagePart, AgentModelConfig, EffectiveTool, ModelFinish, ModelOutputItem, ModelRequest,
-    ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage,
+    AgentMessage, AgentMessagePart, AgentModelConfig, EffectiveTool, ModelFinish, ModelOutputItem,
+    ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage,
 };
 use crate::domain::reasoning::ReasoningEffort;
 use eliteforge_agent_official_plugin_model_http as sdk;
@@ -453,18 +453,58 @@ impl From<sdk::ModelRequest> for ModelRequest {
 impl From<sdk::ModelOutputItem> for ModelOutputItem {
     fn from(item: sdk::ModelOutputItem) -> Self {
         match item {
-            sdk::ModelOutputItem::Message { output_index, item_id, phase, text } => Self::Message { output_index, item_id, phase, text },
-            sdk::ModelOutputItem::ReasoningSummary { output_index, text } => Self::ReasoningSummary { output_index, text },
-            sdk::ModelOutputItem::ToolCall { output_index, call } => Self::ToolCall { output_index, call: crate::domain::agent::ToolCall { call_id: call.call_id, tool_name: call.tool_name, input: call.input, input_error: call.input_error } },
+            sdk::ModelOutputItem::Message {
+                output_index,
+                item_id,
+                phase,
+                text,
+            } => Self::Message {
+                output_index,
+                item_id,
+                phase,
+                text,
+            },
+            sdk::ModelOutputItem::ReasoningSummary { output_index, text } => {
+                Self::ReasoningSummary { output_index, text }
+            }
+            sdk::ModelOutputItem::ToolCall { output_index, call } => Self::ToolCall {
+                output_index,
+                call: crate::domain::agent::ToolCall {
+                    call_id: call.call_id,
+                    tool_name: call.tool_name,
+                    input: call.input,
+                    input_error: call.input_error,
+                },
+            },
         }
     }
 }
 impl From<ModelOutputItem> for sdk::ModelOutputItem {
     fn from(item: ModelOutputItem) -> Self {
         match item {
-            ModelOutputItem::Message { output_index, item_id, phase, text } => Self::Message { output_index, item_id, phase, text },
-            ModelOutputItem::ReasoningSummary { output_index, text } => Self::ReasoningSummary { output_index, text },
-            ModelOutputItem::ToolCall { output_index, call } => Self::ToolCall { output_index, call: sdk::ToolCall { call_id: call.call_id, tool_name: call.tool_name, input: call.input, input_error: call.input_error } },
+            ModelOutputItem::Message {
+                output_index,
+                item_id,
+                phase,
+                text,
+            } => Self::Message {
+                output_index,
+                item_id,
+                phase,
+                text,
+            },
+            ModelOutputItem::ReasoningSummary { output_index, text } => {
+                Self::ReasoningSummary { output_index, text }
+            }
+            ModelOutputItem::ToolCall { output_index, call } => Self::ToolCall {
+                output_index,
+                call: sdk::ToolCall {
+                    call_id: call.call_id,
+                    tool_name: call.tool_name,
+                    input: call.input,
+                    input_error: call.input_error,
+                },
+            },
         }
     }
 }

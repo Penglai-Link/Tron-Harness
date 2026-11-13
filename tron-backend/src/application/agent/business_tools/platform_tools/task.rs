@@ -19,7 +19,9 @@ use super::common::{
 
 pub(super) fn tools(tasks: TaskService) -> Vec<Arc<dyn Tool>> {
     let tools: Vec<Arc<dyn Tool>> = vec![
-        Arc::new(TaskGetTool { tasks: tasks.clone() }),
+        Arc::new(TaskGetTool {
+            tasks: tasks.clone(),
+        }),
         Arc::new(TaskPageTool {
             tasks: tasks.clone(),
         }),
@@ -45,27 +47,60 @@ pub(super) fn tools(tasks: TaskService) -> Vec<Arc<dyn Tool>> {
             "task_restore" => "dude_task_restore",
             _ => unreachable!(),
         };
-        result.push(Arc::new(TaskScopeTool { name: tool.name().to_string(), inner: tool.clone(), dude: false }));
-        result.push(Arc::new(TaskScopeTool { name: dude_name.into(), inner: tool, dude: true }));
+        result.push(Arc::new(TaskScopeTool {
+            name: tool.name().to_string(),
+            inner: tool.clone(),
+            dude: false,
+        }));
+        result.push(Arc::new(TaskScopeTool {
+            name: dude_name.into(),
+            inner: tool,
+            dude: true,
+        }));
     }
     result
 }
 
-struct TaskScopeTool { name: String, inner: Arc<dyn Tool>, dude: bool }
+struct TaskScopeTool {
+    name: String,
+    inner: Arc<dyn Tool>,
+    dude: bool,
+}
 impl Tool for TaskScopeTool {
-    fn name(&self) -> &str { &self.name }
-    fn exec(&self, mut request: ToolRequest, context: &AgentRunContext) -> Result<ToolExecutionResult, ToolError> {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn exec(
+        &self,
+        mut request: ToolRequest,
+        context: &AgentRunContext,
+    ) -> Result<ToolExecutionResult, ToolError> {
         if self.dude {
             if !context.is_owning_dude() || !context.workspace_code.trim().is_empty() {
-                return Err(ToolError::ExecutionFailed("Dude task tools require the owning platform Dude".into()));
+                return Err(ToolError::ExecutionFailed(
+                    "Dude task tools require the owning platform Dude".into(),
+                ));
             }
             if request.input.get("workspaceCode").is_some() {
-                return Err(ToolError::ExecutionFailed("Dude task tools do not accept workspaceCode".into()));
+                return Err(ToolError::ExecutionFailed(
+                    "Dude task tools do not accept workspaceCode".into(),
+                ));
             }
         } else {
-            if context.is_owning_dude() { return Err(ToolError::ExecutionFailed("Dude must use dude_task tools".into())); }
-            if request.input.get("workspaceCode").and_then(serde_json::Value::as_str).is_none_or(|s| s.trim().is_empty()) {
-                return Err(ToolError::ExecutionFailed("workspaceCode is required".into()));
+            if context.is_owning_dude() {
+                return Err(ToolError::ExecutionFailed(
+                    "Dude must use dude_task tools".into(),
+                ));
+            }
+            if request
+                .input
+                .get("workspaceCode")
+                .and_then(serde_json::Value::as_str)
+                .is_none_or(|s| s.trim().is_empty())
+            {
+                return Err(ToolError::ExecutionFailed(
+                    "workspaceCode is required".into(),
+                ));
             }
         }
         request.tool_name = self.inner.name().into();
@@ -260,10 +295,25 @@ impl Tool for TaskUpdateTool {
         let source_type = parse_task_source_type(input.source_type.as_deref())?;
         let status = parse_task_status(input.status.as_deref())?;
         if let Some(status) = &status {
-            let flow = self.tasks.get_task_flow(&current.flow_code).map_err(service_tool_error)?;
+            let flow = self
+                .tasks
+                .get_task_flow(&current.flow_code)
+                .map_err(service_tool_error)?;
             if !flow.statuses.iter().any(|item| item.status_code == *status) {
-                return Err(ToolError::ExecutionFailed(format!("Status {status:?} is not in task flow {}. Valid statuses: {}. Read {}task_get for the current flow; CLOSED closes the task.",
-                    flow.flow_code, flow.statuses.iter().map(|item| item.status_code.as_str()).collect::<Vec<_>>().join(", "), if context.is_owning_dude() { "dude_" } else { "" })));
+                return Err(ToolError::ExecutionFailed(format!(
+                    "Status {status:?} is not in task flow {}. Valid statuses: {}. Read {}task_get for the current flow; CLOSED closes the task.",
+                    flow.flow_code,
+                    flow.statuses
+                        .iter()
+                        .map(|item| item.status_code.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    if context.is_owning_dude() {
+                        "dude_"
+                    } else {
+                        ""
+                    }
+                )));
             }
         }
         if status.as_deref() == Some(crate::domain::task::CLOSED_STATUS_CODE)
@@ -318,20 +368,37 @@ struct TaskCodeInput {
 }
 
 #[derive(Clone)]
-struct TaskGetTool { tasks: TaskService }
+struct TaskGetTool {
+    tasks: TaskService,
+}
 impl Tool for TaskGetTool {
-    fn name(&self) -> &str { "task_get" }
-    fn exec(&self, request: ToolRequest, context: &AgentRunContext) -> Result<ToolExecutionResult, ToolError> {
+    fn name(&self) -> &str {
+        "task_get"
+    }
+    fn exec(
+        &self,
+        request: ToolRequest,
+        context: &AgentRunContext,
+    ) -> Result<ToolExecutionResult, ToolError> {
         let input: TaskCodeInput = parse_tool_input(request.input)?;
         let workspace = resolve_task_workspace(&input.workspace_code, context)?;
-        let task = self.tasks.get_task(input.task_code.trim()).map_err(service_tool_error)?;
+        let task = self
+            .tasks
+            .get_task(input.task_code.trim())
+            .map_err(service_tool_error)?;
         ensure_task_access(context, workspace.as_deref(), &task)?;
         task_observation(self.name(), &self.tasks, &task)
     }
 }
 
-fn task_observation(name: &str, tasks: &TaskService, task: &TaskDetail) -> Result<ToolExecutionResult, ToolError> {
-    let flow = tasks.get_task_flow(&task.flow_code).map_err(service_tool_error)?;
+fn task_observation(
+    name: &str,
+    tasks: &TaskService,
+    task: &TaskDetail,
+) -> Result<ToolExecutionResult, ToolError> {
+    let flow = tasks
+        .get_task_flow(&task.flow_code)
+        .map_err(service_tool_error)?;
     let mut value = serde_json::to_value(task).map_err(service_tool_error)?;
     value["taskFlow"] = serde_json::json!({"flowCode":flow.flow_code,"statuses":flow.statuses,"closedStatus":"CLOSED",
         "reopen":"Use task_update (Dude: dude_task_update) with a valid non-CLOSED status. Omitted progress resets to 0 when reopening; archived tasks must first be restored."});

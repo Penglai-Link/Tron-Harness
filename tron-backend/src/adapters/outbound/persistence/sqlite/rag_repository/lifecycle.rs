@@ -2,9 +2,7 @@ use super::SqliteRagRepositorySql;
 use rusqlite::params;
 
 use crate::{
-    application::rag::{
-        RagDeactivateSourceCommand, RagSourceLifecycleRepository,
-    },
+    application::rag::{RagDeactivateSourceCommand, RagSourceLifecycleRepository},
     domain::rag::RagError,
 };
 
@@ -34,8 +32,18 @@ impl RagSourceLifecycleRepository for SqliteRagRepositorySql<'_> {
             &command.scope.scope_type,
             &command.scope.scope_code,
         )?;
-        let partition=crate::domain::rag::graph::GraphPartition{corpus_id:command.corpus_id.clone(),scope_type:command.scope.scope_type.clone(),scope_code:command.scope.scope_code.clone()};
-        super::super::rag_graph_index::retire_graph_source_version(&tx,&partition,&command.source_code,&command.source_version).map_err(|_|RagError::StorageFailure)?;
+        let partition = crate::domain::rag::graph::GraphPartition {
+            corpus_id: command.corpus_id.clone(),
+            scope_type: command.scope.scope_type.clone(),
+            scope_code: command.scope.scope_code.clone(),
+        };
+        super::super::rag_graph_index::retire_graph_source_version(
+            &tx,
+            &partition,
+            &command.source_code,
+            &command.source_version,
+        )
+        .map_err(|_| RagError::StorageFailure)?;
         tx.commit().map_err(storage_error)
     }
 }

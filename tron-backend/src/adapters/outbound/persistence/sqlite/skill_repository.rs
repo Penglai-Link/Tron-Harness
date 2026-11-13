@@ -466,9 +466,10 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
     }
     fn initialize_agents_skills(&mut self, agents: &[String]) -> Result<(), SkillError> {
         let agents = serde_json::to_string(agents).map_err(|_| SkillError::StorageFailure)?;
-        self.connection.call(move |connection| {
-            initialize_pack_skill_assignments(connection, &agents)
-        }, || SkillError::StorageFailure)
+        self.connection.call(
+            move |connection| initialize_pack_skill_assignments(connection, &agents),
+            || SkillError::StorageFailure,
+        )
     }
     fn initialize_agent_skills(&mut self, agent: &str) -> Result<(), SkillError> {
         let agent = agent.to_owned();
@@ -528,8 +529,11 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
     }
 }
 
-fn initialize_pack_skill_assignments(connection: &mut Connection, agents: &str) -> Result<(), SkillError> {
-    use crate::domain::computer_use::{PACK_ID, SKILL, CONTROLLERS};
+fn initialize_pack_skill_assignments(
+    connection: &mut Connection,
+    agents: &str,
+) -> Result<(), SkillError> {
+    use crate::domain::computer_use::{CONTROLLERS, PACK_ID, SKILL};
     let tx = connection.transaction().map_err(storage_error)?;
     tx.execute(
         "INSERT OR IGNORE INTO agent_skill_assignments

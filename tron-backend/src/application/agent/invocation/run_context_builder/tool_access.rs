@@ -55,24 +55,44 @@ impl AgentRunContextBuilder {
                         || requested_tool_names.contains(&tool.tool_name)
                 })
                 .collect::<Vec<_>>();
-            if self.collaboration_owner.as_ref().is_some_and(|owner| {
-                owner.kind == "DUDE" && owner.code == agent_code
-            }) {
+            if self
+                .collaboration_owner
+                .as_ref()
+                .is_some_and(|owner| owner.kind == "DUDE" && owner.code == agent_code)
+            {
                 // All tools is the platform-wide catalog, including workspace
                 // tools. Their own scope and permission checks still apply.
                 if policy.tool_assignment_mode
                     != crate::domain::agent::ToolAssignmentMode::AllPlatformTools
                 {
-                    let aliases = effective_tool_records.iter()
-                        .filter_map(|tool| crate::application::agent::dude_tool_replacement(&tool.tool_code))
-                        .map(str::to_owned).collect::<Vec<_>>();
-                    effective_tool_records.retain(|tool| !crate::application::agent::tool_catalog::dude_workspace_tool(tool));
-                    effective_tool_records.extend(self.management.tools_by_codes(&aliases, locale).into_iter().filter(|tool| tool.availability_state == ToolAvailabilityState::Available));
+                    let aliases = effective_tool_records
+                        .iter()
+                        .filter_map(|tool| {
+                            crate::application::agent::dude_tool_replacement(&tool.tool_code)
+                        })
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>();
+                    effective_tool_records.retain(|tool| {
+                        !crate::application::agent::tool_catalog::dude_workspace_tool(tool)
+                    });
+                    effective_tool_records.extend(
+                        self.management
+                            .tools_by_codes(&aliases, locale)
+                            .into_iter()
+                            .filter(|tool| {
+                                tool.availability_state == ToolAvailabilityState::Available
+                            }),
+                    );
                     let mut seen = HashSet::new();
                     effective_tool_records.retain(|tool| seen.insert(tool.tool_code.clone()));
                 }
             } else {
-                effective_tool_records.retain(|tool| !tool.category.as_ref().is_some_and(|category| category.code == "tron.dude"));
+                effective_tool_records.retain(|tool| {
+                    !tool
+                        .category
+                        .as_ref()
+                        .is_some_and(|category| category.code == "tron.dude")
+                });
             }
             // The gateway plugin owns on-demand discovery for every run, so
             // saved exposure-mode differences collapse to one behavior: the

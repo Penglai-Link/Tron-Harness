@@ -249,7 +249,9 @@ fn prompt_from_context(context: &AgentRunContext) -> String {
         return prompt;
     }
     let mut parts = Vec::new();
-    if let Some(scope) = crate::application::agent::execution_context_message(&context.execution_scope) {
+    if let Some(scope) =
+        crate::application::agent::execution_context_message(&context.execution_scope)
+    {
         parts.push(scope.text_content());
     }
     if let Some(snapshot) = &context.external_topic_snapshot {

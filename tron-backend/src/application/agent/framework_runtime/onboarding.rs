@@ -68,8 +68,8 @@ pub(super) fn next_action(context: &AgentRunContext, soul: &DudeSoul) -> &'stati
     if soul.state == SoulState::Ready {
         return "complete";
     }
-    let same_session = soul.session_code == context.conversation_code
-        && soul.user_code == context.user_code;
+    let same_session =
+        soul.session_code == context.conversation_code && soul.user_code == context.user_code;
     let answered = same_session
         && soul.pending_interaction_id.as_ref().is_some_and(|id| {
             context
@@ -78,7 +78,9 @@ pub(super) fn next_action(context: &AgentRunContext, soul: &DudeSoul) -> &'stati
                 .and_then(|memory| memory.input_metadata.as_ref())
                 .and_then(|metadata| metadata["resume"].as_array())
                 .is_some_and(|answers| {
-                    answers.iter().any(|answer| answer["interruptId"].as_str() == Some(id.as_str()))
+                    answers
+                        .iter()
+                        .any(|answer| answer["interruptId"].as_str() == Some(id.as_str()))
                 })
         });
     if answered {

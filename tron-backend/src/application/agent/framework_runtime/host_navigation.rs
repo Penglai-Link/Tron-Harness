@@ -32,12 +32,15 @@ pub(crate) fn read_navigation(
     if bytes.len() > 1024 * 1024 {
         return Err("navigation resource exceeds 1 MiB".into());
     }
-    let mut navigation: NavigationContribution = serde_json::from_slice(&bytes).map_err(|e| format!("invalid {RESOURCE_PATH}: {e}"))?;
+    let mut navigation: NavigationContribution =
+        serde_json::from_slice(&bytes).map_err(|e| format!("invalid {RESOURCE_PATH}: {e}"))?;
     let pages = super::host_pages::read_pages(path, manifest)?;
     for menu in &mut navigation.menus {
         if menu.menu_type == "PackPage" {
             let id = menu.page_code.as_deref().ok_or("pageCode is required")?;
-            if !pages.iter().any(|page| page.id == id) { return Err("unknown capability page".into()); }
+            if !pages.iter().any(|page| page.id == id) {
+                return Err("unknown capability page".into());
+            }
             menu.page_code = Some(format!("{}/{}", manifest.id, id));
         }
     }

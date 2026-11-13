@@ -410,10 +410,19 @@ impl KnowledgeBaseService {
                 .ok()
         });
         let reuse_parsed_only = doc.parsing_artifact.is_some();
-        let embedding_images = model.as_ref().ok().map(|model| self.llm.embedding_accepts_images(workspace, model))
-            .transpose().map_err(|error|KnowledgeBaseError::Invalid(error.to_string()))?;
-        let parser = if reuse_parsed_only { None } else { self.document_parser(&doc)?
-            .as_ref().map(|parser| parser.snapshot().unwrap_or_else(|| parser.clone())) };
+        let embedding_images = model
+            .as_ref()
+            .ok()
+            .map(|model| self.llm.embedding_accepts_images(workspace, model))
+            .transpose()
+            .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?;
+        let parser = if reuse_parsed_only {
+            None
+        } else {
+            self.document_parser(&doc)?
+                .as_ref()
+                .map(|parser| parser.snapshot().unwrap_or_else(|| parser.clone()))
+        };
         let parser_identity = parser
             .as_ref()
             .map(|p| p.profile_identity())
@@ -456,8 +465,15 @@ impl KnowledgeBaseService {
             .image_description_model_code
             .clone()
             .unwrap_or_default();
-        let chunk_config = doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config);
-        let strategy = self.chunk_strategies.descriptors().into_iter().find(|s|s.id==chunk_config.mode.strategy_id())
+        let chunk_config = doc
+            .chunk_config
+            .as_ref()
+            .unwrap_or(&kb.default_chunk_config);
+        let strategy = self
+            .chunk_strategies
+            .descriptors()
+            .into_iter()
+            .find(|s| s.id == chunk_config.mode.strategy_id())
             .ok_or_else(|| KnowledgeBaseError::Invalid("切片策略未注册".into()))?;
         let config = json!({"indexPipelineVersion":"source-graph-image-bindings-v2", "reuseParsedOnly":reuse_parsed_only, "embeddingImages":embedding_images, "chunkStrategy":strategy,"ragSettings":settings,"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parsePlan":doc.parse_plan, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": image_description});
         let identity = hash(&format!(
@@ -525,10 +541,12 @@ impl KnowledgeBaseService {
             weight: 1,
         }];
         endpoints.push(ParseEndpointCapacity {
-            supported_tiers: vec![],endpoint_id:"cached-document-index".into(),
-            capacity:self.active_ingestion_config().parse_capacity,
-            resource_group:"cached-document-index".into(),
-            resource_group_capacity:self.active_ingestion_config().parse_capacity,weight:1,
+            supported_tiers: vec![],
+            endpoint_id: "cached-document-index".into(),
+            capacity: self.active_ingestion_config().parse_capacity,
+            resource_group: "cached-document-index".into(),
+            resource_group_capacity: self.active_ingestion_config().parse_capacity,
+            weight: 1,
         });
         if self
             .queue
@@ -620,12 +638,20 @@ impl KnowledgeBaseService {
             // A configuration change during parsing must not strand the document
             // on the old immutable snapshot. Preserve completed parse artifacts,
             // then schedule a fresh supplement after fencing this failed lease.
-            let superseded = self.rag.settings_for_corpus(&task.knowledge_base_id)
-                .ok().and_then(|settings| serde_json::to_value(settings).ok())
+            let superseded = self
+                .rag
+                .settings_for_corpus(&task.knowledge_base_id)
+                .ok()
+                .and_then(|settings| serde_json::to_value(settings).ok())
                 .is_some_and(|settings| settings != task.configuration["ragSettings"])
-                && self.repository.document(&task.knowledge_base_id, &task.document_id)
-                    .is_ok_and(|doc| doc.revision == task.document_revision && doc.parsing_artifact.is_some());
-            let retry = !superseded && automatic_retry
+                && self
+                    .repository
+                    .document(&task.knowledge_base_id, &task.document_id)
+                    .is_ok_and(|doc| {
+                        doc.revision == task.document_revision && doc.parsing_artifact.is_some()
+                    });
+            let retry = !superseded
+                && automatic_retry
                 && matches!(error, KnowledgeBaseError::Storage(_))
                 && task.failures.saturating_add(1) < config.max_attempts;
             let after = retry.then(|| {
@@ -635,8 +661,18 @@ impl KnowledgeBaseService {
                         .saturating_mul(1i64 << task.failures.min(10)),
                 )
             });
-            if self.queue.fail(&owned, now_ms(), &error.to_string(), after).is_ok() && superseded {
-                let _ = self.enqueue_index(&task.user_code, &task.workspace_code, &task.knowledge_base_id, &task.document_id);
+            if self
+                .queue
+                .fail(&owned, now_ms(), &error.to_string(), after)
+                .is_ok()
+                && superseded
+            {
+                let _ = self.enqueue_index(
+                    &task.user_code,
+                    &task.workspace_code,
+                    &task.knowledge_base_id,
+                    &task.document_id,
+                );
             }
         }
     }

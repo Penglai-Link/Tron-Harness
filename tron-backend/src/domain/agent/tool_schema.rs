@@ -24,7 +24,8 @@ impl PreparedToolSchema {
             0
         } else {
             let text = serde_json::to_string(&payload).map_err(|error| error.to_string())?;
-            u32::try_from(eliteforge_agent_core::estimate_unicode_text_tokens(&text)).unwrap_or(u32::MAX)
+            u32::try_from(eliteforge_agent_core::estimate_unicode_text_tokens(&text))
+                .unwrap_or(u32::MAX)
         };
         Ok(Self {
             protocol,

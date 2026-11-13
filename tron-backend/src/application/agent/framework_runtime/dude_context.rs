@@ -16,7 +16,8 @@ pub(super) struct DudeContributor {
 #[async_trait::async_trait]
 impl fw::ContextContributor for DudeContributor {
     fn layout_metadata(&self) -> fw::ContextBlockMetadata {
-        crate::application::short_term_memory::native_context_block_metadata(self.block_id()).expect("native Dude context metadata")
+        crate::application::short_term_memory::native_context_block_metadata(self.block_id())
+            .expect("native Dude context metadata")
     }
     fn block_id(&self) -> &str {
         self.id
@@ -129,7 +130,11 @@ impl fw::ContextContributor for DudeContributor {
         };
         Ok(fw::ContextBlock {
             id: self.id.into(),
-            messages: if text.is_empty() { Vec::new() } else { vec![fw::Message::user(text)] },
+            messages: if text.is_empty() {
+                Vec::new()
+            } else {
+                vec![fw::Message::user(text)]
+            },
             trust: fw::ContextTrust::Data,
             source_version: None,
         })
@@ -147,7 +152,10 @@ fn trigger_event(metadata: Option<&serde_json::Value>) -> Option<serde_json::Val
     let event = ["source", "eventId", "taskCode", "payload"]
         .into_iter()
         .filter_map(|key| {
-            metadata.get(key).filter(|value| !value.is_null()).map(|value| (key.into(), value.clone()))
+            metadata
+                .get(key)
+                .filter(|value| !value.is_null())
+                .map(|value| (key.into(), value.clone()))
         })
         .collect::<serde_json::Map<_, _>>();
     Some(serde_json::Value::Object(event))
@@ -175,7 +183,8 @@ impl DudeGuidance {
 #[async_trait::async_trait]
 impl fw::ContextContributor for DudeGuidance {
     fn layout_metadata(&self) -> fw::ContextBlockMetadata {
-        crate::application::short_term_memory::native_context_block_metadata(self.block_id()).expect("native Dude guidance metadata")
+        crate::application::short_term_memory::native_context_block_metadata(self.block_id())
+            .expect("native Dude guidance metadata")
     }
     fn kind(&self) -> fw::ContextSourceKind {
         fw::ContextSourceKind::Instruction
@@ -192,7 +201,11 @@ impl fw::ContextContributor for DudeGuidance {
             .iter()
             .map(|key| {
                 managed_guidance(input, key, &self.locale).map(|text| {
-                    let text = if *key == "dude.soul-guidance" { text.replace(" task_update ", " dude_task_update ") } else { text };
+                    let text = if *key == "dude.soul-guidance" {
+                        text.replace(" task_update ", " dude_task_update ")
+                    } else {
+                        text
+                    };
                     fw::Message::system(text).with_instruction_origin(fw::InstructionOrigin::Plugin)
                 })
             })
@@ -203,7 +216,10 @@ impl fw::ContextContributor for DudeGuidance {
             } else {
                 "Coordinate other agents and use your dude_memory_*, dude_task_*, and notification tools for memories, your own tasks, and notifications. Delegate Harness platform configuration and workspace business data to the main agent."
             };
-            messages.push(fw::Message::system(guidance).with_instruction_origin(fw::InstructionOrigin::Plugin));
+            messages.push(
+                fw::Message::system(guidance)
+                    .with_instruction_origin(fw::InstructionOrigin::Plugin),
+            );
         }
         Ok(fw::ContextBlock::instructions(self.block_id(), messages))
     }

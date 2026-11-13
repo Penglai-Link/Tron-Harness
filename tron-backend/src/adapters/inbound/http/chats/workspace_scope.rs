@@ -27,8 +27,13 @@ pub async fn require_workspace(
     if !chat && !replay && !runs {
         return next.run(request).await;
     }
-    if let Some(kb) = request.headers().get("x-knowledge-base-code").and_then(|v|v.to_str().ok()).map(str::to_owned) {
-        return knowledge::require(state,request,next,kb).await;
+    if let Some(kb) = request
+        .headers()
+        .get("x-knowledge-base-code")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned)
+    {
+        return knowledge::require(state, request, next, kb).await;
     }
     // Dude namespace is explicit and verified against durable ownership. The
     // submitted workspace is validated separately for execution, not ownership.
@@ -138,8 +143,13 @@ pub async fn require_workspace(
             if chat.status != ChatSessionStatus::Active {
                 return chat_error_response(ChatError::SessionArchived);
             }
-            if request.method() != axum::http::Method::GET && !path.ends_with("/history/query") && !replay {
-                if let Err(error) = state.chats.ensure_session_writable(code) { return chat_error_response(error); }
+            if request.method() != axum::http::Method::GET
+                && !path.ends_with("/history/query")
+                && !replay
+            {
+                if let Err(error) = state.chats.ensure_session_writable(code) {
+                    return chat_error_response(error);
+                }
             }
         }
         if runs && path == "/api/v1/agents/runs" {
@@ -189,9 +199,8 @@ pub async fn require_workspace(
     // Run creation owns its workspace validation contract
     // (AGENT_WORKSPACE_INVALID); the middleware only needs the scope for
     // resolving existing run and session ownership.
-    let run_creation = runs
-        && path == "/api/v1/agents/runs"
-        && request.method() != axum::http::Method::GET;
+    let run_creation =
+        runs && path == "/api/v1/agents/runs" && request.method() != axum::http::Method::GET;
     if !run_creation && state.workspaces.get_workspace(&workspace).is_err() {
         return chat_error_response(ChatError::SessionNotFound);
     }
@@ -318,7 +327,11 @@ pub async fn require_workspace(
         if state.dudes.session(&session).ok().flatten().is_some() {
             return chat_error_response(ChatError::SessionNotFound);
         }
-        if record.source_code.as_deref().is_some_and(|source|source.starts_with("__knowledge:")) {
+        if record
+            .source_code
+            .as_deref()
+            .is_some_and(|source| source.starts_with("__knowledge:"))
+        {
             return chat_error_response(ChatError::SessionNotFound);
         }
         if record.workspace_code != workspace {
@@ -331,8 +344,14 @@ pub async fn require_workspace(
         if !deleting_session && record.status != ChatSessionStatus::Active {
             return chat_error_response(ChatError::SessionArchived);
         }
-        if !deleting_session && request.method() != axum::http::Method::GET && !path.ends_with("/history/query") && !replay {
-            if let Err(error) = state.chats.ensure_session_writable(&session) { return chat_error_response(error); }
+        if !deleting_session
+            && request.method() != axum::http::Method::GET
+            && !path.ends_with("/history/query")
+            && !replay
+        {
+            if let Err(error) = state.chats.ensure_session_writable(&session) {
+                return chat_error_response(error);
+            }
         }
     }
     next.run(request).await
@@ -348,7 +367,7 @@ fn is_session_operation(code: &str) -> bool {
             | "stop-run"
             | "get-todos"
             | "get-context-detail"
-                    | "get-context-assembly"
+            | "get-context-assembly"
             | "get-latest-compaction"
             | "create-compaction"
             | "get-goal"

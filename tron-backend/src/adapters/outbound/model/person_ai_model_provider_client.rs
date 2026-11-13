@@ -20,19 +20,33 @@ impl PersonAiModelProviderClient {
 }
 #[async_trait]
 impl sdk::ModelTransportFactory for PersonAiModelProviderClient {
-    fn embedding_input_modalities(&self, config: &sdk::AgentModelConfig) -> Result<Vec<fw::Modality>, fw::ModelError> {
+    fn embedding_input_modalities(
+        &self,
+        config: &sdk::AgentModelConfig,
+    ) -> Result<Vec<fw::Modality>, fw::ModelError> {
         if !self.providers.is_person_ai_config(&config.model_code) {
             return self.fallback.embedding_input_modalities(config);
         }
         let mut modalities = vec![fw::Modality::Text];
-        if self.providers.embedding_accepts_images(&config.model_code).map_err(|e| fw::ModelError::Fatal(e.to_string()))? {
+        if self
+            .providers
+            .embedding_accepts_images(&config.model_code)
+            .map_err(|e| fw::ModelError::Fatal(e.to_string()))?
+        {
             modalities.push(fw::Modality::Image);
         }
         Ok(modalities)
     }
-    fn embedding_body(&self, config: &sdk::AgentModelConfig, request: &fw::EmbeddingRequest) -> Result<serde_json::Value, fw::ModelError> {
+    fn embedding_body(
+        &self,
+        config: &sdk::AgentModelConfig,
+        request: &fw::EmbeddingRequest,
+    ) -> Result<serde_json::Value, fw::ModelError> {
         if self.providers.is_person_ai_config(&config.model_code) {
-            eliteforge_agent_capability_personai::personai_embedding_request_body(&config.model_name, request)
+            eliteforge_agent_capability_personai::personai_embedding_request_body(
+                &config.model_name,
+                request,
+            )
         } else {
             self.fallback.embedding_body(config, request)
         }

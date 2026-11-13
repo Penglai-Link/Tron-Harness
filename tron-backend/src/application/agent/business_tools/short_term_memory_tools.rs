@@ -13,8 +13,14 @@ pub(super) fn short_term_memory_tools(
     short_term_memory: ShortTermMemoryService,
 ) -> Vec<Arc<dyn Tool>> {
     vec![
-        Arc::new(TodoUpdateTool { short_term_memory: short_term_memory.clone(), dude_only: false }),
-        Arc::new(TodoUpdateTool { short_term_memory, dude_only: true }),
+        Arc::new(TodoUpdateTool {
+            short_term_memory: short_term_memory.clone(),
+            dude_only: false,
+        }),
+        Arc::new(TodoUpdateTool {
+            short_term_memory,
+            dude_only: true,
+        }),
     ]
 }
 
@@ -25,7 +31,11 @@ struct TodoUpdateTool {
 
 impl Tool for TodoUpdateTool {
     fn name(&self) -> &str {
-        if self.dude_only { "dude_todo_update" } else { "todo_update" }
+        if self.dude_only {
+            "dude_todo_update"
+        } else {
+            "todo_update"
+        }
     }
 
     fn exec(
@@ -33,10 +43,19 @@ impl Tool for TodoUpdateTool {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
-        let requested_workspace = request.input.get("workspaceCode").and_then(serde_json::Value::as_str).map(str::to_owned);
+        let requested_workspace = request
+            .input
+            .get("workspaceCode")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
         if self.dude_only {
-            if !context.is_owning_dude() || !context.workspace_code.trim().is_empty() || request.input.get("workspaceCode").is_some() {
-                return Err(ToolError::ExecutionFailed("Dude todo tools require an owning Dude without workspaceCode".into()));
+            if !context.is_owning_dude()
+                || !context.workspace_code.trim().is_empty()
+                || request.input.get("workspaceCode").is_some()
+            {
+                return Err(ToolError::ExecutionFailed(
+                    "Dude todo tools require an owning Dude without workspaceCode".into(),
+                ));
             }
         } else {
             super::platform_tools::resolve_workspace_code(&requested_workspace, context)?;

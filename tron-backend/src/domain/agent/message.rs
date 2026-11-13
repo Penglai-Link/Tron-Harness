@@ -74,7 +74,10 @@ impl AgentMessage {
         }
     }
 
-    pub fn with_instruction_origin(mut self, origin: eliteforge_agent_core::InstructionOrigin) -> Self {
+    pub fn with_instruction_origin(
+        mut self,
+        origin: eliteforge_agent_core::InstructionOrigin,
+    ) -> Self {
         self.instruction_origin = Some(origin);
         self
     }

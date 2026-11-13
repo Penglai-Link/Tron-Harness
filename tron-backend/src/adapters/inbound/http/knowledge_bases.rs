@@ -17,11 +17,11 @@ use axum::{
 use serde::Deserialize;
 mod agent_grants;
 mod creation;
-mod preflight;
-mod quality;
 mod library;
 mod library_agent_grants;
 mod platform_catalog;
+mod preflight;
+mod quality;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Configure {
@@ -190,14 +190,35 @@ async fn upload(
                     }
                 },
                 "parsePreference" => {
-                    preference = match field.text().await.ok().and_then(|v| serde_json::from_value::<crate::application::knowledge_base::DocumentParsePreference>(serde_json::Value::String(v)).ok()) {
-                        Some(value) => Some(value), None => return response::<()>(Err(KnowledgeBaseError::Invalid("解析方式无效".into())))
+                    preference = match field.text().await.ok().and_then(|v| {
+                        serde_json::from_value::<
+                            crate::application::knowledge_base::DocumentParsePreference,
+                        >(serde_json::Value::String(v))
+                        .ok()
+                    }) {
+                        Some(value) => Some(value),
+                        None => {
+                            return response::<()>(Err(KnowledgeBaseError::Invalid(
+                                "解析方式无效".into(),
+                            )));
+                        }
                     };
                 }
                 "parsePlan" => {
-                    plan = match field.text().await.ok().and_then(|v| serde_json::from_str::<crate::application::knowledge_base::DocumentParsePlan>(&v).ok()) {
-                        Some(value) => Some(value), None => return response::<()>(Err(KnowledgeBaseError::Invalid("解析计划无效".into())))
-                    };
+                    plan =
+                        match field.text().await.ok().and_then(|v| {
+                            serde_json::from_str::<
+                                crate::application::knowledge_base::DocumentParsePlan,
+                            >(&v)
+                            .ok()
+                        }) {
+                            Some(value) => Some(value),
+                            None => {
+                                return response::<()>(Err(KnowledgeBaseError::Invalid(
+                                    "解析计划无效".into(),
+                                )));
+                            }
+                        };
                 }
                 _ => {}
             },
@@ -346,22 +367,23 @@ async fn chunks(
     response(kb.published_chunks(&auth.user().user_code, &id, &doc, q.page, q.page_size))
 }
 
-
-
 async fn binary(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path((id, code)): Path<(String, String)>,
 ) -> Response {
     let user = auth.user().user_code.clone();
-    let (file, length) =
-        match crate::app::telemetry::spawn_blocking_traced(move || kb.download_resource(&user, &id, &code)).await {
-            Ok(Ok(value)) => value,
-            Ok(Err(error)) => return response::<()>(Err(error)),
-            Err(error) => {
-                return response::<()>(Err(KnowledgeBaseError::Storage(error.to_string())));
-            }
-        };
+    let (file, length) = match crate::app::telemetry::spawn_blocking_traced(move || {
+        kb.download_resource(&user, &id, &code)
+    })
+    .await
+    {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => return response::<()>(Err(error)),
+        Err(error) => {
+            return response::<()>(Err(KnowledgeBaseError::Storage(error.to_string())));
+        }
+    };
     let stream = async_stream::stream! {
         use tokio::io::AsyncReadExt;
         let mut file = tokio::fs::File::from_std(file);

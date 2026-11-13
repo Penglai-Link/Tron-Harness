@@ -1,4 +1,4 @@
-//! Refresh a package-owned default entrypoint when a new version is selected.
+//! Refresh a package-owned entrypoint when the package changes.
 use super::{
     McpHealthStatus, McpServerTransportKind, McpService, PlatformMcpServerRecord, current_timestamp,
 };
@@ -6,32 +6,62 @@ use eliteforge_agent_capability_runtime::{McpDeclaration, McpDeclarationTranspor
 use std::path::Path;
 
 impl McpService {
-    pub(super) fn upgraded_pack_entrypoint(
+    /// Keep a package-owned server aligned with its current manifest declaration.
+    ///
+    /// Enablement, credentials, environment and user labels are preserved.
+    /// Commands that no longer point inside the package are treated as explicit
+    /// user overrides and are never rewritten.
+    pub(super) fn reconciled_pack_entrypoint(
         &self,
         server: &PlatformMcpServerRecord,
         declaration: &McpDeclaration,
         directory: &Path,
+        pack_id: &str,
     ) -> Option<PlatformMcpServerRecord> {
-        self.capability_resource(&declaration.id)?;
-        let McpDeclarationTransport::Stdio { program, args } = &declaration.transport else {
+        let owner = self.capability_resource(&declaration.id)?;
+        if owner.pack_id != pack_id {
             return None;
+        }
+        let (transport_kind, url, command, args) = match &declaration.transport {
+            McpDeclarationTransport::Stdio { program, args } => (
+                McpServerTransportKind::Stdio,
+                String::new(),
+                program.clone(),
+                args.clone(),
+            ),
+            McpDeclarationTransport::Http { url } => (
+                McpServerTransportKind::StreamableHttp,
+                url.clone(),
+                String::new(),
+                vec![],
+            ),
         };
-        let previous = Path::new(server.working_directory.as_deref()?);
-        if server.transport_kind != McpServerTransportKind::Stdio
-            || previous == directory
-            || previous.parent() != directory.parent()
-            || !Path::new(&server.command).starts_with(previous)
-            || !Path::new(program).starts_with(directory)
+        if transport_kind == McpServerTransportKind::Stdio
+            && !Path::new(&command).starts_with(directory)
         {
             return None;
         }
-        // Keep platform/workspace enablement, credentials, environment and user
-        // labels. Explicit commands or working directories outside the old pack
-        // are user overrides and do not match the package entrypoint above.
+        if server.transport_kind == McpServerTransportKind::Stdio {
+            let previous = Path::new(server.working_directory.as_deref()?);
+            if !Path::new(&server.command).starts_with(previous) {
+                return None;
+            }
+        }
+        let working_directory = Some(directory.display().to_string());
+        if server.transport_kind == transport_kind
+            && server.url == url
+            && server.command == command
+            && server.args == args
+            && server.working_directory == working_directory
+        {
+            return None;
+        }
         Some(PlatformMcpServerRecord {
-            command: program.clone(),
-            args: args.clone(),
-            working_directory: Some(directory.display().to_string()),
+            transport_kind,
+            url,
+            command,
+            args,
+            working_directory,
             last_health_status: McpHealthStatus::NeverChecked,
             last_health_message: None,
             last_health_checked_at: None,

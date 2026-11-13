@@ -51,8 +51,14 @@ impl<T> RagConfigRepository for Arc<Mutex<T>>
 where
     T: RagConfigRepository,
 {
-    fn record_task_summary(&self, user: &str, id: &str) -> Result<Option<super::RagRecordTask>, RagError> {
-        self.lock().map_err(|_| RagError::StorageFailure)?.record_task_summary(user, id)
+    fn record_task_summary(
+        &self,
+        user: &str,
+        id: &str,
+    ) -> Result<Option<super::RagRecordTask>, RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .record_task_summary(user, id)
     }
     fn deleted_task_history(
         &self,
@@ -107,8 +113,12 @@ where
             .map_err(|_| RagError::StorageFailure)?
             .index_counts(corpus)
     }
-    fn list_corpora_with_counts(&self) -> Result<Vec<(RagCorpusRecord, super::RagIndexCounts)>, RagError> {
-        self.lock().map_err(|_| RagError::StorageFailure)?.list_corpora_with_counts()
+    fn list_corpora_with_counts(
+        &self,
+    ) -> Result<Vec<(RagCorpusRecord, super::RagIndexCounts)>, RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .list_corpora_with_counts()
     }
     fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
         self.lock()

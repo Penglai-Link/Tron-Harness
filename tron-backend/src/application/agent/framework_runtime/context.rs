@@ -95,7 +95,11 @@ impl fw::ContextPreparationPolicy for TronContext {
             ));
         }
         let auxiliary_calls = state.context_auxiliary_calls.as_ref().unwrap().1.clone();
-        let manual = input.run.extensions.get::<fw::ContextCompactionRequest>().is_some();
+        let manual = input
+            .run
+            .extensions
+            .get::<fw::ContextCompactionRequest>()
+            .is_some();
         let force = state.context_force_compression || manual;
         let onboarding = state.onboarding;
         let previous_messages = state
@@ -105,8 +109,15 @@ impl fw::ContextPreparationPolicy for TronContext {
         // No host mutex may be held while a reducer invokes an auxiliary model.
         drop(state);
         let assembled = super::context_providers::assemble(
-            input, host.clone(), &context, &projection, force, auxiliary_calls, onboarding,
-        ).await;
+            input,
+            host.clone(),
+            &context,
+            &projection,
+            force,
+            auxiliary_calls,
+            onboarding,
+        )
+        .await;
         let window = match assembled {
             Ok(window) => window,
             Err(error) => match error.primary() {
@@ -148,7 +159,8 @@ impl fw::ContextPreparationPolicy for TronContext {
             input,
             &host.harness.framework_context_config(),
         )?;
-        let snapshot_sequence = host.harness
+        let snapshot_sequence = host
+            .harness
             .framework_record_context(&context, &projection, &window.report)
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
         // Detail does not complete the lifecycle: Framework emits completion

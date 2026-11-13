@@ -152,7 +152,18 @@ async fn checkout(
         CheckoutRequest::Existing { path } => CheckoutChoice::Existing { path },
         CheckoutRequest::Clone { path, username } => CheckoutChoice::Clone { path, username },
     };
-    match repository_checkout::prepare(&state.integrations, &state.directories, &state.topics, &workspace, &auth.user().user_code, &project, &reference, choice).await {
+    match repository_checkout::prepare(
+        &state.integrations,
+        &state.directories,
+        &state.topics,
+        &workspace,
+        &auth.user().user_code,
+        &project,
+        &reference,
+        choice,
+    )
+    .await
+    {
         Ok(memo) => Json(ApiResponse::protocol_success(memo)).into_response(),
         Err(error) => checkout_error_response(error, &headers),
     }
@@ -168,13 +179,26 @@ async fn checkout_options(
         Ok(project) => project.workspace_code,
         Err(_) => return error_response(TopicError::NotFound, &headers),
     };
-    match crate::application::repository_checkout::options(&state.integrations, &state.directories, &state.topics, &workspace, &auth.user().user_code, &project, &reference).await {
+    match crate::application::repository_checkout::options(
+        &state.integrations,
+        &state.directories,
+        &state.topics,
+        &workspace,
+        &auth.user().user_code,
+        &project,
+        &reference,
+    )
+    .await
+    {
         Ok(options) => Json(ApiResponse::protocol_success(options)).into_response(),
         Err(error) => checkout_error_response(error, &headers),
     }
 }
 
-fn checkout_error_response(error: crate::application::repository_checkout::CheckoutError, headers: &HeaderMap) -> Response {
+fn checkout_error_response(
+    error: crate::application::repository_checkout::CheckoutError,
+    headers: &HeaderMap,
+) -> Response {
     use crate::application::repository_checkout::CheckoutError;
     match error {
         CheckoutError::Connection(error) => super::connectors::error_response(error, headers),
@@ -182,15 +206,50 @@ fn checkout_error_response(error: crate::application::repository_checkout::Check
         CheckoutError::Directory(error) => super::directories::error_response(error, headers),
         error => {
             let (code, en, zh) = match error {
-                CheckoutError::InvalidPath => ("CHECKOUT_PATH_INVALID", "Choose an absolute path that does not already exist and a valid Git username.", "请选择尚不存在的绝对路径，并填写有效的 Git 用户名。"),
-                CheckoutError::DifferentRepository => ("CHECKOUT_REPOSITORY_MISMATCH", "The selected directory is not a checkout of this repository.", "所选目录不是此仓库的检出目录。"),
-                CheckoutError::UnsupportedRemote => ("CHECKOUT_REMOTE_UNSUPPORTED", "The platform returned an unsupported HTTPS clone address.", "平台返回了不受支持的 HTTPS 克隆地址。"),
-                CheckoutError::GitFailed => ("CHECKOUT_GIT_FAILED", "Clone failed. Check Git, the account name and repository access; the destination may contain partial files.", "克隆失败，请检查 Git、账户名和仓库权限；目标目录可能包含未完成的文件。"),
-                CheckoutError::TimedOut => ("CHECKOUT_TIMEOUT", "Clone timed out; the destination may contain partial files.", "克隆超时；目标目录可能包含未完成的文件。"),
+                CheckoutError::InvalidPath => (
+                    "CHECKOUT_PATH_INVALID",
+                    "Choose an absolute path that does not already exist and a valid Git username.",
+                    "请选择尚不存在的绝对路径，并填写有效的 Git 用户名。",
+                ),
+                CheckoutError::DifferentRepository => (
+                    "CHECKOUT_REPOSITORY_MISMATCH",
+                    "The selected directory is not a checkout of this repository.",
+                    "所选目录不是此仓库的检出目录。",
+                ),
+                CheckoutError::UnsupportedRemote => (
+                    "CHECKOUT_REMOTE_UNSUPPORTED",
+                    "The platform returned an unsupported HTTPS clone address.",
+                    "平台返回了不受支持的 HTTPS 克隆地址。",
+                ),
+                CheckoutError::GitFailed => (
+                    "CHECKOUT_GIT_FAILED",
+                    "Clone failed. Check Git, the account name and repository access; the destination may contain partial files.",
+                    "克隆失败，请检查 Git、账户名和仓库权限；目标目录可能包含未完成的文件。",
+                ),
+                CheckoutError::TimedOut => (
+                    "CHECKOUT_TIMEOUT",
+                    "Clone timed out; the destination may contain partial files.",
+                    "克隆超时；目标目录可能包含未完成的文件。",
+                ),
                 _ => unreachable!(),
             };
-            let locale = SupportedLocale::from_request(headers.get("accept-language").and_then(|value| value.to_str().ok()));
-            (StatusCode::UNPROCESSABLE_ENTITY, Json(ApiResponse::protocol_error(code, if locale == SupportedLocale::EnUs { en } else { zh }))).into_response()
+            let locale = SupportedLocale::from_request(
+                headers
+                    .get("accept-language")
+                    .and_then(|value| value.to_str().ok()),
+            );
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ApiResponse::protocol_error(
+                    code,
+                    if locale == SupportedLocale::EnUs {
+                        en
+                    } else {
+                        zh
+                    },
+                )),
+            )
+                .into_response()
         }
     }
 }

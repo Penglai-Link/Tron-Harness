@@ -111,8 +111,6 @@ impl RagSettings {
     }
 }
 
-
-
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RagIndexCounts {

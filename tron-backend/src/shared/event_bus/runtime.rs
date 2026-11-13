@@ -223,8 +223,6 @@ impl EventBusRuntimeBuilder {
         self
     }
 
-
-
     pub fn build(self) -> EventBusHandle {
         if !self.config.enabled {
             return EventBusHandle::disabled();

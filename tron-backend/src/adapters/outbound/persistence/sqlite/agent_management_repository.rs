@@ -101,7 +101,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         from: &str,
         to: &str,
     ) -> Result<(), AgentManagementError> {
-        use crate::domain::computer_use::{PACK_ID, SKILL, CONTROLLERS};
+        use crate::domain::computer_use::{CONTROLLERS, PACK_ID, SKILL};
         self.connection.execute("INSERT INTO agent_skill_assignments(agent_code,skill_name,enabled)
             SELECT ?2,a.skill_name,CASE WHEN (s.provider_pack_id=?3 OR s.skill_name=?4) AND ?2 NOT IN (?5,?6) THEN 0 ELSE a.enabled END
             FROM agent_skill_assignments a JOIN registry_skills s ON s.skill_name=a.skill_name WHERE a.agent_code=?1

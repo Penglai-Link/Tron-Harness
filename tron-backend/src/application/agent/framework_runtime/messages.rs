@@ -8,8 +8,13 @@ use eliteforge_agent_core::{
 /// The host prefix includes typed runtime data as well as fixed instructions.
 /// It is source material for contributors, never persisted conversation history.
 pub(super) fn is_prompt_prefix(message: &AgentMessage) -> bool {
-    message.role == "system" || (message.role == "user" && !message.parts.is_empty()
-        && message.parts.iter().all(|part| matches!(part, AgentMessagePart::Context { .. })))
+    message.role == "system"
+        || (message.role == "user"
+            && !message.parts.is_empty()
+            && message
+                .parts
+                .iter()
+                .all(|part| matches!(part, AgentMessagePart::Context { .. })))
 }
 
 pub(super) fn encode(message: &AgentMessage) -> Result<Message, String> {
@@ -20,7 +25,8 @@ pub(super) fn encode(message: &AgentMessage) -> Result<Message, String> {
         "tool" => Role::Tool,
         other => return Err(format!("unsupported conversation role: {other}")),
     };
-    let mut result = Message::new(role, Content::default()).with_annotations(message.annotations.clone());
+    let mut result =
+        Message::new(role, Content::default()).with_annotations(message.annotations.clone());
     result.phase = message.phase.clone();
     result.output_group_id = message.output_group_id.clone();
     for part in &message.parts {

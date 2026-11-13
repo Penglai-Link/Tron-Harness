@@ -49,7 +49,11 @@ pub struct LlmRuntimeService {
 
 impl LlmRuntimeService {
     pub async fn transcribe_with_config(
-        &self, config: &RuntimeModelConfig, audio: Vec<u8>, mime: &str, file_name: &str,
+        &self,
+        config: &RuntimeModelConfig,
+        audio: Vec<u8>,
+        mime: &str,
+        file_name: &str,
     ) -> Result<String, String> {
         self.client.transcribe(config, audio, mime, file_name).await
     }

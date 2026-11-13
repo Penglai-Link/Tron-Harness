@@ -1,11 +1,11 @@
 //! Tron projection of Framework telemetry records. No transport or physical storage.
 mod dashboard;
 pub mod disk_usage;
-mod triggers;
-mod query_filters;
 mod list_query;
-mod statistics;
 pub mod logs;
+mod query_filters;
+mod statistics;
+mod triggers;
 use crate::adapters::outbound::persistence::sqlite::framework_storage::blocking;
 use crate::application::observability::*;
 use eliteforge_agent_core::{TelemetrySpan, TelemetryStore, TelemetryTrace, TelemetryTraceFilter};
@@ -21,10 +21,15 @@ fn failure(_: impl std::fmt::Display) -> ObservabilityError {
 fn filter(q: &TraceQuery) -> TelemetryTraceFilter {
     let mut attributes = BTreeMap::new();
     if let Some(category) = q.category {
-        let key = match category { TraceCategory::Page => "tron.trace.page", TraceCategory::Agent => "tron.trace.agent" };
+        let key = match category {
+            TraceCategory::Page => "tron.trace.page",
+            TraceCategory::Agent => "tron.trace.agent",
+        };
         attributes.insert(key.into(), "true".into());
     }
-    if !q.workspace_code.is_empty() { attributes.insert("tron.workspace.code".into(), q.workspace_code.clone()); }
+    if !q.workspace_code.is_empty() {
+        attributes.insert("tron.workspace.code".into(), q.workspace_code.clone());
+    }
     if let Some(session) = &q.session_code {
         attributes.insert("tron.session.code".into(), session.clone());
     }
@@ -34,7 +39,12 @@ fn filter(q: &TraceQuery) -> TelemetryTraceFilter {
     }
 }
 fn status(attrs: &BTreeMap<String, String>, code: i32) -> String {
-    if attrs.get("tron.operation.active").is_some_and(|v| v == "true") { return "Running".into(); }
+    if attrs
+        .get("tron.operation.active")
+        .is_some_and(|v| v == "true")
+    {
+        return "Running".into();
+    }
     match attrs.get("agent.operation.outcome").map(String::as_str) {
         Some("unknown") => "Unknown",
         Some("cancelled") => "Cancelled",
@@ -47,7 +57,11 @@ fn status(attrs: &BTreeMap<String, String>, code: i32) -> String {
     .into()
 }
 fn trace_status(t: &TelemetryTrace) -> String {
-    if t.ended_at.is_none() || t.attributes.get("tron.operation.active").is_some_and(|v| v == "true") {
+    if t.ended_at.is_none()
+        || t.attributes
+            .get("tron.operation.active")
+            .is_some_and(|v| v == "true")
+    {
         "Running".into()
     } else if t.abandoned {
         "Unknown".into()
@@ -57,7 +71,10 @@ fn trace_status(t: &TelemetryTrace) -> String {
 }
 fn span(mut s: TelemetrySpan) -> TraceSpan {
     if s.status_code == 2
-        && let Some(message) = s.data.pointer("/span/status/message").and_then(serde_json::Value::as_str)
+        && let Some(message) = s
+            .data
+            .pointer("/span/status/message")
+            .and_then(serde_json::Value::as_str)
         && !message.trim().is_empty()
     {
         s.attributes.insert(
@@ -67,8 +84,19 @@ fn span(mut s: TelemetrySpan) -> TraceSpan {
     }
     if s.name == "db.sqlite.business" {
         if let Some(file) = s.attributes.get("code.file.path") {
-            let module = file.split("/sqlite/").last().unwrap_or(file).trim_end_matches(".rs").trim_end_matches(".inc");
-            s.name = format!("db.sqlite.{module}:{}", s.attributes.get("code.line.number").map(String::as_str).unwrap_or("?"));
+            let module = file
+                .split("/sqlite/")
+                .last()
+                .unwrap_or(file)
+                .trim_end_matches(".rs")
+                .trim_end_matches(".inc");
+            s.name = format!(
+                "db.sqlite.{module}:{}",
+                s.attributes
+                    .get("code.line.number")
+                    .map(String::as_str)
+                    .unwrap_or("?")
+            );
         }
     }
     TraceSpan {
@@ -104,10 +132,19 @@ fn span(mut s: TelemetrySpan) -> TraceSpan {
 }
 fn summary(t: TelemetryTrace, spans: &[TraceSpan]) -> TraceSummary {
     let attr = |key: &str| t.attributes.get(key).cloned().unwrap_or_default();
-    let root = spans.iter().find(|s| s.name.starts_with("page "))
+    let root = spans
+        .iter()
+        .find(|s| s.name.starts_with("page "))
         .or_else(|| spans.iter().find(|s| s.parent_span_id.is_none()));
     let mut record = TraceSummary {
-        trigger: root.map(|s| s.attributes.get("url.path").cloned().unwrap_or_else(|| s.name.clone())).unwrap_or_default(),
+        trigger: root
+            .map(|s| {
+                s.attributes
+                    .get("url.path")
+                    .cloned()
+                    .unwrap_or_else(|| s.name.clone())
+            })
+            .unwrap_or_default(),
         root_span_id: root.map(|s| s.span_id.clone()),
         workspace_code: attr("tron.workspace.code"),
         trace_id: t.trace_id.clone(),
@@ -164,9 +201,15 @@ pub(crate) fn now() -> i64 {
 }
 
 impl TraceRepository for TelemetryProjection {
-    fn agent_options(&self, workspace: &str) -> Result<Vec<TraceAgentOption>, ObservabilityError> { self.trace_agent_options(workspace) }
+    fn agent_options(&self, workspace: &str) -> Result<Vec<TraceAgentOption>, ObservabilityError> {
+        self.trace_agent_options(workspace)
+    }
     fn query(&self, q: &TraceQuery) -> Result<TracePage, ObservabilityError> {
-        if matches!(q.category,Some(TraceCategory::Agent)) { self.agent_triggers(q) } else { self.page_triggers(q) }
+        if matches!(q.category, Some(TraceCategory::Agent)) {
+            self.agent_triggers(q)
+        } else {
+            self.page_triggers(q)
+        }
     }
     fn detail(&self, workspace: &str, id: &str) -> Result<TraceDetail, ObservabilityError> {
         // Keep inspection reads off the telemetry export connection. Decode large
@@ -226,7 +269,6 @@ impl TraceRepository for TelemetryProjection {
             p95_duration_ms: stats.p95_duration_ms,
         })
     }
-
 }
 impl ObservabilityRepository for TelemetryProjection {
     fn metric_points(

@@ -38,7 +38,11 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredConnection> {
 }
 
 impl ConnectionRepository for SqliteConnectionRepository {
-    fn list(&self, _workspace_code: &str, _user_code: &str) -> Result<Vec<StoredConnection>, ConnectionError> {
+    fn list(
+        &self,
+        _workspace_code: &str,
+        _user_code: &str,
+    ) -> Result<Vec<StoredConnection>, ConnectionError> {
         self.connection.call_read(move |db| {
             let mut statement = db.prepare("SELECT connection_code,workspace_code,owner_user_code,provider_id,name,endpoint,encrypted_credential FROM connector_connections ORDER BY name,connection_code").map_err(|_| ConnectionError::StorageFailure)?;
             statement.query_map([], row).map_err(|_| ConnectionError::StorageFailure)?.collect::<Result<_, _>>().map_err(|_| ConnectionError::StorageFailure)

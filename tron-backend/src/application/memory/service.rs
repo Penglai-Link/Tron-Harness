@@ -199,7 +199,7 @@ where
                 }
             };
             if let Some(runtime) = &self.index_runtime {
-                let _runtime=runtime.enter();
+                let _runtime = runtime.enter();
                 crate::shared::auth_holder::AuthHolder::spawn(work);
             } else {
                 crate::shared::auth_holder::AuthHolder::spawn(work);

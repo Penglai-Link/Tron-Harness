@@ -191,7 +191,7 @@ pub async fn action(
         Err(_) => None,
     };
     let command = SendChatMessageCommand {
-            annotations: Vec::new(),
+        annotations: Vec::new(),
         requested_skills: Vec::new(),
         run_code: Some(receipt.run_id),
         a2ui_action_id: Some(receipt.input.action_id),

@@ -156,9 +156,12 @@ impl AppConfig {
         if let Some(value) = overrides.rag_retrieval {
             self.rag_retrieval = value;
         }
-        self.rag_retrieval.validate().map_err(|value| ConfigError::InvalidConfigValue {
-            key: "ragRetrieval".into(), value,
-        })?;
+        self.rag_retrieval
+            .validate()
+            .map_err(|value| ConfigError::InvalidConfigValue {
+                key: "ragRetrieval".into(),
+                value,
+            })?;
         if let Some(value) = overrides.model_invocation {
             self.model_invocation.apply_overrides(value);
         }

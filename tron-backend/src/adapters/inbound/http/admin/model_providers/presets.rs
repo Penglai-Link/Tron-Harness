@@ -109,7 +109,8 @@ pub(super) async fn models(Path(preset_id): Path<String>, headers: HeaderMap) ->
         .iter()
         .find(|preset| preset.id == preset_id)
     else {
-        let descriptor = crate::application::model::configured_provider_preset_not_found_descriptor();
+        let descriptor =
+            crate::application::model::configured_provider_preset_not_found_descriptor();
         let locale = resolve_request_locale(
             headers
                 .get("accept-language")

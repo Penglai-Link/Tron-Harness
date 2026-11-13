@@ -89,7 +89,9 @@ impl TopicRepository for SqliteTopicRepository {
         self.connection.call_read(
             move |db| {
                 // Read the revision and references from the same SQLite snapshot.
-                let tx = db.unchecked_transaction().map_err(|_| TopicError::StorageFailure)?;
+                let tx = db
+                    .unchecked_transaction()
+                    .map_err(|_| TopicError::StorageFailure)?;
                 let memo = read(&tx, &code)?;
                 tx.commit().map_err(|_| TopicError::StorageFailure)?;
                 Ok(memo)

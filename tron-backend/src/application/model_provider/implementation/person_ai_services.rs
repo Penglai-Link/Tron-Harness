@@ -10,7 +10,10 @@ use crab_serverapi::{
 
 impl ModelProviderService {
     pub async fn transcribe_profile_audio(
-        &self, user: &str, _file_name: &str, audio: Vec<u8>,
+        &self,
+        user: &str,
+        _file_name: &str,
+        audio: Vec<u8>,
         sources: &crate::domain::model::AutoRouteSources,
     ) -> Result<String, ModelProviderError> {
         let (context, base) = self.person_ai_profile_session(user).await?;
@@ -20,11 +23,15 @@ impl ModelProviderService {
         if sources.mode == crate::domain::model::AutoRouteSourceMode::SelectedModels {
             let catalog = crab_serverapi::multimedia::MultimediaClient::new(base.clone())
                 .map_err(server_api_error)?;
-            let models = self.person_ai_service_result(catalog.list_models(&context, Some(2)).await)?;
-            if models.is_empty() || models.iter().any(|model| {
-                model.media_type != 2
-                    || !sources.allows("PersonAi", &format!("PERSON_AI:SPEECH:{}", model.model_id))
-            }) {
+            let models =
+                self.person_ai_service_result(catalog.list_models(&context, Some(2)).await)?;
+            if models.is_empty()
+                || models.iter().any(|model| {
+                    model.media_type != 2
+                        || !sources
+                            .allows("PersonAi", &format!("PERSON_AI:SPEECH:{}", model.model_id))
+                })
+            {
                 return Err(ModelProviderError::InvalidSelection(
                     "Person-AI transcription cannot restrict its active speech model pool".into(),
                 ));
@@ -35,12 +42,19 @@ impl ModelProviderService {
         use fw::ModelOperations;
         let model = fw::ModelRef::new("PersonAi", "speech-auto");
         let adapter = eliteforge_agent_capability_personai::PersonAiSpeechRecognitionModel {
-            client: std::sync::Arc::new(crab_serverapi::audio::AudioTranscriptionsClient::new(base)
-                .map_err(server_api_error)?),
+            client: std::sync::Arc::new(
+                crab_serverapi::audio::AudioTranscriptionsClient::new(base)
+                    .map_err(server_api_error)?,
+            ),
             authorization: context,
         };
         let mut update = eliteforge_agent_framework::ModelRuntimeUpdate::new(user, 0, vec![]);
-        update.recognition.push(fw::SpeechRecognitionModelService::new(model.clone(), std::sync::Arc::new(adapter)));
+        update
+            .recognition
+            .push(fw::SpeechRecognitionModelService::new(
+                model.clone(),
+                std::sync::Arc::new(adapter),
+            ));
         let client = eliteforge_agent_framework::ModelClient::new(update)
             .map_err(|e| ModelProviderError::Remote(e.to_string()))?
             .with_options(fw::ModelInvocationOptions {
@@ -48,16 +62,22 @@ impl ModelProviderService {
                 max_input_bytes: 12 * 1024 * 1024,
                 ..Default::default()
             });
-        client.transcribe(fw::SpeechRecognitionRequest {
-            choice: fw::ModelChoice::model(model),
-            audio: fw::MediaContent {
-                mime_type: "audio/wav".into(),
-                name: Some(_file_name.into()),
-                source: fw::MediaSource::Base64(base64::engine::general_purpose::STANDARD.encode(audio)),
-                estimated_tokens: None,
-            },
-            language: None,
-        }).await.map(|response| response.text).map_err(|e| ModelProviderError::Remote(e.to_string()))
+        client
+            .transcribe(fw::SpeechRecognitionRequest {
+                choice: fw::ModelChoice::model(model),
+                audio: fw::MediaContent {
+                    mime_type: "audio/wav".into(),
+                    name: Some(_file_name.into()),
+                    source: fw::MediaSource::Base64(
+                        base64::engine::general_purpose::STANDARD.encode(audio),
+                    ),
+                    estimated_tokens: None,
+                },
+                language: None,
+            })
+            .await
+            .map(|response| response.text)
+            .map_err(|e| ModelProviderError::Remote(e.to_string()))
     }
 
     /// The durable knowledge task belongs to one Person-AI account. A profile
@@ -199,7 +219,9 @@ impl ModelProviderError {
             Self::InvalidSelection(_) => ("101026003", "tron.personAi.invalid_request"),
             Self::Storage => ("101026005", "tron.personAi.storage_failed"),
             Self::CapabilityPackUnavailable => ("101038005", "tron.capability.pack_unavailable"),
-            Self::CapabilityReleaseUnavailable => ("101038004", "tron.capability.release_unavailable"),
+            Self::CapabilityReleaseUnavailable => {
+                ("101038004", "tron.capability.release_unavailable")
+            }
             _ => ("101026004", "tron.personAi.request_failed"),
         };
         PersonAiServiceErrorDescriptor { code, message_key }

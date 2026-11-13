@@ -33,7 +33,10 @@ pub struct ProjectExecutionContext {
     pub linked_apps: Vec<AppDetail>,
 }
 
-pub struct ProjectReadPage { pub total:usize, pub records:Vec<ProjectView> }
+pub struct ProjectReadPage {
+    pub total: usize,
+    pub records: Vec<ProjectView>,
+}
 
 pub trait ProjectReadRepository: Send + Sync {
     /// Native count and bounded ordered page in a single storage snapshot.
@@ -224,10 +227,23 @@ impl ProjectService {
         self.view(project)
     }
 
-    pub fn mutate_container(&self, project_code: &str, chats: &crate::application::chat::ChatService, delete: bool) -> Result<Vec<String>, ProjectContainerError> {
-        let project = self.repository.lock().expect("project repository mutex poisoned").get_project(project_code).map_err(ProjectContainerError::Project)?;
-        self.active_workspace(&project.workspace_code).map_err(ProjectContainerError::Project)?;
-        chats.mutate_project(&project.workspace_code, project_code, delete).map_err(ProjectContainerError::Chat)
+    pub fn mutate_container(
+        &self,
+        project_code: &str,
+        chats: &crate::application::chat::ChatService,
+        delete: bool,
+    ) -> Result<Vec<String>, ProjectContainerError> {
+        let project = self
+            .repository
+            .lock()
+            .expect("project repository mutex poisoned")
+            .get_project(project_code)
+            .map_err(ProjectContainerError::Project)?;
+        self.active_workspace(&project.workspace_code)
+            .map_err(ProjectContainerError::Project)?;
+        chats
+            .mutate_project(&project.workspace_code, project_code, delete)
+            .map_err(ProjectContainerError::Chat)
     }
 
     /// Resolve linked apps at invocation time so project edits affect future runs.

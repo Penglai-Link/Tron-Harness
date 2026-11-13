@@ -16,7 +16,9 @@ fn evidence(values: Vec<String>) -> Result<Vec<String>, ToolError> {
     let mut values: Vec<_> = values.into_iter().map(|v| v.trim().to_owned()).collect();
     if values.is_empty()
         || values.len() > 20
-        || values.iter().any(|v| v.is_empty() || v.chars().count() > 2000)
+        || values
+            .iter()
+            .any(|v| v.is_empty() || v.chars().count() > 2000)
     {
         return Err(invalid(
             "Provide 1-20 nonempty evidence references (result, artifact, decision or interaction IDs).",
@@ -51,10 +53,21 @@ fn snapshot(task: &crate::domain::task::TaskDetail) -> Value {
     json!({"status":task.status,"progress":task.progress,"executionResult":task.execution_result})
 }
 fn similar_summary(left: &str, right: &str) -> bool {
-    let normalize = |text: &str| text.chars().flat_map(char::to_lowercase).filter(|c| c.is_alphanumeric()).collect::<Vec<_>>();
+    let normalize = |text: &str| {
+        text.chars()
+            .flat_map(char::to_lowercase)
+            .filter(|c| c.is_alphanumeric())
+            .collect::<Vec<_>>()
+    };
     let (left, right) = (normalize(left), normalize(right));
-    if left.len().min(right.len()) < 8 { return false; }
-    let grams = |text: &[char]| text.windows(2).map(|pair| (pair[0], pair[1])).collect::<std::collections::BTreeSet<_>>();
+    if left.len().min(right.len()) < 8 {
+        return false;
+    }
+    let grams = |text: &[char]| {
+        text.windows(2)
+            .map(|pair| (pair[0], pair[1]))
+            .collect::<std::collections::BTreeSet<_>>()
+    };
     let (left, right) = (grams(&left), grams(&right));
     2 * left.intersection(&right).count() * 100 >= 90 * (left.len() + right.len())
 }
@@ -141,8 +154,11 @@ impl Tool for DudeWorkChangeTool {
                 let requested_action = requested_action
                     .map(|v| v.trim().to_owned())
                     .filter(|v| !v.is_empty());
-                if requested_action.as_ref().is_some_and(|v| v.chars().count() > 8000)
-                    || (kind.actionable() && requested_action.is_none()) {
+                if requested_action
+                    .as_ref()
+                    .is_some_and(|v| v.chars().count() > 8000)
+                    || (kind.actionable() && requested_action.is_none())
+                {
                     return Err(invalid(
                         "Actionable changes require a specific requestedAction",
                     ));
@@ -211,7 +227,9 @@ impl Tool for DudeWorkChangeTool {
                 }
                 .to_string();
                 let mut repository = self.dudes.repo().map_err(failure)?;
-                let saved = repository.record_work_change(&change, &fingerprint).map_err(failure)?;
+                let saved = repository
+                    .record_work_change(&change, &fingerprint)
+                    .map_err(failure)?;
                 let mut value = json!(saved);
                 if saved.change_id == change.change_id {
                     let warnings = repository.work_changes(dude, &change.task_code).map_err(failure)?
@@ -220,7 +238,9 @@ impl Tool for DudeWorkChangeTool {
                         .map(|previous| json!({"code":"SIMILAR_WORK_CHANGE","existingChangeId":previous.change_id,
                             "existingNotificationId":previous.notification.map(|notification| notification.id),
                             "message":"A similar milestone already exists for this task. Review and reuse its receipt if this is the same outcome; do not send another notification just because this session used a different changeKey. Distinct outcomes remain separate."})).collect::<Vec<_>>();
-                    if !warnings.is_empty() { value["warnings"] = json!(warnings); }
+                    if !warnings.is_empty() {
+                        value["warnings"] = json!(warnings);
+                    }
                 }
                 value
             }
@@ -281,7 +301,9 @@ pub(super) fn publish(
         WorkChangeKind::Progress => {
             task.status == crate::domain::task::CLOSED_STATUS_CODE
                 || task.execution_result.as_deref().map(str::trim)
-                    != change.task_snapshot["executionResult"].as_str().map(str::trim)
+                    != change.task_snapshot["executionResult"]
+                        .as_str()
+                        .map(str::trim)
         }
         WorkChangeKind::Completed => snapshot(&task) != change.task_snapshot,
         _ => false,
@@ -291,19 +313,16 @@ pub(super) fn publish(
             "Task changed since this assessment. Reassess and record its current change before notifying",
         ));
     }
-    if title.trim().is_empty() || title.chars().count() > 200 || body.trim().is_empty() || body.chars().count() > 8000
+    if title.trim().is_empty()
+        || title.chars().count() > 200
+        || body.trim().is_empty()
+        || body.chars().count() > 8000
     {
         return Err(invalid("Notification title/body is empty or too long"));
     }
     dudes
         .repo()
         .map_err(failure)?
-        .notify_work_change(
-            dude,
-            id,
-            title,
-            body,
-            chrono::Utc::now().timestamp_millis(),
-        )
+        .notify_work_change(dude, id, title, body, chrono::Utc::now().timestamp_millis())
         .map_err(failure)
 }

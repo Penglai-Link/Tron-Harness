@@ -86,10 +86,10 @@ impl ModelProviderService {
     ) -> Result<T, ModelProviderError> {
         match result {
             Err(ServerApiError::Business { code: 404, .. })
-            | Err(ServerApiError::Gateway { status: 404, .. }) => {
-                Err(unavailable)
-            }
-            Err(ServerApiError::Http(error)) if error.status() == Some(reqwest::StatusCode::NOT_FOUND) => {
+            | Err(ServerApiError::Gateway { status: 404, .. }) => Err(unavailable),
+            Err(ServerApiError::Http(error))
+                if error.status() == Some(reqwest::StatusCode::NOT_FOUND) =>
+            {
                 Err(unavailable)
             }
             other => self.person_ai_service_result(other),

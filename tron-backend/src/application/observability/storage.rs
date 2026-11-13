@@ -44,7 +44,13 @@ pub trait ObservabilityRepository: TraceRepository + super::DashboardRepository 
         current: usize,
         size: usize,
     ) -> Result<MetricPage, ObservabilityError>;
-    fn scoped_metric_points(&self, workspace: Option<String>, name: Option<String>, current: usize, size: usize) -> Result<MetricPage, ObservabilityError>;
+    fn scoped_metric_points(
+        &self,
+        workspace: Option<String>,
+        name: Option<String>,
+        current: usize,
+        size: usize,
+    ) -> Result<MetricPage, ObservabilityError>;
     fn runtime_metrics(&self) -> Result<RuntimeMetrics, ObservabilityError>;
 }
 

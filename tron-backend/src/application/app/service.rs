@@ -73,7 +73,10 @@ pub struct AppService {
 impl AppService {
     pub fn delete_app(&self, app_code: &str) -> Result<(), AppError> {
         validate_app_code(app_code)?;
-        self.repository.lock().expect("app repository mutex poisoned").delete_app(app_code.trim())
+        self.repository
+            .lock()
+            .expect("app repository mutex poisoned")
+            .delete_app(app_code.trim())
     }
 
     pub fn new(repository: impl AppRepository + 'static, workspaces: WorkspaceService) -> Self {

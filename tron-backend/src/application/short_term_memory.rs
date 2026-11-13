@@ -1,6 +1,6 @@
 //! Tron scope checks, business state and display projections over Framework stores.
-mod context_assembly;
 mod compaction_details;
+mod context_assembly;
 pub(crate) use compaction_details::{CompactionBlock, compaction_blocks};
 mod block_metadata;
 pub(crate) use block_metadata::{context_block_catalog, native_context_block_metadata};
@@ -9,21 +9,21 @@ mod assembler;
 mod config;
 mod dto;
 mod native_service;
-mod tool_catalog_updates;
 mod provider_config;
 mod redaction;
+mod tool_catalog_updates;
 pub use config::{
     CompactionPolicyConfig, ContextBlockBudgetConfig, ContextBlockBudgets, ContextBudgetConfig,
     GoalLoopConfig, ModelContextBudgetPlan, ShortTermMemoryConfig,
 };
 pub use dto::{
     ContextBudgetBreakdown, GoalSessionCommand, PreparedContextSources, PreparedModelContext,
-    ReplaceTodosCommand, SetGoalCommand,
-    TodoUpdateItem, UpdateGoalCommand,
+    ReplaceTodosCommand, SetGoalCommand, TodoUpdateItem, UpdateGoalCommand,
 };
 pub use native_service::ShortTermMemoryService;
 pub use provider_config::{
-    ContextDataBlockConfig, ContextPriceInputs, ContextProviderPolicy, ContextProvidersConfig, ContextReductionStrategy,
+    ContextDataBlockConfig, ContextPriceInputs, ContextProviderPolicy, ContextProvidersConfig,
+    ContextReductionStrategy,
 };
 pub(crate) use redaction::redact_sensitive_text;
 

@@ -122,10 +122,26 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             name_i18n_key: "agent.toolCatalog.domains.dude.name",
             description_i18n_key: "agent.toolCatalog.domains.dude.description",
         },
-        ToolDomainDefinition { domain_code: "dude_memory", name_i18n_key: "agent.toolCatalog.domains.dude_memory.name", description_i18n_key: "agent.toolCatalog.domains.dude_memory.description" },
-        ToolDomainDefinition { domain_code: "dude_task", name_i18n_key: "agent.toolCatalog.domains.dude_task.name", description_i18n_key: "agent.toolCatalog.domains.dude_task.description" },
-        ToolDomainDefinition { domain_code: "dude_work", name_i18n_key: "agent.toolCatalog.domains.dude_work.name", description_i18n_key: "agent.toolCatalog.domains.dude_work.description" },
-        ToolDomainDefinition { domain_code: "dude_notification", name_i18n_key: "agent.toolCatalog.domains.dude_notification.name", description_i18n_key: "agent.toolCatalog.domains.dude_notification.description" },
+        ToolDomainDefinition {
+            domain_code: "dude_memory",
+            name_i18n_key: "agent.toolCatalog.domains.dude_memory.name",
+            description_i18n_key: "agent.toolCatalog.domains.dude_memory.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "dude_task",
+            name_i18n_key: "agent.toolCatalog.domains.dude_task.name",
+            description_i18n_key: "agent.toolCatalog.domains.dude_task.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "dude_work",
+            name_i18n_key: "agent.toolCatalog.domains.dude_work.name",
+            description_i18n_key: "agent.toolCatalog.domains.dude_work.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "dude_notification",
+            name_i18n_key: "agent.toolCatalog.domains.dude_notification.name",
+            description_i18n_key: "agent.toolCatalog.domains.dude_notification.description",
+        },
         ToolDomainDefinition {
             domain_code: "harness_rag",
             name_i18n_key: "agent.toolCatalog.domains.rag.name",
@@ -230,20 +246,37 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     definitions.extend(productivity::tool_definitions());
     for tool in &mut definitions {
         if tool.domain_code == "harness_rag" || tool.tool_name == "workspace_page" {
-            if let Some(properties) = tool.input_schema.get_mut("properties").and_then(Value::as_object_mut) {
-                properties.entry("workspaceCode").or_insert_with(|| json!({"type":"string", "minLength":1}));
+            if let Some(properties) = tool
+                .input_schema
+                .get_mut("properties")
+                .and_then(Value::as_object_mut)
+            {
+                properties
+                    .entry("workspaceCode")
+                    .or_insert_with(|| json!({"type":"string", "minLength":1}));
             }
         }
-        if tool.input_schema.pointer("/properties/workspaceCode").is_some() {
-            let object = tool.input_schema.as_object_mut().expect("tool schema object");
+        if tool
+            .input_schema
+            .pointer("/properties/workspaceCode")
+            .is_some()
+        {
+            let object = tool
+                .input_schema
+                .as_object_mut()
+                .expect("tool schema object");
             let required = object.entry("required").or_insert_with(|| json!([]));
             if let Some(required) = required.as_array_mut() {
-                if !required.iter().any(|value| value == "workspaceCode") { required.push(json!("workspaceCode")); }
+                if !required.iter().any(|value| value == "workspaceCode") {
+                    required.push(json!("workspaceCode"));
+                }
             }
             if let Some(examples) = object.get_mut("examples").and_then(Value::as_array_mut) {
                 for example in examples {
                     if let Some(example) = example.as_object_mut() {
-                        example.entry("workspaceCode").or_insert_with(|| json!("TRON_CORE"));
+                        example
+                            .entry("workspaceCode")
+                            .or_insert_with(|| json!("TRON_CORE"));
                     }
                 }
             }
@@ -271,18 +304,37 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         tool.domain_code = domain;
         tool.category_code = "tron.dude";
         tool.module_owner = "dude";
-        if let Some(properties) = tool.input_schema.get_mut("properties").and_then(Value::as_object_mut) {
+        if let Some(properties) = tool
+            .input_schema
+            .get_mut("properties")
+            .and_then(Value::as_object_mut)
+        {
             properties.remove("workspaceCode");
-            if !code.starts_with("dude.memory_"){properties.remove("scopeCode");}
+            if !code.starts_with("dude.memory_") {
+                properties.remove("scopeCode");
+            }
             if let Some(scope) = properties.get_mut("scope") {
                 scope["enum"] = json!(["User", "WorkDomain"]);
             }
         }
-        if let Some(required) = tool.input_schema.get_mut("required").and_then(Value::as_array_mut) {
+        if let Some(required) = tool
+            .input_schema
+            .get_mut("required")
+            .and_then(Value::as_array_mut)
+        {
             required.retain(|value| value != "workspaceCode" && value != "scopeCode");
         }
-        if let Some(examples) = tool.input_schema.get_mut("examples").and_then(Value::as_array_mut) {
-            for example in examples { if let Some(object) = example.as_object_mut() { object.remove("workspaceCode"); object.remove("scopeCode"); } }
+        if let Some(examples) = tool
+            .input_schema
+            .get_mut("examples")
+            .and_then(Value::as_array_mut)
+        {
+            for example in examples {
+                if let Some(object) = example.as_object_mut() {
+                    object.remove("workspaceCode");
+                    object.remove("scopeCode");
+                }
+            }
         }
         dude_tools.push(tool);
     }

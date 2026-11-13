@@ -1,7 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    application::project::{ProjectRepository, ProjectReadRepository, ProjectReadPage},
+    application::project::{ProjectReadPage, ProjectReadRepository, ProjectRepository},
     domain::project::{
         Project, ProjectAppLink, ProjectError, ProjectView, project_status_from_storage,
         project_status_to_storage,
@@ -83,8 +83,13 @@ impl SqliteProjectRepositorySql<'_> {
         let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
             .connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| ProjectError::StorageFailure)?;
-        if active_name_exists(&tx, &project.workspace_code, &project.name, &project.project_code)
-            .map_err(storage_error)?
+        if active_name_exists(
+            &tx,
+            &project.workspace_code,
+            &project.name,
+            &project.project_code,
+        )
+        .map_err(storage_error)?
         {
             return Err(ProjectError::DuplicateName);
         }

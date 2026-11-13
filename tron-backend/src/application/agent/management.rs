@@ -429,7 +429,9 @@ impl AgentManagementService {
                 }
                 if let Some(index) = fixed_indexes.get(&tool.tool_code) {
                     let fixed = &mut records[*index];
-                    if tool.display.is_some() { fixed.display = tool.display.clone(); }
+                    if tool.display.is_some() {
+                        fixed.display = tool.display.clone();
+                    }
                     if tool.category.is_some() {
                         fixed.category = tool.category;
                     }

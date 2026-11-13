@@ -125,7 +125,10 @@ pub(super) async fn require(
         if session.status != ChatSessionStatus::Active {
             return chat_error_response(ChatError::SessionArchived);
         }
-        if request.method() != axum::http::Method::GET && !path.ends_with("/history/query") && !replay {
+        if request.method() != axum::http::Method::GET
+            && !path.ends_with("/history/query")
+            && !replay
+        {
             if let Err(error) = state.chats.ensure_session_writable(code) {
                 return chat_error_response(error);
             }

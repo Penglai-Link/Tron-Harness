@@ -23,18 +23,36 @@ impl SkillRegistryService {
             .filter(|s| matches_skill_search(s, search.as_deref()))
             .map(|mut s| {
                 s.available &= self.skill_available(&s.skill_name);
-                let actor_allowed = agent.is_none_or(|agent| crate::domain::computer_use::skill_allowed(agent, &s.skill_name, s.provider_pack_id.as_deref()));
+                let actor_allowed = agent.is_none_or(|agent| {
+                    crate::domain::computer_use::skill_allowed(
+                        agent,
+                        &s.skill_name,
+                        s.provider_pack_id.as_deref(),
+                    )
+                });
                 s.available &= actor_allowed;
                 let count = assignments
                     .iter()
-                    .filter(|a| a.skill_name == s.skill_name && a.enabled && s.available
-                        && crate::domain::computer_use::skill_allowed(&a.agent_code, &s.skill_name, s.provider_pack_id.as_deref()))
+                    .filter(|a| {
+                        a.skill_name == s.skill_name
+                            && a.enabled
+                            && s.available
+                            && crate::domain::computer_use::skill_allowed(
+                                &a.agent_code,
+                                &s.skill_name,
+                                s.provider_pack_id.as_deref(),
+                            )
+                    })
                     .count();
                 let description = read_skill_markdown(Path::new(&s.registry_path))
                     .ok()
                     .and_then(|md| parse_skill_frontmatter(&md).description);
                 RegistrySkillListItem {
-                    disabled_reason: if actor_allowed { disabled_reason(&s) } else { Some("电脑操作技能仅供主 Agent 和主 Dude 使用".into()) },
+                    disabled_reason: if actor_allowed {
+                        disabled_reason(&s)
+                    } else {
+                        Some("电脑操作技能仅供主 Agent 和主 Dude 使用".into())
+                    },
                     assigned_agent_count: count,
                     assigned: s.available
                         && agent.is_some_and(|agent| {

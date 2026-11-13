@@ -59,7 +59,11 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_SESSION_RUN_ACTIVE",
             "this operation is unavailable while the chat session is running".to_string(),
         ),
-        ChatError::ContainerDeleteRejected => (StatusCode::CONFLICT, "CHAT_CONTAINER_DELETE_REJECTED", "Disk directories are shared or unsafe to delete.".into()),
+        ChatError::ContainerDeleteRejected => (
+            StatusCode::CONFLICT,
+            "CHAT_CONTAINER_DELETE_REJECTED",
+            "Disk directories are shared or unsafe to delete.".into(),
+        ),
         ChatError::SessionLocationChanged => (
             StatusCode::CONFLICT,
             "CHAT_SESSION_LOCATION_CHANGED",
@@ -87,7 +91,9 @@ pub fn chat_error_response(error: ChatError) -> Response {
         ),
         ChatError::ProjectNameConflict => (
             StatusCode::CONFLICT,
-            crate::application::chat::ArchiveError::TopicNameConflict.descriptor().code,
+            crate::application::chat::ArchiveError::TopicNameConflict
+                .descriptor()
+                .code,
             "An active topic already uses this name".into(),
         ),
         ChatError::ProjectInvalid => (
@@ -96,7 +102,8 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "chat project is invalid for this workspace".to_string(),
         ),
         ChatError::DirectoryFixed => (
-            StatusCode::CONFLICT, "CHAT_DIRECTORY_FIXED",
+            StatusCode::CONFLICT,
+            "CHAT_DIRECTORY_FIXED",
             "directory chats must use their own directory".to_string(),
         ),
         ChatError::DirectoryInvalid => (
@@ -124,14 +131,26 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_USER_INPUT_REQUEST_NOT_FOUND",
             "chat user input request was not found".to_string(),
         ),
-        ChatError::AnnotationsInvalid | ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict => unreachable!("composer errors have descriptors"),
+        ChatError::AnnotationsInvalid
+        | ChatError::RequestedSkillsInvalid
+        | ChatError::RequestedSkillForbidden
+        | ChatError::GoalCommandInvalid
+        | ChatError::GoalCommandUnavailable
+        | ChatError::GoalCommandConflict => unreachable!("composer errors have descriptors"),
         ChatError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "CHAT_STORAGE_FAILED",
             "chat storage failed".to_string(),
         ),
     };
-    (status, Json(ApiResponse::error(code, super::error_messages::message(code, &message)))).into_response()
+    (
+        status,
+        Json(ApiResponse::error(
+            code,
+            super::error_messages::message(code, &message),
+        )),
+    )
+        .into_response()
 }
 
 pub(super) fn user_input_error_message(detail: &str) -> String {
@@ -151,17 +170,38 @@ pub(super) fn composer_error_message(error: &ChatError) -> String {
     let locale = crate::shared::auth_holder::AuthHolder::get()
         .map(|auth| SupportedLocale::from_raw(&auth.locale));
     let key = crate::application::chat::composer_input::descriptor(error)
-        .expect("composer error descriptor").message_key;
+        .expect("composer error descriptor")
+        .message_key;
     let (zh, en) = match key {
-        "tron.chat.requested_skill_forbidden" => ("所选技能未授权给当前 Agent，或已被禁用", "Selected skills are not granted to this Agent or have been disabled"),
-        "tron.chat.annotations_invalid" => ("评论无效，最多支持 32 条评论", "Invalid annotations; at most 32 comments are allowed"),
-        "tron.chat.requested_skills_invalid" => ("技能选择无效，最多选择 32 个技能", "Invalid skill selection; select at most 32 skills"),
-        "tron.chat.goal_command_invalid" => ("请在 /goal 后输入目标", "Enter an objective after /goal"),
-        "tron.chat.goal_command_conflict" => ("目标已发生变化，请重试", "The goal changed; please try again"),
-        "tron.chat.goal_command_unavailable" => ("当前 Agent 无法使用 /goal", "This Agent cannot use /goal"),
+        "tron.chat.requested_skill_forbidden" => (
+            "所选技能未授权给当前 Agent，或已被禁用",
+            "Selected skills are not granted to this Agent or have been disabled",
+        ),
+        "tron.chat.annotations_invalid" => (
+            "评论无效，最多支持 32 条评论",
+            "Invalid annotations; at most 32 comments are allowed",
+        ),
+        "tron.chat.requested_skills_invalid" => (
+            "技能选择无效，最多选择 32 个技能",
+            "Invalid skill selection; select at most 32 skills",
+        ),
+        "tron.chat.goal_command_invalid" => {
+            ("请在 /goal 后输入目标", "Enter an objective after /goal")
+        }
+        "tron.chat.goal_command_conflict" => (
+            "目标已发生变化，请重试",
+            "The goal changed; please try again",
+        ),
+        "tron.chat.goal_command_unavailable" => {
+            ("当前 Agent 无法使用 /goal", "This Agent cannot use /goal")
+        }
         _ => unreachable!("unknown composer message key"),
     };
-    if locale == Some(SupportedLocale::EnUs) { en.into() } else { zh.into() }
+    if locale == Some(SupportedLocale::EnUs) {
+        en.into()
+    } else {
+        zh.into()
+    }
 }
 
 pub fn chat_send_error_response(error: ChatSendError) -> Response {
@@ -172,7 +212,10 @@ pub fn chat_send_error_response(error: ChatSendError) -> Response {
             StatusCode::CONFLICT,
             Json(ApiResponse::error(
                 "CHAT_RUN_ALREADY_ACTIVE",
-                super::error_messages::message("CHAT_RUN_ALREADY_ACTIVE", "chat session already has an active run"),
+                super::error_messages::message(
+                    "CHAT_RUN_ALREADY_ACTIVE",
+                    "chat session already has an active run",
+                ),
             )),
         )
             .into_response(),
@@ -225,7 +268,14 @@ pub fn chat_steer_error_response(error: ChatSteerError) -> Response {
             "active run registry is unavailable".to_string(),
         ),
     };
-    (status, Json(ApiResponse::error(code, super::error_messages::message(code, &message)))).into_response()
+    (
+        status,
+        Json(ApiResponse::error(
+            code,
+            super::error_messages::message(code, &message),
+        )),
+    )
+        .into_response()
 }
 
 pub fn chat_run_control_error_response(error: ChatRunControlError) -> Response {
@@ -266,7 +316,14 @@ pub fn chat_run_control_error_response(error: ChatRunControlError) -> Response {
             "active run registry is unavailable".to_string(),
         ),
     };
-    (status, Json(ApiResponse::error(code, super::error_messages::message(code, &message)))).into_response()
+    (
+        status,
+        Json(ApiResponse::error(
+            code,
+            super::error_messages::message(code, &message),
+        )),
+    )
+        .into_response()
 }
 
 pub fn stop_chat_run_request_rejection_response(_error: JsonRejection) -> Response {
@@ -274,7 +331,10 @@ pub fn stop_chat_run_request_rejection_response(_error: JsonRejection) -> Respon
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
             "CHAT_STOP_RUN_REQUEST_INVALID",
-            super::error_messages::message("CHAT_STOP_RUN_REQUEST_INVALID", "stop run request body is invalid"),
+            super::error_messages::message(
+                "CHAT_STOP_RUN_REQUEST_INVALID",
+                "stop run request body is invalid",
+            ),
         )),
     )
         .into_response()
@@ -285,7 +345,10 @@ pub fn active_chat_run_query_rejection_response(_error: QueryRejection) -> Respo
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
             "CHAT_ACTIVE_RUN_QUERY_INVALID",
-            super::error_messages::message("CHAT_ACTIVE_RUN_QUERY_INVALID", "active run query is invalid"),
+            super::error_messages::message(
+                "CHAT_ACTIVE_RUN_QUERY_INVALID",
+                "active run query is invalid",
+            ),
         )),
     )
         .into_response()
@@ -296,7 +359,10 @@ pub fn steer_chat_message_request_rejection_response(_error: JsonRejection) -> R
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
             "CHAT_STEER_REQUEST_INVALID",
-            super::error_messages::message("CHAT_STEER_REQUEST_INVALID", "steer message request body is invalid"),
+            super::error_messages::message(
+                "CHAT_STEER_REQUEST_INVALID",
+                "steer message request body is invalid",
+            ),
         )),
     )
         .into_response()
@@ -373,5 +439,12 @@ fn agent_error_response(error: AgentInvocationError) -> Response {
             "agent run exceeded max tool calls".to_string(),
         ),
     };
-    (status, Json(ApiResponse::error(code, super::error_messages::message(code, &message)))).into_response()
+    (
+        status,
+        Json(ApiResponse::error(
+            code,
+            super::error_messages::message(code, &message),
+        )),
+    )
+        .into_response()
 }

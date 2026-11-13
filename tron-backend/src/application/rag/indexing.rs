@@ -42,7 +42,6 @@ impl Default for RagEmbeddingBatchLimits {
     }
 }
 
-
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct RagPreparedVectors {
     pub vectors: Vec<Vec<f32>>,

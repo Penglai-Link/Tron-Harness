@@ -18,7 +18,7 @@ fn content(
     name: impl Into<String>,
     description: impl Into<String>,
 ) -> CapabilityContentInfo {
-    let name=name.into();
+    let name = name.into();
     CapabilityContentInfo {
         kind: kind.into(),
         display_name: name.clone(),
@@ -32,7 +32,13 @@ pub(super) fn manifest_contents(
     manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest,
 ) -> Vec<CapabilityContentInfo> {
     let mut items = Vec::new();
-    items.extend(manifest.tools.iter().map(|entry| content("Tool",&entry.descriptor.call_name,&entry.descriptor.description)));
+    items.extend(manifest.tools.iter().map(|entry| {
+        content(
+            "Tool",
+            &entry.descriptor.call_name,
+            &entry.descriptor.description,
+        )
+    }));
     for (kind, names) in [
         ("Plugin", &manifest.plugins),
         ("Resource", &manifest.resources),
@@ -107,13 +113,13 @@ pub(super) fn builtin_tool_descriptors(id: &str) -> Vec<eliteforge_agent_core::T
         "framework.personai" => eliteforge_agent_capability_personai::personai_tool_catalog(),
         "framework.web" => vec![eliteforge_agent_official_plugin_tools_web::web_read_descriptor()],
         "framework.media" => eliteforge_agent_official_plugin_tools_media::media_tool_catalog(),
-        tron_harness_capability::PACK_ID => {
-            eliteforge_agent_core::ToolProvider::catalog_metadata(&super::super::tools::HarnessTools)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|tool| tool.descriptor)
-                .collect()
-        }
+        tron_harness_capability::PACK_ID => eliteforge_agent_core::ToolProvider::catalog_metadata(
+            &super::super::tools::HarnessTools,
+        )
+        .unwrap_or_default()
+        .into_iter()
+        .map(|tool| tool.descriptor)
+        .collect(),
         _ => vec![],
     }
 }
@@ -346,26 +352,49 @@ pub(super) fn plugin_display_name(id: &str, locale: &str) -> Option<&'static str
         "framework.context-assembler" => ("Context Assembly", "上下文组装"),
         _ => return None,
     };
-    Some(if locale.starts_with("zh") { chinese } else { english })
+    Some(if locale.starts_with("zh") {
+        chinese
+    } else {
+        english
+    })
 }
 
-
-pub(super) fn navigation_contents(path: &std::path::Path, manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest, locale: &str) -> Result<Vec<CapabilityContentInfo>, String> {
+pub(super) fn navigation_contents(
+    path: &std::path::Path,
+    manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest,
+    locale: &str,
+) -> Result<Vec<CapabilityContentInfo>, String> {
     let navigation = super::super::host::host_navigation::read_navigation(path, manifest)?;
     let mut items = Vec::new();
     for page in super::super::host::host_pages::read_pages(path, manifest)? {
-        let title = page.title.get(if locale.starts_with("zh") { "zh-CN" } else { "en-US" }).cloned().unwrap_or_else(|| page.id.clone());
+        let title = page
+            .title
+            .get(if locale.starts_with("zh") {
+                "zh-CN"
+            } else {
+                "en-US"
+            })
+            .cloned()
+            .unwrap_or_else(|| page.id.clone());
         let mut item = content("Page", &page.id, "");
         item.display_name = title;
         items.push(item);
     }
     for domain in &navigation.domains {
-        let mut item = content("NavigationDomain", &domain.code, domain.description.localized().value(locale));
+        let mut item = content(
+            "NavigationDomain",
+            &domain.code,
+            domain.description.localized().value(locale),
+        );
         item.display_name = domain.name.localized().value(locale).into();
         items.push(item);
     }
     for menu in &navigation.menus {
-        let mut item = content("NavigationMenu", &menu.code, menu.description.localized().value(locale));
+        let mut item = content(
+            "NavigationMenu",
+            &menu.code,
+            menu.description.localized().value(locale),
+        );
         item.display_name = menu.name.localized().value(locale).into();
         items.push(item);
     }

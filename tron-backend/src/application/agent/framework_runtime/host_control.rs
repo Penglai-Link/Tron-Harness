@@ -155,16 +155,21 @@ impl FrameworkHost {
         if let Some(control) = control {
             let state = control.lock().unwrap_or_else(|e| e.into_inner());
             if let Some((_, sdk)) = &state.sdk {
-                return sdk.notify(message.to_owned(), fw::MessageProvenance {
-                    sender: fw::MessageSender {
-                        kind: "SYSTEM".into(),
-                        id: None,
-                        display_name: Some("系统通知".into()),
-                        avatar_url: None,
-                    },
-                    source: Some("ChildRunCompletion".into()),
-                    correlation: None,
-                }).is_ok();
+                return sdk
+                    .notify(
+                        message.to_owned(),
+                        fw::MessageProvenance {
+                            sender: fw::MessageSender {
+                                kind: "SYSTEM".into(),
+                                id: None,
+                                display_name: Some("系统通知".into()),
+                                avatar_url: None,
+                            },
+                            source: Some("ChildRunCompletion".into()),
+                            correlation: None,
+                        },
+                    )
+                    .is_ok();
             }
         }
         false
@@ -228,7 +233,9 @@ impl FrameworkHost {
             let _registration = registration;
             let (result, ()) = tokio::join!(
                 agent.wait(handle),
-                super::super::presentation::consume_native_agui(stream, &context, service, &trace_id)
+                super::super::presentation::consume_native_agui(
+                    stream, &context, service, &trace_id
+                )
             );
             result
         })
@@ -256,7 +263,9 @@ impl FrameworkHost {
             let _registration = registration;
             let (result, ()) = tokio::join!(
                 handle.wait(),
-                super::super::presentation::consume_native_agui(stream, &context, service, &trace_id)
+                super::super::presentation::consume_native_agui(
+                    stream, &context, service, &trace_id
+                )
             );
             result
         })

@@ -1,9 +1,21 @@
 use super::*;
 use rusqlite::{params_from_iter, types::Value};
 
-pub(super) fn append_filters(sql: &mut String, values: &mut Vec<Value>, filters: &TraceFilters, attrs: &str, code: &str, unfinished: &str, abandoned: &str, trace: &str, searchable: &str) {
+pub(super) fn append_filters(
+    sql: &mut String,
+    values: &mut Vec<Value>,
+    filters: &TraceFilters,
+    attrs: &str,
+    code: &str,
+    unfinished: &str,
+    abandoned: &str,
+    trace: &str,
+    searchable: &str,
+) {
     if let Some(agent) = &filters.agent_code {
-        sql.push_str(&format!(" AND json_extract({attrs},'$.\"tron.agent.code\"')=?"));
+        sql.push_str(&format!(
+            " AND json_extract({attrs},'$.\"tron.agent.code\"')=?"
+        ));
         values.push(Value::Text(agent.clone()));
     }
     if let Some(status) = &filters.status {
@@ -12,7 +24,9 @@ pub(super) fn append_filters(sql: &mut String, values: &mut Vec<Value>, filters:
         values.push(Value::Text(status.clone()));
     }
     if !filters.keyword.is_empty() {
-        sql.push_str(&format!(" AND (instr(lower({trace} || ' ' || {searchable}),?)>0"));
+        sql.push_str(&format!(
+            " AND (instr(lower({trace} || ' ' || {searchable}),?)>0"
+        ));
         values.push(Value::Text(filters.keyword.clone()));
         for alias in &filters.keyword_aliases {
             sql.push_str(&format!(" OR instr(lower({searchable}),lower(?))>0"));
@@ -22,13 +36,23 @@ pub(super) fn append_filters(sql: &mut String, values: &mut Vec<Value>, filters:
     }
 }
 pub(super) fn status_sql(attrs: &str, code: &str, unfinished: &str, abandoned: &str) -> String {
-    format!("CASE WHEN ({unfinished}) OR json_extract({attrs},'$.\"tron.operation.active\"')='true' THEN 'Running' WHEN ({abandoned}) THEN 'Unknown' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='unknown' THEN 'Unknown' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='cancelled' THEN 'Cancelled' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"') IN ('waiting','awaiting_input') THEN 'Waiting' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"') IN ('interrupted','step_limit','tool_call_limit') THEN 'Interrupted' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='error' OR {code}=2 THEN 'Error' ELSE 'Completed' END")
+    format!(
+        "CASE WHEN ({unfinished}) OR json_extract({attrs},'$.\"tron.operation.active\"')='true' THEN 'Running' WHEN ({abandoned}) THEN 'Unknown' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='unknown' THEN 'Unknown' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='cancelled' THEN 'Cancelled' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"') IN ('waiting','awaiting_input') THEN 'Waiting' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"') IN ('interrupted','step_limit','tool_call_limit') THEN 'Interrupted' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='error' OR {code}=2 THEN 'Error' ELSE 'Completed' END"
+    )
 }
 
 /// Match an exact span in a page trace, or an execution root containing that span.
 /// UNION deduplicates ancestors so malformed cycles cannot recurse forever.
-pub(super) fn append_span_filter(sql: &mut String, values: &mut Vec<Value>, id: Option<&str>, trace: &str, root: Option<&str>) {
-    let Some(id) = id else { return; };
+pub(super) fn append_span_filter(
+    sql: &mut String,
+    values: &mut Vec<Value>,
+    id: Option<&str>,
+    trace: &str,
+    root: Option<&str>,
+) {
+    let Some(id) = id else {
+        return;
+    };
     if let Some(root) = root {
         sql.push_str(&format!(" AND {root} IN (WITH RECURSIVE ancestors(span_id,parent_id) AS (SELECT p.span_id,json_extract(p.data,'$.parentSpanId') FROM ef_telemetry_spans p WHERE p.trace_id={trace} AND p.span_id=? UNION SELECT p.span_id,json_extract(p.data,'$.parentSpanId') FROM ef_telemetry_spans p JOIN ancestors a ON p.span_id=a.parent_id WHERE p.trace_id={trace}) SELECT span_id FROM ancestors)"));
     } else {

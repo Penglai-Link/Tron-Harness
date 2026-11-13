@@ -1,6 +1,6 @@
 mod commands;
-pub mod packs;
 mod default_tree;
+pub mod packs;
 mod repository;
 
 use std::{
@@ -10,10 +10,9 @@ use std::{
 
 use crate::{
     domain::navigation::{
-        LocalizedText, MenuQuery, MenuSource, MenuType, NavigationDomain,
-        NavigationError, NavigationMenu, NavigationMenuChildDisplay, NavigationMenuTree,
-        NavigationPage, NavigationTreeItem, validate_menu_code,
-        validate_menu_target, validate_translations,
+        LocalizedText, MenuQuery, MenuSource, MenuType, NavigationDomain, NavigationError,
+        NavigationMenu, NavigationMenuChildDisplay, NavigationMenuTree, NavigationPage,
+        NavigationTreeItem, validate_menu_code, validate_menu_target, validate_translations,
     },
     shared::time::current_timestamp,
 };

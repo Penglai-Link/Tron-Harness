@@ -72,7 +72,13 @@ pub(super) fn validate(files: &BTreeMap<String, Vec<u8>>, entry: &str) -> Result
         }
         if tag == "script" {
             scripts += 1;
-            if element.value().attr("src").is_some_and(|src| !src.ends_with(".js")) { return Err("script entry must be JavaScript".into()); }
+            if element
+                .value()
+                .attr("src")
+                .is_some_and(|src| !src.ends_with(".js"))
+            {
+                return Err("script entry must be JavaScript".into());
+            }
             if scripts > 1 {
                 return Err("only one script entry is supported".into());
             }

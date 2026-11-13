@@ -24,12 +24,19 @@ impl SystemCommandProbe for ProcessSystemCommandProbe {
         }
         if command_name.contains(std::path::MAIN_SEPARATOR) {
             let path = Path::new(command_name);
-            if !path.is_file() { return Ok(false); }
-            #[cfg(unix)] {
-                use std::os::unix::fs::PermissionsExt;
-                return path.metadata().map(|metadata| metadata.permissions().mode() & 0o111 != 0).map_err(|e| e.to_string());
+            if !path.is_file() {
+                return Ok(false);
             }
-            #[cfg(not(unix))] return Ok(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                return path
+                    .metadata()
+                    .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+                    .map_err(|e| e.to_string());
+            }
+            #[cfg(not(unix))]
+            return Ok(true);
         }
         let output = Command::new(command_discovery_command())
             .arg(command_name)
@@ -311,8 +318,6 @@ fn deduplicate_models(models: Vec<SystemAgentModelRecord>) -> Vec<SystemAgentMod
     }
     deduplicated
 }
-
-
 
 fn parse_reasoning_efforts(
     object: &serde_json::Map<String, Value>,

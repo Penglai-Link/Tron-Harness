@@ -233,10 +233,14 @@ impl Display for ChatError {
             Self::AttachmentNotFound => f.write_str("chat attachment was not found"),
             Self::AnnotationsInvalid => f.write_str("invalid conversation annotations"),
             Self::RequestedSkillsInvalid => f.write_str("invalid explicit skill selection"),
-            Self::RequestedSkillForbidden => f.write_str("selected skill is not granted to the execution Agent"),
+            Self::RequestedSkillForbidden => {
+                f.write_str("selected skill is not granted to the execution Agent")
+            }
             Self::GoalCommandInvalid => f.write_str("goal objective is required"),
             Self::GoalCommandConflict => f.write_str("session goal changed concurrently"),
-            Self::GoalCommandUnavailable => f.write_str("goal commands are unavailable for this execution Agent"),
+            Self::GoalCommandUnavailable => {
+                f.write_str("goal commands are unavailable for this execution Agent")
+            }
             Self::MessageRequired => f.write_str("chat message content is required"),
             Self::SessionNotFound => f.write_str("chat session was not found"),
             Self::SessionMustBeArchived => {
@@ -246,7 +250,9 @@ impl Display for ChatError {
                 f.write_str("archived chat sessions cannot be changed or resumed")
             }
             Self::SessionRunActive => f.write_str("running chat sessions cannot be archived"),
-            Self::ContainerDeleteRejected => f.write_str("container disk deletion is unsafe or shared"),
+            Self::ContainerDeleteRejected => {
+                f.write_str("container disk deletion is unsafe or shared")
+            }
             Self::SessionLocationChanged => f.write_str("chat location changed; retry the request"),
             Self::SessionTitleRequired => f.write_str("chat session title is required"),
             Self::StorageFailure => f.write_str("chat storage failure"),

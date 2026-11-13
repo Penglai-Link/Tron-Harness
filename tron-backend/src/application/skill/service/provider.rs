@@ -8,24 +8,59 @@ impl SkillRegistryService {
     pub fn provider(&self) -> impl fw::SkillProvider + use<> {
         RegistryProvider(self.clone())
     }
-    pub fn register_pack_directories(
+    /// Project the skills currently shipped by each capability pack into the registry.
+    ///
+    /// The pack is authoritative: rows whose skill no longer exists in that pack
+    /// are removed, while surviving rows are refreshed in place so Agent
+    /// assignments are preserved.
+    pub fn reconcile_pack_directories(
         &self,
-        pack: &str,
-        roots: &[PathBuf],
-        enabled: bool,
-    ) -> Result<(), SkillError> {
-        let skills = self.validate_pack_directories(pack, roots)?;
+        packs: &[(String, Vec<PathBuf>, bool)],
+    ) -> Result<Vec<String>, SkillError> {
+        let enabled = packs
+            .iter()
+            .map(|(pack, _, active)| (pack.as_str(), *active))
+            .collect::<BTreeMap<_, _>>();
+        let mut desired = BTreeMap::<String, (String, PathBuf, Option<String>)>::new();
+        for (pack, roots, _) in packs {
+            for (name, (path, version)) in self.scan_pack_directories(roots)? {
+                if desired
+                    .insert(name, (pack.clone(), path, version))
+                    .is_some()
+                {
+                    return Err(SkillError::DuplicateSkill);
+                }
+            }
+        }
         let now = current_timestamp();
-        let entries = skills
-            .into_iter()
-            .map(|(name, path)| RegistrySkill {
-                skill_name: name,
-                provider_pack_id: Some(pack.into()),
-                available: enabled,
-                source_ref: pack.into(),
+        let mut repository = self.repository.lock().unwrap();
+        let existing = repository.list_registry_skills()?;
+        if existing.iter().any(|skill| {
+            skill.provider_pack_id.is_none() && desired.contains_key(&skill.skill_name)
+        }) {
+            return Err(SkillError::DuplicateSkill);
+        }
+        let mut removed = Vec::new();
+        for skill in existing
+            .iter()
+            .filter(|skill| skill.provider_pack_id.is_some())
+        {
+            if !desired.contains_key(&skill.skill_name)
+                && repository.delete_registry_skill(&skill.skill_name)?
+            {
+                removed.push(skill.skill_name.clone());
+            }
+        }
+        let entries = desired
+            .iter()
+            .map(|(name, (pack, path, version))| RegistrySkill {
+                skill_name: name.clone(),
+                provider_pack_id: Some(pack.clone()),
+                available: enabled.get(pack.as_str()).copied().unwrap_or(true),
+                source_ref: pack.clone(),
                 source_type: SkillSourceType::BuiltIn,
                 registry_path: path.display().to_string(),
-                declared_version: None,
+                declared_version: version.clone(),
                 update_status: SkillUpdateStatus::Manual,
                 managed_by: SkillManagedBy::BuiltIn,
                 last_checked_at: None,
@@ -35,29 +70,31 @@ impl SkillRegistryService {
                 updated_at: now.clone(),
             })
             .collect::<Vec<_>>();
-        let controllers = if pack == crate::domain::computer_use::PACK_ID && enabled {
-            crate::domain::computer_use::CONTROLLERS.iter().map(|agent| (*agent).to_owned()).collect::<Vec<_>>()
-        } else { vec![] };
-        let mut repository = self.repository.lock().unwrap();
-        let existing = repository.list_registry_skills()?;
-        if entries.iter().any(|entry| {
-            existing.iter().any(|old| {
-                old.skill_name == entry.skill_name && old.provider_pack_id.as_deref() != Some(pack)
-            })
-        }) {
-            return Err(SkillError::DuplicateSkill);
-        }
         repository.upsert_registry_skills(&entries)?;
+        let controllers = if enabled
+            .get(crate::domain::computer_use::PACK_ID)
+            .copied()
+            .unwrap_or(false)
+        {
+            crate::domain::computer_use::CONTROLLERS
+                .iter()
+                .map(|agent| (*agent).to_owned())
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
         // A newly installed/upgraded desktop package receives the requested
         // primary-controller defaults once. Later scans preserve deselections.
         for entry in &entries {
-            if !controllers.is_empty() && existing.iter().find(|old| old.skill_name == entry.skill_name)
-                .is_none_or(|old| old.registry_path != entry.registry_path)
-            {
+            let changed = existing
+                .iter()
+                .find(|old| old.skill_name == entry.skill_name)
+                .is_none_or(|old| old.registry_path != entry.registry_path);
+            if !controllers.is_empty() && changed {
                 repository.replace_skill_agents(&entry.skill_name, &controllers)?;
             }
         }
-        Ok(())
+        Ok(removed)
     }
     /// Read and validate the complete contribution before changing the registry.
     pub fn validate_pack_directories(
@@ -65,13 +102,36 @@ impl SkillRegistryService {
         pack: &str,
         roots: &[PathBuf],
     ) -> Result<BTreeMap<String, PathBuf>, SkillError> {
-        fn collect(root: &Path, skills: &mut BTreeMap<String, PathBuf>) -> Result<(), SkillError> {
+        let skills = self.scan_pack_directories(roots)?;
+        let existing = self.repository.lock().unwrap().list_registry_skills()?;
+        if existing.iter().any(|skill| {
+            skills.contains_key(&skill.skill_name)
+                && skill.provider_pack_id.as_deref() != Some(pack)
+        }) {
+            return Err(SkillError::DuplicateSkill);
+        }
+        Ok(skills
+            .into_iter()
+            .map(|(name, (path, _))| (name, path))
+            .collect())
+    }
+
+    fn scan_pack_directories(
+        &self,
+        roots: &[PathBuf],
+    ) -> Result<BTreeMap<String, (PathBuf, Option<String>)>, SkillError> {
+        fn collect(
+            root: &Path,
+            skills: &mut BTreeMap<String, (PathBuf, Option<String>)>,
+        ) -> Result<(), SkillError> {
             if !root.exists() {
                 return Ok(());
             }
             if root.join("SKILL.md").is_file() {
-                let name = parse_skill_name(&read_skill_markdown(root)?)?;
-                if skills.insert(name, root.to_path_buf()).is_some() {
+                let markdown = read_skill_markdown(root)?;
+                let name = parse_skill_name(&markdown)?;
+                let version = parse_skill_frontmatter(&markdown).declared_version;
+                if skills.insert(name, (root.to_path_buf(), version)).is_some() {
                     return Err(SkillError::DuplicateSkill);
                 }
             } else {
@@ -91,13 +151,6 @@ impl SkillRegistryService {
         let mut skills = BTreeMap::new();
         for root in roots {
             collect(root, &mut skills)?;
-        }
-        let existing = self.repository.lock().unwrap().list_registry_skills()?;
-        if existing.iter().any(|skill| {
-            skills.contains_key(&skill.skill_name)
-                && skill.provider_pack_id.as_deref() != Some(pack)
-        }) {
-            return Err(SkillError::DuplicateSkill);
         }
         Ok(skills)
     }

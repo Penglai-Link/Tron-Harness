@@ -13,7 +13,9 @@ pub fn descriptor(error: &eliteforge_agent_core::StateError) -> ApplicationError
     ApplicationErrorDescriptor { code, message_key }
 }
 
-pub fn deletion_descriptor(error: &eliteforge_agent_core::StateError) -> ApplicationErrorDescriptor {
+pub fn deletion_descriptor(
+    error: &eliteforge_agent_core::StateError,
+) -> ApplicationErrorDescriptor {
     use eliteforge_agent_core::StateError;
     let (code, message_key) = match error {
         StateError::UnsupportedVersion => ("101030008", "tron.chat.history_delete_unsupported"),

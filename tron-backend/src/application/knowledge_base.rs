@@ -1,11 +1,12 @@
 mod settings;
 pub use settings::KnowledgeLibrarySettings;
 mod agent_grants;
-pub mod deletion;
-mod document_intake;
-mod document_configuration;
 pub(crate) mod chunk_context;
+pub mod deletion;
+mod document_configuration;
+mod document_intake;
 pub mod fidelity; // Legacy finding types and read guards for persisted documents.
+pub(crate) mod image_index;
 pub mod ingestion;
 pub(crate) mod ingestion_worker;
 pub mod local_documents;
@@ -13,7 +14,6 @@ mod managed_retrieval;
 pub mod office_visuals;
 pub mod parsing;
 mod parsing_cache;
-pub(crate) mod image_index;
 pub use crate::application::document::preflight::{DocumentParsePlan, DocumentParsePreference};
 pub mod pdf_visual_source;
 mod platform_catalog;
@@ -37,9 +37,7 @@ use crate::{
     domain::{rag::*, resource::ResourceKind},
     shared::sqlite_extensions::TRON_VECTOR_INDEX_DIMENSION,
 };
-use local_documents::{
-    ChunkConfig, ImageAnalysisSummary, LocatedChunk, parse_local_document,
-};
+use local_documents::{ChunkConfig, ImageAnalysisSummary, LocatedChunk, parse_local_document};
 use parsing::{
     KnowledgeDocumentParser, OcrMode, ParsingArtifact, ParsingCapabilities, ParsingTier,
 };
@@ -184,7 +182,8 @@ pub struct KnowledgeBaseContext {
 #[derive(Clone)]
 pub struct KnowledgeBaseService {
     pub(crate) quality_jobs: Arc<crate::application::knowledge_quality::QualityJobs>,
-    pub(crate) quality_questions: Option<Arc<dyn crate::application::knowledge_quality::QualityQuestionGenerator>>,
+    pub(crate) quality_questions:
+        Option<Arc<dyn crate::application::knowledge_quality::QualityQuestionGenerator>>,
     pub(crate) chunk_strategies: eliteforge_agent_core::ChunkStrategies,
     skills: Arc<std::sync::OnceLock<crate::application::skill::SkillRegistryService>>,
     pub(crate) cleanup_gate: Arc<std::sync::Mutex<()>>,
@@ -254,11 +253,17 @@ impl KnowledgeBaseService {
             runtime_config: None,
         }
     }
-    pub fn with_chunk_strategies(mut self, strategies: eliteforge_agent_core::ChunkStrategies) -> Self {
+    pub fn with_chunk_strategies(
+        mut self,
+        strategies: eliteforge_agent_core::ChunkStrategies,
+    ) -> Self {
         self.chunk_strategies = strategies;
         self
     }
-    pub fn with_quality_question_generator(mut self, generator: Arc<dyn crate::application::knowledge_quality::QualityQuestionGenerator>) -> Self {
+    pub fn with_quality_question_generator(
+        mut self,
+        generator: Arc<dyn crate::application::knowledge_quality::QualityQuestionGenerator>,
+    ) -> Self {
         self.quality_questions = Some(generator);
         self
     }
@@ -444,7 +449,12 @@ impl KnowledgeBaseService {
         name: &str,
         description: &str,
     ) -> Result<KnowledgeBase, KnowledgeBaseError> {
-        self.create_with_index_settings(user, name, description, RagSettings::knowledge_base_default())
+        self.create_with_index_settings(
+            user,
+            name,
+            description,
+            RagSettings::knowledge_base_default(),
+        )
     }
 
     pub fn create_with_index_settings(
@@ -781,7 +791,15 @@ impl KnowledgeBaseService {
         kb: &KnowledgeBase,
         doc: &KnowledgeBaseDocument,
         generate_descriptions: bool,
-    ) -> Result<(Vec<LocatedChunk>, Vec<eliteforge_agent_core::ChunkContext>, Vec<String>, KnowledgeBaseDocument), KnowledgeBaseError> {
+    ) -> Result<
+        (
+            Vec<LocatedChunk>,
+            Vec<eliteforge_agent_core::ChunkContext>,
+            Vec<String>,
+            KnowledgeBaseDocument,
+        ),
+        KnowledgeBaseError,
+    > {
         let (_, record) = self.resources.download_binary_to_file(
             user,
             ResourceBinaryDownloadCommand {
@@ -803,15 +821,23 @@ impl KnowledgeBaseService {
                 return Err(KnowledgeBaseError::Conflict);
             }
         }
-        let reuse_only = self.parse_checkpoint.as_ref().map(|checkpoint|checkpoint.task())
-            .transpose()?.is_some_and(|task|task.configuration["reuseParsedOnly"]==true);
+        let reuse_only = self
+            .parse_checkpoint
+            .as_ref()
+            .map(|checkpoint| checkpoint.task())
+            .transpose()?
+            .is_some_and(|task| task.configuration["reuseParsedOnly"] == true);
         let (parsed, parsed_doc) = if reuse_only {
             (self.existing_parsed_document(user, doc)?, doc.clone())
         } else {
-            self.parsed_document(user, namespace, kb, doc, &bytes).await?
+            self.parsed_document(user, namespace, kb, doc, &bytes)
+                .await?
         };
         if generate_descriptions && fidelity::blocked(&parsed_doc) {
-            return Err(KnowledgeBaseError::Invalid(format!("解析质量校验失败，索引未发布：{}；请核对原件及图片",fidelity::failure_reason(&parsed_doc))));
+            return Err(KnowledgeBaseError::Invalid(format!(
+                "解析质量校验失败，索引未发布：{}；请核对原件及图片",
+                fidelity::failure_reason(&parsed_doc)
+            )));
         }
         let (parsed, mut parsed_doc) = self
             .supplement_image_descriptions(
@@ -837,22 +863,32 @@ impl KnowledgeBaseService {
             &doc.file_name,
         )
         .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
-        let image_vectors = match self.parse_checkpoint.as_ref().map(|checkpoint|checkpoint.task()).transpose()? {
+        let image_vectors = match self
+            .parse_checkpoint
+            .as_ref()
+            .map(|checkpoint| checkpoint.task())
+            .transpose()?
+        {
             Some(task) => match task.configuration["embeddingImages"].as_bool() {
-                Some(value)=>value,
+                Some(value) => value,
                 // Preserve image candidates without resolving an unavailable
                 // embedding model in the parsing task. Indexing decides which
                 // candidates to consume after the model identity is pinned.
-                None if task.configuration["ragSettings"]["vector"]==true => true,
-                None=>false,
+                None if task.configuration["ragSettings"]["vector"] == true => true,
+                None => false,
             },
-            None=>false,
+            None => false,
         };
         if image_vectors {
             image_index::append_image_chunks(&parsed, &doc.file_name, &mut chunked.chunks)?;
         }
         chunked.warnings.extend(parsed.warnings);
-        Ok((chunked.chunks, chunked.contexts, chunked.warnings, parsed_doc))
+        Ok((
+            chunked.chunks,
+            chunked.contexts,
+            chunked.warnings,
+            parsed_doc,
+        ))
     }
     pub async fn preview(
         &self,
@@ -863,7 +899,8 @@ impl KnowledgeBaseService {
         let namespace = "PLATFORM";
         let kb = self.owned(user, kb)?;
         let doc = self.repository.document(&kb.id, doc)?;
-        let (chunks, _, warnings, parsed_doc) = self.chunks(user, namespace, &kb, &doc, false).await?;
+        let (chunks, _, warnings, parsed_doc) =
+            self.chunks(user, namespace, &kb, &doc, false).await?;
         Ok(KnowledgeBasePreview {
             fidelity_issues: vec![], // Legacy response field; no interactive audit workflow.
             chunk_count: chunks.len(),
@@ -1418,8 +1455,8 @@ impl RagAccessResolver for KnowledgeBaseService {
             .map_err(|_| RagError::SearchScopeInvalid)?;
         let corpus = "skill";
         let settings = self.rag.settings_for_corpus(corpus)?;
-            let sources = self.allowed_skill_sources(&identity.agent_code)?;
-            if !sources.is_empty() {
+        let sources = self.allowed_skill_sources(&identity.agent_code)?;
+        if !sources.is_empty() {
             ranges.extend(self.rag.partition_ranges(AuthorizedRagRange {
                 corpus_id: corpus.into(),
                 scopes: vec![RagSearchScope {
@@ -1472,11 +1509,19 @@ impl RagAccessResolver for KnowledgeBaseService {
 
         Ok(())
     }
-    fn recheck(&self,identity:&RagIdentity,result:&mut RagEvidenceResult)->Result<(),RagError>{
-        self.recheck_sources(identity,result)
+    fn recheck(
+        &self,
+        identity: &RagIdentity,
+        result: &mut RagEvidenceResult,
+    ) -> Result<(), RagError> {
+        self.recheck_sources(identity, result)
     }
-    fn assemble_context(&self,identity:&RagIdentity,result:&mut RagEvidenceResult)->Result<(),RagError>{
-        self.expand_context_evidence(&identity.user_code,result).map_err(|_|RagError::StorageFailure)
+    fn assemble_context(
+        &self,
+        identity: &RagIdentity,
+        result: &mut RagEvidenceResult,
+    ) -> Result<(), RagError> {
+        self.expand_context_evidence(&identity.user_code, result)
+            .map_err(|_| RagError::StorageFailure)
     }
-
 }

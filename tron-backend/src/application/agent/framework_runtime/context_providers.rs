@@ -111,9 +111,7 @@ pub(super) async fn assemble(
         .prefix
         .iter()
         .filter(|m| {
-            !onboarding
-                && !is_tool_domains(m)
-                && (m.role != "system" || contains_context_data(m))
+            !onboarding && !is_tool_domains(m) && (m.role != "system" || contains_context_data(m))
         })
         .map(|message| {
             let mut message = message.clone();
@@ -162,28 +160,54 @@ pub(super) async fn assemble(
         source_order.push("topic_memo".into());
     }
     if let Some(services) = input.run.extensions.get::<fw::ScopedAgentServices>() {
-        for source in services.0.context_sources.iter().filter(|source| source.kind() == fw::ContextSourceKind::Data) {
+        for source in services
+            .0
+            .context_sources
+            .iter()
+            .filter(|source| source.kind() == fw::ContextSourceKind::Data)
+        {
             let id = source.block_id().to_owned();
-            if !source_order.contains(&id) { source_order.push(id); }
+            if !source_order.contains(&id) {
+                source_order.push(id);
+            }
         }
     }
     let mut shares = config.context.providers.effective_shares(&source_order);
     if !config.context.providers.shares.contains_key("topic_memo") {
-        let extra = shares.get("current_session_history").copied().unwrap_or(0).min(199);
-        if let Some(history) = shares.get_mut("current_session_history") { *history -= extra; }
-        if let Some(topic) = shares.get_mut("topic_memo") { *topic += extra; }
+        let extra = shares
+            .get("current_session_history")
+            .copied()
+            .unwrap_or(0)
+            .min(199);
+        if let Some(history) = shares.get_mut("current_session_history") {
+            *history -= extra;
+        }
+        if let Some(topic) = shares.get_mut("topic_memo") {
+            *topic += extra;
+        }
     }
     let quotas = memory::ContextShareAllocation::new(shares)?.allocate(available.max_tokens);
     let quota = |id: &str| {
         let allocated = quotas.get(id).copied().unwrap_or(0);
         if id == "long_term_memory" {
-            allocated.min(config.context.providers.data_blocks.get(id)
-                .and_then(|block| block.max_tokens).map(|cap| cap as usize).unwrap_or(usize::MAX))
+            allocated.min(
+                config
+                    .context
+                    .providers
+                    .data_blocks
+                    .get(id)
+                    .and_then(|block| block.max_tokens)
+                    .map(|cap| cap as usize)
+                    .unwrap_or(usize::MAX),
+            )
         } else {
             allocated
         }
     };
-    let seed = fw::ContextBlockConfig::new(fw::INSTRUCTIONS_BLOCK, fw::BlockBudget::tokens(quota("seed_prompt_prefix")));
+    let seed = fw::ContextBlockConfig::new(
+        fw::INSTRUCTIONS_BLOCK,
+        fw::BlockBudget::tokens(quota("seed_prompt_prefix")),
+    );
     let knowledge_cap = quota("knowledge_base");
     let mut contributors: Vec<Arc<dyn fw::ContextContributor>> = Vec::new();
     contributors.push(Arc::new(topic_context::TopicContributor {
@@ -255,10 +279,7 @@ pub(super) async fn assemble(
             agent_directory_context::AgentDirectoryContributor((**runtime).clone()),
         ));
     }
-    configs.insert(
-        "seed_prompt_prefix".into(),
-        seed,
-    );
+    configs.insert("seed_prompt_prefix".into(), seed);
     for (id, entries, cap, policy) in [
         (
             crate::application::agent::page_context::PAGE_CONTEXT_BLOCK,
@@ -269,17 +290,13 @@ pub(super) async fn assemble(
         (
             "tool_domains",
             &tool_domains,
-            fw::BlockBudget::tokens(
-                quota("tool_domains"),
-            ),
+            fw::BlockBudget::tokens(quota("tool_domains")),
             None,
         ),
         (
             "application_context",
             &application,
-            fw::BlockBudget::tokens(
-                quota("application_context"),
-            ),
+            fw::BlockBudget::tokens(quota("application_context")),
             None,
         ),
         (
@@ -323,7 +340,9 @@ pub(super) async fn assemble(
             // The history coordinator writes the summary once under this block's
             // own budget; a generic data reducer must not truncate it separately.
             if id == "conversation_history_summary" {
-                if policy.strategy != Strategy::Keep { block = compression(block, policy)?; }
+                if policy.strategy != Strategy::Keep {
+                    block = compression(block, policy)?;
+                }
                 configs.insert(id.into(), block);
                 continue;
             }
@@ -356,14 +375,22 @@ pub(super) async fn assemble(
         fw::ContextBlockConfig::new("knowledge_base", fw::BlockBudget::tokens(knowledge_cap));
     configs.insert("knowledge_base".into(), knowledge);
     let memory_cap = quota("long_term_memory");
-    configs.insert("long_term_memory".into(), fw::ContextBlockConfig::new("long_term_memory", fw::BlockBudget::tokens(memory_cap)));
-    configs.insert("topic_memo".into(), fw::ContextBlockConfig::new("topic_memo", fw::BlockBudget::tokens(quota("topic_memo"))));
+    configs.insert(
+        "long_term_memory".into(),
+        fw::ContextBlockConfig::new("long_term_memory", fw::BlockBudget::tokens(memory_cap)),
+    );
+    configs.insert(
+        "topic_memo".into(),
+        fw::ContextBlockConfig::new("topic_memo", fw::BlockBudget::tokens(quota("topic_memo"))),
+    );
     let mut block = fw::ContextBlockConfig::new(
         fw::HISTORY_BLOCK,
         fw::BlockBudget::tokens(plan.effective_input_budget as usize),
     );
     if config.context.providers.history.strategy != Strategy::Keep {
-        if config.compaction.auto_enabled || force { block = compression(block, &config.context.providers.history)?; }
+        if config.compaction.auto_enabled || force {
+            block = compression(block, &config.context.providers.history)?;
+        }
         match config.context.providers.history.strategy {
             Strategy::Checkpoint => {
                 let model = host.harness.framework_compaction_model_config(&context.model);
@@ -381,9 +408,7 @@ pub(super) async fn assemble(
     if directory.is_some() {
         let block = fw::ContextBlockConfig::new(
             "agent_directory",
-            fw::BlockBudget::tokens(
-                quota("agent_directory"),
-            ),
+            fw::BlockBudget::tokens(quota("agent_directory")),
         );
         configs.insert("agent_directory".into(), block);
     }
@@ -421,9 +446,9 @@ pub(super) async fn assemble(
                 continue;
             }
             let id = source.block_id();
-            let mut block = source.default_block_config().unwrap_or_else(|| {
-                fw::ContextBlockConfig::new(id, fw::BlockBudget::ratio(10_000))
-            });
+            let mut block = source
+                .default_block_config()
+                .unwrap_or_else(|| fw::ContextBlockConfig::new(id, fw::BlockBudget::ratio(10_000)));
             if block.id != id {
                 return Err(fw::AgentError::InvalidConfiguration(format!(
                     "context contributor default config changed identity: {id}"
@@ -433,10 +458,7 @@ pub(super) async fn assemble(
             // the plugin's protocol/message constraints, not an independent token cap.
             block.budget.max_tokens = Some(quota(id));
             block.budget.max_ratio_bps = None;
-            if configs
-                .insert(id.into(), block)
-                .is_some()
-            {
+            if configs.insert(id.into(), block).is_some() {
                 return Err(fw::AgentError::InvalidConfiguration(format!(
                     "duplicate context contributor: {id}"
                 )));
@@ -477,7 +499,9 @@ pub(super) async fn assemble(
     }
     plugin_order.sort();
     let mut order = config.context.providers.order.clone();
-    if !order.iter().any(|id| id == "topic_memo") { order.push("topic_memo".into()); }
+    if !order.iter().any(|id| id == "topic_memo") {
+        order.push("topic_memo".into());
+    }
     for (_, id) in plugin_order {
         if !order.contains(&id) {
             order.push(id);
@@ -495,11 +519,19 @@ pub(super) async fn assemble(
     let policy: Arc<dyn fw::ContextBudgetPolicy> = Arc::new(memory::SharedContextBudget);
     let assembler = fw::DefaultContextAssembler::new(fw::ContextLayout(layout), contributors)?;
     let assembler = if config.context.providers.history.strategy == Strategy::Checkpoint {
-        assembler.with_history_summary_block("conversation_history_summary", config.context.providers.history_recent_turns)?
-    } else { assembler };
+        assembler.with_history_summary_block(
+            "conversation_history_summary",
+            config.context.providers.history_recent_turns,
+        )?
+    } else {
+        assembler
+    };
     let assembler = assembler
         .with_policy(policy)
-        .with_reduction_cache(Arc::new(memory::MemoryContextReductionCache::new(host.summaries.clone(), fingerprint(&("tron.context-reducers.v2", &config.context.providers))?)))
+        .with_reduction_cache(Arc::new(memory::MemoryContextReductionCache::new(
+            host.summaries.clone(),
+            fingerprint(&("tron.context-reducers.v2", &config.context.providers))?,
+        )))
         .with_global_compression(
             config
                 .compaction
@@ -575,9 +607,7 @@ fn reducer(
                 .min(model.max_tokens.unwrap_or(limits.max_model_output_tokens));
             let options = memory::CompressionOptions {
                 max_input_tokens: auxiliary_limits.max_context_tokens.max(1),
-                max_summary_bytes: memory::summary_byte_guard(
-                    limits.max_context_tokens
-                ),
+                max_summary_bytes: memory::summary_byte_guard(limits.max_context_tokens),
                 max_model_calls: 16,
             };
             // Cache identity follows the actual authorized summary model and settings.
@@ -632,11 +662,10 @@ fn bound_memory_reducer() -> Arc<dyn fw::ContextReducer> {
                 native,
                 cap.min(u32::MAX as usize) as u32,
             ),
-        ).unwrap_or_else(|_| message.clone())
+        )
+        .unwrap_or_else(|_| message.clone())
     }))
 }
-
-
 
 /// Resolve the host codec before a generic reducer turns JSON into prose.
 /// Reserved transport records must never become model-visible text.
@@ -653,7 +682,11 @@ impl fw::ContextReducer for HostDataBounding {
         // the admission checks below even when its estimated cost fits.
         if input.compression.is_none()
             && input.block.messages.len() <= input.budget.max_messages
-            && !input.block.messages.iter().any(|message| message.content.has_media())
+            && !input
+                .block
+                .messages
+                .iter()
+                .any(|message| message.content.has_media())
             && fw::context_tokens(&input.block.messages, input.model, input.estimator).await?
                 <= input.budget.max_tokens.min(self.0.text_tokens)
         {
@@ -669,7 +702,8 @@ impl fw::ContextReducer for HostDataBounding {
                         serde_json::from_value(part.clone()).map_err(|error| {
                             fw::AgentError::InvalidConfiguration(error.to_string())
                         })?;
-                    if let crate::domain::agent::AgentMessagePart::Context { kind, text, .. } = part {
+                    if let crate::domain::agent::AgentMessagePart::Context { kind, text, .. } = part
+                    {
                         *content = fw::ContentBlock::Text {
                             text: format!("[Runtime reference data: {kind}]\n{text}"),
                         };
@@ -681,7 +715,12 @@ impl fw::ContextReducer for HostDataBounding {
                 }
             }
         }
-        self.0.reduce(&fw::ContextReductionInput { block: &block, ..*input }).await
+        self.0
+            .reduce(&fw::ContextReductionInput {
+                block: &block,
+                ..*input
+            })
+            .await
     }
 }
 
@@ -692,14 +731,37 @@ struct ScopedReduction {
 }
 #[async_trait]
 impl fw::ContextReducer for ScopedReduction {
-    async fn project_history(&self, input: &fw::ContextReductionInput<'_>, summary_budget: fw::ContextBudget, recent_turns: usize, cached_only: bool) -> Result<Option<fw::HistoryProjection>, fw::AgentError> {
+    async fn project_history(
+        &self,
+        input: &fw::ContextReductionInput<'_>,
+        summary_budget: fw::ContextBudget,
+        recent_turns: usize,
+        cached_only: bool,
+    ) -> Result<Option<fw::HistoryProjection>, fw::AgentError> {
         let mut run = input.run.clone();
-        if let Some(model) = self.extensions.get::<crate::application::agent::runtime::CompactionModelInput>() {
+        if let Some(model) = self
+            .extensions
+            .get::<crate::application::agent::runtime::CompactionModelInput>()
+        {
             run.extensions.insert((*model).clone());
         }
-        self.inner.project_history(&fw::ContextReductionInput { run: &run, limits: &self.limits, ..*input }, summary_budget, recent_turns, cached_only).await
+        self.inner
+            .project_history(
+                &fw::ContextReductionInput {
+                    run: &run,
+                    limits: &self.limits,
+                    ..*input
+                },
+                summary_budget,
+                recent_turns,
+                cached_only,
+            )
+            .await
     }
-    async fn cached_projection(&self, input: &fw::ContextReductionInput<'_>) -> Result<Option<Vec<fw::Message>>, fw::AgentError> {
+    async fn cached_projection(
+        &self,
+        input: &fw::ContextReductionInput<'_>,
+    ) -> Result<Option<Vec<fw::Message>>, fw::AgentError> {
         self.inner.cached_projection(input).await
     }
     async fn reduce(

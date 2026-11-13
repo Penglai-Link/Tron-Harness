@@ -232,8 +232,22 @@ where
                 entries.push(e);
             }
         }
-        let current=self.service.recallable_versions(&self.context).map_err(map_error)?;
-        entries.retain(|entry|entry.version.rsplit_once(':').and_then(|(code,version)|version.parse::<u32>().ok().map(|version|current.contains(&(code.into(),version)))).unwrap_or(false));
+        let current = self
+            .service
+            .recallable_versions(&self.context)
+            .map_err(map_error)?;
+        entries.retain(|entry| {
+            entry
+                .version
+                .rsplit_once(':')
+                .and_then(|(code, version)| {
+                    version
+                        .parse::<u32>()
+                        .ok()
+                        .map(|version| current.contains(&(code.into(), version)))
+                })
+                .unwrap_or(false)
+        });
         Ok(entries)
     }
     async fn save(

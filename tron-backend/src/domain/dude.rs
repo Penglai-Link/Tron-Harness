@@ -150,7 +150,11 @@ pub struct DudeWorkChange {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SoulState { Uninitialized, AwaitingUser, Ready }
+pub enum SoulState {
+    Uninitialized,
+    AwaitingUser,
+    Ready,
+}
 
 /// One platform-owned identity per Dude. No account or workspace copies.
 #[derive(Debug, Clone, Serialize, Deserialize)]

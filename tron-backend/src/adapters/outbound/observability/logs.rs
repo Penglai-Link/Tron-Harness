@@ -25,21 +25,33 @@ where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
     N: for<'a> tracing_subscriber::fmt::format::FormatFields<'a> + 'static,
 {
-    fn format_event(&self, ctx: &tracing_subscriber::fmt::FmtContext<'_, S, N>,
-        mut writer: tracing_subscriber::fmt::format::Writer<'_>, event: &tracing::Event<'_>) -> std::fmt::Result {
+    fn format_event(
+        &self,
+        ctx: &tracing_subscriber::fmt::FmtContext<'_, S, N>,
+        mut writer: tracing_subscriber::fmt::format::Writer<'_>,
+        event: &tracing::Event<'_>,
+    ) -> std::fmt::Result {
         use opentelemetry::trace::TraceContextExt;
         use tracing_subscriber::fmt::format::Writer;
         let mut line = String::new();
-        tracing_subscriber::fmt::format().json().flatten_event(true)
+        tracing_subscriber::fmt::format()
+            .json()
+            .flatten_event(true)
             .format_event(ctx, Writer::new(&mut line), event)?;
         let context = opentelemetry::Context::current();
         let span = context.span();
         let ids = span.span_context();
-        if !ids.is_valid() { return writer.write_str(&line); }
+        if !ids.is_valid() {
+            return writer.write_str(&line);
+        }
         let mut value: Value = serde_json::from_str(&line).map_err(|_| std::fmt::Error)?;
         if let Some(object) = value.as_object_mut() {
-            object.entry("trace_id").or_insert_with(|| Value::String(ids.trace_id().to_string()));
-            object.entry("span_id").or_insert_with(|| Value::String(ids.span_id().to_string()));
+            object
+                .entry("trace_id")
+                .or_insert_with(|| Value::String(ids.trace_id().to_string()));
+            object
+                .entry("span_id")
+                .or_insert_with(|| Value::String(ids.span_id().to_string()));
         }
         writeln!(writer, "{value}")
     }
@@ -215,8 +227,14 @@ pub fn query_log_files(
 ) -> Result<ApplicationLogPage, ObservabilityError> {
     q.normalize()?;
     let (date, zone, from, to) = day_range(&q)?;
-    let before = q.before_log_id.as_deref().and_then(crate::application::observability::log_position);
-    let after = q.after_log_id.as_deref().and_then(crate::application::observability::log_position);
+    let before = q
+        .before_log_id
+        .as_deref()
+        .and_then(crate::application::observability::log_position);
+    let after = q
+        .after_log_id
+        .as_deref()
+        .and_then(crate::application::observability::log_position);
     let first = DateTime::from_timestamp_millis(from)
         .ok_or(ObservabilityError::InvalidLogQuery)?
         .date_naive();
@@ -262,7 +280,10 @@ pub fn query_log_files(
                     let position = crate::application::observability::log_position(&record.log_id);
                     if before.is_none_or(|cursor| position.is_some_and(|p| p < cursor))
                         && after.is_none_or(|cursor| position.is_some_and(|p| p > cursor))
-                        && record.timestamp >= from && record.timestamp < to && q.matches(&record) {
+                        && record.timestamp >= from
+                        && record.timestamp < to
+                        && q.matches(&record)
+                    {
                         visitor(record);
                     }
                 }

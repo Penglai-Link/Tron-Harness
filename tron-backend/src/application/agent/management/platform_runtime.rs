@@ -27,7 +27,9 @@ impl AgentManagementService {
             }
             Err(error) => return Err(error),
         };
-        if !policy.enabled { return Err(AgentManagementError::SystemAgentUnavailable); }
+        if !policy.enabled {
+            return Err(AgentManagementError::SystemAgentUnavailable);
+        }
         Ok(ResolvedAgentRuntime {
             system_fast_mode: false,
             system_reasoning_effort: None,

@@ -1,7 +1,7 @@
+use super::encryption_keys::{is_encryption_key_failure, is_encryption_key_failure_detail};
 use super::*;
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
-use super::encryption_keys::{is_encryption_key_failure, is_encryption_key_failure_detail};
 
 use eliteforge_agent_official_plugin_model_http as sdk;
 
@@ -165,7 +165,8 @@ impl ModelProviderService {
                 Ok(None) => {
                     let mut failure = error.clone();
                     if let fw::ModelError::Provider(detail) = &mut failure {
-                        detail.message = "PersonAI encryption key changed; authorize PersonAI again".into();
+                        detail.message =
+                            "PersonAI encryption key changed; authorize PersonAI again".into();
                     }
                     Err(failure)
                 }
@@ -203,8 +204,9 @@ impl ModelProviderService {
             return;
         }
         let rejected_key = terminal && is_encryption_key_failure_detail(error);
-        let rejected_access =
-            terminal && error.category == fw::ProviderErrorCategory::Authentication && !rejected_key;
+        let rejected_access = terminal
+            && error.category == fw::ProviderErrorCategory::Authentication
+            && !rejected_key;
         let identity = identity.to_owned();
         let result = (|| -> Result<(), ModelProviderError> {
             let this = self.clone();
@@ -414,28 +416,34 @@ impl ModelProviderService {
         // Credential attempts below retain their process-local salted digest.
         let mut digest = Sha256::new();
         digest.update(b"tron.provider.account.v1\0");
-        digest.update(serde_json::json!([
+        digest.update(
+            serde_json::json!([
                 row.provider_code.storage_value(),
                 row.person_ai_user_id,
                 row.server_base_url
-            ]).to_string().as_bytes());
+            ])
+            .to_string()
+            .as_bytes(),
+        );
         format!("{:x}", digest.finalize())
     }
     pub(super) fn sdk_attempt_for_row(&self, row: &ProviderConnectionRow, token: &str) -> String {
         // A device reauthorization can rotate the encryption key while the
         // access token stays valid. Late failures must identify that key too.
-        let credentials = row.credentials_encrypted.as_deref()
+        let credentials = row
+            .credentials_encrypted
+            .as_deref()
             .and_then(|encrypted| self.decrypt_credentials(encrypted).ok());
         let material = serde_json::json!([
             token,
             credentials.as_ref().map(|value| &value.client_id),
             credentials.as_ref().map(|value| &value.public_key),
-        ]).to_string();
+        ])
+        .to_string();
         format!(
             "{}:{}",
             self.sdk_identity_scope(row),
             self.sdk_fingerprint(&material)
         )
     }
-
 }

@@ -102,33 +102,13 @@ impl McpService {
             .get()
             .is_none_or(|c| c.available("mcp", code))
     }
-    pub fn register_pack_server(
-        &self,
-        declaration: &eliteforge_agent_capability_runtime::McpDeclaration,
-        enabled: bool,
-        directory: &std::path::Path,
-    ) -> Result<(), McpError> {
-        self.register_pack_servers(std::slice::from_ref(declaration), enabled, directory)
-    }
-    pub fn register_pack_servers(
-        &self,
-        declarations: &[eliteforge_agent_capability_runtime::McpDeclaration],
-        enabled: bool,
-        directory: &std::path::Path,
-    ) -> Result<(), McpError> {
-        let contributions = declarations
-            .iter()
-            .cloned()
-            .map(|declaration| (declaration, enabled, directory.to_path_buf()))
-            .collect::<Vec<_>>();
-        self.register_pack_contributions(&contributions)
-    }
     pub(crate) fn register_pack_contributions(
         &self,
         declarations: &[(
             eliteforge_agent_capability_runtime::McpDeclaration,
             bool,
             std::path::PathBuf,
+            String,
         )],
     ) -> Result<(), McpError> {
         if declarations.is_empty() {
@@ -140,9 +120,10 @@ impl McpService {
             .into_iter()
             .map(|server| (server.server_code.clone(), server))
             .collect::<std::collections::BTreeMap<_, _>>();
-        for (declaration, enabled, directory) in declarations {
+        for (declaration, enabled, directory, pack_id) in declarations {
             if let Some(server) = existing.get(&declaration.id) {
-                if let Some(updated) = self.upgraded_pack_entrypoint(server, declaration, directory)
+                if let Some(updated) =
+                    self.reconciled_pack_entrypoint(server, declaration, directory, pack_id)
                 {
                     repository.upsert_platform_server(&updated)?;
                     existing.insert(declaration.id.clone(), updated);

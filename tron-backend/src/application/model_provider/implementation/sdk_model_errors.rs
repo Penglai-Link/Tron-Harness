@@ -4,7 +4,11 @@ use serde_json::Value;
 /// Preserve a definite output-budget failure before the protocol parser turns
 /// it into a generic abnormal-stop error. Never expose generated arguments.
 pub(super) fn output_limit_failure(event: &Value, request: &Value) -> Option<fw::ModelError> {
-    if event.pointer("/choices/0/finish_reason").and_then(Value::as_str) != Some("length") {
+    if event
+        .pointer("/choices/0/finish_reason")
+        .and_then(Value::as_str)
+        != Some("length")
+    {
         return None;
     }
     let limit = request

@@ -19,11 +19,23 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         {
             return Err(IngestionQueueError::Conflict);
         }
-        if let Some(expected)=task.configuration.get("ragSettings") {
-            let capabilities:String=tx.query_row("SELECT capabilities_json FROM rag_corpora WHERE corpus_id=?1",[&task.knowledge_base_id],|r|r.get(0)).map_err(storage)?;
-            let current=crate::application::rag::RagSettings::from_capabilities(&serde_json::from_str(&capabilities).map_err(storage)?).map_err(storage)?;
-            let expected:crate::application::rag::RagSettings=serde_json::from_value(expected.clone()).map_err(storage)?;
-            if current!=expected{return Err(IngestionQueueError::Conflict);}
+        if let Some(expected) = task.configuration.get("ragSettings") {
+            let capabilities: String = tx
+                .query_row(
+                    "SELECT capabilities_json FROM rag_corpora WHERE corpus_id=?1",
+                    [&task.knowledge_base_id],
+                    |r| r.get(0),
+                )
+                .map_err(storage)?;
+            let current = crate::application::rag::RagSettings::from_capabilities(
+                &serde_json::from_str(&capabilities).map_err(storage)?,
+            )
+            .map_err(storage)?;
+            let expected: crate::application::rag::RagSettings =
+                serde_json::from_value(expected.clone()).map_err(storage)?;
+            if current != expected {
+                return Err(IngestionQueueError::Conflict);
+            }
         }
         let current = document(&tx, &task)?;
         if ready["resourceCode"] != current["resourceCode"] {
@@ -61,15 +73,32 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
                 dimension as usize,
             )?;
         }
-        let partition=crate::domain::rag::graph::GraphPartition{corpus_id:task.knowledge_base_id.clone(),scope_type:"SPACE".into(),scope_code:task.workspace_code.clone()};
-        if task.configuration["ragSettings"]["graph"]==true {
+        let partition = crate::domain::rag::graph::GraphPartition {
+            corpus_id: task.knowledge_base_id.clone(),
+            scope_type: "SPACE".into(),
+            scope_code: task.workspace_code.clone(),
+        };
+        if task.configuration["ragSettings"]["graph"] == true {
             let metadata:String=tx.query_row(&format!("SELECT source_metadata FROM {table} WHERE source_code=?1 AND source_status='STAGING' LIMIT 1"),[source],|r|r.get(0)).map_err(storage)?;
-            let metadata:Value=serde_json::from_str(&metadata).map_err(storage)?;
-            let id=metadata["graphGenerationId"].as_str().ok_or(IngestionQueueError::Conflict)?;
-            super::super::rag_graph_index::validate_graph_generation_binding(&tx,id,&partition,&task.document_id,source,&task.id,&task.input_config_hash).map_err(|_|IngestionQueueError::Conflict)?;
-            super::super::rag_graph_index::activate_graph_generation(&tx,id).map_err(|_|IngestionQueueError::Conflict)?;
+            let metadata: Value = serde_json::from_str(&metadata).map_err(storage)?;
+            let id = metadata["graphGenerationId"]
+                .as_str()
+                .ok_or(IngestionQueueError::Conflict)?;
+            super::super::rag_graph_index::validate_graph_generation_binding(
+                &tx,
+                id,
+                &partition,
+                &task.document_id,
+                source,
+                &task.id,
+                &task.input_config_hash,
+            )
+            .map_err(|_| IngestionQueueError::Conflict)?;
+            super::super::rag_graph_index::activate_graph_generation(&tx, id)
+                .map_err(|_| IngestionQueueError::Conflict)?;
         } else {
-            super::super::rag_graph_index::retire_graph_source(&tx,&partition,&task.document_id).map_err(storage)?;
+            super::super::rag_graph_index::retire_graph_source(&tx, &partition, &task.document_id)
+                .map_err(storage)?;
         }
         publication_cleanup::remove_old_generations(&tx, &task, &current, source)?;
         tx.execute(&format!("UPDATE {table} SET source_status='ACTIVE',status='ACTIVE' WHERE source_code=?1 AND source_status='STAGING'"), [source]).map_err(storage)?;

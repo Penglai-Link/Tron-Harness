@@ -4,11 +4,13 @@
 
 ## 继承与优先级
 
-浅色/深色基底 → `colors` → `layout` → 资源引擎生成的背景/字体变量。组件变量优先于该组件的语义色回退。单独设置 `--tron-button-primary-bg` 只改变主按钮，不改正文、图谱或其他控件。
+浅色/深色基底 → `variants.light` / `variants.dark` → `layout` → 资源引擎生成的背景/字体变量。组件变量优先于该组件的语义色回退。单独设置 `--tron-button-primary-bg` 只改变主按钮，不改正文、图谱或其他控件。
 
 `--color-primary` 等语义颜色会桥接到 `--primary` 等控件别名，显式别名优先。模板不复制这组别名，避免改了主色却被旧别名盖住。`--color-success` 是业务成功色，`--success` 是 UI 库别名；同理 error→destructive、accent→info。
 
 全局配色建议成对调整：surface/on-surface、primary/on-primary、accent-container/on-accent-container、error-container/on-error-container、success-container/on-success-container、warning-container/on-warning-container。背景和表面有多层，不能只改 `--color-background`。
+
+`--tron-background-image-overlay-color` 是用户自定义背景图上方的遮罩色，浅色主题通常用浅色半透明，深色主题用深色；`--tron-tab-active-bg` 控制工作区活动标签页底色。`--tron-sidebar-bg-opacity` 和 `--tron-sidebar-bg-blur` 由本机侧栏偏好写入，主题设置会被宿主覆盖，不要把它们当成主题效果。`--tron-system-font-size` 保留给字号设置。
 
 ## 按钮
 
@@ -63,28 +65,27 @@
 
 组件可通过已有 className/style 明确覆盖公共样式，所以这些变量不承诺控制所有手写原生 button 或业务专属布局。开发新页面时应使用公共组件。
 
-## 能力包管理页
+## 能力包、能力中心与扩展配置
 
-能力包和能力配置页面提供以下稳定 `data-theme-part` 选择器，可在版本 2 的包内 CSS 中按页面、能力卡片、扩展实现、提供方、状态或包 ID 定制。页面默认消费的局部变量可在 `colors` 或 `layout` 中设置：
+当前页面提供以下稳定 `data-theme-part` 选择器，可在版本 3 的包内 CSS 中按页面、能力卡片或扩展标签定制。页面默认消费的局部变量可在 `variants.light` / `variants.dark` 或 `layout` 中设置：
 
 - `--tron-capability-effective-fg`：已生效状态文字，默认跟随成功色。
 - `--tron-capability-inactive-fg`：未生效状态文字，默认跟随次要文字色。
-- `--tron-capability-id-fg`：能力包 ID 文字，默认跟随次要文字色。
 - `--tron-capability-provider-fg`：扩展实现提供方文字，默认跟随次要文字色。
 
-页面选择器：`capability-packs-page`、`capability-configuration-page`；子部件：`capability-pack-card`、`capability-pack-id`、`capability-extension-tabs`、`capability-implementation`、`capability-provider`、`capability-status-effective`、`capability-status-inactive`。例如：
+页面挂点：`capability-packs-page`（能力中心列表）、`capability-center-card`（单个市场/已安装能力卡）、`capability-pack-detail-page`（能力包详情）、`capability-configuration-page`（扩展实现配置）、`capability-extension-tabs`（扩展点标签栏）。例如：
 
 ```css
-[data-theme-part="capability-pack-card"] {
+[data-theme-part="capability-center-card"] {
   border-color: var(--color-accent);
 }
 
-[data-theme-part="capability-status-effective"] {
-  background: var(--color-success-container);
+[data-theme-part="capability-pack-detail-page"] {
+  background-color: var(--color-surface-container-low);
 }
 ```
 
-这些页面仍沿用 `--color-*` 语义色、`--tron-card-*` 卡片变量和按钮/标签公共组件变量；新增页面部件变量只用于局部语义文字色。
+这些页面仍沿用 `--color-*` 语义色、`--tron-card-*` 卡片变量和按钮/标签公共组件变量；新增页面部件变量只用于局部语义文字色。旧挂点 `capability-pack-card`、`capability-pack-id`、`capability-implementation`、`capability-provider`、`capability-status-effective`、`capability-status-inactive` 已不由当前页面声明。
 
 ## Markdown、代码、图谱、终端
 
@@ -92,14 +93,16 @@
 - Chat 的外部颜色入口使用 `--agent-ui-chat-*-color`，避免覆盖组件内部派生变量，详见 [共享界面契约](agent-ui.md)。
 - CodeMirror 编辑器通过全局 `--color-*` 取色。代码与终端保持等宽字体。
 - 图谱：`--tron-graph-active-edge` / `-edge` / `-highlight` / `-selected` / `-label-bg` / `-label-fg` / `-label-border` / `-grid`。节点分类色使用 `--tron-graph-group-1-color` / `-border` / `-soft`，序号 1–12，按分类名稳定分组。图谱 Canvas 与 DOM 图例都刷新。
-- 终端 ANSI：`--tron-terminal-black/red/green/yellow/blue/magenta/cyan/white`，以及 bright-black 等八个亮色。主题内使用 HEX 或 RGB 值，避免 Canvas/第三方颜色解析器差异。
+- 终端 ANSI：`--tron-terminal-black/red/green/yellow/blue/magenta/cyan/white`，以及 bright-black 等八个亮色。主题内使用 HEX 或 RGB 值，避免 Canvas/第三方颜色解析器差异。Tron 只消费 `--tron-terminal-*`；共享 Agent UI 终端的 `--ai-terminal-*` 语义变量不适用于 Tron 终端。
 - 字体：`--font-sans` 可指定已安装系统字体，`resources.font` 加载包内字体且优先级更高。标题、表单和 Portal 弹层共享字体；字号设置 `--tron-system-font-size` 不允许主题覆盖。
 
 ## 边界
 
-主题覆盖 Tron 的 Web 页面，包括独立聊天窗口。版本 2 的包内 CSS 仅作用于当前 Tron 页面主题命名空间，可使用普通 CSS 选择器覆盖匹配组件，并通过 `data-theme-effect-layer="global"` 在所有页面上应用伪元素和关键帧效果；尺寸、间距和布局属性受保护。外部网页/webview 的内容、截图/图片/PDF 原文、原生 OS 窗口边框、用户图标和第三方固定装饰不属于主题覆盖面。
+主题覆盖 Tron 的 Web 页面，包括独立聊天窗口。版本 3 的包内 CSS 仅作用于当前 Tron 页面主题命名空间，可使用普通 CSS 选择器覆盖匹配组件，并通过 `data-theme-effect-layer="global"` 在所有页面上应用伪元素和关键帧效果；尺寸、间距和布局属性受保护。外部网页/webview 的内容、截图/图片/PDF 原文、原生 OS 窗口边框、用户图标和第三方固定装饰不属于主题覆盖面。
 
 应用主框架、左侧导航菜单、右侧工具栏、底部终端面板、页面主体、表格、筛选输入框和选择器都使用皮肤语义色。包内 CSS 可用 `data-theme-part` 精确覆盖侧栏或页面，也可用 `button`、`input` 等选择器覆盖所有匹配控件。
+
+当前外壳提供的稳定 `data-theme-part`：`app-sidebar-frame`、`app-sidebar`、`app-sidebar-content`、`app-sidebar-menu`、`app-sidebar-menu-item`、`app-toolbar`、`app-content`、`app-page`、`app-right-sidebar`、`app-bottom-sidebar`。`data-theme-anchor` 的公共名称则用于装饰层，两者不要混用。
 
 ## 公共组件变量目录
 
@@ -162,6 +165,7 @@
 - `--tron-button-secondary-hover-bg`
 - `--tron-button-secondary-hover-fg`
 - `--tron-button-shadow`
+- `--tron-background-image-overlay-color`
 - `--tron-card-bg`
 - `--tron-card-border`
 - `--tron-card-fg`
@@ -213,9 +217,17 @@
 - `--tron-table-row-selected-bg`
 - `--tron-table-row-selected-fg`
 - `--tron-table-row-stripe-bg`
+- `--tron-tab-active-bg`
 
-## 共享聊天、A2UI 和动效变量
+## 共享聊天、Composer、A2UI 和动效变量
 
-完整可识别变量见 `tokens.json`，覆盖 Chat、Markdown、代码、通用控件、A2UI 和 Motion。它是拼写与发现索引，不表示所有变量在每个页面都生效，尤其不能绕过宿主显式配置或组件局部派生变量。
+完整可识别变量见 `tokens.json`，覆盖 Chat、Composer、Markdown、代码、通用控件、A2UI 和 Motion。它是拼写与发现索引，不表示所有变量在每个页面都生效，尤其不能绕过宿主显式配置或组件局部派生变量。
 
-具体用途、公开挂点、问答及图表例子见 [agent-ui.md](agent-ui.md)。随共享 UI 更新时，核对实际依赖源码与 `docs/a2ui-theme-tokens.json`、`docs/motion-tokens.json` 后更新索引，不能只从旧皮肤猜测变量。
+共享聊天新增的稳定入口：
+
+- 历史索引：`--agent-ui-chat-history-inset`、`-hit-width`、`-step`、`-dot-size`、`-active-size`、`-color`、`-active-color`、`-preview-width`、`-preview-shadow`、`-preview-font-size`、`-preview-detail-font-size`。
+- 图片缩略图：`--agent-ui-chat-image-thumbnail-width`、`-height`、`-radius`。
+- 输入区：`--agent-ui-composer-*` 与 `--agent-ui-control-*`；旧的 `--agent-ui-composer-skill-font-size`、`--agent-ui-composer-skill-max-width` 已不再生效。
+- 通用量：`--agent-ui-space-1` 至 `-4`、`--agent-ui-border-width`、`--agent-ui-focus-ring-width` / `-offset`、`--agent-ui-font-mono`、`--agent-ui-line-height`、`--agent-ui-font-weight-medium`。
+
+具体用途、公开挂点、问答及图表例子见 [agent-ui.md](agent-ui.md)。随共享 UI 更新时，核对实际依赖源码与 `docs/a2ui-theme-tokens.json`、`docs/composer-theme-tokens.json`、`docs/motion-tokens.json` 后更新索引，不能只从旧皮肤猜测变量。

@@ -164,11 +164,17 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         let name = &binding.descriptor.call_name;
         if !crate::domain::computer_use::allows(state.context.agent_code.as_deref().unwrap_or(""))
             && crate::domain::computer_use::is_tool(
-                &binding.descriptor.id, name, binding.domain_code.as_deref(), binding.source.pack_id.as_deref(),
+                &binding.descriptor.id,
+                name,
+                binding.domain_code.as_deref(),
+                binding.source.pack_id.as_deref(),
             )
         {
             state.product_tool_authority.remove(name);
-            state.context.effective_tools.retain(|tool| &tool.tool_name != name);
+            state
+                .context
+                .effective_tools
+                .retain(|tool| &tool.tool_name != name);
             state.context.tools.retain(|tool| &tool.tool_name != name);
             return Ok(fw::ToolBindingAdmission::Exclude);
         }
@@ -183,12 +189,18 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 .map_err(fw::AgentError::ToolSetup)?;
             if state.context.is_owning_dude()
                 && selection.mode != crate::domain::agent::ToolAssignmentMode::AllPlatformTools
-                && crate::application::agent::tool_catalog::dude_workspace_tool(&record) {
+                && crate::application::agent::tool_catalog::dude_workspace_tool(&record)
+            {
                 state.product_tool_authority.remove(name);
                 return Ok(fw::ToolBindingAdmission::Exclude);
             }
             let selected = selection.selects(&record)
-                || (state.context.is_owning_dude() && record.category.as_ref().is_some_and(|category| category.code == "tron.dude") && state.product_tool_authority.contains(name))
+                || (state.context.is_owning_dude()
+                    && record
+                        .category
+                        .as_ref()
+                        .is_some_and(|category| category.code == "tron.dude")
+                    && state.product_tool_authority.contains(name))
                 || (caller_scope && binding.descriptor.id == "agent.ask_caller");
             let restrict_selection = matches!(
                 selection.mode,
@@ -332,11 +344,22 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         // the model exactly what changed instead of leaving stale tool names in
         // prior conversation turns as its only evidence. In-flight tools keep
         // the assignment they were admitted under.
-        if let Some(notice) = host.harness.framework_tool_catalog_update(&state.context, bindings).await
-            .map_err(|error| fw::AgentError::ToolSetup(error.to_string()))? {
-            state.trusted_prefix.push(crate::domain::agent::AgentMessage::new("user", vec![crate::domain::agent::AgentMessagePart::Context {
-                kind: "tool_domains".into(), text: notice.to_string(), metadata: None,
-            }]));
+        if let Some(notice) = host
+            .harness
+            .framework_tool_catalog_update(&state.context, bindings)
+            .await
+            .map_err(|error| fw::AgentError::ToolSetup(error.to_string()))?
+        {
+            state
+                .trusted_prefix
+                .push(crate::domain::agent::AgentMessage::new(
+                    "user",
+                    vec![crate::domain::agent::AgentMessagePart::Context {
+                        kind: "tool_domains".into(),
+                        text: notice.to_string(),
+                        metadata: None,
+                    }],
+                ));
         }
         Ok(())
     }
@@ -362,9 +385,16 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         let host = HostExecution::from_extensions(&invocation.run.extensions)?;
         let state = host.state.lock().await;
         if !crate::domain::computer_use::allows(state.context.agent_code.as_deref().unwrap_or(""))
-            && crate::domain::computer_use::is_tool(&invocation.descriptor.id, &invocation.descriptor.call_name, None, None)
+            && crate::domain::computer_use::is_tool(
+                &invocation.descriptor.id,
+                &invocation.descriptor.call_name,
+                None,
+                None,
+            )
         {
-            return Ok(fw::ToolPolicyDecision::Deny("Computer Use is restricted to the main Agent and main Dude".into()));
+            return Ok(fw::ToolPolicyDecision::Deny(
+                "Computer Use is restricted to the main Agent and main Dude".into(),
+            ));
         }
         if let Some(management) = &self.management {
             if !management

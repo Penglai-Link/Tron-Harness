@@ -51,7 +51,11 @@ impl CapabilityResourceRepository for SqliteCapabilityRepository {
     }
     fn transition(&mut self, pack: &str, enabled: bool, agents: &[String]) -> Result<(), String> {
         let pack = pack.to_owned();
-        let agents = agents.iter().filter(|agent| pack != computer_use::PACK_ID || computer_use::allows(agent)).cloned().collect::<Vec<_>>();
+        let agents = agents
+            .iter()
+            .filter(|agent| pack != computer_use::PACK_ID || computer_use::allows(agent))
+            .cloned()
+            .collect::<Vec<_>>();
         self.0.call(move |c| {
             let tx=c.transaction().map_err(failure)?;
             let owned=resources(&tx)?.into_iter().filter(|r|r.pack_id==pack).collect::<Vec<_>>();
@@ -111,6 +115,47 @@ impl CapabilityResourceRepository for SqliteCapabilityRepository {
             || "capability storage unavailable".into(),
         )
     }
+    fn retain_kind(
+        &mut self,
+        kind: &str,
+        owners: &std::collections::BTreeMap<String, String>,
+    ) -> Result<(), String> {
+        let kind = kind.to_owned();
+        let owners = owners.clone();
+        self.0.call(
+            move |connection| {
+                let tx = connection.transaction().map_err(failure)?;
+                if owners.is_empty() {
+                    tx.execute(
+                        "DELETE FROM capability_resource_ownership WHERE resource_kind=?1",
+                        [&kind],
+                    )
+                    .map_err(failure)?;
+                } else {
+                    let placeholders = std::iter::repeat_n("?", owners.len())
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    let sql = format!(
+                        "DELETE FROM capability_resource_ownership WHERE resource_kind=?1 AND resource_code NOT IN ({placeholders})"
+                    );
+                    let mut values = Vec::with_capacity(owners.len() + 1);
+                    values.push(kind.as_str());
+                    values.extend(owners.keys().map(String::as_str));
+                    tx.execute(&sql, rusqlite::params_from_iter(values))
+                        .map_err(failure)?;
+                }
+                for (code, pack) in &owners {
+                    tx.execute(
+                        "UPDATE capability_resource_ownership SET pack_id=?2 WHERE resource_kind=?1 AND resource_code=?3",
+                        params![kind, pack, code],
+                    )
+                    .map_err(failure)?;
+                }
+                tx.commit().map_err(failure)
+            },
+            || "capability storage unavailable".into(),
+        )
+    }
 }
 fn update_assignments(
     c: &Connection,
@@ -118,8 +163,11 @@ fn update_assignments(
     enabled: bool,
     only_other_controllers: bool,
 ) -> Result<(), String> {
-    let controlled = owned.iter().filter(|resource| resource.pack_id == computer_use::PACK_ID)
-        .map(|resource| resource.code.as_str()).collect::<std::collections::HashSet<_>>();
+    let controlled = owned
+        .iter()
+        .filter(|resource| resource.pack_id == computer_use::PACK_ID)
+        .map(|resource| resource.code.as_str())
+        .collect::<std::collections::HashSet<_>>();
     if !controlled.is_empty() {
         c.execute(
             "UPDATE workspace_internal_agent_policies
@@ -148,7 +196,9 @@ fn update_assignments(
         .map_err(failure)?;
     drop(q);
     for (agent, json) in configs {
-        if only_other_controllers && computer_use::allows(&agent) { continue; }
+        if only_other_controllers && computer_use::allows(&agent) {
+            continue;
+        }
         let mut config: serde_json::Value =
             serde_json::from_str(&json).map_err(|e| e.to_string())?;
         for (key, codes) in [("selectedToolCodes", &tools), ("selectedServerCodes", &mcp)] {
@@ -158,7 +208,15 @@ fn update_assignments(
                 .filter(|v| !v.as_str().is_some_and(|v| codes.iter().any(|c| c == v)))
                 .collect::<Vec<_>>();
             if enabled {
-                values.extend(codes.iter().filter(|code| !controlled.contains(code.as_str()) || computer_use::allows(&agent)).cloned().map(serde_json::Value::String));
+                values.extend(
+                    codes
+                        .iter()
+                        .filter(|code| {
+                            !controlled.contains(code.as_str()) || computer_use::allows(&agent)
+                        })
+                        .cloned()
+                        .map(serde_json::Value::String),
+                );
             }
             config[key] = serde_json::Value::Array(values);
         }
@@ -186,8 +244,18 @@ fn update_assignments(
         ),
     ] {
         for code in codes {
-            c.execute(&format!("DELETE FROM {table} WHERE {column}=?1 AND (?2=0 OR agent_code NOT IN (?3,?4))"), params![code,only_other_controllers,computer_use::CONTROLLERS[0],computer_use::CONTROLLERS[1]])
-                .map_err(failure)?;
+            c.execute(
+                &format!(
+                    "DELETE FROM {table} WHERE {column}=?1 AND (?2=0 OR agent_code NOT IN (?3,?4))"
+                ),
+                params![
+                    code,
+                    only_other_controllers,
+                    computer_use::CONTROLLERS[0],
+                    computer_use::CONTROLLERS[1]
+                ],
+            )
+            .map_err(failure)?;
             if enabled && !only_other_controllers {
                 c.execute(&format!("INSERT OR IGNORE INTO {table}(workspace_code,agent_code,{column},created_at,updated_at) SELECT workspace_code,agent_code,?1,?2,?2 FROM workspace_internal_agent_policies WHERE (?3=0 OR agent_code IN (?4,?5))"),params![code,chrono::Utc::now().timestamp_millis(),controlled.contains(code.as_str()),computer_use::CONTROLLERS[0],computer_use::CONTROLLERS[1]]).map_err(failure)?;
             }

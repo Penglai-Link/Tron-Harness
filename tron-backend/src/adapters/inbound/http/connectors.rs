@@ -189,7 +189,10 @@ async fn delete(
     auth: RequestAuthContext,
     headers: HeaderMap,
 ) -> Response {
-    match state.integrations.delete("PLATFORM", &auth.user().user_code, &code) {
+    match state
+        .integrations
+        .delete("PLATFORM", &auth.user().user_code, &code)
+    {
         Ok(()) => Json(ApiResponse::protocol_success(EmptyData {})).into_response(),
         Err(error) => error_response(error, &headers),
     }

@@ -201,9 +201,7 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.memory.search.sampleResultSummary" => {
             "Returns relevant memory excerpts with their original sources and versions."
         }
-        "agent.toolCatalog.tools.memory.search.params.query" => {
-            "Required question or search text."
-        }
+        "agent.toolCatalog.tools.memory.search.params.query" => "Required question or search text.",
         "agent.toolCatalog.tools.memory.search.params.limit" => {
             "Maximum number of memories to return. Defaults to 8."
         }
@@ -484,9 +482,7 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.memory.search.sampleResultSummary" => {
             "返回相关记忆片段、原始来源和版本。"
         }
-        "agent.toolCatalog.tools.memory.search.params.query" => {
-            "必填的问题或检索文本。"
-        }
+        "agent.toolCatalog.tools.memory.search.params.query" => "必填的问题或检索文本。",
         "agent.toolCatalog.tools.memory.search.params.limit" => "最多返回的记忆数量，默认 8。",
         "agent.toolCatalog.tools.memory.get.name" => "读取记忆",
         "agent.toolCatalog.tools.memory.get.description" => {

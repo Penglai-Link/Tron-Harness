@@ -51,7 +51,11 @@ impl AgentInvocationService {
         )
         .map_err(map_continuation_error)?;
         group.attach(&mut request.extensions);
-        request.extensions.insert(eliteforge_agent_official_plugin_otel::TraceParent(opentelemetry::Context::current()));
+        request
+            .extensions
+            .insert(eliteforge_agent_official_plugin_otel::TraceParent(
+                opentelemetry::Context::current(),
+            ));
         let presentation = host
             .presentation_service()
             .map_err(AgentInvocationError::RuntimeFailed)?;

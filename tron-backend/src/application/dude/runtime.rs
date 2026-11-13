@@ -164,11 +164,10 @@ impl DudeDispatcher {
         if matches!(&result, Err(DudeError::ExecutionBusy)) {
             // Admission contention is not an execution failure and must not exhaust
             // the retry budget while the user-facing run is still in progress.
-            if let Err(error) = self.service.defer_busy(
-                &event,
-                chrono::Utc::now().timestamp_millis(),
-                5_000,
-            ) {
+            if let Err(error) =
+                self.service
+                    .defer_busy(&event, chrono::Utc::now().timestamp_millis(), 5_000)
+            {
                 tracing::error!(%error, "Dude busy feedback could not be deferred");
             }
             return;

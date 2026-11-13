@@ -24,8 +24,12 @@ pub struct SaveProjectRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ArchiveProjectRequest { pub project_code: String }
+pub struct ArchiveProjectRequest {
+    pub project_code: String,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DeleteProjectRequest { pub project_code: String }
+pub struct DeleteProjectRequest {
+    pub project_code: String,
+}

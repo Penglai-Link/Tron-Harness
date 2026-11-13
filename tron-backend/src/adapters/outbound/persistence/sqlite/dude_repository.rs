@@ -70,7 +70,9 @@ fn validate_work_snapshot(
     } else if change.kind == WorkChangeKind::Progress {
         if status == crate::domain::task::CLOSED_STATUS_CODE
             || result.as_deref().map(str::trim)
-                != change.task_snapshot["executionResult"].as_str().map(str::trim)
+                != change.task_snapshot["executionResult"]
+                    .as_str()
+                    .map(str::trim)
         {
             return Err(DudeError::Conflict);
         }
@@ -134,7 +136,7 @@ fn prune_completed_heartbeat_events(
 
 impl DudeRepository for SqliteDudeRepository {
     fn soul(&mut self, code: &str) -> Result<DudeSoul, DudeError> {
-        let code=code.to_owned();
+        let code = code.to_owned();
         self.call(move |c| {
             let json: Option<String> = c.query_row("SELECT s.record_json FROM dude_souls s JOIN dudes d USING(dude_code) WHERE s.dude_code=?1", [code], |r| r.get(0)).optional().map_err(storage)?;
             let mut soul: DudeSoul = decode(json.ok_or(DudeError::NotFound)?)?;
@@ -152,10 +154,15 @@ impl DudeRepository for SqliteDudeRepository {
         })
     }
     fn save_soul(&mut self, soul: &DudeSoul) -> Result<(), DudeError> {
-        let soul=soul.clone();
+        let soul = soul.clone();
         self.call(move |c| {
-            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
-            tx.execute("UPDATE dude_souls SET record_json=?2 WHERE dude_code=?1",params![soul.dude_code,encode(&soul)?]).map_err(storage)?;
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate)
+                .map_err(storage)?;
+            tx.execute(
+                "UPDATE dude_souls SET record_json=?2 WHERE dude_code=?1",
+                params![soul.dude_code, encode(&soul)?],
+            )
+            .map_err(storage)?;
             tx.commit().map_err(storage)
         })
     }
@@ -358,16 +365,21 @@ impl DudeRepository for SqliteDudeRepository {
     fn activity_events(&mut self, code: &str) -> Result<Vec<DudeEvent>, DudeError> {
         let code = code.to_owned();
         self.call(move |c| {
-            let mut query = c.prepare(
-                "SELECT event.record_json FROM dude_events event
+            let mut query = c
+                .prepare(
+                    "SELECT event.record_json FROM dude_events event
                  WHERE event.dude_code=?1 AND (event.source!='Heartbeat' OR event.rowid IN (
                      SELECT heartbeat.rowid FROM dude_events heartbeat
                      WHERE heartbeat.dude_code=?1 AND heartbeat.source='Heartbeat'
                      ORDER BY heartbeat.rowid DESC LIMIT ?2
                  ))
                  ORDER BY event.rowid DESC LIMIT 200",
-            ).map_err(storage)?;
-            query.query_map(params![code, HEARTBEAT_HISTORY_LIMIT as i64], |row| row.get::<_, String>(0))
+                )
+                .map_err(storage)?;
+            query
+                .query_map(params![code, HEARTBEAT_HISTORY_LIMIT as i64], |row| {
+                    row.get::<_, String>(0)
+                })
                 .map_err(storage)?
                 .map(|row| decode(row.map_err(storage)?))
                 .collect()
@@ -420,7 +432,13 @@ tx.commit().map_err(storage)})
         self.retry_event(event, now, delay_ms, error, false)
     }
     fn defer_busy(&mut self, event: &DudeEvent, now: i64, delay_ms: i64) -> Result<(), DudeError> {
-        self.retry_event(event, now, delay_ms, "Waiting for the current Dude run", true)
+        self.retry_event(
+            event,
+            now,
+            delay_ms,
+            "Waiting for the current Dude run",
+            true,
+        )
     }
     fn resolve_awaiting_input(
         &mut self,
@@ -512,8 +530,12 @@ tx.commit().map_err(storage)})
             tx.commit().map_err(storage)?; Ok(change)
         })
     }
-    fn scoped_pending_work_changes(&mut self, dude: &str, user: &str) -> Result<Vec<DudeWorkChange>, DudeError> {
-        let (dude,user)=(dude.to_owned(),user.to_owned());
+    fn scoped_pending_work_changes(
+        &mut self,
+        dude: &str,
+        user: &str,
+    ) -> Result<Vec<DudeWorkChange>, DudeError> {
+        let (dude, user) = (dude.to_owned(), user.to_owned());
         self.call(move |c| {
             let mut q=c.prepare("SELECT w.record_json FROM dude_work_changes w JOIN workspace_session_links s ON s.session_id=json_extract(w.record_json,'$.sessionCode') WHERE w.dude_code=?1 AND json_extract(s.business_json,'$.user_code')=?2 AND json_extract(w.record_json,'$.kind') IN ('NeedsDecision','Blocked') AND json_extract(w.record_json,'$.resolvedAt') IS NULL ORDER BY w.created_at,w.change_id LIMIT 32").map_err(storage)?;
             q.query_map(params![dude,user],|r|r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect()
@@ -666,8 +688,15 @@ tx.commit().map_err(storage)})
     fn notifications(&mut self) -> Result<Vec<PlatformNotification>, DudeError> {
         self.call(|c|{let mut q=c.prepare("SELECT record_json FROM platform_notifications ORDER BY created_at DESC LIMIT 500").map_err(storage)?;q.query_map([],|r|r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect()})
     }
-    fn scoped_notifications(&mut self, dude: &str, user: &str, id: Option<&str>, current: usize, size: usize, include_archived: bool)
-        -> Result<(usize, Vec<PlatformNotification>), DudeError> {
+    fn scoped_notifications(
+        &mut self,
+        dude: &str,
+        user: &str,
+        id: Option<&str>,
+        current: usize,
+        size: usize,
+        include_archived: bool,
+    ) -> Result<(usize, Vec<PlatformNotification>), DudeError> {
         let (dude, user, id) = (dude.to_owned(), user.to_owned(), id.map(str::to_owned));
         self.call(move |c| {
             let predicate = "json_extract(n.record_json,'$.dudeCode')=?1 AND (EXISTS(SELECT 1 FROM workspace_session_links s WHERE s.session_id=json_extract(n.record_json,'$.target.sessionCode') AND json_extract(s.business_json,'$.user_code')=?2) OR EXISTS(SELECT 1 FROM collaboration_threads t WHERE t.session_id=json_extract(n.record_json,'$.target.sessionCode') AND t.user_code=?2 AND t.owner_kind='DUDE' AND t.owner_code=?1)) AND (?3 IS NULL OR n.notification_id=?3) AND (?4 OR json_extract(n.record_json,'$.archivedAt') IS NULL)";

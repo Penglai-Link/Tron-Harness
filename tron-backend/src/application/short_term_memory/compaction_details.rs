@@ -12,21 +12,27 @@ pub struct CompactionBlock {
 }
 
 pub(crate) fn compaction_blocks(report: &fw::ContextAssemblyReport) -> Vec<CompactionBlock> {
-    report.blocks.iter().filter_map(|block| {
-        if !matches!(block.outcome, fw::ContextBlockOutcome::Reduced) {
-            return None;
-        }
-        let before = block.original_tokens?;
-        let kind = if block.id == "conversation_history_summary" && block.final_tokens > 0 {
-            "summary"
-        } else if block.final_tokens < before {
-            "compressed"
-        } else {
-            return None;
-        };
-        Some(CompactionBlock {
-            id: block.id.clone(), before_tokens: before,
-            after_tokens: block.final_tokens, kind,
+    report
+        .blocks
+        .iter()
+        .filter_map(|block| {
+            if !matches!(block.outcome, fw::ContextBlockOutcome::Reduced) {
+                return None;
+            }
+            let before = block.original_tokens?;
+            let kind = if block.id == "conversation_history_summary" && block.final_tokens > 0 {
+                "summary"
+            } else if block.final_tokens < before {
+                "compressed"
+            } else {
+                return None;
+            };
+            Some(CompactionBlock {
+                id: block.id.clone(),
+                before_tokens: before,
+                after_tokens: block.final_tokens,
+                kind,
+            })
         })
-    }).collect()
+        .collect()
 }

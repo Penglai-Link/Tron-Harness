@@ -737,8 +737,6 @@ pub use chunking::{
 };
 pub use source_facts::source_fact_locations;
 
-
-
 fn excel_column(mut index: u32) -> String {
     let mut letters = Vec::new();
     while index > 0 {
