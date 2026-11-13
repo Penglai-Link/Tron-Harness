@@ -87,6 +87,7 @@ import { useSavedContextAssembly } from "../hooks/useSavedContextAssembly";
 import { useContextModelLabel } from "../hooks/useContextModelLabel";
 import { useChatContextRefreshInterval } from "../hooks/useChatContextRefreshInterval";
 import { contextAssemblySnapshot, type ContextAssemblySnapshot } from "../model/contextAssemblyReport";
+import { contextBudgetBorrowing } from "../model/contextBudgetBorrowing";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
   type ChatAttachmentLabels,
@@ -881,15 +882,21 @@ export function latestShortTermMemoryRuntimeNotice(
 
 
 function aguiEventStableKey(event: TranscriptAguiEvent) {
+  const metadata = "metadata" in event ? event.metadata as Record<string, unknown> | undefined : undefined;
+  const tron = metadata?.tron as { eventId?: unknown } | undefined;
+  if (typeof tron?.eventId === "string") return `protocol:${tron.eventId}`;
+  if ("id" in event && typeof event.id === "string") return `audit:${event.id}`;
   const messageId = "messageId" in event && typeof event.messageId === "string" ? event.messageId : "";
   const toolCallId = "toolCallId" in event && typeof event.toolCallId === "string" ? event.toolCallId : "";
   return [
     aguiEventRunCode(event),
     aguiEventType(event),
+    "name" in event ? event.name : "",
     aguiEventTime(event),
     messageId,
     toolCallId,
     aguiEventSummary(event),
+    "value" in event ? JSON.stringify(event.value) : "",
   ].join("\u0000");
 }
 
@@ -1382,7 +1389,10 @@ interface ContextMemoryBlockItem {
   order: number;
   sources?: { id: string; name: string }[];
   limitDescription?: string;
-  allocationTokens?: number | null;
+  configuredTokens?: number | null;
+  lentTokens?: number;
+  borrowedTokens?: number;
+  unallocatedTokens?: number;
   limitTokens: number | null;
   name: string;
   description?: string;
@@ -1399,6 +1409,7 @@ export function buildReportedContextMemoryBlocks(
   catalog?: ContextBlockCatalog,
 ): ContextMemoryBlockItem[] {
   const prefix = "chat.shortTermMemory.contextPanel.";
+  const borrowing = contextBudgetBorrowing(snapshot.blocks);
   const placements = contextBlockPlacements(snapshot.blocks, "framework.history");
   const label = (id: string) => catalog?.get(id)?.displayName || contextBlockName(id, translate);
   const detailAliases: Record<string, ContextDetailBlock> = {
@@ -1415,7 +1426,10 @@ export function buildReportedContextMemoryBlocks(
     order: index + 1,
     sources: block.sources.length > 1 || block.sources.some((id) => id !== block.id)
       ? block.sources.map((id) => ({ id, name: id === "framework.instructions" ? translate(prefix + "baseInstructionsName") : label(id) })) : undefined,
-    allocationTokens: block.allocatedTokens,
+    configuredTokens: block.configuredTokens,
+    lentTokens: borrowing.lentByBlock.get(block.id) ?? 0,
+    borrowedTokens: block.id === "framework.history" ? borrowing.borrowedTokens : 0,
+    unallocatedTokens: block.id === "framework.history" ? borrowing.unallocatedTokens : 0,
     limitTokens: block.configuredTokens,
     name: label(block.id),
     description: catalog?.get(block.id)?.description,
@@ -1438,7 +1452,6 @@ export function buildReportedContextMemoryBlocks(
     description: catalog?.get("protocol")?.description,
     updateMode: catalog?.get("protocol")?.updateMode,
     stat: "",
-    allocationTokens: null,
     limitTokens: typeof protocolLimit === "number" && Number.isSafeInteger(protocolLimit) && protocolLimit >= 0
       ? protocolLimit : null,
     tokens: snapshot.protocolTokens,
@@ -1624,6 +1637,14 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
   const colors = contextBlockColorClasses[block.color];
   const percent = contextPercent(block.tokens, block.limitTokens);
   const hasCapacity = block.limitTokens != null && block.limitTokens > 0;
+  const lentTokens = block.lentTokens ?? 0;
+  const borrowedTokens = block.borrowedTokens ?? 0;
+  const unallocatedTokens = block.unallocatedTokens ?? 0;
+  const budgetTitle = lentTokens > 0
+    ? t("chat.shortTermMemory.contextPanel.lentBudget", { used: block.tokens, configured: block.configuredTokens, lent: lentTokens })
+    : borrowedTokens > 0
+      ? t("chat.shortTermMemory.contextPanel.borrowedBudget", { used: block.tokens, configured: block.configuredTokens, borrowed: borrowedTokens, unallocated: unallocatedTokens })
+      : block.limitTokens == null ? String(block.tokens) : `${block.tokens} / ${block.limitTokens}`;
   useEffect(() => {
     if (!dialogOpen || !block.detailCode) return;
     if (block.detailValue !== undefined) {
@@ -1690,16 +1711,18 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
               </div> : null}
           </ContextBlockHelp>
         </div>
-        <span
-          className="shrink-0 font-mono text-[11px]"
-          data-testid={`context-budget-${block.code}`}
-          title={block.limitTokens == null ? String(block.tokens) : `${block.tokens} / ${block.limitTokens}`}
-        >
-          {block.limitTokens == null ? formatCompactTokenCount(block.tokens) : formatTokenLimit(block.tokens, block.limitTokens)}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {borrowedTokens > 0 ? <Badge size="sm" variant="info" title={budgetTitle}>{t("chat.shortTermMemory.contextPanel.borrowing")}</Badge> : null}
+          <span className="font-mono text-[11px]" data-testid={`context-budget-${block.code}`} title={budgetTitle}>
+            {lentTokens > 0 ? <>
+              ({formatCompactTokenCount(block.tokens)} + <span className="text-[var(--color-primary)]">{formatCompactTokenCount(lentTokens)}</span>) / {formatCompactTokenCount(block.limitTokens)}
+            </> : block.limitTokens == null ? formatCompactTokenCount(block.tokens) : formatTokenLimit(block.tokens, block.limitTokens)}
+          </span>
+        </div>
       </div>
-      {hasCapacity ? <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]" role="progressbar" aria-label={block.name} aria-valuenow={Math.min(block.tokens, block.limitTokens!)} aria-valuemin={0} aria-valuemax={block.limitTokens!}>
-        <div className={cn("h-full rounded-full", colors.fill)} style={{ width: `${percent}%` }} />
+      {hasCapacity ? <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]" role="progressbar" aria-label={block.name} aria-valuetext={budgetTitle} aria-valuenow={Math.min(block.tokens + lentTokens, block.limitTokens!)} aria-valuemin={0} aria-valuemax={block.limitTokens!} title={budgetTitle}>
+        <div className={cn("absolute inset-y-0 left-0", colors.fill)} style={{ width: `${percent}%` }} />
+        {lentTokens > 0 ? <div className="absolute inset-y-0 bg-[var(--color-primary)] opacity-50" data-testid={`context-lent-${block.code}`} style={{ left: `${percent}%`, width: `${contextPercent(lentTokens, block.limitTokens)}%` }} /> : null}
       </div> : null}
     </>
   );
