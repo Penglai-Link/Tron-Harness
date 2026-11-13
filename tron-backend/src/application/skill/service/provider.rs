@@ -3,10 +3,21 @@ use eliteforge_agent_core as fw;
 use eliteforge_agent_official_plugin_skills::{FileSystemSkillProvider, FileSystemSkillsConfig};
 #[derive(Clone)]
 pub struct SkillAgentIdentity(pub String);
-struct RegistryProvider(SkillRegistryService);
+struct RegistryProvider {
+    registry: SkillRegistryService,
+    filesystem: FileSystemSkillProvider,
+}
 impl SkillRegistryService {
     pub fn provider(&self) -> impl fw::SkillProvider + use<> {
-        RegistryProvider(self.clone())
+        RegistryProvider {
+            registry: self.clone(),
+            filesystem: FileSystemSkillProvider::new(
+                FileSystemSkillsConfig::new()
+                    .without_local_directory()
+                    .without_system_directory()
+                    .with_system_directory(self.skills_dir()),
+            ),
+        }
     }
     /// Project the skills currently shipped by each capability pack into the registry.
     ///
@@ -156,26 +167,17 @@ impl SkillRegistryService {
     }
 }
 impl RegistryProvider {
-    fn filesystem(&self) -> FileSystemSkillProvider {
-        FileSystemSkillProvider::new(
-            FileSystemSkillsConfig::new()
-                .without_local_directory()
-                .without_system_directory()
-                .with_system_directory(self.0.skills_dir()),
-        )
-    }
-    fn allowed(&self, run: &fw::RunContext, name: &str) -> Result<(), fw::AgentError> {
+    fn allowed_names(&self, run: &fw::RunContext) -> Result<BTreeSet<String>, fw::AgentError> {
         let agent = run
             .extensions
             .get::<SkillAgentIdentity>()
             .ok_or_else(|| fw::AgentError::Run("missing skill Agent identity".into()))?;
-        if self
-            .0
-            .effective_agent_skills(&agent.0)
-            .map_err(|e| fw::AgentError::Run(e.to_string()))?
-            .iter()
-            .any(|s| s.skill_name == name && s.assigned && s.available)
-        {
+        self.registry
+            .effective_agent_skill_names(&agent.0)
+            .map_err(|e| fw::AgentError::Run(e.to_string()))
+    }
+    fn allowed(&self, run: &fw::RunContext, name: &str) -> Result<(), fw::AgentError> {
+        if self.allowed_names(run)?.contains(name) {
             Ok(())
         } else {
             Err(fw::AgentError::Run(
@@ -187,10 +189,9 @@ impl RegistryProvider {
 #[async_trait::async_trait]
 impl fw::SkillProvider for RegistryProvider {
     async fn catalog(&self, run: &fw::RunContext) -> Result<fw::SkillCatalog, fw::AgentError> {
-        let mut catalog = self.filesystem().catalog(run).await?;
-        catalog
-            .skills
-            .retain(|s| self.allowed(run, &s.name).is_ok());
+        let mut catalog = self.filesystem.catalog(run).await?;
+        let allowed = self.allowed_names(run)?;
+        catalog.skills.retain(|s| allowed.contains(&s.name));
         Ok(catalog)
     }
     async fn load(
@@ -199,7 +200,10 @@ impl fw::SkillProvider for RegistryProvider {
         name: &str,
     ) -> Result<fw::SkillDetail, fw::AgentError> {
         self.allowed(run, name)?;
-        self.filesystem().load(run, name).await
+        let detail = self.filesystem.load(run, name).await?;
+        // File I/O may yield while grants or package availability change.
+        self.allowed(run, name)?;
+        Ok(detail)
     }
     async fn read_resource(
         &self,
@@ -208,6 +212,11 @@ impl fw::SkillProvider for RegistryProvider {
         path: &str,
     ) -> Result<fw::SkillResource, fw::AgentError> {
         self.allowed(run, name)?;
-        self.filesystem().read_resource(run, name, path).await
+        let resource = self.filesystem.read_resource(run, name, path).await?;
+        self.allowed(run, name)?;
+        Ok(resource)
+    }
+    fn release(&self, run: &fw::RunContext) {
+        self.filesystem.release(run);
     }
 }

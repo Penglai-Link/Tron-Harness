@@ -424,10 +424,9 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                     .unwrap_or("");
                 let agent = state.context.agent_code.as_deref().unwrap_or("main-agent");
                 if !skills
-                    .effective_agent_skills(agent)
+                    .effective_agent_skill_names(agent)
                     .map_err(|e| fw::AgentError::Run(e.to_string()))?
-                    .iter()
-                    .any(|s| s.skill_name == name && s.assigned && s.available)
+                    .contains(name)
                 {
                     return Ok(fw::ToolPolicyDecision::Deny(
                         "skill is not assigned or is unavailable".into(),

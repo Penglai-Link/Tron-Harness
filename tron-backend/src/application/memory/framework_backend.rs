@@ -211,11 +211,29 @@ where
         }
         let mut entries = vec![];
         let mut bytes = 0;
+        // Search returns durable record codes, not Framework semantic aliases.
+        let codes = result
+            .items
+            .iter()
+            .map(|hit| hit.memory_code.clone())
+            .collect::<Vec<_>>();
+        let records = self
+            .service
+            .recallable_records(&self.context, &codes)
+            .map_err(map_error)?;
         for hit in result.items {
-            let mut r = match self.find(&hit.memory_code) {
-                Ok(r) if r.version == hit.version => r,
-                Ok(_) | Err(fw::MemoryError::NotFound) => continue,
-                Err(e) => return Err(e),
+            let mut r = match records.get(&hit.memory_code) {
+                Some(r)
+                    if r.version == hit.version
+                        && self.scope.is_none_or(|s| s == r.scope)
+                        && self
+                            .scope_code
+                            .as_ref()
+                            .is_none_or(|code| *code == r.scope_code) =>
+                {
+                    r.clone()
+                }
+                _ => continue,
             };
             r.text = hit.text;
             let id = r
@@ -234,7 +252,7 @@ where
         }
         let current = self
             .service
-            .recallable_versions(&self.context)
+            .recallable_records(&self.context, &codes)
             .map_err(map_error)?;
         entries.retain(|entry| {
             entry
@@ -244,7 +262,7 @@ where
                     version
                         .parse::<u32>()
                         .ok()
-                        .map(|version| current.contains(&(code.into(), version)))
+                        .map(|version| current.get(code).is_some_and(|r| r.version == version))
                 })
                 .unwrap_or(false)
         });

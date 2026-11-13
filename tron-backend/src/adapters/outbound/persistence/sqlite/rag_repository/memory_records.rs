@@ -124,6 +124,32 @@ impl MemoryRecordRepository for SqliteMemoryRecords {
             stmt.query_map(params![i.user_code,i.workspace_code,chrono::Utc::now().timestamp_millis()],map_record).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)
         },unavailable)
     }
+    fn recallable_by_codes(
+        &self,
+        identity: &RagIdentity,
+        codes: &[String],
+    ) -> Result<Vec<MemoryRecord>, MemoryError> {
+        if codes.is_empty() || identity.user_code.is_empty() {
+            return Ok(vec![]);
+        }
+        let identity = identity.clone();
+        let codes =
+            serde_json::to_string(codes).map_err(|e| MemoryError::Storage(e.to_string()))?;
+        self.database.call(move |c| {
+            let mut statement = c.prepare(&format!(
+                "{SELECT} WHERE m.user_code=?1 AND m.memory_code IN (SELECT value FROM json_each(?4)) \
+                 AND m.enabled=1 AND (m.expires_at IS NULL OR m.expires_at>?3) \
+                 AND ((m.scope_type='USER' AND m.scope_code=?1) \
+                 OR (m.scope_type='SPACE' AND ?2<>'' AND m.scope_code=?2) \
+                 OR (m.scope_type='AGENT' AND EXISTS(SELECT 1 FROM memory_work_domains d \
+                     WHERE d.domain_code=m.scope_code AND d.status='ACTIVE')))"
+            )).map_err(err)?;
+            statement.query_map(
+                params![identity.user_code, identity.workspace_code, chrono::Utc::now().timestamp_millis(), codes],
+                map_record,
+            ).map_err(err)?.collect::<Result<Vec<_>, _>>().map_err(err)
+        }, unavailable)
+    }
     fn save(
         &self,
         r: &MemoryRecord,

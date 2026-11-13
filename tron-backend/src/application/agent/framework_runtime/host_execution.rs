@@ -9,12 +9,8 @@ impl FrameworkHost {
         if let Some(skills) = self.0.skill_registry.get() {
             let agent = context.agent_code.as_deref().unwrap_or("main-agent");
             let mut names: std::collections::BTreeSet<String> = skills
-                .effective_agent_skills(agent)
-                .map_err(|e| fw::AgentError::InvalidConfiguration(e.to_string()))?
-                .into_iter()
-                .filter(|s| s.assigned && s.available)
-                .map(|s| s.skill_name)
-                .collect();
+                .effective_agent_skill_names(agent)
+                .map_err(|e| fw::AgentError::InvalidConfiguration(e.to_string()))?;
             // The negotiated Framework A2UI skill belongs to its capability
             // pack, not the user's independently assigned skill registry.
             if request

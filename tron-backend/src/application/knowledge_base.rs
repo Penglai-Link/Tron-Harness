@@ -211,11 +211,10 @@ impl KnowledgeBaseService {
             return Ok(vec![]);
         };
         Ok(skills
-            .effective_agent_skills(agent)
+            .effective_agent_skill_names(agent)
             .map_err(|_| RagError::SearchScopeInvalid)?
             .into_iter()
-            .filter(|s| s.available && s.assigned)
-            .map(|s| format!("skill:PLATFORM:{}", s.skill_name))
+            .map(|name| format!("skill:PLATFORM:{name}"))
             .collect())
     }
 

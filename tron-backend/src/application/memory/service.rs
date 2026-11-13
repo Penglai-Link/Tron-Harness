@@ -256,6 +256,26 @@ where
             .map(|r| (r.memory_code, r.version))
             .collect())
     }
+    /// Each call rechecks ownership, scope, work-domain status and expiry in storage.
+    pub fn recallable_records(
+        &self,
+        context: &MemoryRunContext,
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, MemoryRecord>, MemoryError> {
+        Ok(self
+            .store
+            .recallable_by_codes(
+                &RagIdentity {
+                    user_code: context.user_code.clone(),
+                    workspace_code: context.workspace_code.clone(),
+                    agent_code: String::new(),
+                },
+                codes,
+            )?
+            .into_iter()
+            .map(|record| (record.memory_code.clone(), record))
+            .collect())
+    }
     pub async fn search_in_run(
         &self,
         c: MemoryRunContext,
@@ -291,11 +311,12 @@ where
             )
             .await?;
         let mut items = Vec::new();
-        let current = self.store.recallable(&RagIdentity {
-            user_code: c.user_code,
-            workspace_code: c.workspace_code,
-            agent_code: String::new(),
-        })?;
+        let codes = result
+            .evidence
+            .iter()
+            .map(|hit| hit.source_code.clone())
+            .collect::<Vec<_>>();
+        let current = self.recallable_records(&c, &codes)?;
         for hit in result.evidence {
             if items
                 .iter()
@@ -303,9 +324,8 @@ where
             {
                 continue;
             }
-            if let Some(r) = current.iter().find(|r| {
-                r.memory_code == hit.source_code
-                    && hit.source["publication"]["recordVersion"].as_u64() == Some(r.version as u64)
+            if let Some(r) = current.get(&hit.source_code).filter(|r| {
+                hit.source["publication"]["recordVersion"].as_u64() == Some(r.version as u64)
             }) {
                 items.push(MemoryItem {
                     memory_code: r.memory_code.clone(),

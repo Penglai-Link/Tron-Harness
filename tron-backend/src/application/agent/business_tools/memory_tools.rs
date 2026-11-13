@@ -149,9 +149,16 @@ where
                 let query=eliteforge_agent_core::MemoryQuery{text:cmd.query,limit:cmd.limit.unwrap_or(8),max_bytes:2*1024*1024};
                 let entries=binding.backend.search(&binding.namespace,&query).await.map_err(|e|ToolError::ExecutionFailed(e.to_string()))?;
                 let mut items=vec![];
-                for entry in entries{let Some((code,version))=entry.version.rsplit_once(':')else{continue};let Ok(version)=version.parse::<u32>()else{continue};let r=match self.memory.get(&c,code){Ok(r) if r.version==version=>r,Ok(_)|Err(MemoryError::NotFound(_))=>continue,Err(e)=>return Err(fail(e))};items.push(MemoryItem{memory_code:r.memory_code,scope:r.scope,scope_code:r.scope_code,title:r.title,text:entry.value.content,source_refs:r.source_refs,source_label:r.source_label,version:r.version});}
-                let current=self.memory.recallable_versions(&c).map_err(fail)?;
-                items.retain(|item|current.contains(&(item.memory_code.clone(),item.version)));
+                let codes=entries.iter().filter_map(|entry|entry.version.rsplit_once(':').map(|(code,_)|code.to_owned())).collect::<Vec<_>>();
+                let records=self.memory.recallable_records(&c,&codes).map_err(fail)?;
+                for entry in entries {
+                    let Some((code,version))=entry.version.rsplit_once(':') else {continue};
+                    let Ok(version)=version.parse::<u32>() else {continue};
+                    let Some(r)=records.get(code).filter(|r|r.version==version) else {continue};
+                    items.push(MemoryItem{memory_code:r.memory_code.clone(),scope:r.scope,scope_code:r.scope_code.clone(),title:r.title.clone(),text:entry.value.content,source_refs:r.source_refs.clone(),source_label:r.source_label.clone(),version:r.version});
+                }
+                let current=self.memory.recallable_records(&c,&codes).map_err(fail)?;
+                items.retain(|item|current.get(&item.memory_code).is_some_and(|r|r.version==item.version));
                 let warnings=binding.diagnostics.lock().map(|v|v.clone()).unwrap_or_default();
                 serde_json::to_value(MemorySearchResponse{items,warnings})
             },

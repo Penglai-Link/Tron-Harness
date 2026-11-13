@@ -99,69 +99,147 @@ impl FrameworkHost {
         let store = framework.sessions()?.store;
         store.recover_expired_runs().await?;
         let mut recovered = 0;
-        for record in self.thread_records().await? {
-            let cached = self
-                .0
-                .collaboration_threads
-                .read()
-                .unwrap()
-                .get(&record.summary.session_id)
-                .cloned();
-            let _transition = if let Some(thread) = cached.as_ref() {
-                Some(thread.transition.lock().await)
-            } else {
-                None
+        let candidates = self.running_thread_ids().await?;
+        for batch in candidates.chunks(64) {
+            let cached = {
+                let threads = self.0.collaboration_threads.read().unwrap();
+                batch
+                    .iter()
+                    .map(|id| (id.clone(), threads.get(id).cloned()))
+                    .collect::<BTreeMap<_, _>>()
             };
-            let Some(mut record) = self.thread_record(&record.summary.session_id).await? else {
-                continue;
-            };
-            if record.summary.status != fw::ThreadStatus::Running {
-                continue;
+            // Never wait while holding another thread's transition lock. Busy
+            // admissions/completions are retried by the next recovery tick.
+            let guards = cached
+                .iter()
+                .map(|(id, thread)| {
+                    (
+                        id,
+                        thread.as_ref().map(|thread| thread.transition.try_lock()),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let selected = guards
+                .iter()
+                .filter(|(_, guard)| !matches!(guard, Some(Err(_))))
+                .map(|(id, _)| (*id).clone())
+                .collect::<Vec<_>>();
+            // Refresh after acquiring locks: resume can reuse a RunId, so the
+            // candidate list alone cannot fence an earlier execution.
+            let records = self
+                .thread_records_by_ids(&selected)
+                .await?
+                .into_iter()
+                .filter(|record| {
+                    record.summary.status == fw::ThreadStatus::Running
+                        && record.summary.latest_run_id.is_some()
+                })
+                .collect::<Vec<_>>();
+            let ids = records
+                .iter()
+                .filter_map(|record| record.summary.latest_run_id)
+                .collect::<Vec<_>>();
+            // Judge lease/grace windows against this batch's observation time,
+            // not the time spent persisting preceding completions.
+            let observed_at_ms = fw::lifecycle_time_ms();
+            let native = store.find_runs(&ids).await?;
+            if native.len() != records.len() {
+                return Err(failure("run batch response length differs"));
             }
-            let Some(run_id) = record.summary.latest_run_id else {
-                continue;
-            };
-            let native = store.get_run(run_id).await;
-            let completion = match native {
-                // A continuation reuses its RunId. Do not mistake the previous
-                // waiting result for the newly admitted execution, even if
-                // both admissions share the same millisecond timestamp.
-                Ok(run) if record.resumed_interaction_id.is_some_and(|id| run.result.as_ref().is_some_and(|result| result.interactions.iter().any(|interaction| interaction.id == id))) => {
-                    if fw::lifecycle_time_ms().saturating_sub(record.run_admitted_at_ms) < 30_000 { None }
-                    else { Some((fw::ThreadStatus::Failed,Err("Thread continuation was admitted but did not start; previous execution remains intact".into()))) }
+            for (mut record, native) in records.into_iter().zip(native) {
+                let run_id = record.summary.latest_run_id.unwrap();
+                let current = self
+                    .0
+                    .collaboration_threads
+                    .read()
+                    .unwrap()
+                    .get(&record.summary.session_id)
+                    .cloned();
+                let previous = cached
+                    .get(&record.summary.session_id)
+                    .and_then(Option::as_ref);
+                if match (previous, current.as_ref()) {
+                    (Some(previous), Some(current)) => !Arc::ptr_eq(previous, current),
+                    (None, None) => false,
+                    _ => true,
+                } {
+                    continue;
                 }
-                Ok(run) if run.result.is_some() => {
-                    let result = fw::ThreadResult::from_run(run_id, &run.result.unwrap());
-                    Some((fw::ThreadStatus::from(&result.status), Ok(result)))
+                let completion = match native {
+                    // Continuations reuse a RunId. A previous waiting result
+                    // must not complete a newly admitted execution, even when
+                    // both admissions share the same millisecond timestamp.
+                    Some(run)
+                        if record.resumed_interaction_id.is_some_and(|id| {
+                            run.result.as_ref().is_some_and(|result| {
+                                result
+                                    .interactions
+                                    .iter()
+                                    .any(|interaction| interaction.id == id)
+                            })
+                        }) =>
+                    {
+                        if observed_at_ms.saturating_sub(record.run_admitted_at_ms) < 30_000 {
+                            None
+                        } else {
+                            Some((fw::ThreadStatus::Failed, Err(
+                                "Thread continuation was admitted but did not start; previous execution remains intact".into(),
+                            )))
+                        }
+                    }
+                    Some(run) if run.result.is_some() => {
+                        let result = fw::ThreadResult::from_run(run_id, &run.result.unwrap());
+                        Some((fw::ThreadStatus::from(&result.status), Ok(result)))
+                    }
+                    Some(run)
+                        if run.status == fw::ManagedRunStatus::Running
+                            && run.lease_until_ms > observed_at_ms =>
+                    {
+                        None
+                    }
+                    Some(run) => {
+                        let status = if run.status == fw::ManagedRunStatus::Cancelled {
+                            fw::ThreadStatus::Cancelled
+                        } else {
+                            fw::ThreadStatus::Failed
+                        };
+                        Some((status, Err(run.error.unwrap_or_else(|| {
+                            "Thread execution needs recovery; verify external actions before continuing".into()
+                        }))))
+                    }
+                    None if observed_at_ms.saturating_sub(record.run_admitted_at_ms) < 30_000 => {
+                        None
+                    }
+                    None => Some((
+                        fw::ThreadStatus::Failed,
+                        Err("Thread was admitted but its native run did not start".into()),
+                    )),
+                };
+                let Some(completion) = completion else {
+                    continue;
+                };
+                record.summary.status = completion.0.clone();
+                record.completion = Some(completion.clone());
+                record.feedback_pending = record.owner.kind == "DUDE";
+                if let Err(error) = self.persist_thread(&mut record, false).await {
+                    // Another process or a newly materialized thread won the CAS.
+                    if matches!(
+                        error.primary(),
+                        fw::AgentError::State(fw::StateError::Conflict)
+                    ) {
+                        continue;
+                    }
+                    return Err(error);
                 }
-                Ok(run) if run.status == fw::ManagedRunStatus::Running && run.lease_until_ms > fw::lifecycle_time_ms() => None,
-                Ok(run) => Some((if run.status == fw::ManagedRunStatus::Cancelled { fw::ThreadStatus::Cancelled } else { fw::ThreadStatus::Failed }, Err(run.error.unwrap_or_else(|| "Thread execution needs recovery; verify external actions before continuing".into())))),
-                Err(fw::StateError::NotFound) if fw::lifecycle_time_ms().saturating_sub(record.run_admitted_at_ms) < 30_000 => None,
-                Err(fw::StateError::NotFound) => Some((fw::ThreadStatus::Failed, Err("Thread was admitted but its native run did not start".into()))),
-                Err(error) => return Err(error.into()),
-            };
-            let Some(completion) = completion else {
-                continue;
-            };
-            record.summary.status = completion.0.clone();
-            record.completion = Some(completion.clone());
-            record.feedback_pending = record.owner.kind == "DUDE";
-            self.persist_thread(&mut record, false).await?;
-            if let Some(thread) = self
-                .0
-                .collaboration_threads
-                .read()
-                .unwrap()
-                .get(&record.summary.session_id)
-                .cloned()
-            {
-                let (_, receiver) = watch::channel(Some(completion));
-                let mut state = thread.state.lock().unwrap();
-                state.summary = record.summary.clone();
-                state.completion = receiver;
-                state.record = record;
+                if let Some(thread) = current {
+                    let (_, receiver) = watch::channel(Some(completion));
+                    let mut state = thread.state.lock().unwrap();
+                    state.summary = record.summary.clone();
+                    state.completion = receiver;
+                    state.record = record;
+                }
+                recovered += 1;
             }
-            recovered += 1;
         }
         self.flush_thread_feedback().await?;
         Ok(recovered)

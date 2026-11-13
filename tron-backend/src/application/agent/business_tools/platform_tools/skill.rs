@@ -91,10 +91,9 @@ impl Tool for SkillViewTool {
         }
         if !self
             .skills
-            .effective_agent_skills(agent)
+            .effective_agent_skill_names(agent)
             .map_err(service_tool_error)?
-            .iter()
-            .any(|s| s.skill_name == skill_name && s.assigned && s.available)
+            .contains(skill_name)
         {
             return Err(service_tool_error(
                 crate::domain::skill::SkillError::Unavailable,

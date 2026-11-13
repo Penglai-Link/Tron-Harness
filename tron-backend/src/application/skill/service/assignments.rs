@@ -58,6 +58,40 @@ impl SkillRegistryService {
             Err(error) => Err(error),
         }
     }
+    /// Live authorization only: never read skill documents or cache grants per run.
+    pub(crate) fn effective_agent_skill_names(
+        &self,
+        agent: &str,
+    ) -> Result<BTreeSet<String>, SkillError> {
+        let _guard = self.capabilities.get().map(|r| r.assignment_guard());
+        let agents = self.internal_agent_codes()?;
+        if !agents.iter().any(|code| code == agent) {
+            return Ok(BTreeSet::new());
+        }
+        let mut repo = self.repository.lock().unwrap();
+        repo.initialize_agents_skills(&agents)?;
+        let assigned = repo
+            .list_assignments()?
+            .into_iter()
+            .filter(|a| a.agent_code == agent && a.enabled)
+            .map(|a| a.skill_name)
+            .collect::<BTreeSet<_>>();
+        Ok(repo
+            .list_registry_skills()?
+            .into_iter()
+            .filter(|s| {
+                assigned.contains(&s.skill_name)
+                    && s.available
+                    && self.skill_available(&s.skill_name)
+                    && crate::domain::computer_use::skill_allowed(
+                        agent,
+                        &s.skill_name,
+                        s.provider_pack_id.as_deref(),
+                    )
+            })
+            .map(|s| s.skill_name)
+            .collect())
+    }
     pub fn replace_agent_skills(&self, agent: &str, names: &[String]) -> Result<(), SkillError> {
         let _guard = self.capabilities.get().map(|r| r.assignment_guard());
         self.validate_agent(agent)?;

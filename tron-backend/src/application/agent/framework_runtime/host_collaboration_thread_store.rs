@@ -62,6 +62,53 @@ fn state_error(error: impl std::fmt::Display) -> fw::StateError {
     fw::StateError::Backend(error.to_string())
 }
 impl FrameworkHost {
+    pub(super) async fn running_thread_ids(&self) -> Result<Vec<String>, fw::AgentError> {
+        self.shared_database()
+            .await?
+            .call_read(|connection| {
+                let mut query = connection
+                    .prepare(
+                        "SELECT session_id FROM collaboration_threads \
+                 WHERE json_extract(record_json,'$.summary.status')='Running' ORDER BY session_id",
+                    )
+                    .map_err(state_error)?;
+                query
+                    .query_map([], |row| row.get(0))
+                    .map_err(state_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(state_error)
+            })
+            .await
+            .map_err(failure)
+    }
+    pub(super) async fn thread_records_by_ids(
+        &self,
+        ids: &[String],
+    ) -> Result<Vec<ThreadRecord>, fw::AgentError> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let ids = serde_json::to_string(ids).map_err(failure)?;
+        self.shared_database()
+            .await?
+            .call_read(move |connection| {
+                let mut query = connection
+                    .prepare(
+                        "SELECT record_json FROM collaboration_threads \
+                 WHERE session_id IN (SELECT value FROM json_each(?1)) ORDER BY session_id",
+                    )
+                    .map_err(state_error)?;
+                query
+                    .query_map([ids], |row| row.get::<_, String>(0))
+                    .map_err(state_error)?
+                    .map(|row| {
+                        serde_json::from_str(&row.map_err(state_error)?).map_err(state_error)
+                    })
+                    .collect()
+            })
+            .await
+            .map_err(failure)
+    }
     pub(super) async fn thread_records(&self) -> Result<Vec<ThreadRecord>, fw::AgentError> {
         self.shared_database()
             .await?

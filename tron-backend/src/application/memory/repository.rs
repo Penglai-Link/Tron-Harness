@@ -12,6 +12,12 @@ pub trait MemoryRecordRepository: Send + Sync {
     ) -> Result<Option<MemoryRecord>, MemoryError>;
     fn query(&self, user: &str, query: MemoryRecordQuery) -> Result<MemoryRecordPage, MemoryError>;
     fn recallable(&self, identity: &RagIdentity) -> Result<Vec<MemoryRecord>, MemoryError>;
+    /// Fresh, authorized, enabled and unexpired records for the selected durable codes.
+    fn recallable_by_codes(
+        &self,
+        identity: &RagIdentity,
+        codes: &[String],
+    ) -> Result<Vec<MemoryRecord>, MemoryError>;
     fn domain_exists(&self, code: &str) -> Result<bool, MemoryError>;
     /// Original text and its durable RAG task are committed atomically.
     fn save(
