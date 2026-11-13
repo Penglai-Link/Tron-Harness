@@ -25,7 +25,6 @@ mod onboarding;
 mod tools;
 
 mod capability_catalog;
-mod desktop_bundles;
 mod host;
 pub use capability_catalog::{
     CapabilityPackInfo, ExtensionImplementationInfo, capability_pack_catalog,

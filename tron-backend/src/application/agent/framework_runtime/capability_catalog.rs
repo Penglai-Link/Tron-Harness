@@ -113,7 +113,7 @@ fn installed_upstream_sdk_version(
     path: &std::path::Path,
     manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest,
 ) -> Result<Option<String>, String> {
-    if manifest.id != crate::domain::computer_use::PACK_ID
+    if !crate::domain::computer_use::is_pack(&manifest.id)
         || !manifest
             .resources
             .iter()

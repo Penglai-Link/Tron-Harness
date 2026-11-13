@@ -534,18 +534,19 @@ fn initialize_pack_skill_assignments(
     agents: &str,
 ) -> Result<(), SkillError> {
     use crate::domain::computer_use::{CONTROLLERS, PACK_ID, SKILL};
+    // Platform variants share the legacy pack id as a prefix.
     let tx = connection.transaction().map_err(storage_error)?;
     tx.execute(
         "INSERT OR IGNORE INTO agent_skill_assignments
          SELECT a.value,s.skill_name,
-                CASE WHEN (s.provider_pack_id=?2 OR s.skill_name=?3) AND a.value NOT IN (?4,?5) THEN 0 ELSE s.available END
+                CASE WHEN (s.provider_pack_id=?2 OR s.provider_pack_id GLOB (?2 || '.*') OR s.skill_name=?3) AND a.value NOT IN (?4,?5) THEN 0 ELSE s.available END
          FROM json_each(?1) a CROSS JOIN registry_skills s WHERE s.provider_pack_id IS NOT NULL",
         params![agents, PACK_ID, SKILL, CONTROLLERS[0], CONTROLLERS[1]],
     ).map_err(storage_error)?;
     tx.execute(
         "UPDATE agent_skill_assignments SET enabled=0
          WHERE enabled=1 AND agent_code NOT IN (?3,?4)
-           AND skill_name IN (SELECT skill_name FROM registry_skills WHERE provider_pack_id=?1 OR skill_name=?2)",
+           AND skill_name IN (SELECT skill_name FROM registry_skills WHERE provider_pack_id=?1 OR provider_pack_id GLOB (?1 || '.*') OR skill_name=?2)",
         params![PACK_ID, SKILL, CONTROLLERS[0], CONTROLLERS[1]],
     ).map_err(storage_error)?;
     tx.commit().map_err(storage_error)

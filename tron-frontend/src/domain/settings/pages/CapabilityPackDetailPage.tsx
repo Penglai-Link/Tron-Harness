@@ -62,9 +62,9 @@ export function CapabilityPackDetailPage() {
       <SurfaceCard className="space-y-3 p-4">
         <div className="flex items-start gap-3"><Package size={24} className="shrink-0" /><div className="min-w-0 flex-1"><h1 className="text-lg font-semibold">{record.name}</h1><p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{record.id}</p></div><Badge variant={record.effective ? "success" : "outline"}>{pageT(record.effective ? "effective" : "inactive")}</Badge></div>
         <MarkdownContent className="max-w-4xl text-sm leading-6 text-[var(--color-on-surface-variant)]" content={capabilityPackDetails(t, record.id, record.description)} />
-        <dl className={`grid grid-cols-1 gap-3 border-t border-[var(--color-outline-variant)] pt-3 text-sm ${record.id === "tron.computer-use" ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-3"}`}>
+        <dl className={`grid grid-cols-1 gap-3 border-t border-[var(--color-outline-variant)] pt-3 text-sm ${record.id.startsWith("tron.computer-use") ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-3"}`}>
           <div><dt className="text-[var(--color-on-surface-variant)]">{pageT("packVersion")}</dt><dd className="mt-1 break-words font-medium">{record.version}</dd></div>
-          {record.id === "tron.computer-use" && <div><dt className="text-[var(--color-on-surface-variant)]">{pageT("cuaDriverSdkVersion")}</dt><dd className="mt-1 break-words font-medium">{record.cuaDriverSdkVersion ?? pageT("versionUndeclared")}</dd></div>}
+          {record.id.startsWith("tron.computer-use") && <div><dt className="text-[var(--color-on-surface-variant)]">{pageT("cuaDriverSdkVersion")}</dt><dd className="mt-1 break-words font-medium">{record.cuaDriverSdkVersion ?? pageT("versionUndeclared")}</dd></div>}
           {([["provider", record.provider], ["updatedAt", record.updatedAt ?? "—"]] as const).map(([key, value]) => <div key={key}><dt className="text-[var(--color-on-surface-variant)]">{pageT(key)}</dt><dd className="mt-1 break-words font-medium">{value}</dd></div>)}
         </dl>
       </SurfaceCard>

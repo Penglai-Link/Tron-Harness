@@ -83,9 +83,8 @@ impl SkillRegistryService {
             .collect::<Vec<_>>();
         repository.upsert_registry_skills(&entries)?;
         let controllers = if enabled
-            .get(crate::domain::computer_use::PACK_ID)
-            .copied()
-            .unwrap_or(false)
+            .iter()
+            .any(|(pack, active)| *active && crate::domain::computer_use::is_pack(pack))
         {
             crate::domain::computer_use::CONTROLLERS
                 .iter()

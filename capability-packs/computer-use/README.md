@@ -1,6 +1,6 @@
 # Computer Use 能力包
 
-`tron.computer-use` 把上游 Cua Rust SDK 编译进包内的 `tron-computer-use` 原生程序，并通过 Framework 原生工具接口为 Tron 提供桌面观察、输入和结果核验能力。用户导入能力包即可使用，无需另外安装 `cua-driver`，运行时也不查找全局驱动、不启动外部驱动服务。
+`tron.computer-use` 把上游 Cua Rust SDK 编译进包内的 `tron-computer-use` 原生程序，并通过 Framework 原生工具接口为 Tron 提供桌面观察、输入和结果核验能力。用户从能力中心安装能力包即可使用，无需另外安装 `cua-driver`，运行时也不查找全局驱动、不启动外部驱动服务。
 
 ```mermaid
 flowchart TD
@@ -30,63 +30,65 @@ Tron 通过 Framework 原生能力包 backend 协议贡献 `ToolProvider` 和 `S
 
 上游 MIT 许可随包保留在 `CUA-LICENSE.md`。包内不含可选视觉识别模型或上游 CLI 的安装器。
 
-## 构建与导入
+## 构建与分发
 
-### 随桌面安装包内置
+每个平台单独一份能力包，通过能力中心在线分发。包 ID 带平台与架构，在哪台机器上构建，就产出那台机器适用的包。
 
-执行 `make desktop-build` 时，会先查找当前平台和架构的现成能力包，校验包版本、SDK 提交、原生程序哈希及官方技能文件。存在有效包就直接复用；缺少或校验不通过时，自动调用 `make capability-computer-use`，构建成功后再放入 `electron/resources/capability-packs/native/`。此构建不需要用户手动复制 ZIP。
+| TARGET | 构建环境 | 平台键 | 能力包 ID |
+| --- | --- | --- | --- |
+| `windows` | Windows x86_64 | `x86_64-windows` | `tron.computer-use.windows-x86_64` |
+| `macos` | macOS Apple Silicon | `aarch64-macos` | `tron.computer-use.macos-aarch64` |
+| `macos` | macOS Intel | `x86_64-macos` | `tron.computer-use.macos-x86_64` |
+| `linux` | 原生 Linux（非 WSL2） | `x86_64-linux` | `tron.computer-use.linux-x86_64` |
+| `wsl` | WSL2 x86_64 或 Windows x64 | `x86_64-linux` | `tron.computer-use.wsl-x86_64` |
+| `wsl` | WSL2 arm64 或 Windows arm64 | `aarch64-linux` | `tron.computer-use.wsl-aarch64` |
 
-```mermaid
-flowchart LR
-    Build[desktop-build] --> Check{对应平台和架构的现成包有效?}
-    Check -->|是| Reuse[复用 ZIP]
-    Check -->|否| Compile[make capability-computer-use]
-    Compile --> Reuse
-    Reuse --> Resources[安装包 capability-packs 资源]
-    Resources --> Startup[桌面后端启动时自动安装]
-    Startup --> Registry[Tron 工具和技能注册表]
-```
-
-Windows 桌面构建同时组装 `capability-packs/wsl2/`，其中包含包内 Windows 原生程序与 POSIX 桥接入口；构建机器无需为此安装 WSL 或 Linux Rust 工具链。Electron 根据后端模式选择对应目录，并核对系统、架构和目录清单。`desktop-repackage` 也会准备这些资源，但新增后端启动逻辑仍需先通过 `desktop-build` 更新 sidecar。
-
-桌面后端通过 `TRON_BUNDLED_CAPABILITY_PACKS_DIR` 读取内置资源，启动时校验归档 SHA-256、身份与版本，安装到业务数据文件旁的能力包目录。新包默认停用，现有包的启停及 Agent 授权保持不变；不会降低用户已安装的更高版本。用户明确卸载后，后续启动会保留该选择。内置分发记录保存在能力包目录的 `desktop-bundles.json`，不修改业务数据库结构。
-
-### 单独构建与手动导入
-
-在 Tron 仓库根目录执行：
+仓库里的 `manifest.json` 是变体模板，构建时写入实际的包 ID、显示名和平台入口。默认按当前系统和架构选择 TARGET，因此各平台机器上直接执行即可：
 
 ```sh
 make capability-computer-use
 ```
 
-构建机器需要 Rust/Cargo、Git，以及目标平台 SDK 所需的系统构建工具；用户运行生成的 ZIP 不需要 Rust、Git 或 `cua-driver`。macOS、Windows 原生、Linux 原生分别在对应环境构建。Linux 原生 SDK 还依赖目标发行版的图形会话及系统库；它与 Windows 桌面运行时分别构建。
+需要交叉构建时显式指定：
 
-命令使用锁定依赖编译 release 原生程序，核对官方技能来源，生成 `build-info.json`，再通过 Framework 正式归档器和安装器校验。输出为：
+```sh
+# Apple Silicon 上构建 Intel Mac 包
+make capability-computer-use TARGET=macos COMPUTER_USE_RUST_TARGET=x86_64-apple-darwin
 
-```text
-output/capability-packs/computer-use/tron.computer-use-0.5.0-<os>-<arch>.zip
+# 在 WSL2 中组装 WSL 包，复用 Windows 上已构建好的同架构包
+make capability-computer-use TARGET=wsl COMPUTER_USE_WINDOWS_PACKAGE=/mnt/c/build/tron.computer-use.windows-x86_64-0.5.0.zip
 ```
 
-`VERSION` 可留空，传入时必须与包 manifest 版本一致；包版本独立于 Tron 产品版本。`SKIP_TESTS` 接受 `true` 或 `false`，本目标不运行测试。当前归档是供 Tron 开发策略导入的未签名包。 `manifest.json` 的版本属于能力包适配层；Cua SDK 的真实版本单独记录在 `upstream.json`，当前为 `0.47.17`。
+构建机器需要 Rust/Cargo、Git 及目标平台 SDK 的系统构建工具；用户运行 ZIP 不需要 Rust、Git 或 `cua-driver`。命令使用锁定依赖编译 release 原生程序，核对官方技能来源，生成 `build-info.json`，再通过 Framework 正式归档器和安装器校验。产物：
 
-在「设置 → 能力包」导入并启用 ZIP，并确保 Agent 的工具和技能授权允许使用它。无需创建或启用 MCP 服务。停用包后，相关资源受现有能力包权限管理约束。
+```text
+output/capability-packs/computer-use/tron.computer-use.macos-aarch64-0.5.0.zip
+```
 
-升级到 0.5.0 后，Tron 会清理旧版本由本能力包注册的 MCP 入口，后续调用使用原生工具接口。独立配置的其他 MCP 服务不受影响。升级后需启动包含新宿主逻辑的 Tron 后端。
+`VERSION` 可留空，传入时必须与包 manifest 版本一致；包版本独立于 Tron 产品版本。`SKIP_TESTS` 接受 `true` 或 `false`，本目标不运行测试。当前归档是未签名包，能力中心安装使用同一份 ZIP。`manifest.json` 的版本属于能力包适配层；Cua SDK 的真实版本单独记录在 `upstream.json`，当前为 `0.47.17`。
+
+能力中心按包 ID 和版本识别发布物：不同平台的包 ID 不同，同一个版本号可以分别上架；同一个包 ID 再传同版本会被拒绝，需要提升 `manifest.version`。上传后用户在能力中心下载、安装并启用，并确保 Agent 的工具和技能授权允许使用它。无需创建或启用 MCP 服务。
+
+旧版单包 `tron.computer-use` 在已安装的机器上继续可用，宿主对它的权限规则不变，但不再产出新包。
+
+所有变体共用同一份源码、官方技能和工具目录，只有 `backend.executables` 的平台键和包内二进制不同：Windows、macOS、Linux 是各自的 `bin/tron-computer-use[.exe]`；WSL2 的 `bin/tron-computer-use` 是 POSIX 桥接入口，另有 `bin/tron-computer-use-windows.exe`。
+
+`make desktop-build` 只构建桌面外壳和 sidecar，不打包 Computer Use 能力包；能力包版本与桌面版本相互独立。
 
 ## Windows + WSL2
 
-WSL2 后端要操作 Windows 桌面时，包必须携带 Windows 原生运行时。构建步骤由开发者或 CI 完成：
+WSL2 后端的桌面能力由独立的 `tron.computer-use.wsl-<arch>` 包提供，包里带 Windows 原生运行时，经 WSL 互操作操作 Windows 桌面。构建方式二选一：
 
-1. 在 Windows 用相同源码执行 `make capability-computer-use`，生成对应架构的 Windows ZIP。
-2. 在同架构 WSL2 环境中组装完整包：
+1. 在 Windows 上执行 `make capability-computer-use TARGET=wsl`，脚本先构建同架构 Windows 运行时，再组装 WSL 包。
+2. 先在 Windows 上构建 Windows 包，再在同架构 WSL2 中组装：
 
 ```sh
-make capability-computer-use COMPUTER_USE_WINDOWS_PACKAGE=/mnt/c/build/tron.computer-use-0.5.0-windows-x86_64.zip
+make capability-computer-use TARGET=wsl COMPUTER_USE_WINDOWS_PACKAGE=/mnt/c/build/tron.computer-use.windows-x86_64-0.5.0.zip
 ```
 
-输出为 `tron.computer-use-0.5.0-wsl2-<arch>.zip`，包含 POSIX 桥接入口和 Windows EXE。组装时检查输入包校验和、系统、架构、包版本、SDK 提交和原生程序哈希；缺少或不匹配就失败。此路径不编译 Linux 桌面 SDK，也不要求运行用户在 Windows 另行安装驱动。`desktop-build` 在 Windows 上会自动完成同类组装，用户无需再执行此命令。
+组装时检查输入包的系统、架构、包版本、SDK 提交、原生程序哈希和工具目录；缺少或不匹配就失败。此路径不编译 Linux 桌面 SDK，也不要求运行用户额外安装驱动。
 
-桥接入口只调用包内的 Windows EXE，经 WSL 互操作传递标准输入输出和字面参数，不查找全局驱动或用户安装目录。需要可用的 `wslpath`、Windows PowerShell、Windows 系统目录和 Windows 可执行文件互操作；Windows 运行时必须位于已登录的交互式桌面中。原生 Linux 包在 WSL 中会明确拒绝启动，防止把 Windows 任务错误地交给 WSLg 桌面。
+Windows 原生后端与 WSL2 后端使用各自的数据目录，安装各自平台的包即可。Linux 桌面与 WSL2 都使用 `x86_64-linux` 平台键；同一个后端环境里只安装其中一份，避免工具和技能重复注册。
 
 ## 工具展示与授权
 

@@ -1,7 +1,9 @@
-//! Build a self-contained capability pack and validate it with the real installer.
-mod desktop;
+//! Build one platform variant of the Computer Use capability pack and validate
+//! it with the real installer.
+mod variant;
+mod wsl2;
 use eliteforge_agent_capability_runtime::{
-    BackendEntrypoint, CapabilityPackManager, InstallPolicy,
+    BackendEntrypoint, CapabilityPackManager, CapabilityPackManifest, InstallPolicy,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -12,17 +14,15 @@ use std::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
-    let check_cache = args.len() == 1 && args[0] == "--check-desktop-cache";
-    let desktop_directory = match args.as_slice() {
-        [] => None,
-        [_] if check_cache => None,
-        [flag, path] if flag == "--desktop-dir" => Some(PathBuf::from(path)),
-        _ => return Err("用法：tron-computer-use-packager [--check-desktop-cache | --desktop-dir <桌面资源目录>]".into()),
-    };
+    if std::env::args_os().len() > 1 {
+        return Err(
+            "用法：tron-computer-use-packager（无参数；平台变体由 TRON_COMPUTER_USE_TARGET 指定）"
+                .into(),
+        );
+    }
     let repository = fs::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."))?;
     let source = repository.join("capability-packs/computer-use");
-    let mut manifest: eliteforge_agent_capability_runtime::CapabilityPackManifest =
+    let mut manifest: CapabilityPackManifest =
         serde_json::from_slice(&fs::read(source.join("manifest.json"))?)?;
     if let Ok(version) = std::env::var("TRON_COMPUTER_USE_VERSION") {
         if !version.is_empty() && version != manifest.version.to_string() {
@@ -38,51 +38,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("SKIP_TESTS 只接受 true 或 false；本目标不运行测试".into());
         }
     }
-    let wsl = cfg!(target_os = "linux")
-        && fs::read_to_string("/proc/sys/kernel/osrelease")
-            .is_ok_and(|value| value.to_ascii_lowercase().contains("microsoft"));
-    let windows_package =
-        std::env::var_os("TRON_COMPUTER_USE_WINDOWS_PACKAGE").filter(|value| !value.is_empty());
-    if wsl && (desktop_directory.is_some() || check_cache) {
-        return Err("桌面安装包请在原生 Windows、macOS 或 Linux 环境构建；WSL2 能力包由 Windows 桌面构建自动组装".into());
-    }
-    if wsl && windows_package.is_none() {
-        return Err("WSL2 包必须包含 Windows 原生运行时；请先在 Windows 构建同版本包，再传入 COMPUTER_USE_WINDOWS_PACKAGE=<Windows ZIP>。运行用户无需安装 cua-driver".into());
-    }
-    if !wsl && windows_package.is_some() {
-        return Err("COMPUTER_USE_WINDOWS_PACKAGE 仅用于在 WSL2 中组装 Windows 桌面能力包".into());
-    }
-
-    if check_cache {
-        if let Err(error) = desktop::check(&repository, &source, &manifest) {
-            eprintln!("现成能力包不可用：{error}");
-            std::process::exit(2);
-        }
-        return Ok(());
-    }
-    if let Some(directory) = desktop_directory {
-        return desktop::prepare(&repository, &source, &manifest, &directory);
-    }
-
+    let variant = variant::current()?;
     let metadata = cargo_metadata(&source)?;
-    let upstream: Value = serde_json::from_slice(&fs::read(source.join("upstream.json"))?)?;
-    validate_upstream(&source, &metadata, &upstream)?;
-    let stage = tempfile::tempdir()?;
-    let root = stage.path();
-    fs::create_dir_all(root.join("bin"))?;
-    copy_tree(&source.join("skills"), &root.join("skills"))?;
-    for file in ["README.md", "CUA-LICENSE.md", "upstream.json"] {
-        fs::copy(source.join(file), root.join(file))?;
-    }
-    let executable = format!("bin/tron-computer-use{}", std::env::consts::EXE_SUFFIX);
-    manifest.backend = Some(BackendEntrypoint {
-        executables: [(
-            eliteforge_agent_capability_runtime::platform_key(),
-            executable.clone(),
-        )]
-        .into(),
-        args: vec!["backend".into()],
-    });
     let native_version = metadata["packages"]
         .as_array()
         .ok_or("invalid Cargo metadata")?
@@ -92,53 +49,87 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if native_version["version"].as_str() != Some(&manifest.version.to_string()) {
         return Err("能力包 manifest 与 native/Cargo.toml 版本不一致".into());
     }
-    if wsl {
-        include_windows_runtime(
-            root,
-            &mut manifest,
-            Path::new(windows_package.as_ref().unwrap()),
-            &upstream,
-        )?;
-        fs::copy(source.join("wsl-launcher.sh"), root.join(&executable))?;
+    let upstream: Value = serde_json::from_slice(&fs::read(source.join("upstream.json"))?)?;
+    validate_upstream(&source, &metadata, &upstream)?;
+
+    let stage = tempfile::tempdir()?;
+    let root = stage.path();
+    fs::create_dir_all(root.join("bin"))?;
+    copy_tree(&source.join("skills"), &root.join("skills"))?;
+    for file in ["README.md", "CUA-LICENSE.md", "upstream.json"] {
+        fs::copy(source.join(file), root.join(file))?;
+    }
+    manifest.id = variant.id.clone();
+    manifest.name = variant.name.clone();
+
+    let (mode, target_os, entrypoint) = if variant.family == variant::Family::Wsl {
+        let (exe, tools) =
+            wsl_runtime(&source, &manifest.version.to_string(), &variant, &upstream)?;
+        wsl2::stage(root, &source, &mut manifest, &variant.arch, &exe, tools)?;
+        ("wsl2", "linux", "bin/tron-computer-use".to_owned())
     } else {
-        let binary = build_native(&source)?;
+        let binary = build_native(&source, variant.rust_target.as_deref())?;
         let catalog = Command::new(&binary).arg("catalog").output()?;
         if !catalog.status.success() {
             return Err("读取原生能力包工具目录失败".into());
         }
         manifest.tools = serde_json::from_slice(&catalog.stdout)?;
-        fs::copy(binary, root.join(&executable))?;
-    }
+        let name = format!("bin/tron-computer-use{}", std::env::consts::EXE_SUFFIX);
+        fs::copy(&binary, root.join(&name))?;
+        manifest.backend = Some(BackendEntrypoint {
+            executables: [(variant.platform_key.clone(), name.clone())].into(),
+            args: vec!["backend".into()],
+        });
+        ("native", variant.family.os(), name)
+    };
     fs::write(
         root.join("manifest.json"),
         serde_json::to_vec_pretty(&manifest)?,
     )?;
-    let mode = if wsl { "wsl2" } else { "native" };
     fs::write(
         root.join("build-info.json"),
         serde_json::to_vec_pretty(&json!({
-            "mode": mode, "targetOs": std::env::consts::OS, "targetArch": std::env::consts::ARCH,
+            "mode": mode, "targetOs": target_os, "targetArch": variant.arch,
             "integration": "framework-native",
             "upstreamRevision": upstream["revision"], "sdkVersion": upstream["sdkVersion"],
-            "runtimeSha256": hash(&fs::read(root.join(&executable))?),
+            "runtimeSha256": hash(&fs::read(root.join(&entrypoint))?),
         }))?,
     )?;
     let archive = eliteforge_agent_capability_runtime::build_capability_archive(root, None)?;
     let validation = tempfile::tempdir()?;
-    CapabilityPackManager::new(validation.path())?
+    let installed = CapabilityPackManager::new(validation.path())?
         .install_bytes(&archive, InstallPolicy::Development)?;
-    let output = repository.join("output/capability-packs/computer-use");
+    if installed.manifest.id != variant.id || installed.manifest.version != manifest.version {
+        return Err("归档校验后的能力包身份与目标变体不一致".into());
+    }
+    let output = variant::output_directory(&repository);
     fs::create_dir_all(&output)?;
-    let os = if wsl { "wsl2" } else { std::env::consts::OS };
-    let target = output.join(format!(
-        "{}-{}-{os}-{}.zip",
-        manifest.id,
-        manifest.version,
-        std::env::consts::ARCH
-    ));
+    let target = output.join(format!("{}-{}.zip", variant.id, manifest.version));
     fs::write(&target, &archive)?;
     println!("{}", target.display());
     Ok(())
+}
+
+fn wsl_runtime(
+    source: &Path,
+    version: &str,
+    variant: &variant::Variant,
+    upstream: &Value,
+) -> Result<(Vec<u8>, Value), Box<dyn std::error::Error>> {
+    if let Some(package) =
+        std::env::var_os("TRON_COMPUTER_USE_WINDOWS_PACKAGE").filter(|value| !value.is_empty())
+    {
+        return wsl2::windows_package(Path::new(&package), version, &variant.arch, upstream);
+    }
+    if !cfg!(windows) {
+        return Err("WSL2 包需要 Windows 原生运行时；请在 Windows 上构建，或用 COMPUTER_USE_WINDOWS_PACKAGE=<同版本同架构 Windows 包 ZIP>".into());
+    }
+    let binary = build_native(source, variant.rust_target.as_deref())?;
+    let catalog = Command::new(&binary).arg("catalog").output()?;
+    if !catalog.status.success() {
+        return Err("读取原生能力包工具目录失败".into());
+    }
+    Ok((fs::read(binary)?, serde_json::from_slice(&catalog.stdout)?))
 }
 
 fn cargo(source: &Path) -> Command {
@@ -165,18 +156,23 @@ fn cargo_metadata(source: &Path) -> Result<Value, Box<dyn std::error::Error>> {
     Ok(serde_json::from_slice(&output.stdout)?)
 }
 
-fn build_native(source: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let output = cargo(source)
-        .args([
-            "build",
-            "--locked",
-            "--release",
-            "--manifest-path",
-            "native/Cargo.toml",
-            "--message-format=json-render-diagnostics",
-        ])
-        .stderr(Stdio::inherit())
-        .output()?;
+fn build_native(
+    source: &Path,
+    rust_target: Option<&str>,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let mut command = cargo(source);
+    command.args([
+        "build",
+        "--locked",
+        "--release",
+        "--manifest-path",
+        "native/Cargo.toml",
+        "--message-format=json-render-diagnostics",
+    ]);
+    if let Some(target) = rust_target {
+        command.args(["--target", target]);
+    }
+    let output = command.stderr(Stdio::inherit()).output()?;
     if !output.status.success() {
         return Err("内嵌 Cua SDK 原生程序编译失败".into());
     }
@@ -218,14 +214,10 @@ fn validate_upstream(
             != Some(revision)
             || dependency["version"] != upstream["sdkVersion"]
         {
-            return Err(format!("{name} 与 upstream.json 的 Git 提交或版本不一致").into());
+            return Err("Cua 依赖与 upstream.json 记录的提交或版本不一致".into());
         }
     }
-    let sdk_manifest = Path::new(
-        sdk["manifest_path"]
-            .as_str()
-            .ok_or("missing SDK manifest path")?,
-    );
+    let sdk_manifest = PathBuf::from(sdk["manifest_path"].as_str().ok_or("missing SDK manifest")?);
     let rust = sdk_manifest
         .parent()
         .and_then(Path::parent)
@@ -252,41 +244,6 @@ fn validate_upstream(
             return Err(format!("官方资源与 SDK 提交不一致：{path}").into());
         }
     }
-    Ok(())
-}
-
-fn include_windows_runtime(
-    root: &Path,
-    manifest: &mut eliteforge_agent_capability_runtime::CapabilityPackManifest,
-    archive: &Path,
-    upstream: &Value,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let validation = tempfile::tempdir()?;
-    let package = CapabilityPackManager::new(validation.path())?
-        .install_bytes(&fs::read(archive)?, InstallPolicy::Development)?;
-    let info: Value = serde_json::from_slice(&fs::read(package.path.join("build-info.json"))?)?;
-    if package.manifest.id != manifest.id
-        || package.manifest.version != manifest.version
-        || info["mode"] != "native"
-        || info["targetOs"] != "windows"
-        || info["targetArch"] != std::env::consts::ARCH
-        || info["upstreamRevision"] != upstream["revision"]
-        || info["sdkVersion"] != upstream["sdkVersion"]
-    {
-        return Err("Windows 包的系统、架构、能力包版本或上游 SDK 提交不匹配".into());
-    }
-    let binary = fs::read(package.path.join("bin/tron-computer-use.exe"))?;
-    if info["runtimeSha256"].as_str() != Some(hash(&binary).as_str()) {
-        return Err("Windows 原生程序校验失败".into());
-    }
-    if !package.manifest.mcp.is_empty() || package.manifest.backend.is_none() {
-        return Err("Windows 包必须使用 Framework 原生能力包入口".into());
-    }
-    manifest.tools = package.manifest.tools;
-    fs::write(root.join("bin/tron-computer-use-windows.exe"), binary)?;
-    manifest
-        .resources
-        .push("bin/tron-computer-use-windows.exe".into());
     Ok(())
 }
 

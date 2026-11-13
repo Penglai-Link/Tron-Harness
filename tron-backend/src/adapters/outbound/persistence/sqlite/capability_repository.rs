@@ -37,7 +37,7 @@ impl CapabilityResourceRepository for SqliteCapabilityRepository {
         self.0.call(move |c| {
             let tx=c.transaction().map_err(failure)?;
             let existing=resources(&tx)?;
-            let controlled = items.iter().filter(|resource| resource.pack_id == computer_use::PACK_ID).cloned().collect::<Vec<_>>();
+            let controlled = items.iter().filter(|resource| computer_use::is_pack(&resource.pack_id)).cloned().collect::<Vec<_>>();
             let introduced = controlled.iter().filter(|resource| resource.available
                 && !existing.iter().any(|old| old.kind == resource.kind && old.code == resource.code)).cloned().collect::<Vec<_>>();
             for r in items {
@@ -53,7 +53,7 @@ impl CapabilityResourceRepository for SqliteCapabilityRepository {
         let pack = pack.to_owned();
         let agents = agents
             .iter()
-            .filter(|agent| pack != computer_use::PACK_ID || computer_use::allows(agent))
+            .filter(|agent| !computer_use::is_pack(&pack) || computer_use::allows(agent))
             .cloned()
             .collect::<Vec<_>>();
         self.0.call(move |c| {
@@ -165,7 +165,7 @@ fn update_assignments(
 ) -> Result<(), String> {
     let controlled = owned
         .iter()
-        .filter(|resource| resource.pack_id == computer_use::PACK_ID)
+        .filter(|resource| computer_use::is_pack(&resource.pack_id))
         .map(|resource| resource.code.as_str())
         .collect::<std::collections::HashSet<_>>();
     if !controlled.is_empty() {
