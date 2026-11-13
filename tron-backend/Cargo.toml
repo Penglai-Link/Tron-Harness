@@ -52,7 +52,7 @@ base64 = "0.22"
 bcrypt = "0.17"
 flate2 = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "a0910f279d91052c8f45fdf5592624341fd98297" }
+crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "b7ef4e21d503bc781bf1714238a1564e7c815184" }
 cron = "0.12"
 gmcrypto-core = { version = "1.0.0", features = ["sm4-aead"] }
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
@@ -109,7 +109,7 @@ windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 # Cargo's [patch] cannot override a Git source with another rev of that source.
 # Remove this replacement when Framework pins the same SDK revision.
 [replace]
-"https://gitee.com/person-ai/person-ai-index-rust-sdk.git#crab-serverapi:0.4.0" = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "a0910f279d91052c8f45fdf5592624341fd98297" }
+"https://gitee.com/person-ai/person-ai-index-rust-sdk.git#crab-serverapi:0.4.0" = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "b7ef4e21d503bc781bf1714238a1564e7c815184" }
 
 [profile.release]
 # Reduce the distributed sidecar size while retaining panic unwinding for
