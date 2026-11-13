@@ -18,6 +18,7 @@ export function usePlatformToolSettings() {
   const [categories, setCategories] = useState<ToolCategoryRecord[]>([]);
   const [catalogIssues, setCatalogIssues] = useState<ToolCatalogIssueRecord[]>([]);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -32,20 +33,33 @@ export function usePlatformToolSettings() {
     return () => window.removeEventListener("beforeunload", protect);
   }, [dirty]);
   const requestVersion = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
   const edits = useRef({ dirty, permissions });
   edits.current = { dirty, permissions };
-  async function refreshTools(preserveEdits = false) {
+  async function refreshTools(preserveEdits = false, rediscover = false) {
     const version = ++requestVersion.current;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const { signal } = controller;
     setLoading(true);
+    setDiscoveryError(null);
+    // Diagnostics are independent of the editable data on normal opens. An
+    // explicit refresh reloads that data after discovery changes the catalog.
+    const discovery = (dataSource === "api" ? fetchToolCatalogIssues(signal, rediscover) : Promise.resolve([] as ToolCatalogIssueRecord[]))
+      .then((issues) => {
+        if (version === requestVersion.current) setCatalogIssues(issues);
+      })
+      .catch((error: unknown) => {
+        if (version !== requestVersion.current || signal.aborted) return;
+        setDiscoveryError(`${pageT("loadParts.diagnostics", "Tool discovery")}: ${error instanceof Error ? error.message : pageT("errors.load", "Platform tools could not be loaded")}`);
+      });
     try {
-      // Refresh discovery first so domains, permissions and tools share the new catalog.
-      const [discovery] = await Promise.allSettled([
-        dataSource === "api" ? fetchToolCatalogIssues() : Promise.resolve([] as ToolCatalogIssueRecord[]),
-      ]);
+      if (rediscover) await discovery;
       if (version !== requestVersion.current) return;
       const results = dataSource === "api"
         ? await Promise.allSettled([
-          fetchToolDomains(), listTools(), fetchToolPermissions(), fetchToolCategories(),
+          fetchToolDomains(signal), listTools({}, signal), fetchToolPermissions(signal), fetchToolCategories(signal),
         ] as const)
         : await Promise.allSettled([
           Promise.resolve(listToolDomainsMock()), Promise.resolve(listToolsMock()),
@@ -53,8 +67,8 @@ export function usePlatformToolSettings() {
         ] as const);
       if (version !== requestVersion.current) return;
       const [domainResult, toolResult, permissionResult, categoryResult] = results;
-      const labels = ["domains", "tools", "permissions", "categories", "diagnostics"];
-      setLoadErrors([...results, discovery].flatMap((result, index) => result.status === "rejected"
+      const labels = ["domains", "tools", "permissions", "categories"];
+      setLoadErrors(results.flatMap((result, index) => result.status === "rejected"
         ? [`${pageT(`loadParts.${labels[index]}`, labels[index])}: ${result.reason instanceof Error ? result.reason.message : pageT("errors.load", "Platform tools could not be loaded")}`]
         : []));
       if (domainResult.status === "fulfilled") setDomains(domainResult.value);
@@ -72,7 +86,6 @@ export function usePlatformToolSettings() {
         }
         setCategories([...derived.values()]);
       }
-      if (discovery.status === "fulfilled") setCatalogIssues(discovery.value);
       // Failed permission reads must never become default grants that can be saved.
       const canEdit = toolResult.status === "fulfilled" && permissionResult.status === "fulfilled";
       setLoaded(canEdit);
@@ -100,7 +113,10 @@ export function usePlatformToolSettings() {
 
   useEffect(() => {
     void refreshTools(true);
-    return () => { ++requestVersion.current; };
+    return () => {
+      ++requestVersion.current;
+      activeRequest.current?.abort();
+    };
   }, [dataSource, i18n.resolvedLanguage]);
 
   async function savePermissions() {
@@ -116,7 +132,7 @@ export function usePlatformToolSettings() {
     } finally { setSaving(false); }
   }
 
-  return { domains, tools, categories, catalogIssues, loadErrors, loading, saving, loaded, permissions, dirty, refreshTools: () => refreshTools(), savePermissions,
+  return { domains, tools, categories, catalogIssues, loadErrors: discoveryError ? [...loadErrors, discoveryError] : loadErrors, loading, saving, loaded, permissions, dirty, refreshTools: () => refreshTools(false, true), savePermissions,
     discard: () => setPermissions(savedPermissions),
     setPermission: (next: ToolPermissionRecord) => setPermissions((current) => current.map((item) => item.toolCode === next.toolCode ? next : item)),
   };

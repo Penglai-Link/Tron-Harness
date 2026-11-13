@@ -13,18 +13,31 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn local_id(name: &str) -> Option<String> {
-    local::local_tool_catalog()
-        .into_iter()
-        .find(|tool| tool.call_name == name)
-        .map(|tool| tool.id)
+    static IDS: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::OnceLock::new();
+    IDS.get_or_init(|| {
+        local::local_tool_catalog()
+            .into_iter()
+            .map(|tool| (tool.call_name, tool.id))
+            .collect()
+    })
+    .get(name)
+    .cloned()
 }
 pub(super) fn official_id(name: &str) -> Option<String> {
-    local::local_tool_catalog()
-        .into_iter()
-        .chain(crate::application::agent::tool_catalog::official_remote_descriptors())
-        .chain(eliteforge_agent_official_plugin_a2ui::tool_descriptors())
-        .find(|tool| tool.call_name == name)
-        .map(|tool| tool.id)
+    // These identities are immutable. Rebuilding every descriptor and display
+    // resource for each tool makes catalog construction quadratic.
+    static IDS: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::OnceLock::new();
+    local_id(name).or_else(|| {
+        IDS.get_or_init(|| {
+            crate::application::agent::tool_catalog::official_remote_descriptors()
+                .into_iter()
+                .chain(eliteforge_agent_official_plugin_a2ui::tool_descriptors())
+                .map(|tool| (tool.call_name, tool.id))
+                .collect()
+        })
+        .get(name)
+        .cloned()
+    })
 }
 fn id(name: &str) -> String {
     official_id(name).unwrap_or_else(|| format!("tron.{name}"))

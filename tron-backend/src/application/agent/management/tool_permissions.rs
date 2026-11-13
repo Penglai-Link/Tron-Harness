@@ -106,7 +106,7 @@ impl AgentManagementService {
             record.display = descriptor.display.clone();
             return Ok(record);
         }
-        if BusinessToolCatalog::tool(&descriptor.id, "en-US").is_some() {
+        if super::super::tool_catalog::is_fixed_code(&descriptor.id.to_ascii_lowercase()) {
             return Err("Native descriptor conflicts with a platform tool code".into());
         }
         let cached = self

@@ -1,8 +1,18 @@
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext, app::AppState, response::ApiResponse,
 };
-use axum::{Json, extract::State};
-use serde::Serialize;
+use axum::{
+    Json,
+    extract::{Query, State},
+};
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListToolCatalogIssuesQuery {
+    #[serde(default)]
+    refresh: bool,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,12 +27,16 @@ pub struct ToolCatalogIssueView {
 pub async fn list(
     State(state): State<AppState>,
     _auth: RequestAuthContext,
+    Query(query): Query<ListToolCatalogIssuesQuery>,
 ) -> Json<ApiResponse<Vec<ToolCatalogIssueView>>> {
-    let discovery_error = state
-        .agent_framework
-        .refresh_capability_catalog()
-        .await
-        .err();
+    // Opening settings reuses the current runtime's catalog. Only an explicit
+    // refresh should acquire provider leases and repeat external discovery.
+    let discovery_error = if query.refresh {
+        state.agent_framework.refresh_capability_catalog().await
+    } else {
+        state.agent_framework.ensure_capability_catalog().await
+    }
+    .err();
     let mut issues = state
         .agent_framework
         .tool_catalog_issues()

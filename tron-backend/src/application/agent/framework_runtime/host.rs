@@ -42,6 +42,8 @@ mod host_environment;
 mod host_execution;
 #[path = "host_sudo.rs"]
 mod host_sudo;
+#[path = "host_tool_catalog.rs"]
+mod host_tool_catalog;
 pub(crate) use host_sudo::{PendingSudoInput, SudoInputError};
 #[path = "host_connector_tools.rs"]
 mod connector_tools;
@@ -104,6 +106,7 @@ struct Host {
     skills: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     installed_packs: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     tool_catalog_issues: std::sync::RwLock<Vec<crate::domain::agent::ToolCatalogIssue>>,
+    tool_catalog_metadata: std::sync::RwLock<host_tool_catalog::ToolCatalogMetadata>,
     tools_enabled: Arc<std::sync::atomic::AtomicBool>,
     observe_enabled: Arc<std::sync::atomic::AtomicBool>,
     external_agent: RuntimeCell<Agent>,
@@ -448,6 +451,7 @@ impl FrameworkHost {
                 .check_remove(&package_id, &version.manifest.version)
                 .map_err(|e| e.to_string())?;
         }
+        self.invalidate_tool_metadata();
         let root = self.0.pack_root.clone();
         let pack = tokio::task::spawn_blocking(move || {
             crate::application::agent::install_capability_pack(&root, &bytes)
@@ -654,6 +658,7 @@ impl FrameworkHost {
             }
         }
         self.invalidate_environment().await?;
+        self.invalidate_tool_metadata();
         for version in versions {
             manager
                 .remove(id, &version.manifest.version)
@@ -867,6 +872,7 @@ impl FrameworkHost {
             skills: Default::default(),
             installed_packs: Default::default(),
             tool_catalog_issues: Default::default(),
+            tool_catalog_metadata: Default::default(),
             tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             observe_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             external_agent: RuntimeCell::new(),
@@ -926,6 +932,7 @@ impl FrameworkHost {
             skills: Default::default(),
             installed_packs: Default::default(),
             tool_catalog_issues: Default::default(),
+            tool_catalog_metadata: Default::default(),
             tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             observe_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             external_agent: RuntimeCell::new(),

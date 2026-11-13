@@ -51,6 +51,9 @@ pub async fn list(
     State(state): State<AppState>,
     auth: RequestAuthContext,
 ) -> Result<Json<ApiResponse<ToolPermissionsView>>, InternalAgentApiError> {
+    if let Err(error) = state.agent_framework.ensure_capability_catalog().await {
+        tracing::warn!(%error, "Serving known tool permissions after metadata loading failed");
+    }
     let settings = state
         .agent_management
         .tool_permissions()

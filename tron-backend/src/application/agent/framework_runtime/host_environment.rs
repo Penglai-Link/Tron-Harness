@@ -69,6 +69,7 @@ impl FrameworkHost {
             .collect::<BTreeMap<_, _>>();
         let mut mcp_resources = Vec::new();
         let mut mcp_declarations = Vec::new();
+        let mut tool_catalog = super::host_tool_catalog::ImportedToolCatalog::default();
         let mut selected = std::collections::BTreeSet::new();
         for pack in installed.iter().rev() {
             if !selected.insert(pack.manifest.id.clone()) {
@@ -83,6 +84,7 @@ impl FrameworkHost {
                     serde_json::Value::Null,
                 )
                 .map_err(|e| e.to_string())?;
+            tool_catalog.add(&managed.installed().manifest);
             sources.push((
                 pack.manifest.id.clone(),
                 fw::CapabilityPack::registry_skill_sources(&managed),
@@ -134,6 +136,14 @@ impl FrameworkHost {
                     mcp_resources.push(resource);
                 }
             }
+        }
+        // Reuse manifests already verified by startup/install reconciliation.
+        // Tool settings must not re-read and hash executable package files.
+        {
+            let mut metadata = self.0.tool_catalog_metadata.write().unwrap();
+            metadata.imported = Some(tool_catalog);
+            metadata.initialized = false;
+            metadata.generation = metadata.generation.wrapping_add(1);
         }
         // Retire only package-owned MCP entries removed by a new manifest.
         // Native tool packages must not leave a second, obsolete MCP route.
@@ -387,15 +397,11 @@ impl FrameworkHost {
         framework: &Framework,
         mut catalog_entries: Vec<(fw::ToolCatalogEntry, fw::ToolSource)>,
     ) -> Result<(), String> {
-        let (Some(resources), Some(management)) = (
-            self.0.capability_resources.get(),
-            self.0.agent_management.get(),
-        ) else {
+        if self.0.capability_resources.get().is_none() || self.0.agent_management.get().is_none() {
             return Ok(());
-        };
+        }
         let services = framework.services().map_err(|e| e.to_string())?;
         let installed = self.0.installed_packs.read().unwrap().clone();
-        let (state, _) = self.capability_state();
         let options = fw::ModelInvocationOptions::for_call(&fw::RunLimits::default())
             .map_err(|e| e.to_string())?;
         let run = options.run.as_ref().ok_or("catalog context unavailable")?;
@@ -492,33 +498,12 @@ impl FrameworkHost {
                 catalog_entries.push((entry, source));
             }
         }
-        let (records, registration_issues) =
-            management.register_tool_catalog_entries(&catalog_entries)?;
-        issues.extend(registration_issues);
-        for issue in &issues {
-            tracing::warn!(tool_code = ?issue.tool_code, provider_id = ?issue.provider_id,
-                pack_id = ?issue.pack_id, error = %issue.message, "Tool catalog entry could not be loaded");
-        }
-        *self.0.tool_catalog_issues.write().unwrap() = issues;
-        let owned = records
-            .into_iter()
-            .filter_map(|record| {
-                record.source.pack_id.map(|pack_id| {
-                    let available = state
-                        .get(&pack_id)
-                        .copied()
-                        .unwrap_or(!installed.contains_key(&pack_id));
-                    crate::application::capability::CapabilityResource {
-                        pack_id,
-                        kind: "tool".into(),
-                        code: record.tool_code,
-                        available,
-                    }
-                })
-            })
-            .collect::<Vec<_>>();
-        resources.register(&owned)?;
-        Ok(())
+        self.register_tool_catalog_metadata(
+            &catalog_entries,
+            issues,
+            &installed.into_keys().collect(),
+            None,
+        )
     }
 
     pub fn tool_catalog_issues(&self) -> Vec<crate::domain::agent::ToolCatalogIssue> {
@@ -540,12 +525,10 @@ impl FrameworkHost {
     }
 
     pub async fn ensure_capability_catalog(&self) -> Result<(), String> {
-        let _guard = self.0.config_lock.lock().await;
+        // Metadata has its own generation and publication lock. Waiting for
+        // execution admission here would still block settings on a cold Agent.
         self.ensure_open()?;
-        self.framework()
-            .await
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+        self.ensure_tool_metadata().await
     }
     pub(super) async fn framework_builder(
         &self,

@@ -462,8 +462,11 @@ export interface ToolCatalogIssueRecord {
   message: string;
 }
 
-export function fetchToolCatalogIssues(signal?: AbortSignal) {
-  return requestApi<ToolCatalogIssueRecord[]>(agentApiEndpoints.getToolCatalogIssues, { signal });
+export function fetchToolCatalogIssues(signal?: AbortSignal, refresh = false) {
+  return requestApi<ToolCatalogIssueRecord[]>(agentApiEndpoints.getToolCatalogIssues, {
+    signal,
+    queryParams: { refresh: refresh || undefined },
+  });
 }
 
 export function fetchToolCategories(signal?: AbortSignal) {
