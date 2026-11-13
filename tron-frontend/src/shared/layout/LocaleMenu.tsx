@@ -20,7 +20,7 @@ export function LocaleMenu() {
       <DropdownMenuTrigger render={<Button id="tron-locale-select" variant="ghost" className="h-9 w-full min-w-0 justify-start gap-2 px-2.5" />}>
 
         <span className="shrink-0">{t("common:locale.label")}</span>
-        <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">{selected ? t(selected.labelKey) : currentLocale}</span>
+        <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">{selected ? t(selected.labelKey, { lng: selected.code }) : currentLocale}</span>
         <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
       </DropdownMenuTrigger>
       <DropdownMenuContent data-tron-locale-menu data-tron-sidebar-surface side="right" align="end" sideOffset={8} className="w-56 max-w-[calc(100vw-2rem)]">
@@ -30,7 +30,7 @@ export function LocaleMenu() {
         }} aria-label={t("common:locale.label")}>
           {supportedLocales.map((locale) => (
             <DropdownMenuRadioItem key={locale.code} value={locale.code} className="min-h-9 break-words">
-              {t(locale.labelKey)}
+              {t(locale.labelKey, { lng: locale.code })}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
