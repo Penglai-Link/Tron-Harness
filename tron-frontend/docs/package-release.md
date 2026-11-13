@@ -1,6 +1,6 @@
 # 前端子包发布流程
 
-本文说明如何将 `tron-frontend/packages` 中的公共包发布到 Nexus npm 私库。
+本文说明如何将 `tron-frontend/packages` 中的公共包发布到 npm registry。
 
 ## 发布范围
 
@@ -14,10 +14,10 @@ React、Vue、theme 和 terminal 渲染包已迁到 `eliteforge-agent-ui`，从�
 
 `@tron/chat-internal-adapter` 设置了 `private: true`，不会发布。
 
-公共包通过各自 `package.json` 中的 `publishConfig` 发布到：
+发布目标 registry 由 `tron-frontend/.npmrc` 或 `npm publish --registry` 决定，未配置时使用 npm 默认的公共 registry：
 
 ```text
-http://nexus.cisdigital.cn/repository/npm-internal/
+https://registry.npmjs.org/
 ```
 
 ## 发布前准备
@@ -32,29 +32,29 @@ make fe-install
 
 ### 2. 配置 npm 认证
 
-在 `tron-frontend/.npmrc` 中配置私库。不要将真实认证信息写入本文或提交到 Git。
+在 `tron-frontend/.npmrc` 中配置 registry 与认证。不要将真实 token 写入本文或提交到 Git。
 
 ```ini
-registry=http://nexus.cisdigital.cn/repository/npm/
-@tron:registry=http://nexus.cisdigital.cn/repository/npm-internal/
+registry=https://registry.npmjs.org/
+@tron:registry=https://registry.npmjs.org/
 @personai:registry=https://registry.npmjs.org/
-//nexus.cisdigital.cn/repository/npm-internal/:_auth=${NPM_AUTH_TOKEN}
+//registry.npmjs.org/:_authToken=${NPM_TOKEN}
 ```
 
-`NPM_AUTH_TOKEN` 是 Nexus Basic Auth 的 Base64 值。项目已忽略 `.npmrc`，提交代码前仍应检查 Git 状态。
+`NPM_TOKEN` 是该 registry 的认证 token；使用私有 registry 时，把地址和认证条目替换为团队配置。项目已忽略 `.npmrc`，提交代码前仍应检查 Git 状态。
 
 验证认证：
 
 ```bash
 cd tron-frontend
-npm whoami --registry=http://nexus.cisdigital.cn/repository/npm-internal/
+npm whoami
 ```
 
-命令应输出当前 Nexus 用户名。
+命令应输出当前 registry 用户名。
 
 ## 首次发布或发布已完成版本变更的包
 
-如果子包版本已经更新，且该版本尚未进入私库，只需构建并发布：
+如果子包版本已经更新，且该版本尚未进入 registry，只需构建并发布：
 
 ```bash
 cd /path/to/tron
@@ -64,7 +64,7 @@ cd tron-frontend
 npm run packages:publish
 ```
 
-`packages:publish` 执行 `changeset publish`。Changesets 会比较本地版本和私库版本，只发布私库中不存在的版本。
+`packages:publish` 执行 `changeset publish`。Changesets 会比较本地版本和 registry 版本，只发布 registry 中不存在的版本。
 
 ## 后续版本发布
 
@@ -130,16 +130,15 @@ npm run packages:publish
 查询已发布版本：
 
 ```bash
-npm view @tron/chat-core version \
-  --registry=http://nexus.cisdigital.cn/repository/npm-internal/
+npm view @tron/chat-core version
 ```
 
 将包名替换为其他公共包，逐一确认版本。
 
-业务项目安装包时使用 Nexus group 仓库：
+业务项目安装包时使用同一 registry：
 
 ```text
-http://nexus.cisdigital.cn/repository/npm/
+https://registry.npmjs.org/
 ```
 
 ## 发布失败处理
@@ -172,18 +171,16 @@ npm 不允许覆盖同名同版本的包。创建新的 changeset，更新版本
 npm run packages:publish
 ```
 
-Changesets 会跳过私库中已经存在的版本，继续发布剩余包。
+Changesets 会跳过 registry 中已经存在的版本，继续发布剩余包。
 
 ### 认证失败
 
 出现 `ENEEDAUTH` 或 `E401` 时：
 
 1. 确认命令在 `tron-frontend` 目录执行。
-2. 确认 `.npmrc` 的认证条目指向 `npm-internal`。
+2. 确认 `.npmrc` 的 registry 与 token 配置正确。
 3. 重新执行 `npm whoami`。
-4. 确认 Nexus 用户拥有目标 hosted 仓库的发布权限。
-
-不要将包发布到 `/repository/npm/`。该地址是 group/proxy 仓库，只用于安装和查询依赖。
+4. 确认 token 具有目标 registry 的发布权限。
 
 ## 发布检查清单
 
@@ -191,7 +188,7 @@ Changesets 会跳过私库中已经存在的版本，继续发布剩余包。
 - [ ] 已执行 `make packages-build`。
 - [ ] dry-run 文件清单正确。
 - [ ] `npm whoami` 返回预期用户。
-- [ ] 公共包版本尚未存在于私库。
+- [ ] 公共包版本尚未存在于 registry。
 - [ ] `.npmrc` 未被 Git 跟踪。
 - [ ] 已执行 `npm run packages:publish`。
-- [ ] 已验证私库中的发布版本。
+- [ ] 已验证 registry 中的发布版本。

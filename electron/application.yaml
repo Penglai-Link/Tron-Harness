@@ -53,7 +53,7 @@ httpClients:
 
 mineru:
   enabled: true
-  baseUrl: https://pre-platform.cisdigital.cn/mineru
+  baseUrl: http://127.0.0.1:8000
   timeoutSeconds: 1200
   maxBytes: 52428800
 

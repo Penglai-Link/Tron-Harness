@@ -21,7 +21,6 @@
     "prepublishOnly": "npm run build"
   },
   "publishConfig": {
-    "registry": "http://nexus.cisdigital.cn/repository/npm-internal/",
     "access": "restricted"
   }
 }

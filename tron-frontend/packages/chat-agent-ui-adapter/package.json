@@ -27,7 +27,6 @@
     "@personai/agent-ui-chat-core": "1.0.0-preview.13"
   },
   "publishConfig": {
-    "registry": "http://nexus.cisdigital.cn/repository/npm-internal/",
     "access": "restricted"
   }
 }
