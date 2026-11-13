@@ -113,15 +113,28 @@ pub(super) fn builtin_tool_descriptors(id: &str) -> Vec<eliteforge_agent_core::T
         "framework.personai" => eliteforge_agent_capability_personai::personai_tool_catalog(),
         "framework.web" => vec![eliteforge_agent_official_plugin_tools_web::web_read_descriptor()],
         "framework.media" => eliteforge_agent_official_plugin_tools_media::media_tool_catalog(),
-        tron_harness_capability::PACK_ID => eliteforge_agent_core::ToolProvider::catalog_metadata(
-            &super::super::tools::HarnessTools,
-        )
-        .unwrap_or_default()
-        .into_iter()
-        .map(|tool| tool.descriptor)
-        .collect(),
+        tron_harness_capability::PACK_ID => harness_tool_descriptors(),
         _ => vec![],
     }
+}
+
+/// Building the harness catalog resolves every tool schema and display resource,
+/// which costs seconds. The descriptors are compile-time metadata, so build the
+/// catalogue once for every capability listing instead of per request.
+fn harness_tool_descriptors() -> Vec<eliteforge_agent_core::ToolDescriptor> {
+    static CACHE: std::sync::OnceLock<Vec<eliteforge_agent_core::ToolDescriptor>> =
+        std::sync::OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            eliteforge_agent_core::ToolProvider::catalog_metadata(
+                &super::super::tools::HarnessTools,
+            )
+            .unwrap_or_default()
+            .into_iter()
+            .map(|tool| tool.descriptor)
+            .collect()
+        })
+        .clone()
 }
 
 pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {

@@ -1,11 +1,13 @@
-use eliteforge_agent_capability_runtime::{CapabilityPackManager, InstalledCapabilityPack};
+use std::path::Path;
 
-pub(super) fn installed_readme(
-    manager: &CapabilityPackManager,
-    pack: &InstalledCapabilityPack,
-) -> Result<Option<String>, String> {
+/// Read a package README for display without re-verifying the entire payload.
+///
+/// The package directory is canonicalized so a symlinked README or package path
+/// cannot escape the installed version.
+pub(super) fn installed_readme(path: &Path) -> Result<Option<String>, String> {
+    let package = path.canonicalize().map_err(|error| error.to_string())?;
     let mut names = Vec::new();
-    for entry in std::fs::read_dir(&pack.path).map_err(|error| error.to_string())? {
+    for entry in std::fs::read_dir(&package).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let name = entry.file_name();
         let Some(name) = name.to_str() else {
@@ -25,10 +27,14 @@ pub(super) fn installed_readme(
     let Some(name) = names.first() else {
         return Ok(None);
     };
-    // Use the package manager's version/digest and path-boundary checks.
-    let bytes = manager
-        .read_resource(pack, name)
+    let file = package
+        .join(name)
+        .canonicalize()
         .map_err(|error| error.to_string())?;
+    if !file.starts_with(&package) {
+        return Err("capability README escapes its package".into());
+    }
+    let bytes = std::fs::read(&file).map_err(|error| error.to_string())?;
     let content =
         String::from_utf8(bytes).map_err(|error| format!("Invalid UTF-8 in {name}: {error}"))?;
     let content = content.trim_start_matches('\u{feff}');

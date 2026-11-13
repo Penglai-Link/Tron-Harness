@@ -51,19 +51,85 @@ pub fn installed_capability_packs(
     query_installed_capability_packs(root, locale, true, None)
 }
 
-fn latest_installed(
-    manager: &eliteforge_agent_capability_runtime::CapabilityPackManager,
-) -> Result<Vec<eliteforge_agent_capability_runtime::InstalledCapabilityPack>, String> {
-    // The manager sorts versions in ascending order. Match runtime selection
-    // instead of showing an obsolete manifest retained for pinned executions.
-    Ok(manager
-        .installed()
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .map(|pack| (pack.manifest.id.clone(), pack))
-        .collect::<std::collections::BTreeMap<_, _>>()
-        .into_values()
-        .collect())
+type InstalledManifest = (
+    semver::Version,
+    std::path::PathBuf,
+    eliteforge_agent_capability_runtime::CapabilityPackManifest,
+);
+
+/// Read installed manifests without re-validating every payload file.
+///
+/// `CapabilityPackManager::installed` verifies checksums and signatures for the
+/// whole package tree on each call, which costs seconds for binary packs. Listing
+/// only needs the manifest; runtime selection and installation still verify
+/// through `CapabilityPackManager`.
+fn latest_installed_manifests(root: &std::path::Path) -> Result<Vec<InstalledManifest>, String> {
+    let root = root.join("packs");
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut latest = std::collections::BTreeMap::<String, InstalledManifest>::new();
+    for package in std::fs::read_dir(&root).map_err(|error| error.to_string())? {
+        let package = package.map_err(|error| error.to_string())?;
+        if !package
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+        {
+            continue;
+        }
+        let versions = package.path().join("versions");
+        if !versions.exists() {
+            continue;
+        }
+        for version in std::fs::read_dir(&versions).map_err(|error| error.to_string())? {
+            let path = version.map_err(|error| error.to_string())?.path();
+            if path
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with('.'))
+            {
+                continue;
+            }
+            let bytes =
+                std::fs::read(path.join("manifest.json")).map_err(|error| error.to_string())?;
+            let manifest: eliteforge_agent_capability_runtime::CapabilityPackManifest =
+                serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+            manifest.validate().map_err(|error| error.to_string())?;
+            let replace = latest
+                .get(&manifest.id)
+                .is_none_or(|(version, _, _)| manifest.version > *version);
+            if replace {
+                latest.insert(
+                    manifest.id.clone(),
+                    (manifest.version.clone(), path, manifest),
+                );
+            }
+        }
+    }
+    Ok(latest.into_values().collect())
+}
+
+fn installed_upstream_sdk_version(
+    path: &std::path::Path,
+    manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest,
+) -> Result<Option<String>, String> {
+    if manifest.id != crate::domain::computer_use::PACK_ID
+        || !manifest
+            .resources
+            .iter()
+            .any(|path| path == "upstream.json")
+    {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path.join("upstream.json")).map_err(|error| error.to_string())?;
+    let upstream: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("Invalid computer-use upstream.json: {error}"))?;
+    Ok(upstream
+        .get("sdkVersion")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|version| !version.is_empty())
+        .map(str::to_owned))
 }
 
 pub fn query_installed_capability_packs(
@@ -72,8 +138,6 @@ pub fn query_installed_capability_packs(
     include_contents: bool,
     id: Option<&str>,
 ) -> Result<Vec<CapabilityPackInfo>, String> {
-    use eliteforge_agent_capability_runtime::CapabilityPackManager;
-    let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
     let mut packs = capability_pack_entries(include_contents, id);
     for pack in packs.iter_mut().filter(|_| include_contents) {
         for item in pack
@@ -96,18 +160,17 @@ pub fn query_installed_capability_packs(
     }
     // Imported metadata belongs to its provider; never translate by a colliding
     // built-in call name or activate a plugin merely to display its manifest.
-    for installed in latest_installed(&manager)?
+    for (_, path, manifest) in latest_installed_manifests(root)?
         .into_iter()
-        .filter(|pack| id.is_none_or(|id| pack.manifest.id == id))
+        .filter(|(_, _, manifest)| id.is_none_or(|id| manifest.id == id))
     {
         let mut contents = if include_contents {
-            installed_contents(&installed.path, &installed.manifest, locale)?
+            installed_contents(&path, &manifest, locale)?
         } else {
             vec![]
         };
         for item in contents.iter_mut().filter(|item| item.kind == "Tool") {
-            if let Some(entry) = installed
-                .manifest
+            if let Some(entry) = manifest
                 .tools
                 .iter()
                 .find(|entry| entry.descriptor.call_name == item.name)
@@ -118,16 +181,16 @@ pub fn query_installed_capability_packs(
             }
         }
         packs.push(CapabilityPackInfo {
-            cua_driver_sdk_version: installed_cua_driver_sdk_version(&manager, &installed)?,
+            cua_driver_sdk_version: installed_upstream_sdk_version(&path, &manifest)?,
             readme: if include_contents && id.is_some() {
-                readme::installed_readme(&manager, &installed)?
+                readme::installed_readme(&path)?
             } else {
                 None
             },
             contents,
-            id: installed.manifest.id,
-            name: installed.manifest.name,
-            version: installed.manifest.version.to_string(),
+            id: manifest.id,
+            name: manifest.name,
+            version: manifest.version.to_string(),
             description: "Imported external capability package".into(),
             provider: "External".into(),
             updated_at: None,
@@ -136,33 +199,6 @@ pub fn query_installed_capability_packs(
         });
     }
     Ok(packs)
-}
-
-fn installed_cua_driver_sdk_version(
-    manager: &eliteforge_agent_capability_runtime::CapabilityPackManager,
-    pack: &eliteforge_agent_capability_runtime::InstalledCapabilityPack,
-) -> Result<Option<String>, String> {
-    if pack.manifest.id != crate::domain::computer_use::PACK_ID
-        || !pack
-            .manifest
-            .resources
-            .iter()
-            .any(|path| path == "upstream.json")
-    {
-        return Ok(None);
-    }
-    // Read this installed version's verified provenance without starting its backend.
-    let bytes = manager
-        .read_resource(pack, "upstream.json")
-        .map_err(|error| error.to_string())?;
-    let upstream: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("Invalid computer-use upstream.json: {error}"))?;
-    Ok(upstream
-        .get("sdkVersion")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|version| !version.is_empty())
-        .map(str::to_owned))
 }
 
 pub fn install_capability_pack(
@@ -176,7 +212,10 @@ pub fn install_capability_pack(
         .map_err(|error| error.to_string())?;
     let contents = installed_contents(&installed.path, &installed.manifest, "en-US")?;
     Ok(CapabilityPackInfo {
-        cua_driver_sdk_version: installed_cua_driver_sdk_version(&manager, &installed)?,
+        cua_driver_sdk_version: installed_upstream_sdk_version(
+            &installed.path,
+            &installed.manifest,
+        )?,
         readme: None,
         contents,
         id: installed.manifest.id,
@@ -517,11 +556,8 @@ pub fn installed_extension_implementations(
     packs: &std::collections::BTreeMap<String, bool>,
     enabled: &std::collections::BTreeMap<String, bool>,
 ) -> Result<Vec<ExtensionImplementationInfo>, String> {
-    use eliteforge_agent_capability_runtime::CapabilityPackManager;
     let mut items = extension_implementation_catalog_with_state(packs, enabled);
-    let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
-    for installed in latest_installed(&manager)? {
-        let manifest = installed.manifest;
+    for (_, _, manifest) in latest_installed_manifests(root)? {
         for implementation in manifest.implementations {
             let enabled = packs.get(&manifest.id).copied().unwrap_or(false);
             items.push(ExtensionImplementationInfo {
