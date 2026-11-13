@@ -1,26 +1,26 @@
 diff --git a/node_modules/@personai/agent-ui-chat-core/dist/index.js b/node_modules/@personai/agent-ui-chat-core/dist/index.js
-index 53e3ef5..04fa88f 100644
+index 0ac1d0c..e9a9b4c 100644
 --- a/node_modules/@personai/agent-ui-chat-core/dist/index.js
 +++ b/node_modules/@personai/agent-ui-chat-core/dist/index.js
-@@ -1869,6 +1869,7 @@ function $e(e) {
+@@ -1870,6 +1870,7 @@ function L(e) {
  				kind: "runError",
  				code: e,
- 				message: t,
-+				diagnostic: s.diagnostic ?? n?.diagnostic,
- 				...e.toLowerCase() === "tool_schema_over_budget" ? { toolSchemaBudget: Xe(t) } : {}
+ 				message: n,
++				diagnostic: c.diagnostic ?? l?.diagnostic,
+ 				...e.toLowerCase() === "tool_schema_over_budget" ? { toolSchemaBudget: Xe(n) } : {}
  			};
  		}
-@@ -2117,7 +2118,9 @@ function At(e, t, n) {
- 	return r === kt(a) || r === kt(i);
+@@ -2118,7 +2119,9 @@ function kt(e, t, n) {
+ 	return r === Ot(a) || r === Ot(i);
  }
- function jt(e, t, n, r) {
--	let i = E(e, t, { locale: r }), a = n?.trim(), o = a && !At(e, a, t) ? a : i.title, s = i.subject;
+ function At(e, t, n, r) {
+-	let i = E(e, t, { locale: r }), a = n?.trim(), o = a && !kt(e, a, t) ? a : i.title, s = i.subject;
 +	let a = n?.trim();
-+	if (a && !At(e, a, t)) return a;
++	if (a && !kt(e, a, t)) return a;
 +	let i = E(e, t, { locale: r }), o = i.title, s = i.subject;
  	return !s || o.includes(s) ? o : `${o} ${s}`;
  }
- function Mt(e, t = void 0, n, r) {
+ function jt(e, t = void 0, n, r) {
 diff --git a/node_modules/@personai/agent-ui-chat-core/dist/src/transcript.d.ts b/node_modules/@personai/agent-ui-chat-core/dist/src/transcript.d.ts
 index 1a71d60..3f046af 100644
 --- a/node_modules/@personai/agent-ui-chat-core/dist/src/transcript.d.ts
