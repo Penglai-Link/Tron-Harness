@@ -322,14 +322,50 @@ pub(crate) fn validate_graph_generation_binding(
     task: &str,
     configuration: &str,
 ) -> Result<(), String> {
-    let manifest = stored_manifest(tx, id)?.ok_or_else(|| err("graph generation is absent"))?;
-    if manifest.partition != *partition
-        || manifest.logical_source_code != logical
-        || manifest.source_code != source
-        || manifest.task_id != task
-        || manifest.configuration_hash != configuration
-    {
-        return Err(err("graph generation does not belong to this source task"));
+    validate_graph_generation_bindings(
+        tx,
+        &[(
+            id.to_owned(),
+            partition.clone(),
+            logical.to_owned(),
+            source.to_owned(),
+            task.to_owned(),
+            configuration.to_owned(),
+        )],
+    )
+}
+
+pub(crate) type GraphPublicationBinding = (String, GraphPartition, String, String, String, String);
+pub(crate) fn validate_graph_generation_bindings(
+    tx: &BusinessTransaction<'_>,
+    bindings: &[GraphPublicationBinding],
+) -> Result<(), String> {
+    if bindings.is_empty() {
+        return Ok(());
+    }
+    let ids = serde_json::to_string(&bindings.iter().map(|item| &item.0).collect::<Vec<_>>())
+        .map_err(err)?;
+    let mut query=tx.prepare(&format!("SELECT {MANIFEST_COLUMNS} FROM rag_graph_generations WHERE generation_id IN (SELECT value FROM json_each(?1))")).map_err(err)?;
+    let manifests = query
+        .query_map([ids], manifest_row)
+        .map_err(err)?
+        .map(|row| {
+            let manifest = row.map_err(err)?;
+            Ok((manifest.id.clone(), manifest))
+        })
+        .collect::<Result<std::collections::BTreeMap<_, _>, String>>()?;
+    for (id, partition, logical, source, task, configuration) in bindings {
+        let manifest = manifests
+            .get(id)
+            .ok_or_else(|| err("graph generation is absent"))?;
+        if manifest.partition != *partition
+            || manifest.logical_source_code != *logical
+            || manifest.source_code != *source
+            || manifest.task_id != *task
+            || manifest.configuration_hash != *configuration
+        {
+            return Err(err("graph generation does not belong to this source task"));
+        }
     }
     Ok(())
 }
@@ -413,51 +449,92 @@ pub(crate) fn activate_graph_generation(
     tx: &BusinessTransaction<'_>,
     id: &str,
 ) -> Result<(), String> {
-    let manifest = stored_manifest(tx, id)?.ok_or_else(|| err("graph generation is absent"))?;
-    let state: String = tx
-        .query_row(
-            "SELECT state FROM rag_graph_generations WHERE generation_id=?1",
-            [id],
-            |r| r.get(0),
-        )
-        .map_err(err)?;
-    if state == "Active" {
+    activate_graph_generations(tx, &[id.to_owned()])
+}
+
+/// Batch readiness checks share the caller's publication transaction.
+pub(crate) fn activate_graph_generations(
+    tx: &BusinessTransaction<'_>,
+    ids: &[String],
+) -> Result<(), String> {
+    if ids.is_empty() {
         return Ok(());
     }
-    if state != "Ready" {
-        return Err(err("graph generation is not ready"));
+    let selected = serde_json::to_string(ids).map_err(err)?;
+    let columns = MANIFEST_COLUMNS
+        .split(',')
+        .map(|name| format!("g.{name}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut query=tx.prepare(&format!("SELECT {columns},g.state,COALESCE(p.actual,0),a.generation_id FROM rag_graph_generations g LEFT JOIN (SELECT generation_id,count(*) AS actual FROM rag_graph_node_projections WHERE generation_id IN (SELECT value FROM json_each(?1)) GROUP BY generation_id) p ON p.generation_id=g.generation_id LEFT JOIN rag_graph_active_sources a ON a.partition_key=g.partition_key AND a.logical_source_code=g.logical_source_code WHERE g.generation_id IN (SELECT value FROM json_each(?1))")).map_err(err)?;
+    let mut manifests = query
+        .query_map([selected], |row| {
+            Ok((
+                manifest_row(row)?,
+                row.get::<_, String>(14)?,
+                row.get::<_, usize>(15)?,
+                row.get::<_, Option<String>>(16)?,
+            ))
+        })
+        .map_err(err)?
+        .map(|row| {
+            let (manifest, state, count, old) = row.map_err(err)?;
+            Ok((manifest.id.clone(), (manifest, state, count, old)))
+        })
+        .collect::<Result<std::collections::BTreeMap<_, _>, String>>()?;
+    let mut active = std::collections::BTreeMap::new();
+    for (manifest, _, _, old) in manifests.values() {
+        active.insert(
+            (
+                manifest.partition.key(),
+                manifest.logical_source_code.clone(),
+            ),
+            old.clone(),
+        );
     }
-    let count: usize = tx
-        .query_row(
-            "SELECT count(*) FROM rag_graph_node_projections WHERE generation_id=?1",
-            [id],
-            |r| r.get(0),
-        )
-        .map_err(err)?;
-    if count != manifest.expected_projections {
-        return Err(err("graph projection count differs at publication"));
-    }
-    let now = chrono::Utc::now().timestamp_millis();
-    let partition = manifest.partition.key();
-    let old:Option<String>=tx.query_row("SELECT generation_id FROM rag_graph_active_sources WHERE partition_key=?1 AND logical_source_code=?2",params![partition,manifest.logical_source_code],|r|r.get(0)).optional().map_err(err)?;
-    if let Some(old) = old.filter(|old| old != id) {
+    for id in ids {
+        let (manifest, state, count, _) = manifests
+            .get(id)
+            .cloned()
+            .ok_or_else(|| err("graph generation is absent"))?;
+        if state == "Active" {
+            continue;
+        }
+        if state != "Ready" {
+            return Err(err("graph generation is not ready"));
+        }
+        if count != manifest.expected_projections {
+            return Err(err("graph projection count differs at publication"));
+        }
+        let now = chrono::Utc::now().timestamp_millis();
+        let partition = manifest.partition.key();
+        let key = (partition.clone(), manifest.logical_source_code.clone());
+        if let Some(old) = active
+            .get(&key)
+            .and_then(Option::as_ref)
+            .filter(|old| *old != id)
+        {
+            tx.execute("UPDATE rag_graph_generations SET state='Retired',updated_at=?2 WHERE generation_id=?1",params![old,now]).map_err(err)?;
+            tx.execute("INSERT INTO rag_graph_cleanup_jobs(generation_id,not_before,updated_at) VALUES (?1,?2,?3) ON CONFLICT(generation_id) DO UPDATE SET not_before=excluded.not_before,updated_at=excluded.updated_at",params![old,now+300_000,now]).map_err(err)?;
+            if let Some(entry) = manifests.get_mut(old) {
+                entry.1 = "Retired".into();
+            }
+        }
+        tx.execute("INSERT INTO rag_graph_active_sources(partition_key,logical_source_code,generation_id,publication_epoch,updated_at) VALUES (?1,?2,?3,1,?4) ON CONFLICT(partition_key,logical_source_code) DO UPDATE SET generation_id=excluded.generation_id,publication_epoch=publication_epoch+1,updated_at=excluded.updated_at",params![partition,manifest.logical_source_code,id,now]).map_err(err)?;
         tx.execute(
-            "UPDATE rag_graph_generations SET state='Retired',updated_at=?2 WHERE generation_id=?1",
-            params![old, now],
+            "DELETE FROM rag_graph_cleanup_jobs WHERE generation_id=?1",
+            [id],
         )
         .map_err(err)?;
-        tx.execute("INSERT INTO rag_graph_cleanup_jobs(generation_id,not_before,updated_at) VALUES (?1,?2,?3) ON CONFLICT(generation_id) DO UPDATE SET not_before=excluded.not_before,updated_at=excluded.updated_at",params![old,now+300_000,now]).map_err(err)?;
+        tx.execute(
+            "UPDATE rag_graph_generations SET state='Active',updated_at=?2 WHERE generation_id=?1",
+            params![id, now],
+        )
+        .map_err(err)?;
+        if let Some(entry) = manifests.get_mut(id) {
+            entry.1 = "Active".into();
+        }
+        active.insert(key, Some(id.clone()));
     }
-    tx.execute("INSERT INTO rag_graph_active_sources(partition_key,logical_source_code,generation_id,publication_epoch,updated_at) VALUES (?1,?2,?3,1,?4) ON CONFLICT(partition_key,logical_source_code) DO UPDATE SET generation_id=excluded.generation_id,publication_epoch=publication_epoch+1,updated_at=excluded.updated_at",params![partition,manifest.logical_source_code,id,now]).map_err(err)?;
-    tx.execute(
-        "DELETE FROM rag_graph_cleanup_jobs WHERE generation_id=?1",
-        [id],
-    )
-    .map_err(err)?;
-    tx.execute(
-        "UPDATE rag_graph_generations SET state='Active',updated_at=?2 WHERE generation_id=?1",
-        params![id, now],
-    )
-    .map_err(err)?;
     Ok(())
 }

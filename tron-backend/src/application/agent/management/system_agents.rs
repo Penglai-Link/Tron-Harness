@@ -125,6 +125,12 @@ impl AgentManagementService {
             self.repository().upsert_system_agent(&entry)?;
         }
 
+        let mut repository = self.repository();
+        let mut refreshed = repository
+            .list_system_agents()?
+            .into_iter()
+            .map(|entry| (entry.agent_code.clone(), entry))
+            .collect::<HashMap<_, _>>();
         for (agent_code, old_entry) in &existing {
             if let Some(base) = old_entry.base_agent_code.as_deref() {
                 let mut entry = old_entry.clone();
@@ -132,16 +138,10 @@ impl AgentManagementService {
                     .supported_agents
                     .iter()
                     .find(|agent| agent.agent_code == base);
-                let refreshed = self
-                    .repository()
-                    .list_system_agents()?
-                    .into_iter()
-                    .find(|agent| agent.agent_code == base);
-                entry.available = refreshed.as_ref().is_some_and(|agent| agent.available);
+                let base_entry = refreshed.get(base);
+                entry.available = base_entry.is_some_and(|agent| agent.available);
                 entry.last_scanned_at = Some(now.clone());
-                entry.last_error = refreshed
-                    .as_ref()
-                    .and_then(|agent| agent.last_error.clone());
+                entry.last_error = base_entry.and_then(|agent| agent.last_error.clone());
                 if let Some(supported) = supported {
                     entry.command_name = supported.command_name.clone();
                     entry.runtime_type = supported.runtime_type;
@@ -149,14 +149,18 @@ impl AgentManagementService {
                 if entry.available {
                     entry.last_seen_at = Some(now.clone());
                 }
-                self.repository().upsert_system_agent(&entry)?;
+                repository.upsert_system_agent(&entry)?;
+                refreshed.insert(agent_code.clone(), entry);
                 continue;
             }
             if !discovered_agent_codes.contains(agent_code) {
                 self.set_system_agent_models(agent_code, Vec::new());
-                self.repository().delete_system_agent(agent_code)?;
+                repository.delete_system_agent(agent_code)?;
+                refreshed.remove(agent_code);
             }
         }
+
+        drop(repository);
 
         let records = self.list_platform_system_agents()?;
         Ok(SystemAgentSyncResult {

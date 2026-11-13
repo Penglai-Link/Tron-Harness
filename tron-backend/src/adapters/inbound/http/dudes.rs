@@ -56,6 +56,7 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/notifications",
             get(notifications).delete(delete_archived_notifications),
         )
+        .route("/api/v1/notifications/batch", patch(update_notifications))
         .route(
             "/api/v1/notifications/{id}",
             patch(update_notification).delete(delete_notification),
@@ -549,6 +550,36 @@ pub struct UpdateNotificationRequest {
     pub read: bool,
     #[serde(default)]
     pub archived: bool,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UpdateNotificationsRequest {
+    ids: Vec<String>,
+    action: UpdateNotificationsAction,
+}
+#[derive(Deserialize)]
+enum UpdateNotificationsAction {
+    MarkRead,
+    Archive,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateNotificationsResponse {
+    updated_count: usize,
+}
+async fn update_notifications(
+    State(s): State<AppState>,
+    _auth: RequestAuthContext,
+    Json(r): Json<UpdateNotificationsRequest>,
+) -> Result<Json<ApiResponse<UpdateNotificationsResponse>>, DudeApiError> {
+    // AppState/repository are scoped to the selected profile, as for the list API.
+    let updated_count = s.dudes.update_notifications(
+        r.ids,
+        matches!(r.action, UpdateNotificationsAction::Archive),
+    )?;
+    Ok(Json(ApiResponse::protocol_success(
+        UpdateNotificationsResponse { updated_count },
+    )))
 }
 async fn update_notification(
     State(s): State<AppState>,

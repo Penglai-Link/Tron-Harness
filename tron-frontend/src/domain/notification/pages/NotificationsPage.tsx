@@ -16,6 +16,7 @@ import {
   listNotifications,
   notificationQueryKey,
   updateNotification,
+  updateNotifications,
   deleteNotification,
   deleteArchivedNotifications,
   type PlatformNotification,
@@ -63,10 +64,7 @@ export function NotificationsPage() {
     setBusy(action);
     setError(null);
     try {
-      await Promise.all(pending.map((item) => updateNotification(item.id, {
-        read: true,
-        archived: action === "archive" ? true : item.archivedAt !== null,
-      })));
+      await updateNotifications(pending.map((item) => item.id), action === "archive" ? "Archive" : "MarkRead");
       await client.invalidateQueries({ queryKey: notificationQueryKey });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));

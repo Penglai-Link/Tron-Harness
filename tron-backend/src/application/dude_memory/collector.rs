@@ -69,35 +69,65 @@ impl DudeMemorySourceCollector {
             .storage_framework()
             .await
             .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
-        // Native subagents are indexed under their trusted root session, including descendants.
-        for (root, (workspace, owner, lineage)) in links.clone() {
-            if owner.as_deref() == Some(memory_dude)
-                || lineage.iter().any(|code| code == memory_dude)
-            {
+        // Read the trusted child-session index once; do not fetch unused run details.
+        let roots = links
+            .iter()
+            .filter(|(_, (_, owner, lineage))| {
+                owner.as_deref() != Some(memory_dude)
+                    && !lineage.iter().any(|code| code == memory_dude)
+            })
+            .map(|(root, _)| root.clone())
+            .collect::<Vec<_>>();
+        let selected =
+            serde_json::to_string(&roots).map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+        let children = database.call_read(move |c| {
+            let mut query = c.prepare("SELECT session_id,value FROM ef_session_context WHERE key='tron.subagents' AND session_id IN (SELECT value FROM json_each(?1)) ORDER BY session_id")?;
+            query.query_map([selected], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()
+        }).await.map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+        for (root, raw) in children {
+            let records: Vec<crate::application::agent::SubagentRecord> =
+                serde_json::from_str(&raw).map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+            let Some((workspace, owner, lineage)) = links.get(&root).cloned() else {
                 continue;
-            }
-            let children = self
-                .host
-                .subagents(&root, &profile_user)
-                .await
-                .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
-            for child in children {
+            };
+            for child in records
+                .into_iter()
+                .filter(|record| record.user_code.as_deref() == Some(&profile_user))
+            {
                 links
-                    .entry(child.record.session_id)
+                    .entry(child.session_id)
                     .or_insert_with(|| (workspace.clone(), owner.clone(), lineage.clone()));
             }
         }
+        let selected = serde_json::to_string(&links.keys().collect::<Vec<_>>())
+            .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+        let versions = database.call_read(move |c| {
+            let mut query = c.prepare("SELECT s.id,COALESCE(v.version,'0') FROM ef_sessions s LEFT JOIN ef_history_versions v ON v.session_id=s.id WHERE s.id IN (SELECT value FROM json_each(?1))")?;
+            query.query_map([selected], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?)))?.collect::<Result<BTreeMap<_,_>,_>>()
+        }).await.map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
         let history = framework
             .history()
             .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
         let mut sources = Vec::new();
+        let mut completed_versions = BTreeMap::new();
         for (session, (workspace, owner, lineage)) in links {
             if owner.as_deref() == Some(memory_dude)
                 || lineage.iter().any(|code| code == memory_dude)
             {
                 continue;
             }
+            let progress_key = format!("history-v1:{session}");
+            let stamp = |version: &str| {
+                serde_json::to_string(&(version, &workspace, &owner, &lineage))
+                    .map_err(|e| DudeMemoryError::Storage(e.to_string()))
+            };
+            if let Some(version) = versions.get(&session)
+                && cursors.get(&progress_key) == Some(&stamp(version)?)
+            {
+                continue;
+            }
             let mut cursor = None;
+            let mut fully_processed = true;
             loop {
                 let page = history
                     .read_session(
@@ -125,7 +155,7 @@ impl DudeMemorySourceCollector {
                         .collect::<Vec<_>>()
                         .join("\n");
                     if !text.trim().is_empty() {
-                        append_chunks(
+                        fully_processed &= append_chunks(
                             &mut sources,
                             &session,
                             &message.id,
@@ -157,7 +187,7 @@ impl DudeMemorySourceCollector {
                     {
                         let json = serde_json::to_string(tool)
                             .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
-                        append_chunks(
+                        fully_processed &= append_chunks(
                             &mut sources,
                             &session,
                             &tool.id.to_string(),
@@ -177,9 +207,24 @@ impl DudeMemorySourceCollector {
                 }
                 cursor = page.next_cursor;
                 if cursor.is_none() {
+                    if fully_processed {
+                        // Only acknowledge a fully scanned version whose chunks
+                        // are already committed. Pending/failed batches cannot
+                        // advance this gate. A concurrent write changes version
+                        // and makes the next collection read it again.
+                        completed_versions.insert(progress_key.clone(), stamp(&page.version)?);
+                    }
                     break;
                 }
             }
+        }
+        if !completed_versions.is_empty() {
+            let dude = memory_dude.to_owned();
+            let versions = serde_json::to_string(&completed_versions)
+                .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+            database.call(move |c| {
+                c.execute("INSERT INTO dude_memory_cursors(user_code,dude_code,source_key,source_version) SELECT ?1,?2,key,value FROM json_each(?3) WHERE true ON CONFLICT(user_code,dude_code,source_key) DO UPDATE SET source_version=excluded.source_version", rusqlite::params![profile_user,dude,versions])
+            }).await.map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
         }
         Ok(sources)
     }
@@ -195,7 +240,8 @@ fn append_chunks(
     kind: MemorySourceKind,
     text: &str,
     cursors: &BTreeMap<String, String>,
-) {
+) -> bool {
+    let mut processed = true;
     let chars: Vec<_> = text.chars().collect();
     for (index, chunk) in chars.chunks(8192).enumerate() {
         let excerpt: String = chunk.iter().collect();
@@ -211,12 +257,14 @@ fn append_chunks(
         if cursors.get(&source.identity()) == Some(&source.version) {
             continue;
         }
+        processed = false;
         if sources.len() >= 64
             || sources.iter().map(|s| s.excerpt.len()).sum::<usize>() + source.excerpt.len()
                 > 128 * 1024
         {
-            return;
+            return false;
         }
         sources.push(source);
     }
+    processed
 }

@@ -30,32 +30,35 @@ pub(super) fn atomic<T>(
     }
     result
 }
-fn owner(c: &Connection, kind: &str, code: &str) -> Result<Option<String>, String> {
-    c.query_row(
-        "SELECT pack_id FROM navigation_pack_ownership WHERE kind=?1 AND code=?2",
-        params![kind, code],
-        |r| r.get(0),
-    )
-    .optional()
-    .map_err(fail)
-}
 fn own(c: &Connection, pack: &str, kind: &str, code: &str) -> Result<(), String> {
     c.execute("INSERT INTO navigation_pack_ownership(pack_id,kind,code) VALUES(?1,?2,?3) ON CONFLICT(kind,code) DO NOTHING",params![pack,kind,code]).map_err(fail)?;
     Ok(())
 }
-fn current_layout(c: &Connection, domain: &str) -> Result<Vec<PackItem>, String> {
-    let mut q = c.prepare("SELECT m.menu_code,p.menu_code,i.position,i.child_display FROM navigation_menu_tree_items i JOIN navigation_menu_trees t ON t.id=i.tree_id JOIN navigation_menus m ON m.id=i.menu_id LEFT JOIN navigation_menu_tree_items pi ON pi.id=i.parent_item_id LEFT JOIN navigation_menus p ON p.id=pi.menu_id WHERE t.tree_code=?1 ORDER BY m.menu_code").map_err(fail)?;
-    q.query_map([domain], |r| {
-        Ok(PackItem {
-            menu_code: r.get(0)?,
-            parent_menu_code: r.get(1)?,
-            position: r.get(2)?,
-            child_display: r.get(3)?,
+fn current_layouts(
+    c: &Connection,
+    domains: &[String],
+) -> Result<BTreeMap<String, Vec<PackItem>>, String> {
+    let selected = serde_json::to_string(domains).map_err(fail)?;
+    let mut q = c.prepare("SELECT t.tree_code,m.menu_code,p.menu_code,i.position,i.child_display FROM navigation_menu_tree_items i JOIN navigation_menu_trees t ON t.id=i.tree_id JOIN navigation_menus m ON m.id=i.menu_id LEFT JOIN navigation_menu_tree_items pi ON pi.id=i.parent_item_id LEFT JOIN navigation_menus p ON p.id=pi.menu_id WHERE t.tree_code IN (SELECT value FROM json_each(?1)) ORDER BY t.tree_code,m.menu_code").map_err(fail)?;
+    let mut layouts = BTreeMap::<String, Vec<PackItem>>::new();
+    for row in q
+        .query_map([selected], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                PackItem {
+                    menu_code: r.get(1)?,
+                    parent_menu_code: r.get(2)?,
+                    position: r.get(3)?,
+                    child_display: r.get(4)?,
+                },
+            ))
         })
-    })
-    .map_err(fail)?
-    .collect::<Result<_, _>>()
-    .map_err(fail)
+        .map_err(fail)?
+    {
+        let (domain, item) = row.map_err(fail)?;
+        layouts.entry(domain).or_default().push(item);
+    }
+    Ok(layouts)
 }
 fn canonical(mut items: Vec<PackItem>) -> Vec<PackItem> {
     items.sort_by(|a, b| a.menu_code.cmp(&b.menu_code));
@@ -82,44 +85,71 @@ fn remove_domain(c: &Connection, domain: &str) -> Result<(), String> {
     .map_err(fail)?;
     Ok(())
 }
-fn remove_menu(c: &Connection, menu: &str) -> Result<(), String> {
-    // Preserve user/other-pack children when removing an owned group from any tree.
-    let rows = {
-        let mut q=c.prepare("SELECT i.id,i.parent_item_id FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id=i.menu_id WHERE m.menu_code=?1").map_err(fail)?;
-        q.query_map([menu], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?))
-        })
-        .map_err(fail)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(fail)?
-    };
-    for (id, parent) in rows {
-        let children = {
-            let mut query = c.prepare("SELECT id FROM navigation_menu_tree_items WHERE parent_item_id=?1 ORDER BY position,id").map_err(fail)?;
-            query
-                .query_map([id], |row| row.get::<_, i64>(0))
-                .map_err(fail)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(fail)?
-        };
-        let next: i64 = c.query_row("SELECT COALESCE(MAX(position),-1)+1 FROM navigation_menu_tree_items WHERE tree_id=(SELECT tree_id FROM navigation_menu_tree_items WHERE id=?1) AND parent_item_id IS ?2",params![id,parent],|row|row.get(0)).map_err(fail)?;
-        for (offset, child) in children.into_iter().enumerate() {
-            c.execute(
-                "UPDATE navigation_menu_tree_items SET parent_item_id=?2,position=?3 WHERE id=?1",
-                params![child, parent, next + offset as i64],
-            )
-            .map_err(fail)?;
-        }
-        c.execute("DELETE FROM navigation_menu_tree_items WHERE id=?1", [id])
-            .map_err(fail)?;
+fn remove_menus(c: &Connection, menus: &[String]) -> Result<(), String> {
+    if menus.is_empty() {
+        return Ok(());
     }
-    c.execute("DELETE FROM navigation_menus WHERE menu_code=?1", [menu])
-        .map_err(fail)?;
+    let selected = serde_json::to_string(menus).map_err(fail)?;
+    // Keep all affected trees in memory so successive removals observe earlier
+    // child promotions without querying each mount point again.
+    let mut items = {
+        let mut query=c.prepare("SELECT i.id,i.tree_id,m.menu_code,i.parent_item_id,i.position FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id=i.menu_id WHERE i.tree_id IN (SELECT x.tree_id FROM navigation_menu_tree_items x JOIN navigation_menus n ON n.id=x.menu_id WHERE n.menu_code IN (SELECT value FROM json_each(?1))) ORDER BY i.id").map_err(fail)?;
+        query
+            .query_map([&selected], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    (
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<i64>>(3)?,
+                        row.get::<_, i64>(4)?,
+                    ),
+                ))
+            })
+            .map_err(fail)?
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .map_err(fail)?
+    };
+    for menu in menus {
+        let mounts = items
+            .iter()
+            .filter(|(_, (_, code, _, _))| code == menu)
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        for id in mounts {
+            let (tree, _, parent, _) = items.get(&id).cloned().ok_or("menu mount disappeared")?;
+            let mut children = items
+                .iter()
+                .filter(|(_, (_, _, p, _))| *p == Some(id))
+                .map(|(id, (_, _, _, position))| (*position, *id))
+                .collect::<Vec<_>>();
+            children.sort();
+            let next = items
+                .values()
+                .filter(|(t, _, p, _)| *t == tree && *p == parent)
+                .map(|(_, _, _, position)| *position)
+                .max()
+                .unwrap_or(-1)
+                + 1;
+            for (offset, (_, child)) in children.into_iter().enumerate() {
+                let position = next + offset as i64;
+                c.execute("UPDATE navigation_menu_tree_items SET parent_item_id=?2,position=?3 WHERE id=?1",params![child,parent,position]).map_err(fail)?;
+                if let Some(item) = items.get_mut(&child) {
+                    item.2 = parent;
+                    item.3 = position;
+                }
+            }
+            c.execute("DELETE FROM navigation_menu_tree_items WHERE id=?1", [id])
+                .map_err(fail)?;
+            items.remove(&id);
+        }
+    }
     c.execute(
-        "DELETE FROM navigation_pack_ownership WHERE kind='Menu' AND code=?1",
-        [menu],
+        "DELETE FROM navigation_menus WHERE menu_code IN (SELECT value FROM json_each(?1))",
+        [&selected],
     )
     .map_err(fail)?;
+    c.execute("DELETE FROM navigation_pack_ownership WHERE kind='Menu' AND code IN (SELECT value FROM json_each(?1))",[&selected]).map_err(fail)?;
     Ok(())
 }
 fn set_enabled(c: &Connection, pack: &str, enabled: bool) -> Result<(), String> {
@@ -155,57 +185,84 @@ fn apply(
         ),
         None => (NavigationContribution::default(), Layouts::new()),
     };
-    // Reject collisions before touching an existing domain or menu.
-    for (kind, code, table, column) in manifest
+    // Reuse one transaction-local registry snapshot for collision checks and updates.
+    let mut domains = SqliteNavigationRepositorySql { connection: c }
+        .all_domains()
+        .map_err(fail)?
+        .into_iter()
+        .map(|record| (record.domain_code.clone(), record))
+        .collect::<BTreeMap<_, _>>();
+    let mut menus = SqliteNavigationRepositorySql { connection: c }
+        .all_menus()
+        .map_err(fail)?
+        .into_iter()
+        .map(|record| (record.menu_code.clone(), record))
+        .collect::<BTreeMap<_, _>>();
+    let ownership = {
+        let mut query = c
+            .prepare("SELECT kind,code,pack_id FROM navigation_pack_ownership")
+            .map_err(fail)?;
+        query
+            .query_map([], |row| {
+                Ok((
+                    (row.get::<_, String>(0)?, row.get::<_, String>(1)?),
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(fail)?
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .map_err(fail)?
+    };
+    for (kind, code, exists) in manifest
         .domains
         .iter()
-        .map(|d| {
-            (
-                "Domain",
-                d.code.as_str(),
-                "navigation_domains",
-                "domain_code",
-            )
-        })
+        .map(|d| ("Domain", d.code.as_str(), domains.contains_key(&d.code)))
         .chain(
             manifest
                 .menus
                 .iter()
-                .map(|m| ("Menu", m.code.as_str(), "navigation_menus", "menu_code")),
+                .map(|m| ("Menu", m.code.as_str(), menus.contains_key(&m.code))),
         )
     {
-        let exists: bool = c
-            .query_row(
-                &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE {column}=?1)"),
-                [code],
-                |r| r.get(0),
-            )
-            .map_err(fail)?;
-        let owned = owner(c, kind, code)?;
-        if owned.as_deref().is_some_and(|id| id != pack)
-            || (exists && owned.as_deref() != Some(pack))
-        {
+        let owned = ownership
+            .get(&(kind.to_owned(), code.to_owned()))
+            .map(String::as_str);
+        if owned.is_some_and(|id| id != pack) || (exists && owned != Some(pack)) {
             return Err(format!(
                 "{kind} {code} conflicts with an existing navigation resource"
             ));
         }
     }
     // Snapshot before removed contributions change a user's layout.
+    let mut current = current_layouts(
+        c,
+        &old.domains
+            .iter()
+            .map(|domain| domain.code.clone())
+            .collect::<Vec<_>>(),
+    )?;
     for domain in &old.domains {
         let state = layouts.entry(domain.code.clone()).or_default();
-        state.customized |= current_layout(c, &domain.code)? != canonical(state.baseline.clone());
+        state.customized |=
+            current.remove(&domain.code).unwrap_or_default() != canonical(state.baseline.clone());
     }
     c.execute("INSERT INTO navigation_pack_state VALUES(?1,?2,?3,?4) ON CONFLICT(pack_id) DO UPDATE SET enabled=excluded.enabled", params![pack,enabled,serde_json::to_string(manifest).map_err(fail)?,"{}"]).map_err(fail)?;
     for domain in &old.domains {
         if !manifest.domains.iter().any(|d| d.code == domain.code) {
             remove_domain(c, &domain.code)?;
+            domains.remove(&domain.code);
             layouts.remove(&domain.code);
         }
     }
-    for menu in &old.menus {
-        if !manifest.menus.iter().any(|m| m.code == menu.code) {
-            remove_menu(c, &menu.code)?;
-        }
+    let removed = old
+        .menus
+        .iter()
+        .filter(|menu| !manifest.menus.iter().any(|m| m.code == menu.code))
+        .map(|menu| menu.code.clone())
+        .collect::<Vec<_>>();
+    remove_menus(c, &removed)?;
+    for code in removed {
+        menus.remove(&code);
     }
     // Untouched defaults can be rebuilt before changing a group's menu type.
     // Customized layouts remain intact, and incompatible type changes are rejected.
@@ -220,20 +277,16 @@ fn apply(
     let now = crate::shared::time::current_timestamp();
     for domain in &manifest.domains {
         let mut repo = SqliteNavigationRepositorySql { connection: c };
-        let existing = match repo.get_domain(&domain.code) {
-            Ok(d) => Some(d),
-            Err(NavigationError::DomainNotFound) => None,
-            Err(e) => return Err(fail(e)),
-        };
+        let existing = domains.get(&domain.code).cloned();
         let position = existing
             .as_ref()
             .map(|d| d.position)
-            .unwrap_or(repo.list_domains().map_err(fail)?.len() as i64);
+            .unwrap_or(domains.len() as i64);
         let record = NavigationDomain {
-            id: existing
-                .as_ref()
-                .map(|d| d.id)
-                .unwrap_or(SnowflakeId::new(repo.next_id().map_err(fail)?)),
+            id: match &existing {
+                Some(domain) => domain.id,
+                None => SnowflakeId::new(repo.next_id().map_err(fail)?),
+            },
             domain_code: domain.code.clone(),
             provider_pack_id: Some(pack.into()),
             name: domain.name.localized(),
@@ -246,27 +299,32 @@ fn apply(
             updated_at: now.clone(),
         };
         repo.save_domain(&record).map_err(fail)?;
+        domains.insert(domain.code.clone(), record);
         own(c, pack, "Domain", &domain.code)?;
     }
+    let parents = {
+        let mut query = c.prepare("SELECT DISTINCT m.menu_code FROM navigation_menu_tree_items p JOIN navigation_menus m ON m.id=p.menu_id JOIN navigation_menu_tree_items child ON child.parent_item_id=p.id").map_err(fail)?;
+        query
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(fail)?
+            .collect::<Result<BTreeSet<_>, _>>()
+            .map_err(fail)?
+    };
     for menu in &manifest.menus {
         let mut repo = SqliteNavigationRepositorySql { connection: c };
-        let existing = match repo.get_menu(&menu.code) {
-            Ok(m) => Some(m),
-            Err(NavigationError::MenuNotFound) => None,
-            Err(e) => return Err(fail(e)),
-        };
+        let existing = menus.get(&menu.code).cloned();
         let kind = MenuType::from_storage(&menu.menu_type).map_err(fail)?;
-        if kind != MenuType::Group && repo.menu_has_children(&menu.code).map_err(fail)? {
+        if kind != MenuType::Group && parents.contains(&menu.code) {
             return Err(format!(
                 "menu {} still has children; cannot change its type",
                 menu.code
             ));
         }
         let record = NavigationMenu {
-            id: existing
-                .as_ref()
-                .map(|m| m.id)
-                .unwrap_or(SnowflakeId::new(repo.next_id().map_err(fail)?)),
+            id: match &existing {
+                Some(menu) => menu.id,
+                None => SnowflakeId::new(repo.next_id().map_err(fail)?),
+            },
             menu_code: menu.code.clone(),
             source: MenuSource::CapabilityPack,
             menu_type: kind,
@@ -280,8 +338,24 @@ fn apply(
             updated_at: now.clone(),
         };
         repo.save_menu(&record).map_err(fail)?;
+        menus.insert(menu.code.clone(), record);
         own(c, pack, "Menu", &menu.code)?;
     }
+    let trees = {
+        let mut query = c
+            .prepare("SELECT tree_code,id FROM navigation_menu_trees")
+            .map_err(fail)?;
+        query
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(fail)?
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .map_err(fail)?
+    };
+    let mut next_id = SqliteNavigationRepositorySql { connection: c }
+        .next_id()
+        .map_err(fail)?;
     for domain in &manifest.domains {
         let state = layouts.entry(domain.code.clone()).or_default();
         if !state.customized {
@@ -298,6 +372,7 @@ fn apply(
                     .then_with(|| a.menu_code.cmp(&b.menu_code))
             });
             let mut inserted = BTreeSet::new();
+            let mut records = Vec::<NavigationTreeItem>::new();
             while !pending.is_empty() {
                 let index = pending
                     .iter()
@@ -308,21 +383,74 @@ fn apply(
                     })
                     .ok_or("cyclic menu layout")?;
                 let item = pending.remove(index);
-                let mut repo = SqliteNavigationRepositorySql { connection: c };
-                let record = NavigationTreeItem {
-                    id: SnowflakeId::new(repo.next_id().map_err(fail)?),
-                    menu: repo.get_menu(&item.menu_code).map_err(fail)?,
+                let id = next_id;
+                next_id += 1;
+                let parent_id = records
+                    .iter()
+                    .find(|record| Some(&record.menu.menu_code) == item.parent_menu_code.as_ref())
+                    .map(|record| record.id.value());
+                let assignments = ordered_assignments_for_insert(
+                    &records,
+                    id,
+                    item.parent_menu_code.as_deref(),
+                    item.position,
+                    parent_id,
+                );
+                let mut record = NavigationTreeItem {
+                    id: SnowflakeId::new(id),
+                    menu: menus
+                        .get(&item.menu_code)
+                        .cloned()
+                        .ok_or("menu not found")?,
                     parent_menu_code: item.parent_menu_code,
                     position: item.position,
                     child_display: NavigationMenuChildDisplay::from_storage(&item.child_display)
                         .map_err(fail)?,
                     children: vec![],
                 };
-                repo.add_item(&domain.code, &record).map_err(fail)?;
+                for (assigned, _, position) in assignments {
+                    if assigned == id {
+                        record.position = position;
+                    } else if let Some(previous) =
+                        records.iter_mut().find(|item| item.id.value() == assigned)
+                    {
+                        previous.position = position;
+                    }
+                }
+                records.push(record);
                 inserted.insert(item.menu_code);
             }
-            // Store the actual normalized positions, not arbitrary author positions.
-            state.baseline = current_layout(c, &domain.code)?;
+            crate::application::navigation::validate_flat_tree(&records, max_depth)
+                .map_err(fail)?;
+            let rows = records
+                .iter()
+                .map(|record| {
+                    let parent = records
+                        .iter()
+                        .find(|item| Some(&item.menu.menu_code) == record.parent_menu_code.as_ref())
+                        .map(|item| item.id.value());
+                    serde_json::json!([
+                        record.id.value(),
+                        record.menu.id.value(),
+                        parent,
+                        record.position,
+                        record.child_display.as_storage()
+                    ])
+                })
+                .collect::<Vec<_>>();
+            c.execute("INSERT INTO navigation_menu_tree_items(id,tree_id,menu_id,parent_item_id,position,child_display) SELECT json_extract(value,'$[0]'),?1,json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]'),json_extract(value,'$[4]') FROM json_each(?2)",params![trees.get(&domain.code).ok_or("tree not found")?,serde_json::to_string(&rows).map_err(fail)?]).map_err(fail)?;
+            state.baseline = canonical(
+                records
+                    .into_iter()
+                    .map(|record| PackItem {
+                        menu_code: record.menu.menu_code,
+                        parent_menu_code: record.parent_menu_code,
+                        position: record.position,
+                        child_display: record.child_display.as_storage().to_owned(),
+                    })
+                    .collect(),
+            );
+            continue;
         }
         let items = SqliteNavigationRepositorySql { connection: c }
             .list_items(&domain.code)
@@ -376,7 +504,9 @@ impl SqliteNavigationRepository {
         let pack = pack.to_owned();
         self.connection.call(move |c| atomic(c,false,|c|{
             let owned={let mut q=c.prepare("SELECT kind,code FROM navigation_pack_ownership WHERE pack_id=?1 ORDER BY kind,code").map_err(fail)?;q.query_map([&pack],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(fail)?.collect::<Result<Vec<_>,_>>().map_err(fail)?};
-            for (kind,code) in owned { if kind=="Domain" {remove_domain(c,&code)?;} else {remove_menu(c,&code)?;} }
+            let mut menus=Vec::new();
+            for (kind,code) in owned { if kind=="Domain" {remove_domain(c,&code)?;} else {menus.push(code);} }
+            remove_menus(c,&menus)?;
             c.execute("DELETE FROM navigation_pack_state WHERE pack_id=?1",[&pack]).map_err(fail)?;Ok(())
         }),||"navigation storage unavailable".into())
     }

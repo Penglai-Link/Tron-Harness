@@ -20,15 +20,6 @@ pub(crate) fn retire_knowledge_index(
     .map_err(storage)?;
     Ok(())
 }
-pub(crate) fn validate_knowledge_vectors(
-    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
-    kb: &str,
-    source: &str,
-    count: usize,
-    dimension: usize,
-) -> Result<(), IngestionQueueError> {
-    publication_indexes::validate_vectors(tx, kb, source, count, dimension)
-}
 pub(crate) fn optimized_publication_cleanup(
     tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     task: &IngestionTask,

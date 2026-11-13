@@ -213,6 +213,16 @@ pub trait AgentManagementRepository: Send {
         &mut self,
         workspace_code: &str,
     ) -> Result<Vec<WorkspaceInternalAgentDefinition>, AgentManagementError>;
+    fn list_workspace_internal_agent_definitions_batch(
+        &mut self,
+        workspaces: &[String],
+    ) -> Result<Vec<WorkspaceInternalAgentDefinition>, AgentManagementError> {
+        let mut definitions = Vec::new();
+        for workspace in workspaces {
+            definitions.extend(self.list_workspace_internal_agent_definitions(workspace)?);
+        }
+        Ok(definitions)
+    }
     fn upsert_workspace_internal_agent_definition(
         &mut self,
         definition: &WorkspaceInternalAgentDefinition,

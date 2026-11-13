@@ -103,7 +103,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     ) -> Result<(), AgentManagementError> {
         use crate::domain::computer_use::{CONTROLLERS, PACK_ID, SKILL};
         self.connection.execute("INSERT INTO agent_skill_assignments(agent_code,skill_name,enabled)
-            SELECT ?2,a.skill_name,CASE WHEN (s.provider_pack_id=?3 OR s.skill_name=?4) AND ?2 NOT IN (?5,?6) THEN 0 ELSE a.enabled END
+            SELECT ?2,a.skill_name,CASE WHEN (s.provider_pack_id=?3 OR s.provider_pack_id GLOB (?3 || '.*') OR s.skill_name=?4) AND ?2 NOT IN (?5,?6) THEN 0 ELSE a.enabled END
             FROM agent_skill_assignments a JOIN registry_skills s ON s.skill_name=a.skill_name WHERE a.agent_code=?1
             ON CONFLICT(agent_code,skill_name) DO NOTHING",params![from,to,PACK_ID,SKILL,CONTROLLERS[0],CONTROLLERS[1]]).map_err(storage_error)?;
         Ok(())
@@ -492,16 +492,27 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         &mut self,
         workspace_code: &str,
     ) -> Result<Vec<WorkspaceInternalAgentDefinition>, AgentManagementError> {
+        self.list_workspace_internal_agent_definitions_batch(&[workspace_code.to_owned()])
+    }
+    fn list_workspace_internal_agent_definitions_batch(
+        &mut self,
+        workspaces: &[String],
+    ) -> Result<Vec<WorkspaceInternalAgentDefinition>, AgentManagementError> {
+        if workspaces.is_empty() {
+            return Ok(Vec::new());
+        }
+        let workspaces = serde_json::to_string(workspaces)
+            .map_err(|_| storage_error(rusqlite::Error::InvalidQuery))?;
         let mut statement = self
             .connection
             .prepare(
                 "SELECT workspace_code, agent_code, name, role_prompt, created_at, updated_at, avatar_id, group_name, candidate_model_codes_json, description
-             FROM workspace_internal_agent_definitions WHERE workspace_code = ?1
+             FROM workspace_internal_agent_definitions WHERE workspace_code IN (SELECT value FROM json_each(?1))
              ORDER BY created_at, agent_code",
             )
             .map_err(storage_error)?;
         statement
-            .query_map([workspace_code], |row| {
+            .query_map([workspaces], |row| {
                 Ok(WorkspaceInternalAgentDefinition {
                     workspace_code: row.get(0)?,
                     agent_code: row.get(1)?,
@@ -1374,6 +1385,20 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
             move |connection| {
                 SqliteAgentManagementRepositorySql { connection }
                     .list_workspace_internal_agent_definitions(&workspace_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+
+    fn list_workspace_internal_agent_definitions_batch(
+        &mut self,
+        workspaces: &[String],
+    ) -> Result<Vec<WorkspaceInternalAgentDefinition>, AgentManagementError> {
+        let workspaces = workspaces.to_vec();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .list_workspace_internal_agent_definitions_batch(&workspaces)
             },
             || storage_error(rusqlite::Error::InvalidQuery),
         )

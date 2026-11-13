@@ -51,6 +51,39 @@ impl SqliteKnowledgeBaseRepository {
                 let mut q=tx.prepare(&format!("SELECT source_code,count(*) FROM \"{table}\" WHERE source_status='STAGING' AND source_code IN (SELECT value FROM json_each(?1)) GROUP BY source_code")).map_err(storage)?;
                 q.query_map([encode(&sources)?],|r|Ok((r.get::<_,String>(0)?,r.get::<_,usize>(1)?))).map_err(storage)?.collect::<Result<std::collections::BTreeMap<_,_>,_>>().map_err(storage)?
             };
+            let mut dimensions=std::collections::BTreeMap::<usize,Vec<&str>>::new();
+            for document in &documents {
+                if let Some(dimension)=document.ready.embedding_dimension {
+                    dimensions.entry(dimension).or_default().push(document.ready.active_source_code.as_deref().ok_or(KnowledgeBaseError::Conflict)?);
+                }
+            }
+            let vector_tables={
+                let mut q=tx.prepare("SELECT name FROM sqlite_schema WHERE type='table'").map_err(storage)?;
+                q.query_map([],|r|r.get::<_,String>(0)).map_err(storage)?.collect::<Result<std::collections::BTreeSet<_>,_>>().map_err(storage)?
+            };
+            let mut vector_counts=std::collections::BTreeMap::new();
+            for (dimension,sources) in dimensions {
+                let vector=format!("rag_{kb}_units_vec_d{dimension}");
+                if !vector_tables.contains(&vector) { return Err(KnowledgeBaseError::Conflict); }
+                let mut q=tx.prepare(&format!("SELECT u.source_code,count(*) FROM \"{table}\" u JOIN \"{vector}\" v ON v.rowid=u.id WHERE u.source_status='STAGING' AND u.source_code IN (SELECT value FROM json_each(?1)) GROUP BY u.source_code")).map_err(storage)?;
+                for row in q.query_map([encode(&sources)?],|r|Ok((r.get::<_,String>(0)?,r.get::<_,usize>(1)?))).map_err(storage)? {
+                    let (source,count)=row.map_err(storage)?; vector_counts.insert((dimension,source),count);
+                }
+            }
+            let graph_sources=documents.iter().filter(|d|d.task.configuration["ragSettings"]["graph"]==true).map(|d|d.ready.active_source_code.as_deref().ok_or(KnowledgeBaseError::Conflict)).collect::<Result<Vec<_>,_>>()?;
+            let graph_ids={
+                let mut q=tx.prepare(&format!("SELECT source_code,source_metadata FROM \"{table}\" WHERE id IN (SELECT min(id) FROM \"{table}\" WHERE source_status='STAGING' AND source_code IN (SELECT value FROM json_each(?1)) GROUP BY source_code)")).map_err(storage)?;
+                q.query_map([encode(&graph_sources)?],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(storage)?.map(|row| {
+                    let (source,raw)=row.map_err(storage)?; let metadata:serde_json::Value=serde_json::from_str(&raw).map_err(storage)?;
+                    Ok((source,metadata["graphGenerationId"].as_str().ok_or(KnowledgeBaseError::Conflict)?.to_owned()))
+                }).collect::<Result<std::collections::BTreeMap<_,_>,KnowledgeBaseError>>()?
+            };
+            let partition=crate::domain::rag::graph::GraphPartition{corpus_id:kb.clone(),scope_type:"SPACE".into(),scope_code:"PLATFORM".into()};
+            let bindings=documents.iter().filter(|d|d.task.configuration["ragSettings"]["graph"]==true).map(|d| {
+                let source=d.ready.active_source_code.as_deref().ok_or(KnowledgeBaseError::Conflict)?;
+                Ok((graph_ids.get(source).ok_or(KnowledgeBaseError::Conflict)?.clone(),partition.clone(),d.ready.id.clone(),source.to_owned(),d.task.id.clone(),d.task.input_config_hash.clone()))
+            }).collect::<Result<Vec<_>,KnowledgeBaseError>>()?;
+            super::super::rag_graph_index::validate_graph_generation_bindings(&tx,&bindings).map_err(storage)?;
             for document in &documents {
                 let (revision,current)=originals.get(&document.original.id).ok_or(KnowledgeBaseError::Conflict)?;
                 if *revision!=document.original.revision || current.resource_code!=document.original.resource_code || current.resource_revision!=document.original.resource_revision || current.active_source_code!=document.original.active_source_code || current.status!="READY" || busy.contains(&current.id) {return Err(KnowledgeBaseError::Conflict);}
@@ -58,9 +91,10 @@ impl SqliteKnowledgeBaseRepository {
                 let count=counts.get(source).copied().unwrap_or(0);
                 if count==0 || count!=document.ready.chunk_count{return Err(KnowledgeBaseError::Conflict);}
                 if let Some(dimension)=document.ready.embedding_dimension {
-                    super::super::knowledge_ingestion_queue::validate_knowledge_vectors(&tx,&kb,source,count,dimension).map_err(|e|storage(format!("{e:?}")))?;
+                    if vector_counts.get(&(dimension,source.to_owned())).copied().unwrap_or(0)!=count { return Err(KnowledgeBaseError::Conflict); }
                 }
             }
+            super::super::rag_graph_index::activate_graph_generations(&tx,&bindings.iter().map(|binding|binding.0.clone()).collect::<Vec<_>>()).map_err(storage)?;
             let mut cleanups=Vec::new();
             for document in documents {
                 let source=document.ready.active_source_code.as_deref().ok_or(KnowledgeBaseError::Conflict)?;
@@ -69,13 +103,7 @@ impl SqliteKnowledgeBaseRepository {
                 }
                 tx.execute(&format!("UPDATE \"{table}\" SET source_status='ACTIVE',status='ACTIVE' WHERE source_code=?1 AND source_status='STAGING'"),[source]).map_err(storage)?;
                 let partition=crate::domain::rag::graph::GraphPartition{corpus_id:kb.clone(),scope_type:"SPACE".into(),scope_code:"PLATFORM".into()};
-                if document.task.configuration["ragSettings"]["graph"]==true {
-                    let metadata:String=tx.query_row(&format!("SELECT source_metadata FROM \"{table}\" WHERE source_code=?1 AND source_status='ACTIVE' LIMIT 1"),[source],|r|r.get(0)).map_err(storage)?;
-                    let metadata:serde_json::Value=serde_json::from_str(&metadata).map_err(storage)?;
-                    let id=metadata["graphGenerationId"].as_str().ok_or(KnowledgeBaseError::Conflict)?;
-                    super::super::rag_graph_index::validate_graph_generation_binding(&tx,id,&partition,&document.ready.id,source,&document.task.id,&document.task.input_config_hash).map_err(storage)?;
-                    super::super::rag_graph_index::activate_graph_generation(&tx,id).map_err(storage)?;
-                }else{
+                if document.task.configuration["ragSettings"]["graph"]!=true {
                     super::super::rag_graph_index::retire_graph_source(&tx,&partition,&document.ready.id).map_err(storage)?;
                 }
                 let ready=encode(&document.ready)?;

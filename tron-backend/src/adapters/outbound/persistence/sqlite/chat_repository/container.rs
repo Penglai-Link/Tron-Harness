@@ -52,33 +52,54 @@ impl SqliteChatRepository {
         let sessions = framework
             .sessions()
             .map_err(|_| ChatError::StorageFailure)?;
-        let goals = framework.goals().map_err(|_| ChatError::StorageFailure)?;
         let db = self.host.shared_database().await.map_err(chat_error)?;
         // Stage only session-owned directories. User project directories are preserved.
         let mut staged = None;
         let result = db.transaction(async {
             let actual = self.read_container_snapshot(container).await.map_err(|e| fw::StateError::Backend(e.to_string()))?;
             if &actual != expected { return Err(fw::StateError::Conflict); }
-            for code in &actual.session_codes {
-                if goals.active(code).await?.is_some_and(|goal| goal.status == fw::GoalStatus::Active) { return Err(fw::StateError::Busy); }
-            }
+            let selected = serde_json::to_string(&actual.session_codes).map_err(|e| fw::StateError::Backend(e.to_string()))?;
+            let selected_for_read = selected.clone();
+            let records = db.call(move |c| -> Result<Vec<(fw::SessionRecord, Link, bool, bool)>, fw::StateError> {
+                let mut query = c.prepare("SELECT s.record,l.business_json,EXISTS(SELECT 1 FROM ef_goals g WHERE g.session_id=s.id AND g.status='ACTIVE'),EXISTS(SELECT 1 FROM dude_sessions d WHERE d.session_code=s.id AND d.purpose='Heartbeat' AND (EXISTS(SELECT 1 FROM dude_events e WHERE (e.session_code=d.session_code OR e.event_id=d.correlation_key) AND (e.source!='Heartbeat' OR e.status IN ('Queued','Running','AwaitingInput'))) OR EXISTS(SELECT 1 FROM tasks t WHERE t.work_session_code=d.session_code) OR EXISTS(SELECT 1 FROM collaboration_threads t WHERE t.session_id=d.session_code) OR EXISTS(SELECT 1 FROM dude_work_changes w WHERE json_extract(w.record_json,'$.sessionCode')=d.session_code AND json_extract(w.record_json,'$.resolvedAt') IS NULL))) FROM ef_sessions s JOIN workspace_session_links l ON l.session_id=s.id WHERE s.id IN (SELECT value FROM json_each(?1)) ORDER BY s.id").map_err(|e| fw::StateError::Backend(e.to_string()))?;
+                query.query_map([selected_for_read], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,bool>(2)?,row.get::<_,bool>(3)?))).map_err(|e| fw::StateError::Backend(e.to_string()))?
+                    .map(|row| {
+                        let (session,link,active,blocked) = row.map_err(|e| fw::StateError::Backend(e.to_string()))?;
+                        Ok((serde_json::from_str(&session).map_err(|e| fw::StateError::Backend(e.to_string()))?,serde_json::from_str(&link).map_err(|e| fw::StateError::Backend(e.to_string()))?, active, blocked))
+                    }).collect()
+            }).await.map_err(|e| fw::StateError::Backend(e.to_string()))?;
+            if records.iter().any(|(_,_,active,blocked)| *active || (delete && *blocked)) { return Err(fw::StateError::Busy); }
+            if records.len() != actual.session_codes.len() { return Err(fw::StateError::Conflict); }
             if delete {
-                let mut owners = Vec::new();
-                for code in &actual.session_codes {
-                    let link = self.link(code).await.map_err(|e| fw::StateError::Backend(e.to_string()))?;
-                    owners.push((code.clone(), link.user_code));
-                }
+                let owners = records.iter().map(|(session,link,_,_)| (session.id.clone(),link.user_code.clone())).collect();
                 staged = Some(self.host.stage_session_working_directories(owners).await.map_err(|error| {
                     tracing::error!(%error, "session directory cleanup staging failed");
                     fw::StateError::Backend("session_directory_cleanup_failed".into())
                 })?);
             }
-            for code in &actual.session_codes {
+            for (record, _, _, _) in records {
                 if delete {
-                    self.delete_session_records(code, false).await.map_err(|e| fw::StateError::Backend(e.to_string()))?;
-                } else if sessions.get(code).await?.status != fw::SessionStatus::Archived {
-                    sessions.archive(code).await?;
+                    // Framework retains its own busy, tombstone and lifecycle fences.
+                    sessions.delete(&record.id).await?;
+                } else if record.status != fw::SessionStatus::Archived {
+                    sessions.archive(&record.id).await?;
                 }
+            }
+            if delete {
+                db.call(move |c| -> rusqlite::Result<()> {
+                    c.execute("DELETE FROM dude_events WHERE source='Heartbeat' AND EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code IN (SELECT value FROM json_each(?1)) AND s.purpose='Heartbeat' AND (dude_events.session_code=s.session_code OR dude_events.event_id=s.correlation_key))", [&selected])?;
+                    c.execute("DELETE FROM dude_sessions WHERE session_code IN (SELECT value FROM json_each(?1)) AND purpose='Heartbeat'", [&selected])?;
+                    c.execute("DELETE FROM resource_chat_session_attachments WHERE session_code IN (SELECT value FROM json_each(?1))", [&selected])?;
+                    for (table, sql) in [
+                        ("chat_session_auto_model_routes", "DELETE FROM chat_session_auto_model_routes WHERE session_code IN (SELECT value FROM json_each(?1))"),
+                        ("provider_model_run_snapshots", "DELETE FROM provider_model_run_snapshots WHERE session_code IN (SELECT value FROM json_each(?1))"),
+                        ("automation_execution_records", "UPDATE automation_execution_records SET session_code=NULL WHERE session_code IN (SELECT value FROM json_each(?1))"),
+                    ] {
+                        if c.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",[table],|r|r.get::<_,bool>(0))? { c.execute(sql,[&selected])?; }
+                    }
+                    c.execute("DELETE FROM workspace_session_links WHERE session_id IN (SELECT value FROM json_each(?1))", [&selected])?;
+                    Ok(())
+                }).await.map_err(|e| fw::StateError::Backend(e.to_string()))?;
             }
             let container = container.clone();
             db.call(move |c| -> rusqlite::Result<()> {

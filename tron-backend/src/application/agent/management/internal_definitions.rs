@@ -450,15 +450,18 @@ impl AgentManagementService {
             for (code, name) in &platform {
                 names.insert((workspace.clone(), code.clone()), name.clone());
             }
-            if !workspace.is_empty() {
-                for agent in repository
-                    .list_workspace_internal_agent_definitions(workspace)
-                    .unwrap_or_default()
-                {
-                    if let Some(name) = agent.name {
-                        names.insert((workspace.clone(), agent.agent_code), name);
-                    }
-                }
+        }
+        let workspaces = workspaces
+            .iter()
+            .filter(|code| !code.is_empty())
+            .cloned()
+            .collect::<Vec<_>>();
+        for agent in repository
+            .list_workspace_internal_agent_definitions_batch(&workspaces)
+            .unwrap_or_default()
+        {
+            if let Some(name) = agent.name {
+                names.insert((agent.workspace_code, agent.agent_code), name);
             }
         }
         names

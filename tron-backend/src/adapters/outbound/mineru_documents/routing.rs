@@ -5,6 +5,7 @@ use crate::{
     },
     config::MineruNode,
 };
+use futures_util::{StreamExt, stream};
 use sha2::{Digest, Sha256};
 
 impl MineruKnowledgeDocumentParser {
@@ -262,12 +263,32 @@ impl MineruKnowledgeDocumentParser {
             }
             let list: Value = serde_json::from_slice(&self.bytes(self.client.get(url)).await?)
                 .map_err(invalid)?;
-            for item in list["data"]
+            let items = list["data"]
                 .as_array()
-                .ok_or_else(|| invalid("MinerU任务对账响应无效"))?
-            {
-                let id = Self::id(item, "job_id")?;
-                let job = self.get(&format!("/v1/parse/jobs/{id}")).await?;
+                .ok_or_else(|| invalid("MinerU任务对账响应无效"))?;
+            // List metadata can exclude unrelated jobs; incomplete summaries still
+            // require details. Keep list order and cap in-flight GETs per node.
+            let candidates = items
+                .iter()
+                .filter(|item| {
+                    item["tier"]
+                        .as_str()
+                        .is_none_or(|value| value == tier.as_str())
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            let parser = self.clone();
+            let mut details = stream::iter(candidates)
+                .map(move |item| {
+                    let parser = parser.clone();
+                    async move {
+                        let id = Self::id(&item, "job_id")?;
+                        parser.get(&format!("/v1/parse/jobs/{id}")).await
+                    }
+                })
+                .buffered(8);
+            while let Some(job) = details.next().await {
+                let job = job?;
                 if job["tier"] == tier.as_str()
                     && job["files"]
                         .as_array()

@@ -735,6 +735,24 @@ tx.commit().map_err(storage)})
             Ok(())
         })
     }
+    fn update_notifications(
+        &mut self,
+        ids: &[String],
+        archive: bool,
+        now: i64,
+    ) -> Result<usize, DudeError> {
+        let count = ids.len();
+        let ids = encode(&ids)?;
+        self.call(move |c| {
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let found: usize = tx.query_row("SELECT count(*) FROM platform_notifications WHERE notification_id IN (SELECT value FROM json_each(?1))", [&ids], |r| r.get(0)).map_err(storage)?;
+            if found != count { return Err(DudeError::NotFound); }
+            // Mark-read must not resurrect a notification archived concurrently.
+            let changed = tx.execute("UPDATE platform_notifications SET record_json=json_set(record_json,'$.readAt',COALESCE(json_extract(record_json,'$.readAt'),?2),'$.archivedAt',CASE WHEN ?3 THEN COALESCE(json_extract(record_json,'$.archivedAt'),?2) ELSE json_extract(record_json,'$.archivedAt') END) WHERE notification_id IN (SELECT value FROM json_each(?1))", params![ids,now,archive]).map_err(storage)?;
+            tx.commit().map_err(storage)?;
+            Ok(changed)
+        })
+    }
     fn delete_archived_notification(&mut self, id: &str) -> Result<(), DudeError> {
         let id = id.to_owned();
         self.call(move |connection| {

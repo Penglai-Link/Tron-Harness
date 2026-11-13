@@ -147,6 +147,14 @@ pub trait DudeRepository: Send {
         archive: bool,
         now: i64,
     ) -> Result<(), DudeError>;
+    fn update_notifications(
+        &mut self,
+        _ids: &[String],
+        _archive: bool,
+        _now: i64,
+    ) -> Result<usize, DudeError> {
+        Err(DudeError::Storage)
+    }
     fn delete_archived_notification(&mut self, id: &str) -> Result<(), DudeError>;
     fn delete_archived_notifications(&mut self) -> Result<usize, DudeError>;
 }
@@ -548,6 +556,23 @@ impl DudeService {
     ) -> Result<(), DudeError> {
         self.repo()?
             .update_notification(id, read, archive, chrono::Utc::now().timestamp_millis())
+    }
+    pub fn update_notifications(
+        &self,
+        ids: Vec<String>,
+        archive: bool,
+    ) -> Result<usize, DudeError> {
+        if ids.is_empty() || ids.len() > 500 || ids.iter().any(|id| id.is_empty() || id.len() > 128)
+        {
+            return Err(DudeError::Invalid);
+        }
+        let ids = ids
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        self.repo()?
+            .update_notifications(&ids, archive, chrono::Utc::now().timestamp_millis())
     }
     pub fn delete_archived_notification(&self, id: &str) -> Result<(), DudeError> {
         self.repo()?.delete_archived_notification(id)

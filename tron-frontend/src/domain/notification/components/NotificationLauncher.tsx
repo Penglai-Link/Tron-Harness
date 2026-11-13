@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ShortcutHint } from "@/shared/shortcuts/ShortcutHints";
-import { listNotifications, notificationQueryKey, updateNotification } from "../api/notificationApi";
+import { listNotifications, notificationQueryKey, updateNotifications } from "../api/notificationApi";
 import { areBrowserNotificationsEnabled, browserNotificationPreferenceChangedEvent } from "../model/browserNotifications";
 
 export function NotificationLauncher({ className }: { className?: string }) {
@@ -24,11 +24,7 @@ export function NotificationLauncher({ className }: { className?: string }) {
   const previousNotificationIds = useRef<Set<string> | null>(null);
   const markAllRead = useMutation({
     mutationFn: async () => {
-      const results = await Promise.allSettled(unreadItems.map(item =>
-        updateNotification(item.id, { read: true, archived: false })
-      ));
-      const failure = results.find(result => result.status === "rejected");
-      if (failure?.status === "rejected") throw failure.reason;
+      if (unreadItems.length > 0) await updateNotifications(unreadItems.map((item) => item.id), "MarkRead");
     },
     onSettled: () => client.invalidateQueries({ queryKey: notificationQueryKey }),
   });
