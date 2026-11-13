@@ -181,7 +181,9 @@ impl SqliteChatRepository {
         id: &str,
         heartbeat_retention: bool,
     ) -> Result<(), ChatError> {
+        let started = std::time::Instant::now();
         let link = self.link(id).await?;
+        let user_code = link.user_code.clone();
         let db = self.host.shared_database().await.map_err(chat_error)?;
         let sessions = self
             .framework()
@@ -189,7 +191,11 @@ impl SqliteChatRepository {
             .sessions()
             .map_err(|_| ChatError::StorageFailure)?;
         let code = id.to_owned();
-        db.transaction(async {
+        // Staged before the business rows disappear so a failed rename still
+        // rolls the whole deletion back; the slow content removal runs after
+        // commit, off the request path and outside the write transaction.
+        let mut staged = None;
+        let result = db.transaction(async {
                 let record=sessions.get(id).await?;
                 if heartbeat_retention && record.status!=fw::SessionStatus::Archived {return Err(fw::StateError::Invalid("session must be archived".into()));}
                 if self.framework().await.map_err(|e|fw::StateError::Backend(e.to_string()))?.goals().map_err(|e|fw::StateError::Backend(e.to_string()))?.active(id).await?.is_some_and(|goal| goal.status == fw::GoalStatus::Active) {
@@ -230,10 +236,23 @@ impl SqliteChatRepository {
                     c.execute("DELETE FROM workspace_session_links WHERE session_id=?1",[&code])?;
                     Ok::<_,rusqlite::Error>(())
                 }).await.map_err(|e|fw::StateError::Backend(e.to_string()))?;
-                self.host.delete_session_working_directory(id, link.user_code.as_deref())
-                    .await.map_err(fw::StateError::Backend)?;
+                staged = Some(
+                    self.host
+                        .stage_session_working_directories(vec![(id.to_owned(), user_code.clone())])
+                        .await
+                        .map_err(fw::StateError::Backend)?,
+                );
                 Ok(())
-            }).await.map_err(chat_error)
+            }).await.map_err(chat_error);
+        if result.is_ok() && let Some(staged) = staged.take() {
+            staged.commit_detached();
+        }
+        tracing::debug!(
+            session_code = id,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "chat session rows deleted"
+        );
+        result
     }
     pub(crate) async fn ensure_run_session(
         host: &FrameworkHost,

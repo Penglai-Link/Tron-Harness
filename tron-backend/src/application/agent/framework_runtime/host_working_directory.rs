@@ -39,6 +39,36 @@ impl StagedSessionDirectories {
         }
         failure.map_or(Ok(()), Err)
     }
+
+    /// Remove staged directories off the request path. The rename that staged
+    /// them already made the deletion atomic, so a slow `remove_dir_all` (large
+    /// session workspace) must not delay the response or hold the database
+    /// write transaction; a failure only leaves an unreferenced `.deleting-*`
+    /// directory for later cleanup. Detaching the paths also disables the
+    /// rollback in `Drop`, which would otherwise restore a deleted session.
+    pub(crate) fn commit_detached(mut self) {
+        let paths = std::mem::take(&mut self.paths);
+        if paths.is_empty() {
+            return;
+        }
+        if let Err(error) = std::thread::Builder::new()
+            .name("session-directory-cleanup".into())
+            .spawn(move || {
+                for (_, staged) in paths {
+                    let result = if staged.is_symlink() {
+                        fs::remove_file(&staged)
+                    } else {
+                        fs::remove_dir_all(&staged)
+                    };
+                    if let Err(error) = result {
+                        tracing::error!(path = %staged.display(), %error, "could not remove staged session directory after committed deletion");
+                    }
+                }
+            })
+        {
+            tracing::error!(%error, "could not start session directory cleanup; staged directories remain");
+        }
+    }
 }
 
 impl Drop for StagedSessionDirectories {
@@ -70,51 +100,6 @@ impl FrameworkHost {
             .join(kind)
             .join(component(user.unwrap_or("system")))
             .join(component(id))
-    }
-
-    /// Delete only this session's managed directory, never its selected project
-    /// or a Dude's shared directory. Reuse the creation path and reject symlinked
-    /// parents so a replaced path cannot redirect cleanup outside the managed root.
-    pub(crate) async fn delete_session_working_directory(
-        &self,
-        session: &str,
-        user: Option<&str>,
-    ) -> Result<(), String> {
-        let root = self.0.path.with_extension("workspaces");
-        let directory = self.managed_working_directory("sessions", user, session);
-        tokio::task::spawn_blocking(move || {
-            for parent in [
-                root.clone(),
-                root.join("sessions"),
-                directory.parent().unwrap().to_owned(),
-            ] {
-                let metadata = match fs::symlink_metadata(&parent) {
-                    Ok(metadata) => metadata,
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-                    Err(error) => {
-                        return Err(format!(
-                            "could not inspect session working directory: {error}"
-                        ));
-                    }
-                };
-                if !metadata.is_dir() || metadata.file_type().is_symlink() {
-                    return Err(format!(
-                        "session working directory parent is not a managed directory: {}",
-                        parent.display()
-                    ));
-                }
-            }
-            match fs::remove_dir_all(&directory) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(format!(
-                    "could not remove session working directory {}: {error}",
-                    directory.display()
-                )),
-            }
-        })
-        .await
-        .map_err(|error| format!("session working directory cleanup failed: {error}"))?
     }
 
     pub(crate) async fn stage_session_working_directories(

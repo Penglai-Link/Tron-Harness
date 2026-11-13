@@ -386,6 +386,7 @@ impl ChatService {
     }
 
     fn delete_session_inner(&self, session: ChatSession, heartbeat_retention: bool) -> Result<ChatSession, ChatError> {
+        let started = std::time::Instant::now();
         let session_code = session.session_code.as_str();
         let attachments = self
             .resources
@@ -411,8 +412,23 @@ impl ChatService {
             }
             return Err(error);
         }
-        if let Some(resources) = self.resources.as_ref() {
-            resources.cleanup_chat_session_attachment_files(&attachments);
+        // The rows are gone once the repository call returns; attachment files
+        // are best-effort and must not keep the response waiting for disk I/O.
+        let attachment_count = attachments.len();
+        if let Some(resources) = self.resources.clone()
+            && attachment_count > 0
+        {
+            let _ = std::thread::Builder::new()
+                .name("session-attachment-cleanup".into())
+                .spawn(move || resources.cleanup_chat_session_attachment_files(&attachments));
+        }
+        if !heartbeat_retention {
+            tracing::info!(
+                session_code,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                attachments = attachment_count,
+                "chat session deleted"
+            );
         }
         Ok(session)
     }
