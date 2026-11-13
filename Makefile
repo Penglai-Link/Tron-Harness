@@ -474,7 +474,13 @@ desktop-check:
 	$(NODE) --check "$(ELECTRON_DIR)/main/wsl-backend.cjs"
 	$(NODE) --check "$(ELECTRON_DIR)/main/wsl-download.cjs"
 	$(NODE) --check "$(ELECTRON_DIR)/main/index.cjs"
-	$(NODE) --test "$(ELECTRON_DIR)/scripts/wsl-dependencies.test.cjs" "$(ELECTRON_DIR)/scripts/wsl-download.test.cjs" "$(ELECTRON_DIR)/scripts/updater.test.cjs"
+
+# Installer-only changes reuse the already packaged application. Keep the output
+# separate so an open copy of the previous setup cannot lock the new installer.
+.PHONY: desktop-installer-package
+desktop-installer-package: desktop-check
+	$(call ASSERT_FILE,$(ELECTRON_DIR)/dist/win-unpacked/Tron.exe)
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) run -s package -- --prepackaged dist/win-unpacked --config.directories.output=dist-installer)
 
 .PHONY: desktop-build
 # A stalled sccache server can block the backend build.

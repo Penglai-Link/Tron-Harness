@@ -70,6 +70,7 @@ $RECYCLE.BIN/
 
 *.pyc
 electron/dist
+electron/dist-installer
 electron/resources
 /node_modules/
 /output/

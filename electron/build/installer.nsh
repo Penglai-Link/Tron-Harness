@@ -56,7 +56,30 @@
   Section /o "un.Delete personal data (data) / 删除个人数据"
     # The installed uninstaller also runs silently during an upgrade.
     ${IfNot} ${isUpdated}
-      RMDir /r "$INSTDIR\data"
+      # Use extended-length Win32 paths: extracted skill templates can exceed
+      # MAX_PATH even when the installation directory itself is short.
+      StrCpy $0 "$INSTDIR" 2
+      ${If} $0 == "\\"
+        StrCpy $0 "$INSTDIR" "" 2
+        StrCpy $0 "\\?\UNC\$0\data"
+      ${Else}
+        StrCpy $0 "\\?\$INSTDIR\data"
+      ${EndIf}
+      StrCpy $1 0
+      tron_delete_data_retry:
+        ClearErrors
+        RMDir /r "$0"
+        IfErrors tron_delete_data_wait
+        IfFileExists "$0" tron_delete_data_wait tron_delete_data_done
+      tron_delete_data_wait:
+        IntOp $1 $1 + 1
+        ${If} $1 < 10
+          Sleep 500
+          Goto tron_delete_data_retry
+        ${EndIf}
+        SetErrorLevel 1
+        Abort "Unable to delete personal data / 无法删除个人数据: $INSTDIR\data"
+      tron_delete_data_done:
       RMDir "$INSTDIR"
     ${EndIf}
   SectionEnd
