@@ -25,6 +25,14 @@ impl FrameworkHost {
             "tron.harness".into(),
             fw::CapabilityPack::registry_skill_sources(&harness),
         ));
+        let remote_access = eliteforge_agent_capability_remote_access::RemoteAccessCapability::new(
+            Arc::new(super::super::host_remote_access::TronRemoteAccessHost),
+        )
+        .capability_pack();
+        sources.push((
+            eliteforge_agent_capability_remote_access::PACK_ID.into(),
+            fw::CapabilityPack::registry_skill_sources(&remote_access),
+        ));
         let development = eliteforge_agent_capability_development::capability_pack();
         sources.push((
             eliteforge_agent_capability_development::PACK_ID.into(),
@@ -614,6 +622,12 @@ impl FrameworkHost {
             .capability_pack(eliteforge_agent_capability_tools::agent_collaboration_pack())
             .capability_pack(eliteforge_agent_capability_development::capability_pack())
             .capability_pack(
+                eliteforge_agent_capability_remote_access::RemoteAccessCapability::new(Arc::new(
+                    super::super::host_remote_access::TronRemoteAccessHost,
+                ))
+                .capability_pack(),
+            )
+            .capability_pack(
                 tron_harness_capability::TronHarness::new(Arc::new(HarnessTools), [])
                     .with_tool_policy(tron_harness_capability::TronToolPolicy(Arc::new(
                         super::super::tools::PlatformPermissionSource(
@@ -691,6 +705,7 @@ impl FrameworkHost {
         matches!(
             id,
             "framework.external-agent"
+                | "framework.remote-access"
                 | "framework.a2ui"
                 | "framework.local.scoped"
                 | "framework.tool-pack.agent-collaboration"

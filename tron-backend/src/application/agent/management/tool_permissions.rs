@@ -169,6 +169,11 @@ impl AgentManagementService {
         if binding.source.adapter_id.is_some() {
             record.source.adapter_id = binding.source.adapter_id.clone();
         }
+        if record.category.is_none() && record.tool_code == "framework.remote-access.manage" {
+            record.category = Some(crate::application::agent::tool_catalog::builtin_category(
+                "tron.platform",
+            ));
+        }
         Ok(record)
     }
 

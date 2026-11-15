@@ -88,6 +88,7 @@ use self::{
     startup::{build_graph_core, build_graph_services, build_rag_service},
 };
 
+static GLOBAL_APP_STATE: OnceLock<AppState> = OnceLock::new();
 static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService, GraphExplorerService)> =
     OnceLock::new();
@@ -106,6 +107,9 @@ pub struct AppStateInner {
     pub dude_memory: crate::application::dude_memory::DudeMemoryService,
     pub dudes: crate::application::dude::DudeService,
     pub config: AppConfig,
+    #[doc(hidden)]
+    pub remote_access: Arc<std::sync::RwLock<crate::config::RemoteAccessConfig>>,
+    pub remote_listener_active: Arc<std::sync::atomic::AtomicBool>,
     pub disk_usage: crate::adapters::outbound::observability::disk_usage::LocalDiskUsage,
     _temporary_database: Option<Arc<tempfile::TempDir>>,
     _agent_collaboration_builder: Arc<crate::application::agent::AgentRunContextBuilder>,
@@ -113,6 +117,8 @@ pub struct AppStateInner {
     pub agui_events: Arc<AguiEventSink>,
     pub agui_replay_store: Arc<dyn AgentAguiReplayStore>,
     pub agent_presentation: AgentAguiStreamService,
+    #[doc(hidden)]
+    pub remote_service: std::sync::OnceLock<Arc<eliteforge_agent_remote_server::RemoteAccessService>>,
     pub agent_model_client: Arc<dyn ModelClient>,
     pub runtime_http_client: reqwest::Client,
     pub agent_management: AgentManagementService,
@@ -173,6 +179,30 @@ impl std::ops::DerefMut for AppState {
 }
 
 impl AppState {
+    /// Late-bound handle used by the remote-access capability pack. The pack is
+    /// built while the framework host is assembled, before `AppState` exists, so
+    /// its host adapter resolves the running state lazily.
+    pub(crate) fn install_global(state: &AppState) {
+        let _ = GLOBAL_APP_STATE.set(state.clone());
+    }
+
+    pub(crate) fn global() -> Option<&'static AppState> {
+        GLOBAL_APP_STATE.get()
+    }
+
+    /// Whether the dedicated remote listener finished binding at startup.
+    pub fn remote_access_active(&self) -> bool {
+        self.0
+            .remote_listener_active
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn set_remote_access_active(&self, active: bool) {
+        self.0
+            .remote_listener_active
+            .store(active, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub(crate) fn dude_invocation_service(&self) -> AgentInvocationService {
         AgentInvocationService::new(
             self.workspaces.clone(),
@@ -702,10 +732,13 @@ impl AppState {
             model_providers.clone(),
             runtime_http_client.clone(),
         );
-        Ok(Self(Arc::new(AppStateInner {
+        let remote_access = Arc::new(std::sync::RwLock::new(config.remote_access.clone()));
+        let state = Self(Arc::new(AppStateInner {
             dude_memory,
             dudes,
             config,
+            remote_access,
+            remote_listener_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             disk_usage,
             _temporary_database: temporary_database,
             _agent_collaboration_builder: agent_collaboration_builder,
@@ -713,6 +746,7 @@ impl AppState {
             agui_events,
             agui_replay_store,
             agent_presentation,
+            remote_service: std::sync::OnceLock::new(),
             agent_model_client,
             runtime_http_client,
             agent_management,
@@ -754,7 +788,9 @@ impl AppState {
             variables,
             resources,
             workspaces,
-        })))
+        }));
+        Self::install_global(&state);
+        Ok(state)
     }
 }
 
@@ -775,11 +811,43 @@ where
 
 /// Assemble routes from the same state owned by the host lifecycle.
 pub fn build_router_with_state(state: AppState) -> Result<Router, AppBootstrapError> {
+    start_background_services(&state);
+    build_router_inner(state, false)
+}
+
+/// Router for the dedicated remote listener. It exposes the mobile-facing API
+/// only and requires the pairing token for every request, including requests
+/// that reach it from localhost through an FRP tunnel.
+pub fn build_remote_router_with_state(state: AppState) -> Result<Router, AppBootstrapError> {
+    build_router_inner(state, true)
+}
+
+fn start_background_services(state: &AppState) {
     dude_runner::start(state.clone());
     state.account_sync.start();
     state.model_providers.start_background_sync();
     state.model_providers.start_person_ai_heartbeat();
+}
+
+fn build_router_inner(state: AppState, remote_only: bool) -> Result<Router, AppBootstrapError> {
     let protected_routes = build_protected_routes(&state);
+    if remote_only {
+        return Ok(Router::new()
+            .route("/api/v1/health", get(health))
+            .route("/api/v1/readiness", get(readiness))
+            .merge(crate::adapters::inbound::http::remote_access::identity_routes())
+            .merge(protected_routes)
+            .with_state(state.clone())
+            .layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                crate::adapters::inbound::http::remote_access::require_remote_token,
+            ))
+            .layer(axum::middleware::from_fn_with_state(
+                state,
+                crate::adapters::inbound::http::observability::log_application_request,
+            ))
+            .layer(remote_access_cors_layer()));
+    }
     let profile_routes = build_profile_routes();
     let terminal_gateway = terminal_socket::TerminalSocketGateway::new(state.terminal.clone())
         .with_pty(state.agent_framework.pty());
@@ -793,6 +861,8 @@ pub fn build_router_with_state(state: AppState) -> Result<Router, AppBootstrapEr
         .route("/api/v1/health", get(health))
         .route("/api/v1/readiness", get(readiness))
         .merge(openapi_routes())
+        .merge(crate::adapters::inbound::http::remote_access::routes())
+        .merge(crate::adapters::inbound::http::remote_access::identity_routes())
         .merge(profile_routes)
         .merge(
             mcp_transport_routes().route_layer(axum::middleware::from_fn_with_state(
@@ -805,11 +875,47 @@ pub fn build_router_with_state(state: AppState) -> Result<Router, AppBootstrapEr
         .with_state(state.clone())
         .layer(socket_layer)
         .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::adapters::inbound::http::remote_access::require_remote_access,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
             state,
             crate::adapters::inbound::http::observability::log_application_request,
         )))
 }
 
 include!("app/builders.rs");
+
+/// The mobile client sends bearer tokens and runs from a different origin when
+/// previewed in a browser, so mirror the request origin instead of pinning a
+/// host list. Credentials stay enabled for cookie-based WebView bootstrap.
+fn remote_access_cors_layer() -> tower_http::cors::CorsLayer {
+    use axum::http::{HeaderName, Method, header};
+    tower_http::cors::CorsLayer::new()
+        .allow_origin(tower_http::cors::AllowOrigin::mirror_request())
+        .allow_methods([
+            Method::GET,
+            Method::HEAD,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::ACCEPT,
+            header::ACCEPT_LANGUAGE,
+            header::CONTENT_TYPE,
+            header::RANGE,
+            HeaderName::from_static("cache-control"),
+            HeaderName::from_static("x-requested-with"),
+            HeaderName::from_static("x-tron-access-token"),
+            HeaderName::from_static("x-tron-pairing-token"),
+            HeaderName::from_static("x-dude-code"),
+        ])
+        .allow_credentials(true)
+        .max_age(std::time::Duration::from_secs(600))
+}
 
 pub mod telemetry;

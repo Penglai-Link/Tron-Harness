@@ -8,8 +8,8 @@ use std::{
 };
 
 use super::{
-    AppConfig, ConfigError, HttpClientProfileConfig, HttpClientProfilesConfig, SystemAgentConfig,
-    mineru::MineruFileConfig, paths::default_application_config_path_from_home,
+    AppConfig, ConfigError, HttpClientProfileConfig, HttpClientProfilesConfig, RemoteAccessConfig,
+    SystemAgentConfig, mineru::MineruFileConfig, paths::default_application_config_path_from_home,
     paths::normalize_storage_path, resource::ResourceFileConfig, variable_crypto,
 };
 
@@ -20,6 +20,15 @@ mod file_short_term_memory;
 
 use file_event_bus::EventBusFileConfig;
 use file_short_term_memory::ShortTermMemoryFileConfig;
+
+#[cfg(unix)]
+fn restrict_config_permissions(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+}
+
+#[cfg(not(unix))]
+fn restrict_config_permissions(_path: &Path) {}
 
 impl AppConfig {
     pub fn from_application_yaml() -> Result<Self, ConfigError> {
@@ -64,7 +73,10 @@ impl AppConfig {
         let mut file = tempfile::NamedTempFile::new_in(parent).map_err(&config_error)?;
         file.write_all(content.as_bytes()).map_err(&config_error)?;
         match file.persist_noclobber(path) {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                restrict_config_permissions(path);
+                Ok(())
+            }
             Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
             Err(error) => Err(config_error(error.error)),
         }
@@ -146,6 +158,9 @@ impl AppConfig {
         }
         if let Some(value) = overrides.system_agents {
             self.system_agents.apply_overrides(value);
+        }
+        if let Some(value) = overrides.remote_access {
+            self.remote_access = value;
         }
         if let Some(value) = overrides.variable_crypto {
             self.variable_crypto.apply_overrides(value);
@@ -300,6 +315,7 @@ struct AppConfigFile {
     skills_registry_root: Option<String>,
     resource: Option<ResourceFileConfig>,
     system_agents: Option<SystemAgentFileConfig>,
+    remote_access: Option<RemoteAccessConfig>,
     variable_crypto: Option<variable_crypto::VariableCryptoFileConfig>,
     http_clients: Option<HttpClientProfilesFileConfig>,
     mineru: Option<MineruFileConfig>,

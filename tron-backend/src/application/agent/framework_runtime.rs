@@ -26,6 +26,7 @@ mod tools;
 
 mod capability_catalog;
 mod host;
+mod host_remote_access;
 pub use capability_catalog::{
     CapabilityPackInfo, ExtensionImplementationInfo, capability_pack_catalog,
     capability_pack_catalog_with_state, extension_implementation_catalog,

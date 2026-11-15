@@ -18,6 +18,7 @@ pub mod profiles;
 pub mod projects;
 pub mod prompts;
 pub mod rag;
+pub mod remote_access;
 pub mod resources;
 pub mod skills;
 pub mod system_config;

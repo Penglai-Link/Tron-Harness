@@ -82,9 +82,19 @@ fn atomic_write(path: &Path, content: &[u8]) -> Result<(), SystemConfigStoreErro
         .map_err(|_| SystemConfigStoreError::WriteFailed)?;
     drop(file);
     replace_file(&temp_path, path)?;
+    restrict_config_permissions(path);
     let _ = File::open(parent).and_then(|directory| directory.sync_all());
     Ok(())
 }
+
+#[cfg(unix)]
+fn restrict_config_permissions(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+}
+
+#[cfg(not(unix))]
+fn restrict_config_permissions(_path: &Path) {}
 
 #[cfg(not(windows))]
 fn replace_file(source: &Path, target: &Path) -> Result<(), SystemConfigStoreError> {

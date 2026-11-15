@@ -114,6 +114,9 @@ pub(super) fn builtin_tool_descriptors(id: &str) -> Vec<eliteforge_agent_core::T
         "framework.web" => vec![eliteforge_agent_official_plugin_tools_web::web_read_descriptor()],
         "framework.media" => eliteforge_agent_official_plugin_tools_media::media_tool_catalog(),
         tron_harness_capability::PACK_ID => harness_tool_descriptors(),
+        eliteforge_agent_capability_remote_access::PACK_ID => {
+            vec![eliteforge_agent_capability_remote_access::tool_descriptor()]
+        }
         _ => vec![],
     }
 }
@@ -159,6 +162,13 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
     if id == eliteforge_agent_capability_development::PACK_ID {
         items.extend(
             eliteforge_agent_capability_development::skill_names()
+                .into_iter()
+                .map(|name| content("Skill", name, "")),
+        );
+    }
+    if id == eliteforge_agent_capability_remote_access::PACK_ID {
+        items.extend(
+            eliteforge_agent_capability_remote_access::skill_names()
                 .into_iter()
                 .map(|name| content("Skill", name, "")),
         );
@@ -209,6 +219,7 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             "tron.harness.tool-permissions",
             "framework.context-assembler",
         ],
+        "framework.remote-access" => &["framework.remote-access.tools"],
         _ => &[],
     };
     let resources: &[(&str, &str)] = match id {

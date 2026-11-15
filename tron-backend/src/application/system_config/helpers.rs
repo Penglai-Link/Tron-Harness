@@ -121,6 +121,7 @@ fn effect_reason(path: &str, runtime_bound: bool) -> &'static str {
         _ if path.starts_with("eventBus.") => "eventQueues",
         _ if path.starts_with("mineru.ingestion.") => "workerCount",
         _ if path.starts_with("systemAgents.") => "agentRegistry",
+        _ if path.starts_with("remoteAccess.") => "listener",
         _ if matches!(path, "bindAddress" | "port") => "listener",
         _ if path.starts_with("resource.storage.") => "storageClients",
         _ => "startupResource",
@@ -143,6 +144,9 @@ fn is_migration(path: &str) -> bool {
 }
 
 fn is_sensitive(path: &str) -> bool {
+    if path == "remoteAccess.token" {
+        return true;
+    }
     let lowercase = path.to_ascii_lowercase();
     lowercase.contains("secret")
         || lowercase.contains("password")
@@ -317,6 +321,7 @@ pub(super) fn effective_context_value(
         "modelInvocation",
         json!(effective.model_invocation),
     )?;
+    set_value_at_path(&mut value, "remoteAccess", json!(effective.remote_access))?;
     set_value_at_path(&mut value, "ragRetrieval", json!(effective.rag_retrieval))?;
     for (field, command) in [
         (

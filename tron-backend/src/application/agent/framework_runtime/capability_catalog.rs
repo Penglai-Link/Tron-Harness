@@ -299,6 +299,14 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
             Some("2026-11-12"),
         ),
         (
+            eliteforge_agent_capability_remote_access::PACK_ID,
+            "Remote Access",
+            "Mobile pairing, short-lived access tokens and remote listener management for PersonAI products",
+            "EliteForge",
+            env!("TRON_FRAMEWORK_VERSION"),
+            Some("2026-11-14"),
+        ),
+        (
             "tron.harness",
             "Tron Harness",
             "Tron context, business tool policy and bundled theme / memory skills",

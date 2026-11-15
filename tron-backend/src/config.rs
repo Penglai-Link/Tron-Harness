@@ -5,6 +5,7 @@ mod model_invocation;
 mod parsing;
 mod paths;
 mod percentage;
+mod remote_access;
 mod resource;
 mod variable_crypto;
 
@@ -25,6 +26,7 @@ use self::paths::{
     default_skills_registry_root_from_home, env_database_url_override,
     env_graph_storage_path_override, normalize_storage_path,
 };
+pub use self::remote_access::RemoteAccessConfig;
 pub use self::resource::{
     LocalResourceStorageProfile, ResourceConfig, ResourceLimits, ResourceStorageConfig,
     ResourceStorageProfile, S3ResourceStorageProfile,
@@ -66,6 +68,7 @@ pub struct AppConfig {
     pub short_term_memory: ShortTermMemoryConfig,
     pub event_bus: EventBusConfig,
     pub navigation: NavigationConfig,
+    pub remote_access: RemoteAccessConfig,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -138,6 +141,7 @@ impl AppConfig {
             short_term_memory: ShortTermMemoryConfig::default(),
             event_bus: EventBusConfig::default(),
             navigation: NavigationConfig { max_depth: 16 },
+            remote_access: RemoteAccessConfig::default(),
         }
     }
 
@@ -175,6 +179,31 @@ impl AppConfig {
             .map_err(|source| ConfigError::InvalidSocketAddr {
                 bind_address: self.bind_address.clone(),
                 port: self.port,
+                source,
+            })
+    }
+
+    /// Dedicated listener used by remote clients. The desktop listener stays on
+    /// loopback so an FRP tunnel pointed at this port cannot bypass the token by
+    /// connecting from 127.0.0.1.
+    pub fn remote_access_listen_addr(&self) -> Result<Option<SocketAddr>, ConfigError> {
+        if !self.remote_access.enabled {
+            return Ok(None);
+        }
+        let bind_address = self.remote_access.listen_address().to_owned();
+        let port = self.remote_access.listen_port(self.port);
+        if port == self.port {
+            return Err(ConfigError::InvalidConfigValue {
+                key: "remoteAccess.port".into(),
+                value: "must differ from the desktop listener port".into(),
+            });
+        }
+        format!("{bind_address}:{port}")
+            .parse()
+            .map(Some)
+            .map_err(|source| ConfigError::InvalidSocketAddr {
+                bind_address,
+                port,
                 source,
             })
     }

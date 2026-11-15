@@ -41,3 +41,5 @@ pub mod document;
 pub mod dude;
 pub mod dude_memory;
 pub mod knowledge_quality;
+
+pub mod remote_service;

@@ -66,6 +66,9 @@ pub fn identify_tool_risk(
         | "personai.detect_image"
         | "web.fetch" => ToolRisk::Low,
         "personai.generate_image" => ToolRisk::Medium,
+        // Remote access changes pairing state and tokens; require the same
+        // approval threshold as other host mutations.
+        "framework.remote-access.manage" => ToolRisk::High,
         _ => match operation {
             Some(false) => nested_risk(args, 0).max(ToolRisk::Low),
             Some(true) => {

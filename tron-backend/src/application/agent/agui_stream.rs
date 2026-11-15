@@ -3,6 +3,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use tokio::sync::broadcast;
+
 use serde_json::Value;
 
 use crate::{
@@ -44,12 +46,20 @@ pub trait AgentAguiReplayStore: Send + Sync {
     ) -> Result<Vec<AgentAguiProtocolEvent>, String>;
 }
 
+/// One recorded AG-UI protocol event pushed to live subscribers.
+#[derive(Clone, Debug)]
+pub struct AgentAguiFanoutEvent {
+    pub stream_key: String,
+    pub event: AgentAguiProtocolEvent,
+}
+
 #[derive(Clone)]
 pub struct AgentAguiStreamService {
     sink: Arc<AguiEventSink>,
     replay_store: Option<Arc<dyn AgentAguiReplayStore>>,
     transient_protocol: bool,
     protocol_buffer: Arc<Mutex<ProtocolBuffer>>,
+    fanout: broadcast::Sender<AgentAguiFanoutEvent>,
 }
 struct ProtocolBuffer {
     frames: VecDeque<ProtocolFrame>,
@@ -84,6 +94,7 @@ impl AgentAguiStreamService {
             replay_store: None,
             transient_protocol: true,
             protocol_buffer: Arc::default(),
+            fanout: broadcast::channel(1024).0,
         }
     }
 
@@ -96,6 +107,7 @@ impl AgentAguiStreamService {
             replay_store: Some(replay_store),
             transient_protocol: false,
             protocol_buffer: Arc::default(),
+            fanout: broadcast::channel(1024).0,
         }
     }
     /// Ordinary chat uses bounded in-memory reconnect evidence. Permanent
@@ -106,6 +118,12 @@ impl AgentAguiStreamService {
     }
     pub(crate) fn records_transient_protocol(&self) -> bool {
         self.transient_protocol
+    }
+
+    /// Live AG-UI protocol events for remote subscribers. Replay remains the
+    /// source of truth for cursor catch-up.
+    pub fn subscribe(&self) -> broadcast::Receiver<AgentAguiFanoutEvent> {
+        self.fanout.subscribe()
     }
 
     pub fn activate(&self, stream_key: &str) -> Result<AgentAguiStreamState, AgentAguiStreamError> {
@@ -278,6 +296,10 @@ impl AgentAguiStreamService {
             buffer.bytes += bytes;
             let sequence = buffer.next_sequence;
             buffer.next_sequence += 1;
+            let _ = self.fanout.send(AgentAguiFanoutEvent {
+                stream_key: stream_key.clone(),
+                event: event.clone(),
+            });
             buffer.frames.push_back(ProtocolFrame {
                 key: stream_key,
                 sequence,
@@ -287,11 +309,12 @@ impl AgentAguiStreamService {
             return Ok(());
         }
         if let Some(store) = self.replay_store.as_ref() {
-            if let Err(error) = store.append_protocol_event(&stream_key, event) {
+            if let Err(error) = store.append_protocol_event(&stream_key, event.clone()) {
                 store.record_delivery_failure(&stream_key, &error);
                 return Err(AgentAguiStreamError::ReplayWriteFailed(error));
             }
         }
+        let _ = self.fanout.send(AgentAguiFanoutEvent { stream_key, event });
         Ok(())
     }
 

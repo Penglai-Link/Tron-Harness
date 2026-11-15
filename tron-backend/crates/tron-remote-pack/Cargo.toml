@@ -1,0 +1,17 @@
+[package]
+name = "tron-remote-pack"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[dependencies]
+eliteforge-agent-remote-protocol = { path = "../../../../eliteforge-agent-framework/crates/remote/eliteforge-agent-remote-protocol" }
+eliteforge-agent-remote-rpc = { path = "../../../../eliteforge-agent-framework/crates/remote/eliteforge-agent-remote-rpc" }
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time", "macros"] }
+tokio-util = "0.7"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+futures-util = "0.3"

@@ -2,7 +2,7 @@ use std::{error::Error, future::IntoFuture, time::Duration};
 
 use tokio::net::TcpListener;
 use tron_backend::{
-    app::{AppState, build_router_with_state},
+    app::{AppState, build_remote_router_with_state, build_router_with_state},
     config::AppConfig,
 };
 
@@ -57,13 +57,43 @@ async fn run_server() -> Result<(), Box<dyn Error>> {
     let socket_addr = config.socket_addr()?;
     let listener = TcpListener::bind(socket_addr).await?;
     let state = AppState::new(config)?;
+    state.init_remote_access().await?;
+    let remote_access_addr = state.config.remote_access_listen_addr()?;
     let framework = state.agent_framework.clone();
     framework
         .observability()
         .await
         .map_err(|_| std::io::Error::other("initialize OTel collector"))?;
     let ingestion = state.knowledge_bases.clone();
-    let router = build_router_with_state(state)?;
+    let router = build_router_with_state(state.clone())?;
+
+    if let Some(remote_addr) = remote_access_addr {
+        let remote_router = match state.remote_service() {
+            Some(service) => service.router(),
+            None => build_remote_router_with_state(state.clone())?,
+        };
+        match TcpListener::bind(remote_addr).await {
+            Ok(remote_listener) => {
+                state.set_remote_access_active(true);
+                tracing::info!("tron-backend remote access listening on http://{remote_addr}");
+                tokio::spawn(async move {
+                    if let Err(error) = axum::serve(
+                        remote_listener,
+                        remote_router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+                    )
+                    .await
+                    {
+                        tracing::error!("tron-backend remote access listener stopped: {error}");
+                    }
+                });
+            }
+            Err(error) => {
+                tracing::error!(
+                    "tron-backend remote access listener could not bind {remote_addr}: {error}"
+                );
+            }
+        }
+    }
 
     tracing::info!("tron-backend listening on http://{socket_addr}");
     tokio::select! {

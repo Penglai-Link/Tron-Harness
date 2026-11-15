@@ -98,8 +98,19 @@ pub(super) fn current() -> Result<Variant, Box<dyn std::error::Error>> {
         Family::Linux if !cfg!(target_os = "linux") || wsl => {
             return Err("Linux 能力包只能在原生 Linux 上构建；WSL2 请用 TARGET=wsl".into());
         }
-        Family::Wsl if !wsl && !cfg!(windows) => {
-            return Err("WSL2 能力包只能在 Windows 或 WSL2 中构建".into());
+        Family::Wsl
+            if !wsl
+                && !cfg!(windows)
+                && env::var_os("TRON_COMPUTER_USE_WINDOWS_PACKAGE")
+                    .filter(|value| !value.is_empty())
+                    .is_none() =>
+        {
+            // Assembly only embeds a Windows runtime, so a provided package
+            // makes the host platform irrelevant.
+            return Err(
+                "WSL2 能力包需要 Windows 运行时；请传入 COMPUTER_USE_WINDOWS_PACKAGE，或在 Windows/WSL2 中构建"
+                    .into(),
+            );
         }
         _ => {}
     }
