@@ -67,11 +67,12 @@ async fn run_server() -> Result<(), Box<dyn Error>> {
     let ingestion = state.knowledge_bases.clone();
     let router = build_router_with_state(state.clone())?;
 
-    if let Some(remote_addr) = remote_access_addr {
-        let remote_router = match state.remote_service() {
-            Some(service) => service.router(),
-            None => build_remote_router_with_state(state.clone())?,
-        };
+    if state.remote_service().is_some() {
+        // The supervisor starts, stops, and repairs the listener as remote
+        // access settings change, so enabling it in the UI needs no restart.
+        tron_backend::application::remote_service::ensure_remote_listener(state.clone()).await;
+    } else if let Some(remote_addr) = remote_access_addr {
+        let remote_router = build_remote_router_with_state(state.clone())?;
         match TcpListener::bind(remote_addr).await {
             Ok(remote_listener) => {
                 state.set_remote_access_active(true);

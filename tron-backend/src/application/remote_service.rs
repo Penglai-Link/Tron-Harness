@@ -1,6 +1,13 @@
 //! Wiring between Tron's existing services and the shared remote server.
 
-use std::sync::Arc;
+use std::{
+    net::SocketAddr,
+    sync::{Arc, OnceLock},
+};
+use tokio::{
+    net::TcpListener,
+    task::JoinHandle,
+};
 
 use async_trait::async_trait;
 use eliteforge_agent_remote_protocol::{ProductIdentity, RemoteSettings};
@@ -138,6 +145,26 @@ impl AppState {
     }
 }
 
+fn listener_port_file(config: &AppConfig) -> std::path::PathBuf {
+    remote_data_root(config).join("listen-port")
+}
+
+fn read_preferred_port(config: &AppConfig) -> Option<u16> {
+    std::fs::read_to_string(listener_port_file(config))
+        .ok()
+        .and_then(|value| value.trim().parse::<u16>().ok())
+}
+
+fn write_preferred_port(config: &AppConfig, port: u16) {
+    let path = listener_port_file(config);
+    if let Some(parent) = path.parent()
+        && std::fs::create_dir_all(parent).is_err()
+    {
+        return;
+    }
+    let _ = std::fs::write(path, port.to_string());
+}
+
 fn remote_data_root(config: &AppConfig) -> std::path::PathBuf {
     if let Some(parent) = std::path::Path::new(&config.application_config_path).parent() {
         return parent.join("remote-access");
@@ -145,4 +172,130 @@ fn remote_data_root(config: &AppConfig) -> std::path::PathBuf {
     std::env::var("HOME")
         .map(|home| std::path::PathBuf::from(home).join(".tron").join("remote-access"))
         .unwrap_or_else(|_| std::path::PathBuf::from(".tron/remote-access"))
+}
+
+
+struct RemoteListenerSlot {
+    task: Option<JoinHandle<()>>,
+    addr: Option<SocketAddr>,
+}
+
+fn listener_slot() -> &'static tokio::sync::Mutex<RemoteListenerSlot> {
+    static SLOT: OnceLock<tokio::sync::Mutex<RemoteListenerSlot>> = OnceLock::new();
+    SLOT.get_or_init(|| {
+        tokio::sync::Mutex::new(RemoteListenerSlot {
+            task: None,
+            addr: None,
+        })
+    })
+}
+
+/// Starts, stops, or repairs the dedicated remote listener to match the
+/// current service settings. Called at startup and after settings changes so
+/// enabling remote access from the UI takes effect without restarting Tron.
+pub async fn ensure_remote_listener(state: AppState) {
+    let Some(service) = state.remote_service() else {
+        return;
+    };
+    let mut slot = listener_slot().lock().await;
+    let status = service.status().await;
+    if !status.enabled {
+        if let Some(task) = slot.task.take() {
+            task.abort();
+        }
+        slot.addr = None;
+        service.set_active(false);
+        state.set_remote_access_active(false);
+        service.shutdown().await;
+        return;
+    }
+
+    let config = state
+        .remote_access
+        .read()
+        .map(|value| (*value).clone())
+        .unwrap_or_else(|_| state.config.remote_access.clone());
+    // A configured port is a preference, not a hard requirement. When the
+    // public URL is empty (the common LAN case), scan forward for the first
+    // free port and remember it so restarts keep the same QR address.
+    let auto_port = config.port == 0;
+    let preferred = if auto_port {
+        read_preferred_port(&state.config).unwrap_or(18_081)
+    } else {
+        config.listen_port(state.config.port)
+    };
+    let bind_host = config.listen_address();
+    let allow_fallback = auto_port && config.public_base_url.trim().is_empty();
+    let mut candidates = vec![preferred];
+    if allow_fallback {
+        for offset in 1..=32u16 {
+            if let Some(port) = preferred.checked_add(offset)
+                && port != state.config.port
+            {
+                candidates.push(port);
+            }
+        }
+    }
+
+    for port in candidates {
+        if port == state.config.port {
+            continue;
+        }
+        let addr = format!("{bind_host}:{port}");
+        let Ok(addr) = addr.parse::<SocketAddr>() else {
+            continue;
+        };
+        if let Some(task) = slot.task.as_ref()
+            && !task.is_finished()
+            && slot.addr == Some(addr)
+        {
+            service.set_active(true);
+            state.set_remote_access_active(true);
+            return;
+        }
+        if let Some(task) = slot.task.take() {
+            task.abort();
+        }
+        slot.addr = None;
+        let Ok(listener) = TcpListener::bind(addr).await else {
+            continue;
+        };
+        let lan_base_url = format!(
+            "http://{}:{port}",
+            crate::adapters::inbound::http::remote_access::detect_lan_ip()
+                .map(|ip| ip.to_string())
+                .unwrap_or_else(|| "127.0.0.1".into())
+        );
+        let mut settings = service.current_settings().await;
+        settings.port = port;
+        settings.lan_base_url = lan_base_url;
+        if let Err(error) = service.update_settings(settings).await {
+            tracing::error!("could not update remote service port: {error}");
+            continue;
+        }
+        let router = service.clone().router();
+        let task = tokio::spawn(async move {
+            if let Err(error) = axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            {
+                tracing::error!("tron-backend remote access listener stopped: {error}");
+            }
+        });
+        slot.task = Some(task);
+        slot.addr = Some(addr);
+        service.set_active(true);
+        state.set_remote_access_active(true);
+        if auto_port {
+            write_preferred_port(&state.config, port);
+        }
+        tracing::info!("tron-backend remote access listening on http://{addr}");
+        return;
+    }
+
+    service.set_active(false);
+    state.set_remote_access_active(false);
+    tracing::error!("tron-backend remote access could not find a free listener port");
 }

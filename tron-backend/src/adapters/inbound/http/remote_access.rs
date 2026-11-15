@@ -280,6 +280,16 @@ async fn update_settings(
         return response;
     }
     apply_runtime(&state, &next);
+    if let Err(error) = sync_remote_service(&state, &next).await {
+        tracing::error!("could not synchronize remote service settings: {error}");
+        return remote_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "REMOTE_ACCESS_SERVICE_SYNC_FAILED",
+            "无法同步远程访问服务设置",
+            &error,
+            None,
+        );
+    }
     no_store(Json(ApiResponse::success(status_snapshot(&state))).into_response())
 }
 
@@ -564,6 +574,31 @@ fn status_snapshot(state: &AppState) -> RemoteAccessStatusResponse {
         allow_insecure_http: configured.allow_insecure_http,
         jwt_ttl_seconds: configured.jwt_ttl_seconds(),
     }
+}
+
+async fn sync_remote_service(
+    state: &AppState,
+    next: &RemoteAccessConfig,
+) -> Result<(), String> {
+    if let Some(service) = state.remote_service() {
+        let mut settings = service.current_settings().await;
+        settings.enabled = next.enabled;
+        settings.machine_name = next.machine_name.clone();
+        settings.product_code = next.product_code().to_owned();
+        settings.product_name = next.product_name().to_owned();
+        let public = next.public_base_url.trim();
+        settings.public_base_url = if public.is_empty() || public.starts_with("https://") {
+            public.to_owned()
+        } else {
+            String::new()
+        };
+        service
+            .update_settings(settings)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    crate::application::remote_service::ensure_remote_listener(state.clone()).await;
+    Ok(())
 }
 
 fn configured_config(state: &AppState) -> RemoteAccessConfig {
@@ -1090,6 +1125,15 @@ async fn service_pairing(State(state): State<AppState>, _local: LocalOnly) -> Re
     match state.remote_service() {
         Some(service) => {
             let status = service.status().await;
+            if !status.enabled || !status.active {
+                return remote_error(
+                    StatusCode::CONFLICT,
+                    "REMOTE_ACCESS_NOT_LISTENING",
+                    "远程访问尚未监听，请确认端口未被占用后重试",
+                    "Remote access is not listening; check the port and try again",
+                    None,
+                );
+            }
             no_store(Json(ApiResponse::success(serde_json::json!({
                 "pairingUri": status.pairing_uri,
                 "pairingTicketExpiresAt": status.pairing_ticket_expires_at,
@@ -1120,6 +1164,16 @@ async fn service_refresh_pairing(State(state): State<AppState>, _local: LocalOnl
             None,
         );
     };
+    let current = service.status().await;
+    if !current.enabled || !current.active {
+        return remote_error(
+            StatusCode::CONFLICT,
+            "REMOTE_ACCESS_NOT_LISTENING",
+            "远程访问尚未监听，请确认端口未被占用后重试",
+            "Remote access is not listening; check the port and try again",
+            None,
+        );
+    }
     match service.refresh_pairing().await {
         Ok(pairing) => {
             let status = service.status().await;
@@ -1224,7 +1278,10 @@ async fn service_set_enabled(
         );
     };
     match service.set_enabled(request.enabled).await {
-        Ok(status) => no_store(Json(ApiResponse::success(status)).into_response()),
+        Ok(status) => {
+            crate::application::remote_service::ensure_remote_listener(state).await;
+            no_store(Json(ApiResponse::success(status)).into_response())
+        }
         Err(error) => remote_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "REMOTE_ACCESS_SET_ENABLED_FAILED",
