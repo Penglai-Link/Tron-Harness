@@ -54,6 +54,7 @@ import { fetchWorkspaceSwitcher } from "@/domain/admin/api";
 import { fetchNavigationDomains, fetchNavigationMenuTree } from "@/domain/navigation/api";
 import { useAuthSession } from "@/domain/auth";
 import { NotificationLauncher } from "@/domain/notification/components/NotificationLauncher";
+import { RemoteAccessDialog } from "@/domain/settings/components/RemoteAccessDialog";
 import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
 import { captureDudePageContext, DudePageContext } from "./dudePageContext";
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
@@ -358,6 +359,7 @@ export function TronShell({
   const workspaceTriggerRef = useRef<HTMLButtonElement | null>(null);
   const domainTriggerRef = useRef<HTMLButtonElement | null>(null);
   const userMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const userSectionRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
   const [showBottomPanel, setBottomPanel] = useState(false)
   const terminalSessionCode = new URLSearchParams(search).get("sessionCode") ?? "";
@@ -371,11 +373,11 @@ export function TronShell({
   const [userPanelStyle, setUserPanelStyle] = useState<CSSProperties | undefined>();
 
   const updateUserPanelPosition = useCallback(() => {
-    if (utilityPanel !== "user" || !userMenuTriggerRef.current || !utilityPanelRef.current) {
+    if (utilityPanel !== "user" || !userSectionRef.current || !utilityPanelRef.current) {
       return;
     }
 
-    const triggerRect = userMenuTriggerRef.current.getBoundingClientRect();
+    const triggerRect = userSectionRef.current.getBoundingClientRect();
     const panelElement = utilityPanelRef.current;
     const panelRect = panelElement.getBoundingClientRect();
     const viewport = window.visualViewport;
@@ -427,7 +429,7 @@ export function TronShell({
     window.addEventListener("scroll", scheduleUpdate, true);
     visualViewport?.addEventListener("resize", scheduleUpdate);
     visualViewport?.addEventListener("scroll", scheduleUpdate);
-    if (userMenuTriggerRef.current) resizeObserver.observe(userMenuTriggerRef.current);
+    if (userSectionRef.current) resizeObserver.observe(userSectionRef.current);
     if (utilityPanelRef.current) resizeObserver.observe(utilityPanelRef.current);
 
     return () => {
@@ -1139,12 +1141,14 @@ export function TronShell({
     const initial = displayName.trim().charAt(0).toUpperCase() || "U";
 
     return (
-      <div className="relative shrink-0">
+      <div ref={userSectionRef} className={cn("relative flex w-full min-w-0 shrink-0", compact ? "flex-col items-center gap-1" : "items-center gap-1")}>
         <button
           ref={userMenuTriggerRef}
           className={cn(
-            "flex min-h-14 min-w-0 w-full cursor-pointer items-center rounded-lg py-1 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
-            compact ? "justify-center px-1" : "gap-2.5 px-2 hover:bg-[var(--color-hover-surface)]",
+            "flex min-h-14 min-w-0 cursor-pointer items-center rounded-lg py-1 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            compact
+              ? "w-full justify-center px-1"
+              : "flex-1 gap-2 px-2 hover:bg-[var(--color-hover-surface)]",
           )}
           type="button"
           aria-label={t("shell:aria.openUserMenu")}
@@ -1168,6 +1172,7 @@ export function TronShell({
             </>
           )}
         </button>
+        <RemoteAccessDialog compact={compact} />
         {utilityPanel === "user" ? createPortal(
           <div
             ref={utilityPanelRef}

@@ -3399,6 +3399,7 @@ export const pages = {
         "Let the Tron mobile app connect to this computer over the same LAN or through an FRP tunnel. Local desktop access is unaffected.",
       help: "Show mobile access settings help",
       enable: "Enable remote access",
+      enableHelp: "Show remote access toggle help",
       enableHint:
         "After enabling, restart Tron and pair a phone with the QR code. Remote access uses a dedicated port and does not affect local desktop access. The pairing token is the only gate; do not share it publicly.",
       active: "Remote access is active",
@@ -3412,6 +3413,7 @@ export const pages = {
       saving: "Saving…",
       saveFailed: "Could not save remote access settings.",
       publicBaseUrl: "Public address (optional)",
+      publicBaseUrlHelp: "Show public address help",
       publicBaseUrlHint:
         "Use the public URL from FRP or a reverse proxy, for example https://tron.example.com. Leave empty to use the LAN address. Point FRP at the remote port shown below.",
       product: "Product",
@@ -3434,6 +3436,7 @@ export const pages = {
       qrHint: "In the Tron mobile app, tap “Scan to add computer” and scan this code.",
       qrDisabledHint: "The pairing QR code appears after remote access is enabled.",
       newPairingTitle: "Encrypted pairing (new channel)",
+      pairingHelp: "Show encrypted pairing help",
       newPairingHint: "Phones connect through the Noise secure channel; no CA install or “insecure HTTP” switch.",
       transport: "Transport",
       transportPublic: "Public WSS (TLS terminated by proxy)",

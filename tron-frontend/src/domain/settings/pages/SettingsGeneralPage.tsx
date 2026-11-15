@@ -15,7 +15,6 @@ import {
   useAguiWorkReplayPreferences,
 } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { SystemConfigTable } from "@/domain/settings/components/SystemConfigTable";
-import { RemoteAccessSettings } from "@/domain/settings/components/RemoteAccessSettings";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { UpdateSettingsCard } from "@/domain/update/UpdateSettingsCard";
 import { WebVersionCard } from "@/domain/update/WebVersionCard";
@@ -45,8 +44,6 @@ export function SettingsGeneralPage() {
         {desktopBridge.isElectron() && <div><BackendEnvironmentSettings /></div>}
 
         <div><SystemConfigTable /></div>
-
-        <div><RemoteAccessSettings /></div>
 
         <div><BrowserNotificationSettingsCard /></div>
 

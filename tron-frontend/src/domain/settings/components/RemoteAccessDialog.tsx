@@ -4,11 +4,19 @@ import { Copy, LoaderCircle, QrCode, RefreshCw, Smartphone } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/forms";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
-import { SurfaceCard } from "@/shared/layout/SurfaceCard";
+import { cn } from "@/shared/lib/utils";
 import {
   getRemoteAccessStatus,
   getServiceDevices,
@@ -21,7 +29,54 @@ import {
   type ServicePairing,
 } from "@/domain/settings/api/remoteAccessApi";
 
-export function RemoteAccessSettings() {
+interface RemoteAccessDialogProps {
+  compact?: boolean;
+}
+
+export function RemoteAccessDialog({ compact = false }: RemoteAccessDialogProps) {
+  const { t } = useTranslation("pages");
+  const title = t("settingsGeneral.remoteAccess.title");
+
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={
+          <button
+            aria-label={title}
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-lg text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+              compact ? "size-10" : "size-9",
+            )}
+            title={title}
+            type="button"
+          />
+        }
+      >
+        <Smartphone aria-hidden="true" size={17} />
+      </DialogTrigger>
+      <DialogContent className="gap-5 p-6 sm:max-w-3xl">
+        <DialogHeader className="pr-8">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Smartphone aria-hidden="true" className="shrink-0" size={16} />
+            <DialogTitle className="leading-relaxed">{title}</DialogTitle>
+            <InfoTooltip ariaLabel={t("settingsGeneral.remoteAccess.help")}>
+              <div className="space-y-2">
+                <p>{t("settingsGeneral.remoteAccess.description")}</p>
+                <p>{t("settingsGeneral.remoteAccess.securityHint")}</p>
+              </div>
+            </InfoTooltip>
+          </div>
+          <DialogDescription className="sr-only">
+            {t("settingsGeneral.remoteAccess.description")}
+          </DialogDescription>
+        </DialogHeader>
+        <RemoteAccessPanel />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RemoteAccessPanel() {
   const { t } = useTranslation("pages");
   const toast = useToast();
   const [status, setStatus] = useState<RemoteAccessStatus | null>(null);
@@ -129,36 +184,31 @@ export function RemoteAccessSettings() {
 
   if (loading && !status) {
     return (
-      <SurfaceCard className="space-y-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-on-surface)]">
-          <Smartphone size={16} aria-hidden="true" />
-          {t("settingsGeneral.remoteAccess.title")}
-        </h2>
-        <p className="flex items-center gap-2 text-sm text-[var(--color-on-surface-variant)]">
-          <LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
-          {t("settingsGeneral.remoteAccess.loading")}
-        </p>
-      </SurfaceCard>
+      <p className="flex items-center gap-2 py-6 text-sm text-[var(--color-on-surface-variant)]">
+        <LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
+        {t("settingsGeneral.remoteAccess.loading")}
+      </p>
     );
   }
-  if (!status) return null;
+
+  if (!status) {
+    return (
+      <p className="py-6 text-sm text-[var(--color-error)]">
+        {t("settingsGeneral.remoteAccess.loadFailed")}
+      </p>
+    );
+  }
 
   return (
-    <SurfaceCard className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-on-surface)]">
-            <Smartphone size={16} aria-hidden="true" />
-            {t("settingsGeneral.remoteAccess.title")}
-            <InfoTooltip ariaLabel={t("settingsGeneral.remoteAccess.help")}>
-              {t("settingsGeneral.remoteAccess.description")}
-            </InfoTooltip>
-          </h2>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="flex items-center gap-1 text-sm font-medium text-[var(--color-on-surface)]">
+          {t("settingsGeneral.remoteAccess.enable")}
+          <InfoTooltip ariaLabel={t("settingsGeneral.remoteAccess.enableHelp")}>
             {t("settingsGeneral.remoteAccess.enableHint")}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+          </InfoTooltip>
+        </span>
+        <span className="flex items-center gap-2.5">
           <span className="text-xs text-[var(--color-on-surface-variant)]">
             {status.active
               ? t("settingsGeneral.remoteAccess.active")
@@ -170,7 +220,7 @@ export function RemoteAccessSettings() {
             disabled={saving}
             onCheckedChange={(checked) => void save({ enabled: checked })}
           />
-        </div>
+        </span>
       </div>
 
       {status.restartRequired && (
@@ -179,93 +229,91 @@ export function RemoteAccessSettings() {
         </p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="space-y-4">
-          <Field
-            hint={t("settingsGeneral.remoteAccess.publicBaseUrlHint")}
-            label={t("settingsGeneral.remoteAccess.publicBaseUrl")}
+      <div className="space-y-4">
+        <Field
+          hint={t("settingsGeneral.remoteAccess.publicBaseUrlHint")}
+          hintAriaLabel={t("settingsGeneral.remoteAccess.publicBaseUrlHelp")}
+          label={t("settingsGeneral.remoteAccess.publicBaseUrl")}
+        >
+          <TextInput
+            aria-label={t("settingsGeneral.remoteAccess.publicBaseUrl")}
+            disabled={saving}
+            placeholder="https://tron.example.com"
+            value={publicBaseUrl}
+            onChange={(event) => setPublicBaseUrl(event.target.value)}
+          />
+        </Field>
+        <Field label={t("settingsGeneral.remoteAccess.machineName")}>
+          <TextInput
+            aria-label={t("settingsGeneral.remoteAccess.machineName")}
+            disabled={saving}
+            placeholder={status.machineName}
+            value={machineName}
+            onChange={(event) => setMachineName(event.target.value)}
+          />
+        </Field>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={saving} onClick={() => void save({})} size="sm" type="button">
+            {saving
+              ? t("settingsGeneral.remoteAccess.saving")
+              : t("settingsGeneral.remoteAccess.save")}
+          </Button>
+          <Button
+            disabled={saving}
+            onClick={() => void save({ publicBaseUrl: "" })}
+            size="sm"
+            type="button"
+            variant="ghost"
           >
-            <TextInput
-              aria-label={t("settingsGeneral.remoteAccess.publicBaseUrl")}
-              disabled={saving}
-              placeholder="https://tron.example.com"
-              value={publicBaseUrl}
-              onChange={(event) => setPublicBaseUrl(event.target.value)}
-            />
-          </Field>
-          <Field label={t("settingsGeneral.remoteAccess.machineName")}>
-            <TextInput
-              aria-label={t("settingsGeneral.remoteAccess.machineName")}
-              disabled={saving}
-              placeholder={status.machineName}
-              value={machineName}
-              onChange={(event) => setMachineName(event.target.value)}
-            />
-          </Field>
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={saving} onClick={() => void save({})} size="sm" type="button">
-              {saving
-                ? t("settingsGeneral.remoteAccess.saving")
-                : t("settingsGeneral.remoteAccess.save")}
-            </Button>
+            {t("settingsGeneral.remoteAccess.useLanAddress")}
+          </Button>
+        </div>
+        <dl className="space-y-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <dt className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
+              {t("settingsGeneral.remoteAccess.product")}
+            </dt>
+            <dd className="font-mono">
+              {status.productCode} · {status.productName}
+            </dd>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <dt className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
+              {t("settingsGeneral.remoteAccess.address")}
+            </dt>
+            <dd className="min-w-0 break-all font-mono">{status.baseUrl}</dd>
             <Button
-              disabled={saving}
-              onClick={() => void save({ publicBaseUrl: "" })}
-              size="sm"
+              aria-label={t("settingsGeneral.remoteAccess.copyAddress")}
+              onClick={() => void copy(status.baseUrl, t("settingsGeneral.remoteAccess.copied"))}
+              size="icon-sm"
               type="button"
               variant="ghost"
             >
-              {t("settingsGeneral.remoteAccess.useLanAddress")}
+              <Copy size={14} aria-hidden="true" />
             </Button>
           </div>
-          <dl className="space-y-2 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <dt className="w-24 shrink-0 text-[var(--color-on-surface-variant)]">
-                {t("settingsGeneral.remoteAccess.product")}
-              </dt>
-              <dd className="font-mono">
-                {status.productCode} · {status.productName}
-              </dd>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <dt className="w-24 shrink-0 text-[var(--color-on-surface-variant)]">
-                {t("settingsGeneral.remoteAccess.address")}
-              </dt>
-              <dd className="min-w-0 break-all font-mono">{status.baseUrl}</dd>
-              <Button
-                aria-label={t("settingsGeneral.remoteAccess.copyAddress")}
-                onClick={() => void copy(status.baseUrl, t("settingsGeneral.remoteAccess.copied"))}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <Copy size={14} aria-hidden="true" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <dt className="w-24 shrink-0 text-[var(--color-on-surface-variant)]">
-                {t("settingsGeneral.remoteAccess.remotePort")}
-              </dt>
-              <dd className="font-mono">{status.port}</dd>
-            </div>
-          </dl>
-        </div>
-
+          <div className="flex flex-wrap items-center gap-2">
+            <dt className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
+              {t("settingsGeneral.remoteAccess.remotePort")}
+            </dt>
+            <dd className="font-mono">{status.port}</dd>
+          </div>
+        </dl>
       </div>
 
       <div className="space-y-3 border-t border-[var(--color-outline-variant)] pt-4">
-        <div className="space-y-1">
+        <div className="flex items-center gap-1">
           <h3 className="text-sm font-semibold text-[var(--color-on-surface)]">
             {t("settingsGeneral.remoteAccess.newPairingTitle")}
           </h3>
-          <p className="text-xs text-[var(--color-on-surface-variant)]">
+          <InfoTooltip ariaLabel={t("settingsGeneral.remoteAccess.pairingHelp")}>
             {t("settingsGeneral.remoteAccess.newPairingHint")}
-          </p>
+          </InfoTooltip>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="space-y-2 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="w-24 shrink-0 text-[var(--color-on-surface-variant)]">
+              <span className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
                 {t("settingsGeneral.remoteAccess.transport")}
               </span>
               <span>
@@ -275,7 +323,7 @@ export function RemoteAccessSettings() {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="w-24 shrink-0 text-[var(--color-on-surface-variant)]">
+              <span className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
                 {t("settingsGeneral.remoteAccess.fingerprint")}
               </span>
               <span className="break-all font-mono text-xs">
@@ -383,10 +431,6 @@ export function RemoteAccessSettings() {
           </div>
         </div>
       </div>
-
-      <p className="border-t border-[var(--color-outline-variant)] pt-3 text-xs text-[var(--color-on-surface-variant)]">
-        {t("settingsGeneral.remoteAccess.securityHint")}
-      </p>
-    </SurfaceCard>
+    </div>
   );
 }

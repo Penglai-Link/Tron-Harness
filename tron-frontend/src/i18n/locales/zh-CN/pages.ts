@@ -3305,6 +3305,7 @@ export const pages = {
         "允许同一局域网或通过 FRP 穿透后的 Tron 手机端连接这台电脑。桌面端本机访问不受影响。",
       help: "查看手机访问设置说明",
       enable: "开启远程访问",
+      enableHelp: "查看开启远程访问说明",
       enableHint:
         "开启后重启 Tron，手机即可通过二维码配对连接。远程访问使用独立端口，桌面本机访问不受影响；配对令牌是唯一门禁，请勿公开发送。",
       active: "远程访问已生效",
@@ -3318,6 +3319,7 @@ export const pages = {
       saving: "保存中…",
       saveFailed: "保存远程访问设置失败。",
       publicBaseUrl: "对外访问地址（可选）",
+      publicBaseUrlHelp: "查看对外访问地址说明",
       publicBaseUrlHint:
         "填写 FRP 或反向代理后的公网地址，例如 https://tron.example.com；留空则使用局域网地址。FRP 请转发到下方显示的远程端口。",
       product: "产品",
@@ -3340,6 +3342,7 @@ export const pages = {
       qrHint: "在 Tron 手机端点按“扫码添加电脑”，扫描此二维码。",
       qrDisabledHint: "开启远程访问后，这里会显示配对二维码。",
       newPairingTitle: "加密配对（新链路）",
+      pairingHelp: "查看加密配对说明",
       newPairingHint: "手机通过 Noise 安全通道连接，不再依赖安装证书或“不安全 HTTP”。",
       transport: "传输方式",
       transportPublic: "公网 WSS（由反代终止 TLS）",
