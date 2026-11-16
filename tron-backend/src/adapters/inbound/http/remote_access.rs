@@ -59,6 +59,10 @@ pub fn routes() -> Router<AppState> {
             axum::routing::delete(service_revoke_device),
         )
         .route(
+            "/api/v1/remote/service/devices/{device_id}/record",
+            axum::routing::delete(service_delete_device),
+        )
+        .route(
             "/api/v1/remote/service/devices/revoke-all",
             axum::routing::post(service_revoke_all),
         )
@@ -1225,6 +1229,32 @@ async fn service_revoke_device(
         );
     };
     match service.revoke_device(&device_id).await {
+        Ok(()) => no_store(Json(ApiResponse::success(service.status_json().await)).into_response()),
+        Err(error) => remote_error(
+            StatusCode::NOT_FOUND,
+            "REMOTE_ACCESS_DEVICE_NOT_FOUND",
+            "设备不存在或已移除",
+            &error.to_string(),
+            None,
+        ),
+    }
+}
+
+async fn service_delete_device(
+    State(state): State<AppState>,
+    _local: LocalOnly,
+    axum::extract::Path(device_id): axum::extract::Path<String>,
+) -> Response {
+    let Some(service) = state.remote_service() else {
+        return remote_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
+            "远程访问服务尚未初始化",
+            "Remote access service is not initialized",
+            None,
+        );
+    };
+    match service.remove_device(&device_id).await {
         Ok(()) => no_store(Json(ApiResponse::success(service.status_json().await)).into_response()),
         Err(error) => remote_error(
             StatusCode::NOT_FOUND,

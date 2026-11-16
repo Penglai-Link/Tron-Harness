@@ -96,6 +96,10 @@ export async function revokeServiceDevice(deviceId: string) {
   return requestApi<ServiceStatus>(`DELETE /api/v1/remote/service/devices/${encodeURIComponent(deviceId)}`);
 }
 
+export async function deleteServiceDevice(deviceId: string) {
+  return requestApi<ServiceStatus>(`DELETE /api/v1/remote/service/devices/${encodeURIComponent(deviceId)}/record`);
+}
+
 export async function getServiceStatus(signal?: AbortSignal) {
   return requestApi<ServiceStatus>("GET /api/v1/remote/service/status", { signal });
 }

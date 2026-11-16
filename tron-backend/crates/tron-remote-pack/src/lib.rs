@@ -53,11 +53,26 @@ impl TronRemotePack {
     }
 
     async fn get(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, RpcError> {
-        let response = self
+        self.get_with_dude(path, query, None).await
+    }
+
+    /// Dude sessions are user-scoped, not workspace-scoped: Tron's chat
+    /// middleware only resolves them when the request carries `X-Dude-Code`.
+    async fn get_with_dude(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        dude_code: Option<&str>,
+    ) -> Result<Value, RpcError> {
+        let mut request = self
             .client
             .get(format!("{}{}", self.http_base, path))
             .query(query)
-            .header("Accept-Language", "zh-CN")
+            .header("Accept-Language", "zh-CN");
+        if let Some(code) = dude_code {
+            request = request.header("X-Dude-Code", code);
+        }
+        let response = request
             .send()
             .await
             .map_err(|e| RpcError::internal(format!("tron request failed: {e}")))?;
@@ -69,11 +84,24 @@ impl TronRemotePack {
     }
 
     async fn post(&self, path: &str, body: Value) -> Result<Value, RpcError> {
-        let response = self
+        self.post_with_dude(path, body, None).await
+    }
+
+    async fn post_with_dude(
+        &self,
+        path: &str,
+        body: Value,
+        dude_code: Option<&str>,
+    ) -> Result<Value, RpcError> {
+        let mut request = self
             .client
             .post(format!("{}{}", self.http_base, path))
             .header("Accept-Language", "zh-CN")
-            .json(&body)
+            .json(&body);
+        if let Some(code) = dude_code {
+            request = request.header("X-Dude-Code", code);
+        }
+        let response = request
             .send()
             .await
             .map_err(|e| RpcError::internal(format!("tron request failed: {e}")))?;
@@ -82,6 +110,60 @@ impl TronRemotePack {
             .await
             .map_err(|e| RpcError::internal(format!("tron response invalid: {e}")))?;
         unwrap_envelope(envelope)
+    }
+
+    /// Dude context travels in the RPC metadata because the session methods
+    /// only carry a session id.
+    fn metadata_dude_code(metadata: &Option<Value>) -> Option<String> {
+        metadata
+            .as_ref()?
+            .get("dudeCode")?
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    }
+
+    /// Chat sidebar sections are product navigation widgets, so the client
+    /// renders whatever the node defines instead of hard-coded tabs.
+    async fn navigation_menus(&self) -> Result<Value, RpcError> {
+        let domains = self.get("/api/v1/navigation/domains", &[]).await?;
+        let list = domains.as_array().cloned().unwrap_or_default();
+        let domain = list
+            .iter()
+            .find(|item| item.get("isDefault").and_then(Value::as_bool).unwrap_or(false))
+            .or_else(|| list.first())
+            .and_then(|item| item.get("domainCode").and_then(Value::as_str))
+            .unwrap_or("ADVANCED");
+        let tree = self
+            .get(
+                &format!("/api/v1/navigation/domains/{domain}/menu-tree"),
+                &[],
+            )
+            .await?;
+        let mut menus = Vec::new();
+        if let Some(items) = tree.get("menus").and_then(Value::as_array) {
+            Self::collect_chat_widgets(items, &mut menus);
+        }
+        Ok(Value::Array(menus))
+    }
+
+    fn collect_chat_widgets(items: &[Value], out: &mut Vec<Value>) {
+        for item in items {
+            let menu_type = item.get("menuType").and_then(Value::as_str).unwrap_or("");
+            let page_code = item.get("pageCode").and_then(Value::as_str).unwrap_or("");
+            if menu_type == "Widget" && page_code.starts_with("chat.") {
+                out.push(json!({
+                    "menuCode": item.get("menuCode").cloned().unwrap_or(Value::Null),
+                    "label": item.get("label").cloned().unwrap_or(Value::Null),
+                    "pageCode": page_code,
+                    "icon": item.get("icon").cloned().unwrap_or(Value::Null),
+                }));
+            }
+            if let Some(children) = item.get("children").and_then(Value::as_array) {
+                Self::collect_chat_widgets(children, out);
+            }
+        }
     }
 
     async fn post_query(&self, path: &str, query: &[(&str, &str)], body: Value) -> Result<Value, RpcError> {
@@ -218,10 +300,12 @@ impl SessionRpc for TronRemotePack {
 
     async fn history(&self, _ctx: &RemotePrincipal, params: SessionHistoryParams) -> Result<SessionHistoryResult, RpcError> {
         let workspace = self.default_workspace().await?;
+        let dude = Self::metadata_dude_code(&params.metadata);
         let data = self
-            .get(
+            .get_with_dude(
                 &format!("/api/v1/chats/sessions/{}/messages", params.session_id),
                 &[("workspaceCode", &workspace)],
+                dude.as_deref(),
             )
             .await?;
         let items = data
@@ -254,6 +338,7 @@ impl SessionRpc for TronRemotePack {
         events: EventEmitter,
     ) -> Result<SendMessageResult, RpcError> {
         let workspace = self.default_workspace().await?;
+        let dude = Self::metadata_dude_code(&params.metadata);
         let mut body = json!({
             "content": params.content,
             "workspaceCode": workspace,
@@ -265,7 +350,7 @@ impl SessionRpc for TronRemotePack {
         if let Some(metadata) = params.metadata {
             body["a2uiMetadata"] = metadata;
         }
-        let response = self
+        let mut request = self
             .client
             .post(format!(
                 "{}/api/v1/chats/sessions/{}/messages/stream",
@@ -273,7 +358,11 @@ impl SessionRpc for TronRemotePack {
             ))
             .query(&[("workspaceCode", workspace.as_str())])
             .header("Accept-Language", "zh-CN")
-            .json(&body)
+            .json(&body);
+        if let Some(code) = dude.as_deref() {
+            request = request.header("X-Dude-Code", code);
+        }
+        let response = request
             .send()
             .await
             .map_err(|e| RpcError::internal(format!("tron stream failed: {e}")))?;
@@ -327,7 +416,10 @@ impl SessionRpc for TronRemotePack {
             "sessionCode": params.session_id,
             "expectedRunCode": params.run_id.unwrap_or_default(),
         });
-        let _ = self.post("/api/v1/chats/sessions/stop-run", body).await?;
+        let dude = Self::metadata_dude_code(&params.metadata);
+        let _ = self
+            .post_with_dude("/api/v1/chats/sessions/stop-run", body, dude.as_deref())
+            .await?;
         Ok(StopRunResult { cancelled: true })
     }
 
@@ -434,6 +526,7 @@ impl RpcMethod for TronMethod {
                     )
                     .await
             }
+            "tron.navigation.menus" => self.pack.navigation_menus().await,
             "tron.skins.list" => self.pack.get("/api/v1/system/skins", &[]).await,
             "tron.skins.active" => self.pack.get("/api/v1/system/skins/active", &[]).await,
             other => Err(RpcError::unsupported(format!("{other} is not implemented"))),
@@ -455,6 +548,7 @@ impl RemotePack for TronRemotePack {
             "tron.projects.list",
             "tron.directories.list",
             "tron.session.groups",
+            "tron.navigation.menus",
             "tron.skins.list",
             "tron.skins.active",
         ] {

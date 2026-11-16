@@ -19,6 +19,7 @@ import { useToast } from "@/components/ui/toast";
 import { cn } from "@/shared/lib/utils";
 import {
   getRemoteAccessStatus,
+  deleteServiceDevice,
   getServiceDevices,
   getServicePairing,
   refreshServicePairing,
@@ -86,6 +87,7 @@ function RemoteAccessPanel() {
   const [saving, setSaving] = useState(false);
   const [pairing, setPairing] = useState<ServicePairing | null>(null);
   const [devices, setDevices] = useState<ServiceDevice[]>([]);
+  const [deletingDeviceId, setDeletingDeviceId] = useState<string | null>(null);
   const [pairingLoading, setPairingLoading] = useState(false);
 
   function applyStatus(next: RemoteAccessStatus) {
@@ -143,6 +145,26 @@ function RemoteAccessPanel() {
     } catch (reason) {
       toast.error(t("settingsGeneral.remoteAccess.revokeFailed"));
       console.error(reason);
+    }
+  }
+
+  async function deleteDevice(device: ServiceDevice) {
+    if (deletingDeviceId) return;
+    if (
+      !window.confirm(
+        t("settingsGeneral.remoteAccess.deleteDeviceConfirm", { name: device.name }),
+      )
+    ) return;
+    setDeletingDeviceId(device.deviceId);
+    try {
+      await deleteServiceDevice(device.deviceId);
+      setDevices(await getServiceDevices());
+      toast.success(t("settingsGeneral.remoteAccess.deleteDeviceDone"));
+    } catch (reason) {
+      toast.error(t("settingsGeneral.remoteAccess.deleteDeviceFailed"));
+      console.error(reason);
+    } finally {
+      setDeletingDeviceId(null);
     }
   }
 
@@ -367,16 +389,33 @@ function RemoteAccessPanel() {
                             : ""}
                         </p>
                       </div>
-                      {!device.revoked && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        {!device.revoked && (
+                          <Button
+                            disabled={deletingDeviceId !== null}
+                            onClick={() => void revokeDevice(device)}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            {t("settingsGeneral.remoteAccess.revoke")}
+                          </Button>
+                        )}
                         <Button
-                          onClick={() => void revokeDevice(device)}
+                          aria-label={t("settingsGeneral.remoteAccess.deleteDeviceAria", {
+                            name: device.name,
+                          })}
+                          className="text-[var(--color-error)]"
+                          disabled={deletingDeviceId !== null}
+                          onClick={() => void deleteDevice(device)}
                           size="sm"
+                          title={t("settingsGeneral.remoteAccess.deleteDevice")}
                           type="button"
                           variant="ghost"
                         >
-                          {t("settingsGeneral.remoteAccess.revoke")}
+                          {t("settingsGeneral.remoteAccess.deleteDevice")}
                         </Button>
-                      )}
+                      </div>
                     </li>
                   ))}
                 </ul>
