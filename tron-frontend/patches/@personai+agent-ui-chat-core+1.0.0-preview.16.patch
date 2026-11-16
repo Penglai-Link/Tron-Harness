@@ -1,0 +1,23 @@
+diff --git a/node_modules/@personai/agent-ui-chat-core/dist/index.js b/node_modules/@personai/agent-ui-chat-core/dist/index.js
+index 321ac19..87e4ce4 100644
+--- a/node_modules/@personai/agent-ui-chat-core/dist/index.js
++++ b/node_modules/@personai/agent-ui-chat-core/dist/index.js
+@@ -1870,6 +1870,7 @@ function L(e) {
+ 				kind: "runError",
+ 				code: e,
+ 				message: n,
++				diagnostic: c.diagnostic ?? l?.diagnostic,
+ 				...e.toLowerCase() === "tool_schema_over_budget" ? { toolSchemaBudget: Xe(n) } : {}
+ 			};
+ 		}
+@@ -2118,7 +2119,9 @@ function kt(e, t, n) {
+ 	return r === Ot(a) || r === Ot(i);
+ }
+ function At(e, t, n, r) {
+-	let i = E(e, t, { locale: r }), a = n?.trim(), o = a && !kt(e, a, t) ? a : i.title, s = i.subject;
++	let a = n?.trim();
++	if (a && !kt(e, a, t)) return a;
++	let i = E(e, t, { locale: r }), o = i.title, s = i.subject;
+ 	return !s || o.includes(s) ? o : `${o} ${s}`;
+ }
+ function jt(e, t = void 0, n, r) {
