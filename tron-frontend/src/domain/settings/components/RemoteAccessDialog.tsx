@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, LoaderCircle, QrCode, RefreshCw, Smartphone } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -33,6 +33,25 @@ import {
 
 interface RemoteAccessDialogProps {
   compact?: boolean;
+}
+
+// A phone that finishes pairing writes the device record on the remote listener,
+// which cannot push to this window. Poll while the dialog is open so the list
+// reflects a new device without closing and reopening it.
+const DEVICE_REFRESH_INTERVAL_MS = 2_000;
+
+function sameDeviceList(left: ServiceDevice[], right: ServiceDevice[]) {
+  if (left.length !== right.length) return false;
+  return left.every((device, index) => {
+    const next = right[index];
+    return (
+      next !== undefined &&
+      device.deviceId === next.deviceId &&
+      device.name === next.name &&
+      device.platform === next.platform &&
+      device.revoked === next.revoked
+    );
+  });
 }
 
 export function RemoteAccessDialog({ compact = false }: RemoteAccessDialogProps) {
@@ -90,6 +109,8 @@ function RemoteAccessPanel() {
   const [devices, setDevices] = useState<ServiceDevice[]>([]);
   const [deletingDeviceId, setDeletingDeviceId] = useState<string | null>(null);
   const [pairingLoading, setPairingLoading] = useState(false);
+  const devicesRevision = useRef(0);
+  const remoteActive = status?.active === true;
 
   function applyStatus(next: RemoteAccessStatus) {
     setStatus(next);
@@ -116,13 +137,57 @@ function RemoteAccessPanel() {
       .catch((reason) => {
         if (!controller.signal.aborted) console.error(reason);
       });
-    void getServiceDevices(controller.signal)
-      .then(setDevices)
-      .catch((reason) => {
-        if (!controller.signal.aborted) console.error(reason);
-      });
     return () => controller.abort();
   }, [t, toast]);
+
+  useEffect(() => {
+    if (!remoteActive) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    let inFlight = false;
+    let errorLogged = false;
+
+    async function loadDevices() {
+      if (inFlight || controller.signal.aborted) return;
+      const revision = devicesRevision.current;
+      inFlight = true;
+      try {
+        const next = await getServiceDevices(controller.signal);
+        if (controller.signal.aborted || revision !== devicesRevision.current) return;
+        errorLogged = false;
+        setDevices((current) => (sameDeviceList(current, next) ? current : next));
+      } catch (reason) {
+        if (!controller.signal.aborted && !errorLogged) {
+          errorLogged = true;
+          console.error(reason);
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    function schedule() {
+      timer = window.setTimeout(async () => {
+        if (document.visibilityState === "visible") await loadDevices();
+        if (!controller.signal.aborted) schedule();
+      }, DEVICE_REFRESH_INTERVAL_MS);
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") void loadDevices();
+    }
+
+    void loadDevices();
+    schedule();
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [remoteActive]);
 
   async function refreshPairing() {
     setPairingLoading(true);
@@ -141,6 +206,7 @@ function RemoteAccessPanel() {
     if (!window.confirm(t("settingsGeneral.remoteAccess.revokeConfirm"))) return;
     try {
       await revokeServiceDevice(device.deviceId);
+      devicesRevision.current += 1;
       setDevices(await getServiceDevices());
       toast.success(t("settingsGeneral.remoteAccess.revoked"));
     } catch (reason) {
@@ -159,6 +225,7 @@ function RemoteAccessPanel() {
     setDeletingDeviceId(device.deviceId);
     try {
       await deleteServiceDevice(device.deviceId);
+      devicesRevision.current += 1;
       setDevices(await getServiceDevices());
       toast.success(t("settingsGeneral.remoteAccess.deleteDeviceDone"));
     } catch (reason) {
