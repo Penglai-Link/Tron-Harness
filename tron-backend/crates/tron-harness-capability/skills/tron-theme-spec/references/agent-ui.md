@@ -1,6 +1,6 @@
 # 共享聊天、Composer、A2UI 与动效
 
-Tron 从 npm 安装 `@personai/agent-ui-*` 公共包；当前仓库依赖 `1.0.0-preview.16`，以 `tron-frontend/package.json` 的统一版本为准。主题包可以把颜色和控件变量写进 `skin.json` 的 `variants.light` / `variants.dark` / `layout`；需要局部外观时使用版本 3 的包内 CSS。公共包只渲染组件，皮肤安装、资源加载、CSS 作用域和清理由 Tron 管理。
+Tron 从 npm 安装 `@personai/agent-ui-*` 公共包；当前仓库依赖 `1.0.0-preview.18`，以 `tron-frontend/package.json` 的统一版本为准。主题包可以把颜色和控件变量写进 `skin.json` 的 `variants.light` / `variants.dark` / `layout`；需要局部外观时使用版本 3 的包内 CSS。公共包只渲染组件，皮肤安装、资源加载、CSS 作用域和清理由 Tron 管理。
 
 本文件只描述 Tron 消费侧的公开接口。React / Vue 源码、默认值、包导出、完整变量目录和发布维护属于 `eliteforge-agent-ui-theme` 与 Agent UI 仓库；本文件不能替代那份契约。
 
