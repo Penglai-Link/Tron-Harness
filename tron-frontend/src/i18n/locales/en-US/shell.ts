@@ -31,7 +31,7 @@ export const shell = {
   },
   assistant: {
     body: "Contextual assistant entry is open. Step 3 pages can bind route-specific prompts here.",
-    title: "Platform main Dude conversation",
+    title: "Platform main PersonAI conversation",
   },
   topic: {
     autosave: {
@@ -171,7 +171,7 @@ export const shell = {
   nav: {
     items: {
       projects: "Work Topics",
-      dudes: "Dude",
+      assistants: "PersonAI",
       notifications: "Notifications",
       agents: "Agents",
       apps: "Apps",

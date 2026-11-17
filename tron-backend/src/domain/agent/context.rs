@@ -251,27 +251,27 @@ impl AgentRunContext {
             .unwrap_or(&self.workspace_code)
     }
 
-    pub(crate) fn is_owning_dude(&self) -> bool {
+    pub(crate) fn is_owning_assistant(&self) -> bool {
         self.collaboration_owner.as_ref().is_some_and(|owner| {
-            owner.kind == "DUDE"
+            owner.kind == "ASSISTANT"
                 && self.agent_code.as_deref() == Some(owner.code.as_str())
                 && owner.origin_session_code.is_some()
                 && self.conversation_code == owner.origin_session_code
         })
     }
 
-    pub(crate) fn is_platform_dude(&self) -> bool {
+    pub(crate) fn is_platform_assistant(&self) -> bool {
         self.workspace_code.trim().is_empty()
             && self
                 .collaboration_owner
                 .as_ref()
-                .is_some_and(|owner| owner.kind == "DUDE" && !owner.code.trim().is_empty())
+                .is_some_and(|owner| owner.kind == "ASSISTANT" && !owner.code.trim().is_empty())
     }
 
     pub(crate) fn uses_platform_agent_definition(&self) -> bool {
         self.workspace_code.is_empty()
             || self.collaboration_owner.as_ref().is_some_and(|owner| {
-                owner.kind.eq_ignore_ascii_case("DUDE")
+                owner.kind.eq_ignore_ascii_case("ASSISTANT")
                     && self.agent_code.as_deref() == Some(owner.code.as_str())
             })
     }

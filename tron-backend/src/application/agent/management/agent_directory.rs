@@ -17,12 +17,12 @@ impl AgentManagementService {
         &self,
         workspace: &str,
     ) -> Result<Vec<InternalAgentDirectoryEntry>, AgentManagementError> {
-        let dudes = self.repository().list_dude_codes()?;
+        let assistants = self.repository().list_assistant_codes()?;
         if workspace.is_empty() {
             return Ok(self
                 .platform_internal_agent_configs()?
                 .into_iter()
-                .filter(|agent| agent.enabled && !dudes.contains(&agent.agent_code))
+                .filter(|agent| agent.enabled && !assistants.contains(&agent.agent_code))
                 .map(|agent| InternalAgentDirectoryEntry {
                     responsibility: responsibility(&agent.description),
                     agent_code: agent.agent_code,
@@ -35,7 +35,7 @@ impl AgentManagementService {
         Ok(self
             .internal_agent_definitions(workspace)?
             .into_iter()
-            .filter(|agent| agent.enabled && !dudes.contains(&agent.agent_code))
+            .filter(|agent| agent.enabled && !assistants.contains(&agent.agent_code))
             .map(|agent| InternalAgentDirectoryEntry {
                 responsibility: responsibility(&agent.description),
                 agent_code: agent.agent_code,

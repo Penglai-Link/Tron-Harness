@@ -75,9 +75,9 @@ impl AgentManagementService {
                 .push(assignment.tool_code);
         }
         let mut policies = Vec::new();
-        let dudes = self.repository().list_dude_codes()?;
+        let assistants = self.repository().list_assistant_codes()?;
         for definition in self.internal_agent_definitions(workspace_code)? {
-            if dudes.contains(&definition.agent_code) {
+            if assistants.contains(&definition.agent_code) {
                 continue;
             }
             let agent_code = definition.agent_code.clone();

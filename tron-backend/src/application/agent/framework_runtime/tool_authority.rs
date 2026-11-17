@@ -187,19 +187,19 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             let record = management
                 .describe_tool_binding(binding)
                 .map_err(fw::AgentError::ToolSetup)?;
-            if state.context.is_owning_dude()
+            if state.context.is_owning_assistant()
                 && selection.mode != crate::domain::agent::ToolAssignmentMode::AllPlatformTools
-                && crate::application::agent::tool_catalog::dude_workspace_tool(&record)
+                && crate::application::agent::tool_catalog::assistant_workspace_tool(&record)
             {
                 state.product_tool_authority.remove(name);
                 return Ok(fw::ToolBindingAdmission::Exclude);
             }
             let selected = selection.selects(&record)
-                || (state.context.is_owning_dude()
+                || (state.context.is_owning_assistant()
                     && record
                         .category
                         .as_ref()
-                        .is_some_and(|category| category.code == "tron.dude")
+                        .is_some_and(|category| category.code == "tron.assistant")
                     && state.product_tool_authority.contains(name))
                 || (caller_scope && binding.descriptor.id == "agent.ask_caller");
             let restrict_selection = matches!(
@@ -393,7 +393,7 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             )
         {
             return Ok(fw::ToolPolicyDecision::Deny(
-                "Computer Use is restricted to the main Agent and main Dude".into(),
+                "Computer Use is restricted to the main Agent and main PersonAI".into(),
             ));
         }
         if let Some(management) = &self.management {

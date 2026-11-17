@@ -15,7 +15,7 @@ mod children;
 mod threads;
 pub(super) use children::Children;
 pub(super) use threads::Threads;
-pub use threads::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
+pub use threads::{AssistantThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
 
 #[derive(Clone, Copy)]
 enum ExecutionLimits {
@@ -138,10 +138,10 @@ impl Runtime {
                     .collaboration_owner
                     .as_ref()
                     .is_some_and(|owner| {
-                        owner.kind == "DUDE"
+                        owner.kind == "ASSISTANT"
                             && self.context.agent_code.as_deref() == Some(owner.code.as_str())
                     }) {
-                    "DUDE"
+                    "ASSISTANT"
                 } else {
                     "AGENT"
                 }
@@ -574,10 +574,10 @@ impl Runtime {
                     .collaboration_owner
                     .as_ref()
                     .is_some_and(|owner| {
-                        owner.kind == "DUDE"
+                        owner.kind == "ASSISTANT"
                             && caller_context.agent_code.as_deref() == Some(owner.code.as_str())
                     }) {
-                    "DUDE"
+                    "ASSISTANT"
                 } else {
                     "AGENT"
                 }
@@ -676,7 +676,7 @@ impl Runtime {
             )),
         );
         tron_harness_capability::TronRunScope {
-            platform_scope: context.is_platform_dude(),
+            platform_scope: context.is_platform_assistant(),
             user_code: context.user_code.clone().unwrap_or_else(|| "system".into()),
             workspace_code: context.workspace_code.clone(),
             session_code: session,

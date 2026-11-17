@@ -223,7 +223,7 @@ pub(super) async fn assemble(
                 .then(|| host.harness.framework_memories())
                 .flatten(),
             user: context.user_code.clone(),
-            workspace: if context.is_owning_dude() {
+            workspace: if context.is_owning_assistant() {
                 String::new()
             } else {
                 context.execution_workspace_code().to_owned()
@@ -250,8 +250,8 @@ pub(super) async fn assemble(
     if onboarding {
         instructions.clear();
     }
-    if context.is_owning_dude() {
-        contributors.push(Arc::new(super::dude_context::DudeGuidance {
+    if context.is_owning_assistant() {
+        contributors.push(Arc::new(super::assistant_context::AssistantGuidance {
             locale: context.locale.clone(),
             onboarding,
         }));
@@ -412,19 +412,19 @@ pub(super) async fn assemble(
         );
         configs.insert("agent_directory".into(), block);
     }
-    if context.is_owning_dude() {
+    if context.is_owning_assistant() {
         for id in [
             "runtime_identity",
-            "dude_onboarding",
-            "dude_environment",
-            "dude_wakeup",
+            "assistant_onboarding",
+            "assistant_environment",
+            "assistant_wakeup",
         ] {
-            if onboarding && matches!(id, "dude_environment" | "dude_wakeup") {
+            if onboarding && matches!(id, "assistant_environment" | "assistant_wakeup") {
                 continue;
             }
             let cap = quota(id);
-            contributors.push(Arc::new(super::dude_context::DudeContributor {
-                service: host.harness.framework_dudes(),
+            contributors.push(Arc::new(super::assistant_context::AssistantContributor {
+                service: host.harness.framework_assistants(),
                 context: context.clone(),
                 id,
                 onboarding,

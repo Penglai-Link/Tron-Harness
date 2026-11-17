@@ -1611,22 +1611,22 @@ function ContextStat({ label, value }: { label: string; value: string }) {
 function ContextStructurePanel({
   sessionCode,
   blocks,
-  dudeCode,
+  assistantCode,
 }: {
   sessionCode: string;
   blocks: ContextMemoryBlockItem[];
-  dudeCode?: string;
+  assistantCode?: string;
 }) {
   return (
     <div>
       {blocks.map((block) => (
-        <ContextMemoryBlockRow key={block.code} block={block} dudeCode={dudeCode} sessionCode={sessionCode} />
+        <ContextMemoryBlockRow key={block.code} block={block} assistantCode={assistantCode} sessionCode={sessionCode} />
       ))}
     </div>
   );
 }
 
-function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: ContextMemoryBlockItem; dudeCode?: string; sessionCode: string }) {
+function ContextMemoryBlockRow({ block, assistantCode, sessionCode }: { block: ContextMemoryBlockItem; assistantCode?: string; sessionCode: string }) {
   const { t } = useTranslation("pages");
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1660,7 +1660,7 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
     let refreshing = true;
     void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
       queryParams: { sessionCode, blockCode: block.detailCode, ...(block.snapshotSequence ? { snapshotSequence: block.snapshotSequence } : {}) },
-      headers: dudeCode ? { "X-Dude-Code": dudeCode } : undefined,
+      headers: assistantCode ? { "X-Assistant-Code": assistantCode } : undefined,
       signal: controller.signal,
     }).then((value) => { if (!controller.signal.aborted) setDetail(value); }).catch(() => {
       if (!controller.signal.aborted) setLoadError(true);
@@ -1672,13 +1672,13 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
       if (refreshing) return;
       refreshing = true;
       void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
-        queryParams: { sessionCode, blockCode: block.detailCode }, headers: dudeCode ? { "X-Dude-Code": dudeCode } : undefined, signal: controller.signal,
+        queryParams: { sessionCode, blockCode: block.detailCode }, headers: assistantCode ? { "X-Assistant-Code": assistantCode } : undefined, signal: controller.signal,
       }).then((value) => { if (!controller.signal.aborted) { setDetail(value); setLoadError(false); } }).catch(() => {
         if (!controller.signal.aborted) setLoadError(true);
       }).finally(() => { refreshing = false; });
     }, 3000) : undefined;
     return () => { controller.abort(); if (timer !== undefined) window.clearInterval(timer); };
-  }, [block.detailCode, block.detailValue, block.snapshotSequence, dialogOpen, dudeCode, sessionCode]);
+  }, [block.detailCode, block.detailValue, block.snapshotSequence, dialogOpen, assistantCode, sessionCode]);
   let parsedDetail = detail;
   if (typeof detail === "string") {
     try {
@@ -2207,7 +2207,7 @@ function RightWorkspaceSidebar({
 }
 
 export function RightContextSidebar({
-  dudeCode,
+  assistantCode,
   refreshInterval,
   events,
   latestCompactionStatus,
@@ -2217,7 +2217,7 @@ export function RightContextSidebar({
   compactionBusy,
   session,
 }: {
-  dudeCode?: string;
+  assistantCode?: string;
   refreshInterval?: number;
   events: TranscriptAguiEvent[];
   goal?: ChatSessionGoalView | null;
@@ -2238,7 +2238,7 @@ export function RightContextSidebar({
   const usage = chatTokenUsage(messages);
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
   const liveAssembly = useMemo(() => latestContextAssemblyFromEvents(events), [events]);
-  const assembly = useSavedContextAssembly(session?.sessionCode ?? "", liveAssembly.snapshot?.snapshotSequence ? liveAssembly.snapshot : null, dudeCode, refreshInterval);
+  const assembly = useSavedContextAssembly(session?.sessionCode ?? "", liveAssembly.snapshot?.snapshotSequence ? liveAssembly.snapshot : null, assistantCode, refreshInterval);
   const modelLabel = useContextModelLabel(assembly.snapshot?.modelCode ?? null, session?.workspaceCode ?? "");
   const budgetBreakdown = assembly.snapshot ? normalizeContextBudgetBreakdown({
     ...assembly.snapshot.budgetBreakdown,
@@ -2263,7 +2263,7 @@ export function RightContextSidebar({
           {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
           <details>
             <summary className="cursor-pointer text-xs font-medium text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.structureDetails")}</summary>
-          {assembly.loading ? <p role="status">{t("chat.shortTermMemory.contextPanel.loadingReport")}</p> : assembly.error ? <div role="alert"><p>{assembly.error.message}</p><button type="button" onClick={() => void assembly.retry()}>{t("chat.shortTermMemory.retry")}</button></div> : assembly.snapshot ? <ContextStructurePanel blocks={contextBlocks} dudeCode={dudeCode} sessionCode={session?.sessionCode ?? ""} /> : <p>{t("chat.shortTermMemory.contextPanel.noReport")}</p>}
+          {assembly.loading ? <p role="status">{t("chat.shortTermMemory.contextPanel.loadingReport")}</p> : assembly.error ? <div role="alert"><p>{assembly.error.message}</p><button type="button" onClick={() => void assembly.retry()}>{t("chat.shortTermMemory.retry")}</button></div> : assembly.snapshot ? <ContextStructurePanel blocks={contextBlocks} assistantCode={assistantCode} sessionCode={session?.sessionCode ?? ""} /> : <p>{t("chat.shortTermMemory.contextPanel.noReport")}</p>}
           </details>
         </div>
       </div>

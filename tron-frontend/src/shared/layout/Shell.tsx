@@ -56,7 +56,7 @@ import { useAuthSession } from "@/domain/auth";
 import { NotificationLauncher } from "@/domain/notification/components/NotificationLauncher";
 import { RemoteAccessDialog } from "@/domain/settings/components/RemoteAccessDialog";
 import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
-import { captureDudePageContext, DudePageContext } from "./dudePageContext";
+import { captureAssistantPageContext, AssistantPageContext } from "./assistantPageContext";
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { tronNavigation } from "@/shared/constants/shellNavigation";
@@ -484,7 +484,7 @@ export function TronShell({
     workspaceName: selectedWorkspaceNode?.name ?? selectedPrimarySpace?.name ?? null, t };
   const getMainAgentPageContext = useCallback(() => {
     const tabs = useTabStore.getState();
-    return captureDudePageContext({
+    return captureAssistantPageContext({
       ...pageSnapshotSourceRef.current,
       tab: tabs.tabs.find((tab) => tab.id === tabs.activeTabId),
     });
@@ -1319,7 +1319,7 @@ export function TronShell({
 
   return (
     <TronShellFrameContext.Provider value={true}>
-      <DudePageContext.Provider value={getMainAgentPageContext}>
+      <AssistantPageContext.Provider value={getMainAgentPageContext}>
       <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
         <SidebarProvider
           className="tron-skin-canvas tron-shell-frame"
@@ -1459,7 +1459,7 @@ export function TronShell({
 
         </SidebarProvider>
       </WorkspaceSpacesContext.Provider>
-      </DudePageContext.Provider>
+      </AssistantPageContext.Provider>
     </TronShellFrameContext.Provider>
   );
 }

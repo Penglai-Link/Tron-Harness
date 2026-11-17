@@ -293,10 +293,10 @@ pub async fn get_trace(
             for span in &mut detail.spans {
                 let same_run = span.attributes.get("agent.run.id") == Some(&detail.trace.run_code)
                     || span.attributes.get("tron.run.code") == Some(&detail.trace.run_code);
-                let root_dude = span.name == "tron.dude.execute"
+                let root_assistant = span.name == "tron.assistant.execute"
                     && detail.trace.root_span_id.as_deref() == Some(&span.span_id);
                 if span.status == "Error"
-                    && (root_dude
+                    && (root_assistant
                         || (same_run
                             && matches!(span.name.as_str(), "agent.run" | "tron.session.run")))
                 {

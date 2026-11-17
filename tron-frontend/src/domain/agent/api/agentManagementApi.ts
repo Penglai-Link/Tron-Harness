@@ -88,8 +88,8 @@ interface ToolRecordApi {
   source?: { providerId: string | null; pluginId: string | null; packId: string | null; adapterId: string | null } | null;
   providerPackId?: string | null;
   assignable?: boolean;
-  dudeAssignable?: boolean;
-  dudeReplacementToolCode?: string | null;
+  assistantAssignable?: boolean;
+  assistantReplacementToolCode?: string | null;
   disabledReason?: string | null;
   toolCode: string;
   toolName: string;
@@ -236,8 +236,8 @@ function normalizeToolRecord(record: ToolRecordApi): PlatformToolRecord {
     source: record.source,
     providerPackId: record.providerPackId,
     assignable: record.assignable,
-    dudeAssignable: record.dudeAssignable,
-    dudeReplacementToolCode: record.dudeReplacementToolCode,
+    assistantAssignable: record.assistantAssignable,
+    assistantReplacementToolCode: record.assistantReplacementToolCode,
     disabledReason: record.disabledReason,
     description: record.description,
     domainCode: record.domainCode,

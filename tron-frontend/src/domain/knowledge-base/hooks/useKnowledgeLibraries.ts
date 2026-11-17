@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { useQuery } from "@tanstack/react-query";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
-import { listDudes } from "@/domain/dude/api/dudeApi";
+import { listAssistants } from "@/domain/assistant/api/assistantApi";
 import { fetchWorkspaceInternalAgents } from "@/domain/agent/api/agentManagementApi";
 import { getKnowledgeLibrary, listKnowledgeLibraries } from "../api/knowledgeBaseApi";
 
@@ -38,8 +38,8 @@ export function useKnowledgeAgents(enabled: boolean) {
   return useQuery({
     queryKey: ["knowledge-base-agents", user], enabled: Boolean(user && enabled),
     queryFn: async ({ signal }) => {
-      const [agents, dudes] = await Promise.all([fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE, signal), listDudes(signal)]);
-      return [...agents.map(({ agentCode, name }) => ({ agentCode, name })), ...dudes.filter(dude => dude.enabled).map(dude => ({ agentCode: dude.dudeCode, name: dude.name }))];
+      const [agents, assistants] = await Promise.all([fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE, signal), listAssistants(signal)]);
+      return [...agents.map(({ agentCode, name }) => ({ agentCode, name })), ...assistants.filter(assistant => assistant.enabled).map(assistant => ({ agentCode: assistant.assistantCode, name: assistant.name }))];
     },
   });
 }

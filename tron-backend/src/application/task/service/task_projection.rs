@@ -84,7 +84,7 @@ impl TaskService {
             id: task.id.as_decimal_string(),
             task_code: task.task_code,
             workspace_code: task.workspace_code,
-            owner_dude_code: task.owner_dude_code,
+            owner_assistant_code: task.owner_assistant_code,
             due_at: task.due_at,
             planned_start_at: task.planned_start_at,
             next_followup_at: task.next_followup_at,
@@ -124,7 +124,7 @@ impl TaskService {
         Ok(TaskListItem {
             task_code: task.task_code.clone(),
             workspace_code: task.workspace_code.clone(),
-            owner_dude_code: task.owner_dude_code.clone(),
+            owner_assistant_code: task.owner_assistant_code.clone(),
             due_at: task.due_at.clone(),
             planned_start_at: task.planned_start_at.clone(),
             next_followup_at: task.next_followup_at.clone(),

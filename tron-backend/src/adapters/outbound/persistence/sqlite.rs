@@ -56,10 +56,10 @@ pub use knowledge_ingestion_queue::SqliteKnowledgeIngestionQueue;
 
 pub mod capability_repository;
 
-mod dude_repository;
-pub use dude_repository::SqliteDudeRepository;
-mod dude_memory_repository;
-pub use dude_memory_repository::SqliteDudeMemoryRepository;
+mod assistant_repository;
+pub use assistant_repository::SqliteAssistantRepository;
+mod assistant_memory_repository;
+pub use assistant_memory_repository::SqliteAssistantMemoryRepository;
 
 mod rag_graph_index;
 pub use rag_graph_index::SqliteRagGraphIndexRepository;

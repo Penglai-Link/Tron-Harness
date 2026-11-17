@@ -1,20 +1,20 @@
 impl ChatService {
-    /// Trusted host entrypoint. Platform Dude ownership is persisted by DudeService;
+    /// Trusted host entrypoint. Platform PersonAI ownership is persisted by AssistantService;
     /// public user session creation continues to require an actual workspace.
-    pub fn ensure_dude_session(&self, dude: &crate::domain::dude::DudeSession, user_code: Option<String>) -> Result<ChatSession, ChatError> {
-        if let Ok(existing)=self.repository().get_session(&dude.session_code) { if existing.user_code!=user_code {return Err(ChatError::WorkspaceForbidden);} return Ok(existing); }
+    pub fn ensure_assistant_session(&self, assistant: &crate::domain::assistant::AssistantSession, user_code: Option<String>) -> Result<ChatSession, ChatError> {
+        if let Ok(existing)=self.repository().get_session(&assistant.session_code) { if existing.user_code!=user_code {return Err(ChatError::WorkspaceForbidden);} return Ok(existing); }
         let now=current_timestamp();
         let session=ChatSession {
             execution_mode: Default::default(),
             id:self.id_provider.next_id().map_err(|_|ChatError::StorageFailure)?.value(),
-            session_code:dude.session_code.clone(), workspace_code:dude.workspace_code.clone().unwrap_or_default(),
-            project_code:None,directory_code:None,working_directory_code:None,user_code,app_code:None,task_code:(dude.purpose == crate::domain::dude::DudeSessionPurpose::Task).then(|| dude.correlation_key.clone()),source_type:ChatSessionSourceType::Manual,
-            source_code:Some(format!("__dude:{}",dude.dude_code)),agent_code:Some(dude.dude_code.clone()),
-            system_agent_session_id:None,title:dude.title.clone(),status:ChatSessionStatus::Active,
+            session_code:assistant.session_code.clone(), workspace_code:assistant.workspace_code.clone().unwrap_or_default(),
+            project_code:None,directory_code:None,working_directory_code:None,user_code,app_code:None,task_code:(assistant.purpose == crate::domain::assistant::AssistantSessionPurpose::Task).then(|| assistant.correlation_key.clone()),source_type:ChatSessionSourceType::Manual,
+            source_code:Some(format!("__assistant:{}",assistant.assistant_code)),agent_code:Some(assistant.assistant_code.clone()),
+            system_agent_session_id:None,title:assistant.title.clone(),status:ChatSessionStatus::Active,
             last_run_code:None,last_run_status:None,created_at:now.clone(),updated_at:now,
         };
         let mut repository=self.repository();
-        if let Ok(existing)=repository.get_session(&dude.session_code){if existing.user_code!=session.user_code {return Err(ChatError::WorkspaceForbidden);}return Ok(existing)}
+        if let Ok(existing)=repository.get_session(&assistant.session_code){if existing.user_code!=session.user_code {return Err(ChatError::WorkspaceForbidden);}return Ok(existing)}
         repository.create_session(&session)?;Ok(session)
     }
 
@@ -23,7 +23,7 @@ impl ChatService {
         command: CreateChatSessionCommand,
         user_code: Option<String>,
     ) -> Result<ChatSession, ChatError> {
-        if command.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:")) {
+        if command.source_code.as_deref().is_some_and(|source| source.starts_with("__assistant:") || source.starts_with("__knowledge:")) {
             return Err(ChatError::WorkspaceForbidden);
         }
         let workspace_code =
@@ -139,7 +139,7 @@ impl ChatService {
         let mut sessions = self.repository().list_sessions()?;
         sessions.retain(|session| {
             session.workspace_code == workspace_code
-                && !session.source_code.as_deref().is_some_and(|s|s.starts_with("__dude:") || s.starts_with("__knowledge:"))
+                && !session.source_code.as_deref().is_some_and(|s|s.starts_with("__assistant:") || s.starts_with("__knowledge:"))
                 && session.status == ChatSessionStatus::Active
                 && session.source_type != ChatSessionSourceType::Terminal
         });
@@ -594,7 +594,7 @@ impl ChatService {
         let session = self.repository().get_session(session_code)?;
         if session.status != ChatSessionStatus::Active { return Err(ChatError::SessionArchived); }
         if session.source_type != ChatSessionSourceType::Manual
-            || session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:")) {
+            || session.source_code.as_deref().is_some_and(|source| source.starts_with("__assistant:") || source.starts_with("__knowledge:")) {
             return Err(ChatError::WorkspaceForbidden);
         }
         if session.directory_code.is_some() && working.as_ref().is_some_and(|value| value != &session.directory_code) {

@@ -205,7 +205,7 @@ pub(crate) struct AgentRunContextBuilder {
     platform_scope: bool,
     framework_host: Option<crate::application::agent::FrameworkHost>,
     collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
-    dude_work_context: Option<crate::application::dude::DudeService>,
+    assistant_work_context: Option<crate::application::assistant::AssistantService>,
     workspaces: WorkspaceService,
     apps: AppService,
     variables: VariableService,
@@ -239,11 +239,11 @@ impl AgentRunContextBuilder {
         self
     }
 
-    pub(crate) fn with_dude_work_context(
+    pub(crate) fn with_assistant_work_context(
         mut self,
-        dudes: Option<crate::application::dude::DudeService>,
+        assistants: Option<crate::application::assistant::AssistantService>,
     ) -> Self {
-        self.dude_work_context = dudes;
+        self.assistant_work_context = assistants;
         self
     }
 
@@ -302,7 +302,7 @@ impl AgentRunContextBuilder {
             tool_execution_mode: Default::default(),
             framework_host: None,
             collaboration_owner: None,
-            dude_work_context: None,
+            assistant_work_context: None,
             workspaces,
             apps,
             variables,

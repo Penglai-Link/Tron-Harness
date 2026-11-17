@@ -1,4 +1,4 @@
-use crate::domain::dude_memory::*;
+use crate::domain::assistant_memory::*;
 use serde::Serialize;
 // Each endpoint has its own protocol DTO, independently evolvable from persisted domain records.
 macro_rules! candidate_vo {
@@ -7,7 +7,7 @@ macro_rules! candidate_vo {
         #[serde(rename_all = "camelCase")]
         pub struct $name {
             candidate_code: String,
-            dude_code: String,
+            assistant_code: String,
             batch_code: String,
             skill_name: String,
             operation: CandidateOperation,
@@ -30,7 +30,7 @@ macro_rules! candidate_vo {
             fn from(c: SkillCandidate) -> Self {
                 Self {
                     candidate_code: c.candidate_code,
-                    dude_code: c.dude_code,
+                    assistant_code: c.assistant_code,
                     batch_code: c.batch_code,
                     skill_name: c.skill_name,
                     operation: c.operation,
@@ -63,7 +63,7 @@ candidate_vo!(RetryCandidateInstallVo);
 #[serde(rename_all = "camelCase")]
 pub struct ListMemoryBatchVo {
     batch_code: String,
-    dude_code: String,
+    assistant_code: String,
     session_code: Option<String>,
     status: MemoryBatchStatus,
     summary: Option<String>,
@@ -79,7 +79,7 @@ impl From<MemoryBatch> for ListMemoryBatchVo {
     fn from(b: MemoryBatch) -> Self {
         Self {
             batch_code: b.batch_code,
-            dude_code: b.dude_code,
+            assistant_code: b.assistant_code,
             session_code: b.session_code,
             status: b.status,
             summary: b.summary,

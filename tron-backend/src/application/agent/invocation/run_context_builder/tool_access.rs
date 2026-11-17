@@ -58,7 +58,7 @@ impl AgentRunContextBuilder {
             if self
                 .collaboration_owner
                 .as_ref()
-                .is_some_and(|owner| owner.kind == "DUDE" && owner.code == agent_code)
+                .is_some_and(|owner| owner.kind == "ASSISTANT" && owner.code == agent_code)
             {
                 // All tools is the platform-wide catalog, including workspace
                 // tools. Their own scope and permission checks still apply.
@@ -68,12 +68,12 @@ impl AgentRunContextBuilder {
                     let aliases = effective_tool_records
                         .iter()
                         .filter_map(|tool| {
-                            crate::application::agent::dude_tool_replacement(&tool.tool_code)
+                            crate::application::agent::assistant_tool_replacement(&tool.tool_code)
                         })
                         .map(str::to_owned)
                         .collect::<Vec<_>>();
                     effective_tool_records.retain(|tool| {
-                        !crate::application::agent::tool_catalog::dude_workspace_tool(tool)
+                        !crate::application::agent::tool_catalog::assistant_workspace_tool(tool)
                     });
                     effective_tool_records.extend(
                         self.management
@@ -91,7 +91,7 @@ impl AgentRunContextBuilder {
                     !tool
                         .category
                         .as_ref()
-                        .is_some_and(|category| category.code == "tron.dude")
+                        .is_some_and(|category| category.code == "tron.assistant")
                 });
             }
             // The gateway plugin owns on-demand discovery for every run, so

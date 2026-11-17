@@ -54,10 +54,10 @@ where
         "memory_get",
         "memory_save",
         "memory_delete",
-        "dude_memory_search",
-        "dude_memory_get",
-        "dude_memory_save",
-        "dude_memory_delete",
+        "assistant_memory_search",
+        "assistant_memory_get",
+        "assistant_memory_save",
+        "assistant_memory_delete",
     ]
     .into_iter()
     .map(|name| {
@@ -129,19 +129,19 @@ where
             .as_deref()
             .filter(|u| !u.is_empty())
             .ok_or_else(|| fail(MemoryError::Forbidden(String::new())))?;
-        let dude = self.name.starts_with("dude_");
-        if dude != ctx.is_owning_dude() {
+        let assistant = self.name.starts_with("assistant_");
+        if assistant != ctx.is_owning_assistant() {
             return Err(fail(MemoryError::Forbidden(String::new())));
         }
         let c = MemoryRunContext::new(
             user,
-            if dude {
+            if assistant {
                 ""
             } else {
                 ctx.execution_workspace_code()
             },
         );
-        let name = self.name.strip_prefix("dude_").unwrap_or(self.name);
+        let name = self.name.strip_prefix("assistant_").unwrap_or(self.name);
         let value=match name {
             "memory_search"=>{
                 let cmd:MemorySearchCommand=parse_input(request.input,en)?;

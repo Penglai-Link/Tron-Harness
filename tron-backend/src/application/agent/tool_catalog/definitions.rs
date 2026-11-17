@@ -118,29 +118,29 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             description_i18n_key: "agent.toolCatalog.domains.media.description",
         },
         ToolDomainDefinition {
-            domain_code: "dude_identity",
-            name_i18n_key: "agent.toolCatalog.domains.dude.name",
-            description_i18n_key: "agent.toolCatalog.domains.dude.description",
+            domain_code: "assistant_identity",
+            name_i18n_key: "agent.toolCatalog.domains.assistant.name",
+            description_i18n_key: "agent.toolCatalog.domains.assistant.description",
         },
         ToolDomainDefinition {
-            domain_code: "dude_memory",
-            name_i18n_key: "agent.toolCatalog.domains.dude_memory.name",
-            description_i18n_key: "agent.toolCatalog.domains.dude_memory.description",
+            domain_code: "assistant_memory",
+            name_i18n_key: "agent.toolCatalog.domains.assistant_memory.name",
+            description_i18n_key: "agent.toolCatalog.domains.assistant_memory.description",
         },
         ToolDomainDefinition {
-            domain_code: "dude_task",
-            name_i18n_key: "agent.toolCatalog.domains.dude_task.name",
-            description_i18n_key: "agent.toolCatalog.domains.dude_task.description",
+            domain_code: "assistant_task",
+            name_i18n_key: "agent.toolCatalog.domains.assistant_task.name",
+            description_i18n_key: "agent.toolCatalog.domains.assistant_task.description",
         },
         ToolDomainDefinition {
-            domain_code: "dude_work",
-            name_i18n_key: "agent.toolCatalog.domains.dude_work.name",
-            description_i18n_key: "agent.toolCatalog.domains.dude_work.description",
+            domain_code: "assistant_work",
+            name_i18n_key: "agent.toolCatalog.domains.assistant_work.name",
+            description_i18n_key: "agent.toolCatalog.domains.assistant_work.description",
         },
         ToolDomainDefinition {
-            domain_code: "dude_notification",
-            name_i18n_key: "agent.toolCatalog.domains.dude_notification.name",
-            description_i18n_key: "agent.toolCatalog.domains.dude_notification.description",
+            domain_code: "assistant_notification",
+            name_i18n_key: "agent.toolCatalog.domains.assistant_notification.name",
+            description_i18n_key: "agent.toolCatalog.domains.assistant_notification.description",
         },
         ToolDomainDefinition {
             domain_code: "harness_rag",
@@ -282,35 +282,75 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             }
         }
     }
-    let mut dude_tools = Vec::new();
+    let mut assistant_tools = Vec::new();
     for definition in &definitions {
         let (code, name, domain) = match definition.tool_code {
-            "memory.get" => ("dude.memory_get", "dude_memory_get", "dude_memory"),
-            "memory.search" => ("dude.memory_search", "dude_memory_search", "dude_memory"),
-            "memory.save" => ("dude.memory_save", "dude_memory_save", "dude_memory"),
-            "memory.delete" => ("dude.memory_delete", "dude_memory_delete", "dude_memory"),
-            "todo.update" => ("dude.todo_update", "dude_todo_update", "dude_task"),
-            "task.get" => ("dude.task_get", "dude_task_get", "dude_task"),
-            "task.page" => ("dude.task_page", "dude_task_page", "dude_task"),
-            "task.create" => ("dude.task_create", "dude_task_create", "dude_task"),
-            "task.update" => ("dude.task_update", "dude_task_update", "dude_task"),
-            "task.delete" => ("dude.task_delete", "dude_task_delete", "dude_task"),
-            "task.restore" => ("dude.task_restore", "dude_task_restore", "dude_task"),
+            "memory.get" => (
+                "assistant.memory_get",
+                "assistant_memory_get",
+                "assistant_memory",
+            ),
+            "memory.search" => (
+                "assistant.memory_search",
+                "assistant_memory_search",
+                "assistant_memory",
+            ),
+            "memory.save" => (
+                "assistant.memory_save",
+                "assistant_memory_save",
+                "assistant_memory",
+            ),
+            "memory.delete" => (
+                "assistant.memory_delete",
+                "assistant_memory_delete",
+                "assistant_memory",
+            ),
+            "todo.update" => (
+                "assistant.todo_update",
+                "assistant_todo_update",
+                "assistant_task",
+            ),
+            "task.get" => ("assistant.task_get", "assistant_task_get", "assistant_task"),
+            "task.page" => (
+                "assistant.task_page",
+                "assistant_task_page",
+                "assistant_task",
+            ),
+            "task.create" => (
+                "assistant.task_create",
+                "assistant_task_create",
+                "assistant_task",
+            ),
+            "task.update" => (
+                "assistant.task_update",
+                "assistant_task_update",
+                "assistant_task",
+            ),
+            "task.delete" => (
+                "assistant.task_delete",
+                "assistant_task_delete",
+                "assistant_task",
+            ),
+            "task.restore" => (
+                "assistant.task_restore",
+                "assistant_task_restore",
+                "assistant_task",
+            ),
             _ => continue,
         };
         let mut tool = definition.clone();
         tool.tool_code = code;
         tool.tool_name = name.into();
         tool.domain_code = domain;
-        tool.category_code = "tron.dude";
-        tool.module_owner = "dude";
+        tool.category_code = "tron.assistant";
+        tool.module_owner = "assistant";
         if let Some(properties) = tool
             .input_schema
             .get_mut("properties")
             .and_then(Value::as_object_mut)
         {
             properties.remove("workspaceCode");
-            if !code.starts_with("dude.memory_") {
+            if !code.starts_with("assistant.memory_") {
                 properties.remove("scopeCode");
             }
             if let Some(scope) = properties.get_mut("scope") {
@@ -336,9 +376,9 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
                 }
             }
         }
-        dude_tools.push(tool);
+        assistant_tools.push(tool);
     }
-    definitions.extend(dude_tools);
+    definitions.extend(assistant_tools);
     definitions
 }
 

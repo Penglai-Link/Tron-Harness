@@ -7,7 +7,7 @@ import { SearchField } from "@/components/search-field";
 import { useToast } from "@/components/ui/toast";
 import { fetchSkillAgents, setSkillAgents } from "@/domain/skill/api";
 import type { RegistrySkillRecord } from "@/domain/skill/model";
-import { listDudes } from "@/domain/dude/api/dudeApi";
+import { listAssistants } from "@/domain/assistant/api/assistantApi";
 import { fetchWorkspaceInternalAgents } from "@/domain/agent/api/agentManagementApi";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
 
@@ -37,13 +37,13 @@ export function SkillAgentGrants({
     const current = ++generation.current;
     setLoading(true);
     try {
-      const [a, g, dudes] = await Promise.all([
+      const [a, g, assistants] = await Promise.all([
         fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE),
         fetchSkillAgents(skill.skillName),
-        listDudes(),
+        listAssistants(),
       ]);
       if (current !== generation.current) return;
-      setAgents([...a, ...dudes.map(dude => ({ agentCode: dude.dudeCode, name: dude.name }))]);
+      setAgents([...a, ...assistants.map(assistant => ({ agentCode: assistant.assistantCode, name: assistant.name }))]);
       setSelected(g.agentCodes);
       setError("");
     } catch (e) {

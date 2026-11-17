@@ -10,7 +10,7 @@ export interface SkillCandidateFile {
 
 export interface SkillCandidate {
   candidateCode: string;
-  dudeCode: string;
+  assistantCode: string;
   batchCode: string;
   skillName: string;
   operation: "Create" | "Update";

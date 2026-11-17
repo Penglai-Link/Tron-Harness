@@ -109,9 +109,9 @@ impl LocalTelemetry {
         // telemetry store owns only host-neutral schema and indexes.
         query_database.call(|connection| connection.execute_batch(
             "CREATE INDEX IF NOT EXISTS ef_telemetry_traces_workspace_time ON ef_telemetry_traces(json_extract(attributes,'$.\"tron.workspace.code\"'),started_at DESC,trace_id DESC);
-             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_time ON ef_telemetry_spans(json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.dude.execute');
-             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_workspace ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.workspace.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.dude.execute');
-             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_session ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.session.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.dude.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_time ON ef_telemetry_spans(json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_workspace ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.workspace.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_session ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.session.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
              CREATE INDEX IF NOT EXISTS ef_telemetry_page_roots_time ON ef_telemetry_traces(started_at DESC,trace_id) WHERE json_extract(attributes,'$.\"tron.trace.page\"')='true';"
         )).await.map_err(|_| ObservabilityError::Storage)?;
         Ok(Self {
@@ -254,24 +254,28 @@ impl LocalTelemetry {
             &context.run_code,
             context.agent_code.as_deref().unwrap_or("main-agent"),
         )?;
-        let mut dude_attributes: BTreeMap<String, String> = BTreeMap::new();
+        let mut assistant_attributes: BTreeMap<String, String> = BTreeMap::new();
         if let Some(owner) = context
             .collaboration_owner
             .as_ref()
-            .filter(|owner| owner.kind == "DUDE")
+            .filter(|owner| owner.kind == "ASSISTANT")
         {
-            dude_attributes.insert("tron.dude.code".into(), owner.code.clone());
+            assistant_attributes.insert("tron.assistant.code".into(), owner.code.clone());
             if let Some(task) = &owner.task_code {
-                dude_attributes.insert("tron.task.code".into(), task.clone());
+                assistant_attributes.insert("tron.task.code".into(), task.clone());
             }
             if let Some(origin) = &owner.origin_session_code {
-                dude_attributes.insert("tron.dude.origin.session.code".into(), origin.clone());
+                assistant_attributes
+                    .insert("tron.assistant.origin.session.code".into(), origin.clone());
             }
             if let Some(memory) = &context.short_term_memory {
-                dude_attributes.insert("tron.dude.input.kind".into(), memory.input_kind.clone());
+                assistant_attributes.insert(
+                    "tron.assistant.input.kind".into(),
+                    memory.input_kind.clone(),
+                );
             }
         }
-        for (key, value) in &dude_attributes {
+        for (key, value) in &assistant_attributes {
             root.span()
                 .set_attribute(KeyValue::new(key.clone(), value.clone()));
         }
@@ -286,14 +290,14 @@ impl LocalTelemetry {
                 context.agent_code.as_deref().unwrap_or("main-agent"),
             ),
         ] {
-            dude_attributes.insert(key.into(), value.into());
+            assistant_attributes.insert(key.into(), value.into());
         }
         Ok(TraceGuard::tracked(
             root,
             self.store.clone(),
             "tron.session.run",
             &Context::current(),
-            dude_attributes,
+            assistant_attributes,
         ))
     }
     pub async fn close(&self) -> Result<(), String> {

@@ -15,7 +15,7 @@ pub(super) fn read_page(
             rusqlite::TransactionBehavior::Deferred,
         )
         .map_err(storage_error)?;
-    let owner = normalized(query.owner_dude_code.as_deref());
+    let owner = normalized(query.owner_assistant_code.as_deref());
     let workspace = normalized(query.workspace_code.as_deref());
     let mut predicates = Vec::new();
     let mut values = Vec::<Value>::new();
@@ -27,7 +27,7 @@ pub(super) fn read_page(
             predicates.push(format!("{column} IS NULL"));
         }
     };
-    equal("owner_dude_code", owner.clone());
+    equal("owner_assistant_code", owner.clone());
     if owner.is_none() || workspace.is_some() {
         equal("workspace_code", workspace);
     }
@@ -100,7 +100,7 @@ pub(super) fn read_page(
     let sql = format!("WITH RECURSIVE
         page AS MATERIALIZED (SELECT task_code FROM tasks WHERE {filter} ORDER BY task_code LIMIT ?{limit} OFFSET ?{offset}),
         tree(code) AS (SELECT task_code FROM page UNION SELECT child.task_code FROM tasks child JOIN tree ON child.parent_task_code = tree.code WHERE child.archived_at IS NULL)
-        SELECT t.id,t.task_code,t.workspace_code,t.parent_task_code,t.title,NULL,NULL,t.flow_code,t.status,t.previous_status,t.priority,t.task_type,t.source_type,t.source_url,t.agent_code,t.model_code,t.progress_value,t.created_at,t.updated_at,t.archived_at,t.owner_dude_code,t.due_at,t.planned_start_at,t.next_followup_at,t.work_session_code,t.schedule_version,
+        SELECT t.id,t.task_code,t.workspace_code,t.parent_task_code,t.title,NULL,NULL,t.flow_code,t.status,t.previous_status,t.priority,t.task_type,t.source_type,t.source_url,t.agent_code,t.model_code,t.progress_value,t.created_at,t.updated_at,t.archived_at,t.owner_assistant_code,t.due_at,t.planned_start_at,t.next_followup_at,t.work_session_code,t.schedule_version,
         t.task_code IN (SELECT task_code FROM page), total.n
         FROM (SELECT count(*) AS n FROM tasks WHERE {filter}) total
         LEFT JOIN tasks t ON t.task_code IN (SELECT code FROM tree)");

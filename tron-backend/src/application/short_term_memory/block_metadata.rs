@@ -72,7 +72,7 @@ fn configured_context_block_metadata(
         HOST_BLOCKS.iter().find(|(block, ..)| *block == id)?;
     let mode = match id {
         "current_session_history" => ContextBlockUpdateMode::Append,
-        "seed_prompt_prefix" | "agent.directory-guidance" | "dude.guidance" => {
+        "seed_prompt_prefix" | "agent.directory-guidance" | "assistant.guidance" => {
             ContextBlockUpdateMode::Fixed
         }
         _ => ContextBlockUpdateMode::Replace,
@@ -154,17 +154,17 @@ const HOST_BLOCKS: &[(&str, &str, &str, &str, &str, CompressionSource)] = &[
     (
         "runtime_identity",
         "Runtime identity",
-        "The current agent or Dude's name, identity confirmation state, soul settings and interface language.",
+        "The current agent or PersonAI's name, identity confirmation state, soul settings and interface language.",
         "运行身份",
-        "当前智能体或 Dude 的名称、身份确认状态、灵魂设定及界面语言。",
+        "当前智能体或 PersonAI 的名称、身份确认状态、灵魂设定及界面语言。",
         CompressionSource::DataPolicy,
     ),
     (
-        "dude_onboarding",
-        "Dude onboarding",
-        "The Dude's initialization state, name confirmation and pending interaction; empty once initialization is complete.",
-        "Dude 唤醒配置",
-        "Dude 的初始化状态、名称确认情况及待处理交互；初始化完成后为空。",
+        "assistant_onboarding",
+        "PersonAI onboarding",
+        "The PersonAI's initialization state, name confirmation and pending interaction; empty once initialization is complete.",
+        "PersonAI 唤醒配置",
+        "PersonAI 的初始化状态、名称确认情况及待处理交互；初始化完成后为空。",
         CompressionSource::DataPolicy,
     ),
     (
@@ -224,19 +224,19 @@ const HOST_BLOCKS: &[(&str, &str, &str, &str, &str, CompressionSource)] = &[
         CompressionSource::DataPolicy,
     ),
     (
-        "dude_environment",
-        "Dude environment",
-        "The Dude's user and workspace, selected applications, working directory and execution scope.",
-        "Dude 运行环境",
-        "Dude 所属用户和工作区、选中的应用、工作目录及执行范围。",
+        "assistant_environment",
+        "PersonAI environment",
+        "The PersonAI's user and workspace, selected applications, working directory and execution scope.",
+        "PersonAI 运行环境",
+        "PersonAI 所属用户和工作区、选中的应用、工作目录及执行范围。",
         CompressionSource::DataPolicy,
     ),
     (
-        "dude_wakeup",
+        "assistant_wakeup",
         "Current trigger",
-        "The event, notification or scheduled task that triggered this Dude run, and its related input.",
+        "The event, notification or scheduled task that triggered this PersonAI run, and its related input.",
         "本轮触发信息",
-        "触发本轮 Dude 运行的事件、通知或定时任务，以及相关输入。",
+        "触发本轮 PersonAI 运行的事件、通知或定时任务，以及相关输入。",
         CompressionSource::DataPolicy,
     ),
     (
@@ -248,11 +248,11 @@ const HOST_BLOCKS: &[(&str, &str, &str, &str, &str, CompressionSource)] = &[
         CompressionSource::Keep,
     ),
     (
-        "dude.guidance",
-        "Dude instructions",
-        "Instructions governing Dude initialization, background work, progress and notifications.",
-        "Dude 指令",
-        "管理 Dude 初始化、后台工作、进展汇报和通知的规则。",
+        "assistant.guidance",
+        "PersonAI instructions",
+        "Instructions governing PersonAI initialization, background work, progress and notifications.",
+        "PersonAI 指令",
+        "管理 PersonAI 初始化、后台工作、进展汇报和通知的规则。",
         CompressionSource::Keep,
     ),
     (

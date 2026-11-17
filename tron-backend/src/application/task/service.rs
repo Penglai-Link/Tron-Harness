@@ -22,7 +22,7 @@ use crate::{
     },
 };
 
-mod dude_tasks;
+mod assistant_tasks;
 mod events;
 mod flows;
 mod projection;
@@ -31,14 +31,14 @@ mod task_projection;
 mod use_cases;
 mod validation;
 
-pub use self::dude_tasks::CancelDudeTaskError;
-use self::dude_tasks::default_planned_start;
+pub use self::assistant_tasks::CancelAssistantTaskError;
+use self::assistant_tasks::default_planned_start;
 use self::projection::*;
 
 #[derive(Debug, Clone)]
 pub struct CreateTaskCommand {
     pub workspace_code: Option<String>,
-    pub owner_dude_code: Option<String>,
+    pub owner_assistant_code: Option<String>,
     pub due_at: Option<i64>,
     pub parent_task_code: Option<String>,
     pub title: String,
@@ -109,20 +109,20 @@ pub trait TaskReadRepository: Send + Sync {
 
 pub trait TaskRepository: Send {
     fn reader(&self) -> Arc<dyn TaskReadRepository>;
-    fn prune_finished_dude_tasks(&mut self, cutoff_ms: i64) -> Result<usize, TaskError>;
+    fn prune_finished_assistant_tasks(&mut self, cutoff_ms: i64) -> Result<usize, TaskError>;
     /// Batch only the selected tasks, preserving each link set's ordering.
     fn relations(
         &mut self,
         codes: &[String],
     ) -> Result<std::collections::BTreeMap<String, TaskRelations>, TaskError>;
     fn list_tasks(&mut self) -> Result<Vec<Task>, TaskError>;
-    fn claim_dude_task(
+    fn claim_assistant_task(
         &mut self,
         task_code: &str,
         expected_version: i64,
         now_ms: i64,
     ) -> Result<bool, TaskError>;
-    fn bind_dude_work_session(
+    fn bind_assistant_work_session(
         &mut self,
         task_code: &str,
         session_code: &str,

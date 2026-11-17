@@ -15,11 +15,11 @@ impl TaskService {
         &self,
         parent_task_code: &str,
         workspace_code: Option<&str>,
-        owner_dude_code: Option<&str>,
+        owner_assistant_code: Option<&str>,
     ) -> Result<(), TaskError> {
         let parent = self.get_task_record(parent_task_code)?;
         if parent.workspace_code.as_deref() != workspace_code
-            || parent.owner_dude_code.as_deref() != owner_dude_code
+            || parent.owner_assistant_code.as_deref() != owner_assistant_code
             || parent.archived_at.is_some()
         {
             return Err(TaskError::InvalidParent);

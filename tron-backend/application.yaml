@@ -147,7 +147,7 @@ shortTermMemory:
         - seed_prompt_prefix
         - conversation_history_summary
         - runtime_identity
-        - dude_onboarding
+        - assistant_onboarding
         - tool_domains
         - current_session_history
         - agent_directory
@@ -158,8 +158,8 @@ shortTermMemory:
         - current_session_working_state
         - long_term_memory
         - knowledge_base
-        - dude_environment
-        - dude_wakeup
+        - assistant_environment
+        - assistant_wakeup
       dataBlocks:
         page_context:
           maxTokens: 2048
@@ -203,19 +203,19 @@ shortTermMemory:
           triggerRatio: "100%"
           targetRatio: "80%"
           minGainTokens: 1
-        dude_onboarding:
+        assistant_onboarding:
           maxTokens: 1024
           strategy: bound
           triggerRatio: "100%"
           targetRatio: "80%"
           minGainTokens: 1
-        dude_environment:
+        assistant_environment:
           maxTokens: 1536
           strategy: bound
           triggerRatio: "100%"
           targetRatio: "80%"
           minGainTokens: 1
-        dude_wakeup:
+        assistant_wakeup:
           maxTokens: 8192
           strategy: bound
           triggerRatio: "100%"

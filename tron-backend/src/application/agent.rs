@@ -15,7 +15,7 @@ pub use execution_context::{
     execution_context_message, project_instructions_message, refresh_execution_context,
 };
 pub use framework_runtime::{
-    CapabilityPackInfo, DudeThreadCatalogItem, ExtensionImplementationInfo, FrameworkHost,
+    AssistantThreadCatalogItem, CapabilityPackInfo, ExtensionImplementationInfo, FrameworkHost,
     SubagentRecord, SubagentView, ThreadFeedback, ThreadFeedbackSink, capability_pack_catalog,
     capability_pack_catalog_with_state, extension_implementation_catalog,
     extension_implementation_catalog_with_state, install_capability_pack,
@@ -75,7 +75,7 @@ pub use runtime_adapter::{
 };
 pub use tool_catalog::BusinessToolCatalog;
 pub(crate) use tool_catalog::builtin_category;
-pub(crate) use tool_catalog::{dude_tool_replacement, dude_workspace_tool};
+pub(crate) use tool_catalog::{assistant_tool_replacement, assistant_workspace_tool};
 pub use tool_schema::{ToolSchemaCache, request_tool_schema_payload, tool_schema_payload};
 pub(crate) use turn_state::{TurnStateAdapter, TurnStateKind};
 pub(crate) use usage_snapshots::{

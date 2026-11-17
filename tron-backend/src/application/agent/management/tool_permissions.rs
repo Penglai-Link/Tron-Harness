@@ -270,7 +270,7 @@ impl AgentManagementService {
         // be under that plugin or capability pack's stable namespace.
         let mut known: HashSet<String> = [
             "tron.platform",
-            "tron.dude",
+            "tron.assistant",
             "system.command",
             "document.media",
             "network",

@@ -35,7 +35,7 @@ pub async fn suggestions(
     _auth: RequestAuthContext,
     Query(query): Query<InputSuggestionsQuery>,
 ) -> Response {
-    // Match send admission: after the first run (and for Dudes), persisted Agent ownership wins.
+    // Match send admission: after the first run (and for PersonAIs), persisted Agent ownership wins.
     let session = match query
         .session_code
         .as_deref()
@@ -50,7 +50,7 @@ pub async fn suggestions(
     let pinned = session.as_ref().is_some_and(|session| {
         session.last_run_code.is_some()
             || session.source_code.as_deref().is_some_and(|source| {
-                source.starts_with("__dude:") || source.starts_with("__knowledge:")
+                source.starts_with("__assistant:") || source.starts_with("__knowledge:")
             })
     });
     let agent = if pinned {

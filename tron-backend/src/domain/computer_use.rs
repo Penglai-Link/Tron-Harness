@@ -5,7 +5,7 @@ pub const PACK_ID: &str = "tron.computer-use";
 pub const PACK_ID_PREFIX: &str = "tron.computer-use.";
 pub const DOMAIN: &str = "tron.computer-use";
 pub const SKILL: &str = "cua-driver";
-pub const CONTROLLERS: [&str; 2] = ["main-agent", "main-dude"];
+pub const CONTROLLERS: [&str; 2] = ["main-agent", "main-assistant"];
 
 /// The legacy single pack and every per-platform variant share these rules.
 pub fn is_pack(pack: &str) -> bool {

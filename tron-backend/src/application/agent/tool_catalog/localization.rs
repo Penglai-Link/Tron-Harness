@@ -30,7 +30,7 @@ pub(super) fn localize_tool_record(
         category: Some(super::builtin_category(definition.category_code)),
         source: eliteforge_agent_core::ToolSource {
             provider_id: Some(
-                if matches!(definition.category_code, "tron.platform" | "tron.dude") {
+                if matches!(definition.category_code, "tron.platform" | "tron.assistant") {
                     super::HARNESS_TOOL_PROVIDER_ID
                 } else {
                     definition.module_owner
@@ -48,7 +48,7 @@ pub(super) fn localize_tool_record(
         sample_result_summary: translate(locale, definition.sample_result_summary_i18n_key)
             .to_string(),
     };
-    if record.domain_code == "dude_memory" {
+    if record.domain_code == "assistant_memory" {
         record.description = match locale {
             SupportedLocale::ZhCn => "管理当前用户或工作领域的记忆。".into(),
             _ => "Manage memories for the current user or work domain.".into(),
@@ -61,22 +61,26 @@ pub(super) fn localize_tool_record(
             }
             .into();
         }
-    } else if record.domain_code == "dude_task" {
+    } else if record.domain_code == "assistant_task" {
         let scope = match locale {
-            SupportedLocale::ZhCn => "管理当前 Dude 负责的平台任务。",
-            _ => "Manage platform tasks owned by the current Dude.",
+            SupportedLocale::ZhCn => "管理当前 PersonAI 负责的平台任务。",
+            _ => "Manage platform tasks owned by the current PersonAI.",
         };
         let description = match (record.tool_name.as_str(), locale) {
-            ("dude_task_page", SupportedLocale::ZhCn) => "分页查询当前 Dude 负责的平台任务。",
-            ("dude_task_page", _) => "Page platform tasks owned by the current Dude.",
-            ("dude_task_create", SupportedLocale::ZhCn) => "创建由当前 Dude 负责的平台任务。",
-            ("dude_task_create", _) => "Create a platform task owned by the current Dude.",
+            ("assistant_task_page", SupportedLocale::ZhCn) => {
+                "分页查询当前 PersonAI 负责的平台任务。"
+            }
+            ("assistant_task_page", _) => "Page platform tasks owned by the current PersonAI.",
+            ("assistant_task_create", SupportedLocale::ZhCn) => {
+                "创建由当前 PersonAI 负责的平台任务。"
+            }
+            ("assistant_task_create", _) => "Create a platform task owned by the current PersonAI.",
             _ => &record.description,
         };
         record.description = format!("{scope} {description}")
-            .replace("task_get", "dude_task_get")
-            .replace("task_update", "dude_task_update")
-            .replace("task_restore", "dude_task_restore");
+            .replace("task_get", "assistant_task_get")
+            .replace("task_update", "assistant_task_update")
+            .replace("task_restore", "assistant_task_restore");
         record.input_schema["description"] = record.description.clone().into();
     }
     // These are explicit host aliases for official local bindings. Resources

@@ -81,6 +81,19 @@ impl Drop for StagedSessionDirectories {
     }
 }
 
+/// Profiles created before the Assistant rename keep assistant work directories
+/// under the former `dudes` name; move the tree once so their files stay reachable.
+fn migrate_legacy_assistant_directory(root: &std::path::Path) {
+    let legacy = root.join("dudes");
+    let current = root.join("assistants");
+    if current.exists() || !legacy.is_dir() {
+        return;
+    }
+    if let Err(error) = fs::rename(&legacy, &current) {
+        tracing::warn!(path = %legacy.display(), %error, "could not move legacy assistant work directory");
+    }
+}
+
 impl FrameworkHost {
     /// dsh's immutable session cwd identifies the shared UI group. The CLI
     /// adapter sets effective cwd and standing write root to the actual task.
@@ -94,10 +107,11 @@ impl FrameworkHost {
     }
 
     fn managed_working_directory(&self, kind: &str, user: Option<&str>, id: &str) -> PathBuf {
-        self.0
-            .path
-            .with_extension("workspaces")
-            .join(kind)
+        let root = self.0.path.with_extension("workspaces");
+        if kind == "assistants" {
+            migrate_legacy_assistant_directory(&root);
+        }
+        root.join(kind)
             .join(component(user.unwrap_or("system")))
             .join(component(id))
     }
@@ -264,9 +278,9 @@ impl FrameworkHost {
         let (kind, id) = match context
             .collaboration_owner
             .as_ref()
-            .filter(|owner| owner.kind == "DUDE")
+            .filter(|owner| owner.kind == "ASSISTANT")
         {
-            Some(owner) => ("dudes", owner.code.as_str()),
+            Some(owner) => ("assistants", owner.code.as_str()),
             None => (
                 "sessions",
                 context

@@ -17,8 +17,10 @@ impl ReactAgent {
             None => Ok(None),
         }
     }
-    pub(crate) fn framework_dudes(&self) -> Option<crate::application::dude::DudeService> {
-        self.framework_host.as_ref().and_then(|h| h.dudes())
+    pub(crate) fn framework_assistants(
+        &self,
+    ) -> Option<crate::application::assistant::AssistantService> {
+        self.framework_host.as_ref().and_then(|h| h.assistants())
     }
 
     pub(crate) fn framework_memories(&self) -> Option<crate::app::AppMemoryService> {
@@ -87,7 +89,7 @@ impl ReactAgent {
         context: &mut AgentRunContext,
         turn_state: &mut TurnStateAdapter,
     ) -> Result<PreparedModelContext, AgentError> {
-        if context.is_owning_dude() {
+        if context.is_owning_assistant() {
             context.model.responses_stateful_enabled = false;
         }
         if let Some(inspector) = self.directory_inspector.clone() {

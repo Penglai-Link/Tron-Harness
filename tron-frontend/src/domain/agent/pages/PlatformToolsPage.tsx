@@ -108,7 +108,7 @@ export function PlatformToolsPage() {
         {[
           { code: "all", name: pageT("categories.all", "All tools"), count: tools.length },
           ...[...categories].sort((left, right) => {
-            const order = ["tron.platform", "tron.dude", "system.command", "document.media", "network", "agent.collaboration", "interaction", "execution"];
+            const order = ["tron.platform", "tron.assistant", "system.command", "document.media", "network", "agent.collaboration", "interaction", "execution"];
             const index = (code: string) => { const found = order.indexOf(code); return found < 0 ? order.length : found; };
             return index(left.code) - index(right.code) || left.name.localeCompare(right.name);
           }).map((category) => ({ ...category, count: category.toolCount })),

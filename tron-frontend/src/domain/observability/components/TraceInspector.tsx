@@ -61,12 +61,12 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
   const triggerRoot = detail.spans.find((item) => item.spanId === trace.rootSpanId)
     ?? detail.spans.find((item) => !item.parentSpanId);
   const isPageTrigger = triggerRoot?.attributes["tron.trace.page"] === "true" || Boolean(triggerRoot?.attributes["url.path"]);
-  const triggerCategory = !isPageTrigger && (triggerRoot?.attributes["tron.agent.code"] || triggerRoot?.attributes["tron.dude.code"]) ? "Agent" : "Page";
+  const triggerCategory = !isPageTrigger && (triggerRoot?.attributes["tron.agent.code"] || triggerRoot?.attributes["tron.assistant.code"]) ? "Agent" : "Page";
   const title = triggerLabel(trace.trigger, i18n, triggerCategory);
-  const isDudeExecution = detail.spans.some((item) => item.name === "tron.dude.execute");
+  const isAssistantExecution = detail.spans.some((item) => item.name === "tron.assistant.execute");
   const canOpenSession = !isPageTrigger && Boolean(trace.sessionCode?.trim());
-  const sessionHref = isDudeExecution
-    ? `/dudes?${new URLSearchParams({ dude: trace.agentCode, tab: "history", session: trace.sessionCode })}`
+  const sessionHref = isAssistantExecution
+    ? `/assistants?${new URLSearchParams({ assistant: trace.agentCode, tab: "history", session: trace.sessionCode })}`
     : `/chats?${new URLSearchParams({ sessionCode: trace.sessionCode, workspaceCode: trace.workspaceCode })}`;
   const duration = (value: number) => formatTraceDuration(value, currentLocale);
   const metrics = [

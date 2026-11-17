@@ -45,7 +45,7 @@ export function triggerDetail(detail: TraceDetail, rootId: string | null): Trace
   const running = spans.some((span) => span.status === "Running");
   const end = spans.reduce((end, span) => Math.max(end, span.startedAt + span.durationMs), running ? Date.now() : 0);
   return { spans, trace: { ...detail.trace, rootSpanId:root.spanId,
-    trigger:root.attributes["tron.dude.name"] || root.attributes["tron.agent.name"] || root.attributes["tron.dude.code"] || root.attributes["tron.agent.code"] || root.attributes["url.path"] || root.name,
+    trigger:root.attributes["tron.assistant.name"] || root.attributes["tron.agent.name"] || root.attributes["tron.assistant.code"] || root.attributes["tron.agent.code"] || root.attributes["url.path"] || root.name,
     workspaceCode:root.attributes["tron.workspace.code"] || detail.trace.workspaceCode,
     sessionCode:root.attributes["tron.session.code"] || detail.trace.sessionCode,
     agentCode:root.attributes["tron.agent.code"] || detail.trace.agentCode,

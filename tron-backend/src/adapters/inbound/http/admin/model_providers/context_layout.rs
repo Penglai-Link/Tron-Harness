@@ -24,7 +24,7 @@ const NATIVE_IDS: &[&str] = &[
     "current_session_history",
     "current_session_working_state",
     "runtime_identity",
-    "dude_onboarding",
+    "assistant_onboarding",
     "tool_domains",
     "agent_directory",
     "skills.catalog",
@@ -33,8 +33,8 @@ const NATIVE_IDS: &[&str] = &[
     "topic_memo",
     "long_term_memory",
     "knowledge_base",
-    "dude_environment",
-    "dude_wakeup",
+    "assistant_environment",
+    "assistant_wakeup",
 ];
 
 #[derive(Debug, Serialize)]

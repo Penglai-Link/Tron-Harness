@@ -25,5 +25,5 @@ pub mod workspace;
 
 pub mod skin;
 
-pub mod dude;
-pub mod dude_memory;
+pub mod assistant;
+pub mod assistant_memory;

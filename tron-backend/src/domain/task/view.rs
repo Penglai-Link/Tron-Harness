@@ -29,7 +29,7 @@ pub struct TaskDetail {
     pub id: String,
     pub task_code: String,
     pub workspace_code: Option<String>,
-    pub owner_dude_code: Option<String>,
+    pub owner_assistant_code: Option<String>,
     pub due_at: Option<i64>,
     pub planned_start_at: Option<i64>,
     pub next_followup_at: Option<i64>,
@@ -65,7 +65,7 @@ pub struct TaskDetail {
 pub struct TaskListItem {
     pub task_code: String,
     pub workspace_code: Option<String>,
-    pub owner_dude_code: Option<String>,
+    pub owner_assistant_code: Option<String>,
     pub due_at: Option<i64>,
     pub planned_start_at: Option<i64>,
     pub next_followup_at: Option<i64>,

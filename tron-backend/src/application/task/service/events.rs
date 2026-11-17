@@ -16,8 +16,8 @@ impl TaskService {
                     detail.workspace_code.clone().unwrap_or_default(),
                 )
                 .attr(
-                    "ownerDudeCode",
-                    detail.owner_dude_code.clone().unwrap_or_default(),
+                    "ownerAssistantCode",
+                    detail.owner_assistant_code.clone().unwrap_or_default(),
                 )
                 .attr("scheduleVersion", detail.schedule_version.to_string())
                 .attr(

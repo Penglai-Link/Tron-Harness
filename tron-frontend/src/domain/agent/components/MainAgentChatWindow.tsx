@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
-import { getAwakening, type AwakeningStatus } from "@/domain/dude/api/dudeApi";
+import { getAwakening, type AwakeningStatus } from "@/domain/assistant/api/assistantApi";
 import {
   defaultMainAgentWindowState,
   MAIN_AGENT_WINDOW_STORAGE_KEY,
@@ -35,8 +35,8 @@ import { useToast } from "@/components/ui/toast";
 import { useTheme } from "@/shared";
 import { applyCurrentLocaleHeader } from "@/i18n";
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
-import { resolveMainDudeSession } from "@/domain/dude/api/dudeApi";
-import { useDudes } from "@/domain/dude/hooks/useDudes";
+import { resolveMainAssistantSession } from "@/domain/assistant/api/assistantApi";
+import { useAssistants } from "@/domain/assistant/hooks/useAssistants";
 import { Button } from "@/components/ui/button";
 
 interface MainAgentChatWindowProps {
@@ -52,7 +52,7 @@ interface MainAgentChatWindowProps {
 
 // Session creation is deduplicated by the server and scoped to the current account.
 function resolvePlatformSession() {
-  return resolveMainDudeSession();
+  return resolveMainAssistantSession();
 }
 
 export function MainAgentChatWindow({
@@ -83,9 +83,9 @@ export function MainAgentChatWindow({
   }, [userCode]);
   const feedback = useChatFeedback();
   const { t } = useTranslation("pages");
-  const dudes = useDudes();
-  const mainDudeName = dudes.data?.find((dude) => dude.isMain)?.name;
-  const chatTitle = floatingTitle ?? mainDudeName ?? t("dude.mainConversation");
+  const assistants = useAssistants();
+  const mainAssistantName = assistants.data?.find((assistant) => assistant.isMain)?.name;
+  const chatTitle = floatingTitle ?? mainAssistantName ?? t("assistant.mainConversation");
   const { agentReplyEffect, agentReplySpeed } = useTheme();
   const workRailLabels = useChatWorkRailLabels();
   const historyLabels = useChatHistoryLabels();
@@ -119,8 +119,8 @@ export function MainAgentChatWindow({
         getAccessToken: getApiAccessToken,
         getHeaders: () => {
           const headers = applyCurrentLocaleHeader(new Headers());
-          const owner = platformSessionRef.current?.ownerDudeCode;
-          if (owner) headers.set("X-Dude-Code", owner);
+          const owner = platformSessionRef.current?.ownerAssistantCode;
+          if (owner) headers.set("X-Assistant-Code", owner);
           return headers;
         },
       }),
@@ -161,13 +161,13 @@ export function MainAgentChatWindow({
   );
 
   const handleSessionChange = useCallback((nextSession: ChatSession | null) => {
-    // Chat completion returns a generic Session; Dude ownership is resolved by
+    // Chat completion returns a generic Session; PersonAI ownership is resolved by
     // the platform endpoint and must survive updates to that same conversation.
     setPersistedSession((current) =>
       current && nextSession?.sessionCode === current.sessionCode
         ? {
             ...nextSession,
-            ownerDudeCode: current.ownerDudeCode,
+            ownerAssistantCode: current.ownerAssistantCode,
             purpose: current.purpose,
           }
         : nextSession
@@ -179,7 +179,7 @@ export function MainAgentChatWindow({
       agentCode: persistedSession?.agentCode ?? undefined,
       floating: true,
       showNewSession: false,
-      inputPlaceholder: t("dude.messagePlaceholder"),
+      inputPlaceholder: t("assistant.messagePlaceholder"),
       storageKey: MAIN_AGENT_WINDOW_STORAGE_KEY,
       title: chatTitle,
       workRailLabels,
@@ -256,7 +256,7 @@ export function MainAgentChatWindow({
           className="mt-3"
           onClick={() => setRetry((value) => value + 1)}
         >
-          {t("dude.retry")}
+          {t("assistant.retry")}
         </Button>
         <Button
           className="ml-2"
@@ -265,7 +265,7 @@ export function MainAgentChatWindow({
             handleWindowStateChange({ ...resolvedWindowState, open: false })
           }
         >
-          {t("dude.close")}
+          {t("assistant.close")}
         </Button>
       </div>
     ) : null;
@@ -280,7 +280,7 @@ export function MainAgentChatWindow({
         showHistoryRail={false}
         createSendInput={createSendInput}
         currentUserDisplayName={currentUserDisplayName}
-        floatingSubtitle={floatingSubtitle ?? t("dude.platform")}
+        floatingSubtitle={floatingSubtitle ?? t("assistant.platform")}
         floatingTitle={chatTitle}
         footerAddon={
           <>
@@ -298,7 +298,7 @@ export function MainAgentChatWindow({
         }
         onRunStateChange={(state) => {
           if (!state.active) {
-            void queryClient.invalidateQueries({ queryKey: ["dudes"] });
+            void queryClient.invalidateQueries({ queryKey: ["assistants"] });
             void getAwakening()
               .then(setAwakening)
               .catch(() => {});

@@ -169,10 +169,23 @@ struct ContextProvidersFileConfig {
     prices: Option<crate::application::short_term_memory::ContextPriceInputs>,
     max_auxiliary_calls_per_step: Option<usize>,
 }
+/// Context layout files written before the Assistant rename still list the Dude
+/// block ids. Keep them working as aliases instead of rewriting the user's file.
+fn normalized_block_id(id: &str) -> String {
+    match id {
+        "dude_onboarding" => "assistant_onboarding",
+        "dude_environment" => "assistant_environment",
+        "dude_wakeup" => "assistant_wakeup",
+        other => other,
+    }
+    .to_owned()
+}
+
 impl ContextProvidersFileConfig {
     fn apply_to(self, config: &mut crate::application::short_term_memory::ContextProvidersConfig) {
         if let Some(blocks) = self.data_blocks {
             for (id, value) in blocks {
+                let id = normalized_block_id(&id);
                 let mut block = config
                     .data_blocks
                     .get(&id)
@@ -196,13 +209,22 @@ impl ContextProvidersFileConfig {
             }
         }
         if let Some(shares) = self.shares {
-            config.shares = shares;
+            config.shares = shares
+                .into_iter()
+                .map(|(id, share)| (normalized_block_id(&id), share))
+                .collect();
         }
         if let Some(order) = self.order {
-            config.order = order;
+            config.order = order
+                .into_iter()
+                .map(|id| normalized_block_id(&id))
+                .collect();
         }
         if let Some(overrides) = self.plugin_overrides {
-            config.plugin_overrides = overrides;
+            config.plugin_overrides = overrides
+                .into_iter()
+                .map(|(id, cap)| (normalized_block_id(&id), cap))
+                .collect();
         }
         if let Some(policy) = self.checkpoint {
             policy.apply_to(&mut config.checkpoint);

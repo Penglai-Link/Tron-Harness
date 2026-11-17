@@ -26,7 +26,7 @@ pub fn routes() -> axum::Router<crate::app::AppState> {
             post(handler::retry_install),
         )
         .route(
-            "/api/v1/dudes/{dude_code}/memory-batches",
+            "/api/v1/assistants/{assistant_code}/memory-batches",
             get(handler::batches),
         )
 }

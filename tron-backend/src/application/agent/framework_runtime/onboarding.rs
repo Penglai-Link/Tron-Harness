@@ -1,9 +1,9 @@
-//! A bounded soul-establishment profile; ordinary Dude messages keep the full runtime.
+//! A bounded soul-establishment profile; ordinary PersonAI messages keep the full runtime.
 use crate::{
-    application::dude::DudeService,
+    application::assistant::AssistantService,
     domain::{
         agent::AgentRunContext,
-        dude::{DudeSoul, SoulState},
+        assistant::{AssistantSoul, SoulState},
     },
 };
 use eliteforge_agent_core as fw;
@@ -20,7 +20,7 @@ pub(super) fn tool_definitions(
             binding.exposed
                 && matches!(
                     binding.descriptor.call_name.as_str(),
-                    "dude_soul_read" | "dude_soul_update" | "a2ui_request_input"
+                    "assistant_soul_read" | "assistant_soul_update" | "a2ui_request_input"
                 )
                 && (binding.descriptor.call_name == "a2ui_request_input"
                     || context.is_tool_authorized(&binding.descriptor.call_name))
@@ -51,7 +51,7 @@ pub(super) fn tool_context(
         vec![crate::domain::agent::AgentMessagePart::Context {
             kind: "tool_domains".into(),
             text: serde_json::json!({
-                "profile": "dude.initial-setup",
+                "profile": "assistant.initial-setup",
                 "complete": true,
                 "mode": "definition",
                 "executionTool": "tool_execute",
@@ -64,7 +64,7 @@ pub(super) fn tool_context(
     )
 }
 
-pub(super) fn next_action(context: &AgentRunContext, soul: &DudeSoul) -> &'static str {
+pub(super) fn next_action(context: &AgentRunContext, soul: &AssistantSoul) -> &'static str {
     if soul.state == SoulState::Ready {
         return "complete";
     }
@@ -92,8 +92,8 @@ pub(super) fn next_action(context: &AgentRunContext, soul: &DudeSoul) -> &'stati
     }
 }
 
-pub(super) fn active(context: &AgentRunContext, dudes: Option<&DudeService>) -> bool {
-    if !context.is_owning_dude() {
+pub(super) fn active(context: &AgentRunContext, assistants: Option<&AssistantService>) -> bool {
+    if !context.is_owning_assistant() {
         return false;
     }
     let Some(memory) = &context.short_term_memory else {
@@ -116,7 +116,7 @@ pub(super) fn active(context: &AgentRunContext, dudes: Option<&DudeService>) -> 
     if !guide_input {
         return false;
     }
-    dudes
+    assistants
         .and_then(|d| d.soul(context.agent_code.as_deref()?).ok())
         .is_some_and(|s| {
             s.state != SoulState::Ready
@@ -139,7 +139,12 @@ pub(super) fn narrow(context: &mut AgentRunContext) {
     let tools = context
         .authorized_tools()
         .iter()
-        .filter(|t| matches!(t.tool_name.as_str(), "dude_soul_read" | "dude_soul_update"))
+        .filter(|t| {
+            matches!(
+                t.tool_name.as_str(),
+                "assistant_soul_read" | "assistant_soul_update"
+            )
+        })
         .cloned()
         .collect::<Vec<_>>();
     context.tools = tools.clone();
@@ -169,7 +174,7 @@ impl fw::ToolProvider for FormTools {
             // The onboarding prompt already embeds the negotiated form contract.
             // The general descriptor's skill lookup would send this bounded
             // profile searching for skill tools it deliberately does not lease.
-            tool.descriptor.description = "Publish the first-awakening SubmitOnce form and wait for its response. The complete A2UI form contract is already in the Dude onboarding instructions; no skill lookup is required.".into();
+            tool.descriptor.description = "Publish the first-awakening SubmitOnce form and wait for its response. The complete A2UI form contract is already in the PersonAI onboarding instructions; no skill lookup is required.".into();
         }
         Ok(lease)
     }

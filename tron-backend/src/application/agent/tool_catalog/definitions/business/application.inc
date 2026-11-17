@@ -260,17 +260,17 @@ fn task_restore_definition() -> ToolCatalogDefinition {
     task_code_definition("task.restore", ToolOperationKind::Command)
 }
 
-fn dude_notify_definition() -> ToolCatalogDefinition {
-    definition("dude.notify", "dude_notification", ToolOperationKind::Command,
-        schema("agent.toolCatalog.tools.dude.notify.description", json!([{"changeId":"change-id","title":"Decision needed","body":"Choose the deployment window."}]),
+fn assistant_notify_definition() -> ToolCatalogDefinition {
+    definition("assistant.notify", "assistant_notification", ToolOperationKind::Command,
+        schema("agent.toolCatalog.tools.assistant.notify.description", json!([{"changeId":"change-id","title":"Decision needed","body":"Choose the deployment window."}]),
             json!({"type":"object","required":["changeId","title","body"],"properties":{
                 "changeId":{"type":"string","minLength":1},"title":{"type":"string","minLength":1,"maxLength":200},"body":{"type":"string","minLength":1,"maxLength":8000}},"additionalProperties":false})))
 }
-fn dude_work_change_definition() -> ToolCatalogDefinition {
+fn assistant_work_change_definition() -> ToolCatalogDefinition {
     // Model providers require a concrete object at the parameter root. Operation-
     // specific required fields are enforced by WorkInput before any mutation.
-    definition("dude.work_change", "dude_work", ToolOperationKind::Command,
-        schema("agent.toolCatalog.tools.dude.work_change.description", json!([{"operation":"list","taskCode":"task-id"}]),
+    definition("assistant.work_change", "assistant_work", ToolOperationKind::Command,
+        schema("agent.toolCatalog.tools.assistant.work_change.description", json!([{"operation":"list","taskCode":"task-id"}]),
             json!({"type":"object","required":["operation"],"properties":{
                 "operation":{"type":"string","enum":["list","recordResult","record","resolve"],"description":"list: requires taskCode. recordResult: requires taskCode and result. record: requires taskCode, changeKey, kind, summary and evidence; NeedsDecision/Blocked also require requestedAction. resolve: requires changeId, resolution and evidence. Omit fields belonging to other operations."},
                 "taskCode":{"type":"string","minLength":1},
@@ -285,13 +285,13 @@ fn dude_work_change_definition() -> ToolCatalogDefinition {
             },"additionalProperties":false})))
 }
 
-fn dude_soul_read_definition() -> ToolCatalogDefinition {
-    definition("dude.soul_read", "dude_identity", ToolOperationKind::Query,
-        schema("agent.toolCatalog.tools.dude.soul_read.description", json!([{}]),json!({"type":"object","properties":{},"additionalProperties":false})))
+fn assistant_soul_read_definition() -> ToolCatalogDefinition {
+    definition("assistant.soul_read", "assistant_identity", ToolOperationKind::Query,
+        schema("agent.toolCatalog.tools.assistant.soul_read.description", json!([{}]),json!({"type":"object","properties":{},"additionalProperties":false})))
 }
-fn dude_soul_update_definition() -> ToolCatalogDefinition {
-    definition("dude.soul_update", "dude_identity", ToolOperationKind::Command,
-        schema("agent.toolCatalog.tools.dude.soul_update.description", json!([
+fn assistant_soul_update_definition() -> ToolCatalogDefinition {
+    definition("assistant.soul_update", "assistant_identity", ToolOperationKind::Command,
+        schema("agent.toolCatalog.tools.assistant.soul_update.description", json!([
             {"name":"小川"},
             {"edits":[{"old":"","new":"回答简洁。"}]}
         ]),json!({"type":"object","properties":{
@@ -304,14 +304,14 @@ fn dude_soul_update_definition() -> ToolCatalogDefinition {
 }
 
 
-fn dude_notification_page_definition() -> ToolCatalogDefinition {
-    definition("dude.notification_page", "dude_notification", ToolOperationKind::Query,
-        schema("agent.toolCatalog.tools.dude.notification_page.description", json!([{"current":1,"size":20}]),
+fn assistant_notification_page_definition() -> ToolCatalogDefinition {
+    definition("assistant.notification_page", "assistant_notification", ToolOperationKind::Query,
+        schema("agent.toolCatalog.tools.assistant.notification_page.description", json!([{"current":1,"size":20}]),
             json!({"type":"object","properties":{"current":{"type":"integer","minimum":1,"maximum":1000000},"size":{"type":"integer","minimum":1,"maximum":100},"includeArchived":{"type":"boolean"}},"additionalProperties":false})))
 }
-fn dude_notification_get_definition() -> ToolCatalogDefinition {
-    definition("dude.notification_get", "dude_notification", ToolOperationKind::Query,
-        schema("agent.toolCatalog.tools.dude.notification_get.description", json!([{"notificationId":"work-change:change-id"}]),
+fn assistant_notification_get_definition() -> ToolCatalogDefinition {
+    definition("assistant.notification_get", "assistant_notification", ToolOperationKind::Query,
+        schema("agent.toolCatalog.tools.assistant.notification_get.description", json!([{"notificationId":"work-change:change-id"}]),
             json!({"type":"object","required":["notificationId"],"properties":{"notificationId":{"type":"string","minLength":1}},"additionalProperties":false})))
 }
 fn task_get_definition() -> ToolCatalogDefinition {

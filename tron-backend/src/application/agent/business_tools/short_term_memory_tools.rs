@@ -15,24 +15,24 @@ pub(super) fn short_term_memory_tools(
     vec![
         Arc::new(TodoUpdateTool {
             short_term_memory: short_term_memory.clone(),
-            dude_only: false,
+            assistant_only: false,
         }),
         Arc::new(TodoUpdateTool {
             short_term_memory,
-            dude_only: true,
+            assistant_only: true,
         }),
     ]
 }
 
 struct TodoUpdateTool {
     short_term_memory: ShortTermMemoryService,
-    dude_only: bool,
+    assistant_only: bool,
 }
 
 impl Tool for TodoUpdateTool {
     fn name(&self) -> &str {
-        if self.dude_only {
-            "dude_todo_update"
+        if self.assistant_only {
+            "assistant_todo_update"
         } else {
             "todo_update"
         }
@@ -48,13 +48,13 @@ impl Tool for TodoUpdateTool {
             .get("workspaceCode")
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned);
-        if self.dude_only {
-            if !context.is_owning_dude()
+        if self.assistant_only {
+            if !context.is_owning_assistant()
                 || !context.workspace_code.trim().is_empty()
                 || request.input.get("workspaceCode").is_some()
             {
                 return Err(ToolError::ExecutionFailed(
-                    "Dude todo tools require an owning Dude without workspaceCode".into(),
+                    "PersonAI todo tools require an owning PersonAI without workspaceCode".into(),
                 ));
             }
         } else {

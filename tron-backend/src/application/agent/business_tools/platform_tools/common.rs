@@ -75,7 +75,8 @@ pub(in crate::application::agent::business_tools) fn resolve_workspace_code(
             "workspaceCode is required".to_string(),
         ));
     }
-    if context.is_owning_dude() || workspace_code != context.execution_workspace_code().trim() {
+    if context.is_owning_assistant() || workspace_code != context.execution_workspace_code().trim()
+    {
         return Err(ToolError::ExecutionFailed(
             "workspaceCode is outside the current authorized execution scope".into(),
         ));

@@ -6,7 +6,7 @@ use super::{TaskPriority, TaskSourceType, TaskType};
 #[serde(rename_all = "camelCase")]
 pub struct TaskListQuery {
     pub workspace_code: Option<String>,
-    pub owner_dude_code: Option<String>,
+    pub owner_assistant_code: Option<String>,
     pub current: Option<usize>,
     pub size: Option<usize>,
     pub search: Option<String>,

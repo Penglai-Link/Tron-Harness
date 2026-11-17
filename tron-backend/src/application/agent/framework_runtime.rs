@@ -19,7 +19,7 @@ pub(crate) struct ContextLayoutContributorInfo {
     pub kind: eliteforge_agent_core::ContextSourceKind,
 }
 
-mod dude_context;
+mod assistant_context;
 mod onboarding;
 
 mod tools;
@@ -35,7 +35,7 @@ pub use capability_catalog::{
     query_installed_capability_packs,
 };
 pub use host::{
-    DudeThreadCatalogItem, FrameworkHost, SubagentRecord, SubagentView, ThreadFeedback,
+    AssistantThreadCatalogItem, FrameworkHost, SubagentRecord, SubagentView, ThreadFeedback,
     ThreadFeedbackSink,
 };
 pub(crate) use host::{PendingSudoInput, SudoInputError};

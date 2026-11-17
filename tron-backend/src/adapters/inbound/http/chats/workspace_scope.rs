@@ -35,15 +35,15 @@ pub async fn require_workspace(
     {
         return knowledge::require(state, request, next, kb).await;
     }
-    // Dude namespace is explicit and verified against durable ownership. The
+    // PersonAI namespace is explicit and verified against durable ownership. The
     // submitted workspace is validated separately for execution, not ownership.
-    if let Some(dude_code) = request
+    if let Some(assistant_code) = request
         .headers()
-        .get("x-dude-code")
+        .get("x-assistant-code")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned)
     {
-        if state.dudes.get(&dude_code).is_err() {
+        if state.assistants.get(&assistant_code).is_err() {
             return chat_error_response(ChatError::SessionNotFound);
         }
         let mut payload = serde_json::Value::Null;
@@ -121,17 +121,17 @@ pub async fn require_workspace(
             return chat_error_response(ChatError::SessionNotFound);
         };
         for code in &candidates {
-            let d = match state.dudes.session(code) {
-                Ok(Some(d)) if d.dude_code == dude_code => d,
+            let d = match state.assistants.session(code) {
+                Ok(Some(d)) if d.assistant_code == assistant_code => d,
                 _ => return chat_error_response(ChatError::SessionNotFound),
             };
             let chat = match state.chats.get_session(code) {
                 Ok(chat) => chat,
                 Err(_) => return chat_error_response(ChatError::SessionNotFound),
             };
-            let expected_source = format!("__dude:{dude_code}");
+            let expected_source = format!("__assistant:{assistant_code}");
             if chat.source_code.as_deref() != Some(expected_source.as_str())
-                || chat.agent_code.as_deref() != Some(dude_code.as_str())
+                || chat.agent_code.as_deref() != Some(assistant_code.as_str())
                 || chat.workspace_code != d.workspace_code.as_deref().unwrap_or_default()
                 || chat
                     .user_code
@@ -324,7 +324,7 @@ pub async fn require_workspace(
                 return chat_error_response(error);
             }
         };
-        if state.dudes.session(&session).ok().flatten().is_some() {
+        if state.assistants.session(&session).ok().flatten().is_some() {
             return chat_error_response(ChatError::SessionNotFound);
         }
         if record

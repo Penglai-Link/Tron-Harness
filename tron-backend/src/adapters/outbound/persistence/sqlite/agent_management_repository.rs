@@ -30,7 +30,7 @@ pub struct SqliteAgentManagementRepository {
     connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-// A Dude shares its Agent configuration and grants. Both owners must remove
+// A PersonAI shares its Agent configuration and grants. Both owners must remove
 // these records inside their existing transaction, before deleting its soul.
 pub(super) fn delete_platform_internal_agent_records(
     transaction: &super::framework_storage::BusinessTransaction<'_>,
@@ -109,10 +109,10 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         Ok(())
     }
 
-    fn list_dude_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
+    fn list_assistant_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
         let mut q = self
             .connection
-            .prepare("SELECT dude_code FROM dudes")
+            .prepare("SELECT assistant_code FROM assistants")
             .map_err(storage_error)?;
         q.query_map([], |r| r.get(0))
             .map_err(storage_error)?
@@ -397,7 +397,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     ) -> Result<Vec<PlatformInternalAgentConfig>, AgentManagementError> {
         let mut statement = self
             .connection
-            .prepare("SELECT CASE WHEN s.dude_code IS NULL THEN a.config_json ELSE json_set(a.config_json, '$.name', json_extract(s.record_json, '$.name')) END FROM platform_internal_agent_configs a LEFT JOIN dude_souls s ON s.dude_code=a.agent_code ORDER BY a.agent_code")
+            .prepare("SELECT CASE WHEN s.assistant_code IS NULL THEN a.config_json ELSE json_set(a.config_json, '$.name', json_extract(s.record_json, '$.name')) END FROM platform_internal_agent_configs a LEFT JOIN assistant_souls s ON s.assistant_code=a.agent_code ORDER BY a.agent_code")
             .map_err(storage_error)?;
         let rows = statement
             .query_map([], |row| row.get::<_, String>(0))
@@ -1114,9 +1114,11 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
         )
     }
 
-    fn list_dude_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
+    fn list_assistant_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
         self.connection.call(
-            move |connection| SqliteAgentManagementRepositorySql { connection }.list_dude_codes(),
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.list_assistant_codes()
+            },
             || AgentManagementError::StorageFailure,
         )
     }

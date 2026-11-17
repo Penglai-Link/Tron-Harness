@@ -56,7 +56,7 @@ static CHAT_SERVICE_COORDINATOR_NAMESPACE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone)]
 pub struct ChatService {
     knowledge_quality: Arc<OnceLock<crate::application::knowledge_base::KnowledgeBaseService>>,
-    dudes: Arc<std::sync::OnceLock<crate::application::dude::DudeService>>,
+    assistants: Arc<std::sync::OnceLock<crate::application::assistant::AssistantService>>,
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
     pub(super) prompt_service: Option<PromptService>,
     pub(super) llm_router: Option<LlmModelRouter>,
@@ -95,7 +95,7 @@ impl GoalContinuationResult {
 }
 
 impl ChatService {
-    pub(crate) fn bind_dudes(&self, service:crate::application::dude::DudeService) {let _=self.dudes.set(service);}
+    pub(crate) fn bind_assistants(&self, service:crate::application::assistant::AssistantService) {let _=self.assistants.set(service);}
 
     pub fn new(repository: impl ChatRepository + 'static) -> Self {
         Self::with_id_provider(
@@ -110,7 +110,7 @@ impl ChatService {
     ) -> Self {
         Self {
             knowledge_quality: Arc::new(OnceLock::new()),
-            dudes: Arc::new(std::sync::OnceLock::new()),
+            assistants: Arc::new(std::sync::OnceLock::new()),
             repository: Arc::new(Mutex::new(Box::new(repository))),
             prompt_service: None,
             llm_router: None,
@@ -131,7 +131,7 @@ impl ChatService {
     pub fn clone_with_id_provider(&self, id_provider: Arc<dyn SnowflakeIdProvider>) -> Self {
         Self {
             knowledge_quality: self.knowledge_quality.clone(),
-            dudes: self.dudes.clone(),
+            assistants: self.assistants.clone(),
             repository: self.repository.clone(),
             prompt_service: self.prompt_service.clone(),
             llm_router: self.llm_router.clone(),

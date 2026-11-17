@@ -31,7 +31,7 @@ export const shell = {
   },
   assistant: {
     body: "上下文助理入口当前已打开。后续 Step 3 页面可以在这里绑定路由级提示。",
-    title: "\u5e73\u53f0\u4e3b Dude \u5bf9\u8bdd",
+    title: "\u5e73\u53f0\u4e3b PersonAI \u5bf9\u8bdd",
   },
   topic: {
     autosave: {
@@ -171,7 +171,7 @@ export const shell = {
   nav: {
     items: {
       projects: "工作主题",
-      dudes: "好兄弟",
+      assistants: "个人助手",
       notifications: "通知",
       agents: "智能体",
       apps: "应用",

@@ -5,14 +5,14 @@ import { SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
 import type { PlatformToolRecord, WorkspaceInternalAgentRecord } from "../model";
-import { DudeToolPolicyFields } from "./DudeToolPolicyFields";
+import { AssistantToolPolicyFields } from "./AssistantToolPolicyFields";
 
 export type AgentPolicyDraft = Pick<WorkspaceInternalAgentRecord, "toolAssignmentMode" | "maxSteps" | "maxToolCalls" | "maxParallelToolCalls" | "mcpAccessMode" | "selectedToolCodes" | "selectedServerCodes" | "selectedCategoryCodes">;
 export const newAgentPolicyDraft = (): AgentPolicyDraft => ({ toolAssignmentMode: "all_platform_tools", maxSteps: 0, maxToolCalls: 0, maxParallelToolCalls: 10, mcpAccessMode: "all_enabled_servers", selectedCategoryCodes: [], selectedToolCodes: [], selectedServerCodes: [] });
 const labels = { mcpAccessMode: "MCP access mode", toolAssignmentMode: "Tool assignment mode", maxSteps: "Max steps", maxToolCalls: "Max total tool calls", maxParallelToolCalls: "Max parallel tool calls" };
 export function AgentPolicyFields({ panel, draft, disabled, onChange, onAssignment, children, tools = [], audience = "agent" }: {
   tools?: PlatformToolRecord[];
-  audience?: "agent" | "dude";
+  audience?: "agent" | "assistant";
   panel: "resources" | "advanced"; draft: AgentPolicyDraft; disabled: boolean;
   onChange: (patch: Partial<AgentPolicyDraft>) => void; onAssignment?: (kind: "mcp" | "tools") => void; children?: ReactNode;
 }) {
@@ -37,14 +37,14 @@ export function AgentPolicyFields({ panel, draft, disabled, onChange, onAssignme
       /></Field>;
     })}
   </div>;
-  const mcpLabel = audience === "dude" ? <span className="inline-flex items-center gap-1.5">{text("dudeToolPolicy.mcpLabel", "MCP servers")}<InfoTooltip ariaLabel={text("dudeToolPolicy.mcpHelpLabel", "About MCP servers")}>{text("dudeToolPolicy.mcpHelp", "Choose which enabled platform MCP servers Dude can use.")}</InfoTooltip></span> : label("mcpAccessMode");
+  const mcpLabel = audience === "assistant" ? <span className="inline-flex items-center gap-1.5">{text("assistantToolPolicy.mcpLabel", "MCP servers")}<InfoTooltip ariaLabel={text("assistantToolPolicy.mcpHelpLabel", "About MCP servers")}>{text("assistantToolPolicy.mcpHelp", "Choose which enabled platform MCP servers PersonAI can use.")}</InfoTooltip></span> : label("mcpAccessMode");
   const mcpField = <Field label={mcpLabel} actions={draft.mcpAccessMode === "selected_servers" ? <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => onAssignment?.("mcp")}>{text("assignmentDialog.editServers", "Choose servers ({{count}})", { count: draft.selectedServerCodes.length })}</Button> : undefined}>
       <SelectInput disabled={disabled} value={draft.mcpAccessMode} onValueChange={(value) => value === "selected_servers" ? onAssignment?.("mcp") : onChange({ mcpAccessMode: value as AgentPolicyDraft["mcpAccessMode"] })}>
         <SelectItem value="disabled">{text("modes.mcpDisabled", "Disabled")}</SelectItem><SelectItem value="all_enabled_servers">{text("modes.allEnabledServers", "All enabled servers")}</SelectItem><SelectItem value="selected_servers">{text("modes.selectedServers", "Selected servers")}</SelectItem>
       </SelectInput>
     </Field>;
-  if (audience === "dude") return <div className="space-y-5">
-    <DudeToolPolicyFields draft={draft} tools={tools} disabled={disabled} onChange={onChange} onChooseTools={() => onAssignment?.("tools")} />
+  if (audience === "assistant") return <div className="space-y-5">
+    <AssistantToolPolicyFields draft={draft} tools={tools} disabled={disabled} onChange={onChange} onChooseTools={() => onAssignment?.("tools")} />
     <div className="border-t border-[var(--color-outline-variant)] pt-4">{mcpField}</div>
     {children}
   </div>;

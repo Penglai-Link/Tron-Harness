@@ -31,7 +31,7 @@ struct SqliteTaskReader {
 impl TaskReadRepository for SqliteTaskReader {
     fn get_task(&self, code: &str) -> Result<Task, TaskError> {
         let code = code.to_owned();
-        self.connection.call_read(move|c|c.query_row("SELECT id,task_code,workspace_code,parent_task_code,title,description,execution_result,flow_code,status,previous_status,priority,task_type,source_type,source_url,agent_code,model_code,progress_value,created_at,updated_at,archived_at,owner_dude_code,due_at,planned_start_at,next_followup_at,work_session_code,schedule_version FROM tasks WHERE task_code=?1",[code],row_to_task).optional().map_err(storage_error)?.ok_or(TaskError::NotFound),||TaskError::StorageFailure)
+        self.connection.call_read(move|c|c.query_row("SELECT id,task_code,workspace_code,parent_task_code,title,description,execution_result,flow_code,status,previous_status,priority,task_type,source_type,source_url,agent_code,model_code,progress_value,created_at,updated_at,archived_at,owner_assistant_code,due_at,planned_start_at,next_followup_at,work_session_code,schedule_version FROM tasks WHERE task_code=?1",[code],row_to_task).optional().map_err(storage_error)?.ok_or(TaskError::NotFound),||TaskError::StorageFailure)
     }
     fn page(
         &self,
@@ -187,25 +187,25 @@ impl<'a> SqliteTaskRepositorySql<'a> {
 }
 
 impl SqliteTaskRepositorySql<'_> {
-    fn claim_dude_task(
+    fn claim_assistant_task(
         &mut self,
         task_code: &str,
         expected_version: i64,
         now_ms: i64,
     ) -> Result<bool, TaskError> {
         self.connection.execute(
-            "UPDATE tasks SET schedule_version = schedule_version + 1, next_followup_at = ?4, updated_at = ?3 WHERE task_code = ?1 AND schedule_version = ?2 AND owner_dude_code IS NOT NULL AND archived_at IS NULL AND status <> 'CLOSED' AND next_followup_at <= ?3",
+            "UPDATE tasks SET schedule_version = schedule_version + 1, next_followup_at = ?4, updated_at = ?3 WHERE task_code = ?1 AND schedule_version = ?2 AND owner_assistant_code IS NOT NULL AND archived_at IS NULL AND status <> 'CLOSED' AND next_followup_at <= ?3",
             params![task_code, expected_version, now_ms, now_ms.saturating_add(15 * 60 * 1000)],
         ).map(|count| count == 1).map_err(storage_error)
     }
 
-    fn bind_dude_work_session(
+    fn bind_assistant_work_session(
         &mut self,
         task_code: &str,
         session_code: &str,
     ) -> Result<bool, TaskError> {
         self.connection.execute(
-            "UPDATE tasks SET work_session_code = ?2 WHERE task_code = ?1 AND owner_dude_code IS NOT NULL AND archived_at IS NULL AND status <> 'CLOSED' AND (work_session_code IS NULL OR work_session_code = ?2)",
+            "UPDATE tasks SET work_session_code = ?2 WHERE task_code = ?1 AND owner_assistant_code IS NOT NULL AND archived_at IS NULL AND status <> 'CLOSED' AND (work_session_code IS NULL OR work_session_code = ?2)",
             params![task_code, session_code],
         ).map(|count| count == 1).map_err(storage_error)
     }
@@ -335,7 +335,7 @@ impl SqliteTaskRepositorySql<'_> {
 
     fn list_tasks(&mut self) -> Result<Vec<Task>, TaskError> {
         let mut statement = self.connection.prepare(
-            "SELECT id, task_code, workspace_code, parent_task_code, title, description, execution_result, flow_code, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at, owner_dude_code, due_at, planned_start_at, next_followup_at, work_session_code, schedule_version FROM tasks ORDER BY id ASC"
+            "SELECT id, task_code, workspace_code, parent_task_code, title, description, execution_result, flow_code, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at, owner_assistant_code, due_at, planned_start_at, next_followup_at, work_session_code, schedule_version FROM tasks ORDER BY id ASC"
         ).map_err(storage_error)?;
         statement
             .query_map([], row_to_task)
@@ -480,8 +480,8 @@ fn next_task_id(connection: &Connection) -> Result<i64, TaskError> {
 fn insert_task_row(connection: &Connection, task: &Task) -> Result<(), TaskError> {
     connection
         .execute(
-            "INSERT INTO tasks (id, task_code, workspace_code, parent_task_code, title, description, execution_result, flow_code, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at, owner_dude_code, due_at, planned_start_at, next_followup_at, work_session_code, schedule_version) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
-            params![task.id.value(), task.task_code, task.workspace_code, task.parent_task_code, task.title, task.description, task.execution_result, task.flow_code, task.status, task.previous_status, task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, task.agent_code, task.model_code, i64::from(task.progress), timestamp_to_millis(&task.created_at), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref()), task.owner_dude_code, task.due_at, task.planned_start_at, task.next_followup_at, task.work_session_code, task.schedule_version],
+            "INSERT INTO tasks (id, task_code, workspace_code, parent_task_code, title, description, execution_result, flow_code, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at, owner_assistant_code, due_at, planned_start_at, next_followup_at, work_session_code, schedule_version) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
+            params![task.id.value(), task.task_code, task.workspace_code, task.parent_task_code, task.title, task.description, task.execution_result, task.flow_code, task.status, task.previous_status, task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, task.agent_code, task.model_code, i64::from(task.progress), timestamp_to_millis(&task.created_at), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref()), task.owner_assistant_code, task.due_at, task.planned_start_at, task.next_followup_at, task.work_session_code, task.schedule_version],
         )
         .map_err(storage_error)?;
     Ok(())
@@ -543,7 +543,7 @@ fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
         id: SnowflakeId::new(row.get(0)?),
         task_code: row.get(1)?,
         workspace_code: row.get(2)?,
-        owner_dude_code: row.get(20)?,
+        owner_assistant_code: row.get(20)?,
         due_at: row.get(21)?,
         planned_start_at: row.get(22)?,
         next_followup_at: row.get(23)?,
@@ -597,7 +597,7 @@ impl TaskRepository for SqliteTaskRepository {
             connection: self.connection.clone(),
         })
     }
-    fn prune_finished_dude_tasks(&mut self, cutoff_ms: i64) -> Result<usize, TaskError> {
+    fn prune_finished_assistant_tasks(&mut self, cutoff_ms: i64) -> Result<usize, TaskError> {
         self.connection.call(
             move |connection| {
                 let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
@@ -609,7 +609,7 @@ impl TaskRepository for SqliteTaskRepository {
                 loop {
                     let codes = {
                         let mut query = tx.prepare(
-                            "SELECT task_code FROM tasks t WHERE owner_dude_code IS NOT NULL \
+                            "SELECT task_code FROM tasks t WHERE owner_assistant_code IS NOT NULL \
                              AND (status = ?1 OR archived_at IS NOT NULL) AND updated_at <= ?2 \
                              AND NOT EXISTS (SELECT 1 FROM tasks child WHERE child.parent_task_code = t.task_code)",
                         ).map_err(storage_error)?;
@@ -639,7 +639,7 @@ impl TaskRepository for SqliteTaskRepository {
             || TaskError::StorageFailure,
         )
     }
-    fn claim_dude_task(
+    fn claim_assistant_task(
         &mut self,
         task_code: &str,
         expected_version: i64,
@@ -648,7 +648,7 @@ impl TaskRepository for SqliteTaskRepository {
         let task_code = task_code.to_owned();
         self.connection.call(
             move |connection| {
-                SqliteTaskRepositorySql { connection }.claim_dude_task(
+                SqliteTaskRepositorySql { connection }.claim_assistant_task(
                     &task_code,
                     expected_version,
                     now_ms,
@@ -658,7 +658,7 @@ impl TaskRepository for SqliteTaskRepository {
         )
     }
 
-    fn bind_dude_work_session(
+    fn bind_assistant_work_session(
         &mut self,
         task_code: &str,
         session_code: &str,
@@ -668,7 +668,7 @@ impl TaskRepository for SqliteTaskRepository {
         self.connection.call(
             move |connection| {
                 SqliteTaskRepositorySql { connection }
-                    .bind_dude_work_session(&task_code, &session_code)
+                    .bind_assistant_work_session(&task_code, &session_code)
             },
             || storage_error(rusqlite::Error::InvalidQuery),
         )

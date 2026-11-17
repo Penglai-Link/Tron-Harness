@@ -40,7 +40,7 @@ impl FrameworkHost {
         crate::application::agent::execution_context::sync_execution_context(&mut context);
         collaboration::authorize_tools(self, &mut context);
         let onboarding =
-            super::super::onboarding::active(&context, harness.framework_dudes().as_ref());
+            super::super::onboarding::active(&context, harness.framework_assistants().as_ref());
         if onboarding {
             super::super::onboarding::narrow(&mut context);
         }
@@ -249,9 +249,9 @@ impl FrameworkHost {
                     && context
                         .collaboration_owner
                         .as_ref()
-                        .is_some_and(|owner| owner.kind == "DUDE")
+                        .is_some_and(|owner| owner.kind == "ASSISTANT")
                 {
-                    "DUDE"
+                    "ASSISTANT"
                 } else {
                     "AGENT"
                 }
@@ -277,11 +277,13 @@ impl FrameworkHost {
                 "a2ui.guidance",
                 "agent.directory-guidance",
             ];
-            if context.is_owning_dude() {
-                keys.extend_from_slice(super::super::dude_context::DudeGuidance::prompt_keys(
-                    false,
-                ));
-                keys.extend_from_slice(super::super::dude_context::DudeGuidance::prompt_keys(true));
+            if context.is_owning_assistant() {
+                keys.extend_from_slice(
+                    super::super::assistant_context::AssistantGuidance::prompt_keys(false),
+                );
+                keys.extend_from_slice(
+                    super::super::assistant_context::AssistantGuidance::prompt_keys(true),
+                );
             }
             let resolved = prompts
                 .runtime_prompt_texts(&keys, &context.locale, &std::collections::HashMap::new())
@@ -419,7 +421,7 @@ impl FrameworkHost {
             sink,
         });
         tron_harness_capability::TronRunScope {
-            platform_scope: context.is_platform_dude(),
+            platform_scope: context.is_platform_assistant(),
             user_code: context.user_code.clone().unwrap_or_else(|| "system".into()),
             workspace_code: context.workspace_code.clone(),
             session_code: session.clone(),
@@ -516,7 +518,7 @@ impl FrameworkHost {
                 .as_ref()
                 .is_ok_and(|r| r.status == fw::RunStatus::AwaitingInput)
         {
-            if let Some(dudes) = harness.framework_dudes() {
+            if let Some(assistants) = harness.framework_assistants() {
                 for interaction in agent
                     .pending_interactions(
                         context
@@ -530,7 +532,7 @@ impl FrameworkHost {
                     if !matches!(interaction.request.kind, fw::InteractionKind::Input) {
                         continue;
                     }
-                    dudes
+                    assistants
                         .record_soul_question(
                             &interaction.session_id,
                             &interaction.request.id.to_string(),
@@ -565,7 +567,7 @@ impl FrameworkHost {
                 fw::AgentError::SessionBusy(_) | fw::AgentError::Cancelled => map_error_ref(error),
                 fw::AgentError::State(fw::StateError::Busy)
                     if runtime_input
-                        .is_some_and(|input| input.input_kind == "DUDE_MEMORY_BATCH")
+                        .is_some_and(|input| input.input_kind == "ASSISTANT_MEMORY_BATCH")
                         && !matches!(error, fw::AgentError::WithCleanup { .. }) =>
                 {
                     AgentError::SessionBusy(session.clone())

@@ -34,22 +34,22 @@ impl AgentModelRouter {
         self
     }
 
-    /// Business workspace context must never select a Dude's model catalog.
+    /// Business workspace context must never select a PersonAI's model catalog.
     fn model_workspace<'a>(&self, workspace: &'a str, agent: &str) -> Result<&'a str, String> {
         if workspace.is_empty() {
             return Ok("");
         }
-        let is_dude = self
+        let is_assistant = self
             .management
             .as_ref()
             .map(|management| {
                 management
-                    .is_dude_definition(agent)
+                    .is_assistant_definition(agent)
                     .map_err(|error| format!("Agent kind lookup failed: {error:?}"))
             })
             .transpose()?
             .unwrap_or(false);
-        Ok(if is_dude { "" } else { workspace })
+        Ok(if is_assistant { "" } else { workspace })
     }
 
     fn route_policy<'a>(

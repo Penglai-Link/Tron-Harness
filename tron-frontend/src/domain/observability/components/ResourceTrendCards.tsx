@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { fetchPlatformSystemAgents, fetchWorkspaceInternalAgents, listTools } from "@/domain/agent/api/agentManagementApi";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
-import { listDudes } from "@/domain/dude/api/dudeApi";
+import { listAssistants } from "@/domain/assistant/api/assistantApi";
 import { CAPABILITY_RESOURCES_CHANGED, fetchRegistrySkills } from "@/domain/skill/api";
 import { SurfaceCard, useLocaleFormatters } from "@/shared";
 import { getCapabilityPluginCounts } from "@/domain/settings/api/capabilityApi";
@@ -60,18 +60,18 @@ export function PluginCountCard() {
   const inventory = useQuery({
     queryKey: ["observability-inventory-counts"],
     queryFn: async ({ signal }) => {
-      const [tools, skills, internalAgents, systemAgents, dudes] = await Promise.all([
+      const [tools, skills, internalAgents, systemAgents, assistants] = await Promise.all([
         listTools({}, signal),
         fetchRegistrySkills({}, signal),
         fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE, signal),
         fetchPlatformSystemAgents(signal),
-        listDudes(signal),
+        listAssistants(signal),
       ]);
       return {
         tools: tools.length,
         skills: skills.length,
         agents: internalAgents.length + systemAgents.length,
-        dudes: dudes.length,
+        assistants: assistants.length,
       };
     },
     retry: false,
@@ -93,7 +93,7 @@ export function PluginCountCard() {
     ["toolCount", inventory.data?.tools],
     ["skillCount", inventory.data?.skills],
     ["agentCount", inventory.data?.agents],
-    ["dudeCount", inventory.data?.dudes],
+    ["assistantCount", inventory.data?.assistants],
   ] as const;
   return <SurfaceCard className="!shadow-none">
     <dl className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">

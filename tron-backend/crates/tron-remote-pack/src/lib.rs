@@ -53,24 +53,24 @@ impl TronRemotePack {
     }
 
     async fn get(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, RpcError> {
-        self.get_with_dude(path, query, None).await
+        self.get_with_assistant(path, query, None).await
     }
 
-    /// Dude sessions are user-scoped, not workspace-scoped: Tron's chat
-    /// middleware only resolves them when the request carries `X-Dude-Code`.
-    async fn get_with_dude(
+    /// PersonAI sessions are user-scoped, not workspace-scoped: Tron's chat
+    /// middleware only resolves them when the request carries `X-Assistant-Code`.
+    async fn get_with_assistant(
         &self,
         path: &str,
         query: &[(&str, &str)],
-        dude_code: Option<&str>,
+        assistant_code: Option<&str>,
     ) -> Result<Value, RpcError> {
         let mut request = self
             .client
             .get(format!("{}{}", self.http_base, path))
             .query(query)
             .header("Accept-Language", "zh-CN");
-        if let Some(code) = dude_code {
-            request = request.header("X-Dude-Code", code);
+        if let Some(code) = assistant_code {
+            request = request.header("X-Assistant-Code", code);
         }
         let response = request
             .send()
@@ -84,13 +84,13 @@ impl TronRemotePack {
     }
 
     /// Chat and AG-UI endpoints resolve ownership from the workspace header
-    /// (or query) and Dude sessions additionally from `X-Dude-Code`.
+    /// (or query) and PersonAI sessions additionally from `X-Assistant-Code`.
     async fn get_with_scope(
         &self,
         path: &str,
         query: &[(&str, &str)],
         workspace: Option<&str>,
-        dude_code: Option<&str>,
+        assistant_code: Option<&str>,
     ) -> Result<Value, RpcError> {
         let mut request = self
             .client
@@ -100,8 +100,8 @@ impl TronRemotePack {
         if let Some(code) = workspace.map(str::trim).filter(|value| !value.is_empty()) {
             request = request.header("X-Workspace-Code", code);
         }
-        if let Some(code) = dude_code.map(str::trim).filter(|value| !value.is_empty()) {
-            request = request.header("X-Dude-Code", code);
+        if let Some(code) = assistant_code.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Assistant-Code", code);
         }
         let response = request
             .send()
@@ -115,21 +115,21 @@ impl TronRemotePack {
     }
 
     async fn post(&self, path: &str, body: Value) -> Result<Value, RpcError> {
-        self.post_with_dude(path, body, None).await
+        self.post_with_assistant(path, body, None).await
     }
 
-    async fn post_with_dude(
+    async fn post_with_assistant(
         &self,
         path: &str,
         body: Value,
-        dude_code: Option<&str>,
+        assistant_code: Option<&str>,
     ) -> Result<Value, RpcError> {
-        self.post_with_scope(path, body, None, dude_code).await
+        self.post_with_scope(path, body, None, assistant_code).await
     }
 
     /// Chat endpoints resolve the active workspace from `X-Workspace-Code`
-    /// (or the query string) before the handler reads the JSON body; Dude
-    /// sessions are resolved through `X-Dude-Code` instead.
+    /// (or the query string) before the handler reads the JSON body; PersonAI
+    /// sessions are resolved through `X-Assistant-Code` instead.
     async fn post_with_workspace(
         &self,
         path: &str,
@@ -144,7 +144,7 @@ impl TronRemotePack {
         path: &str,
         body: Value,
         workspace: Option<&str>,
-        dude_code: Option<&str>,
+        assistant_code: Option<&str>,
     ) -> Result<Value, RpcError> {
         let mut request = self
             .client
@@ -154,8 +154,8 @@ impl TronRemotePack {
         if let Some(code) = workspace.map(str::trim).filter(|value| !value.is_empty()) {
             request = request.header("X-Workspace-Code", code);
         }
-        if let Some(code) = dude_code.map(str::trim).filter(|value| !value.is_empty()) {
-            request = request.header("X-Dude-Code", code);
+        if let Some(code) = assistant_code.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Assistant-Code", code);
         }
         let response = request
             .send()
@@ -168,12 +168,12 @@ impl TronRemotePack {
         unwrap_envelope(envelope)
     }
 
-    /// Dude context travels in the RPC metadata because the session methods
+    /// PersonAI context travels in the RPC metadata because the session methods
     /// only carry a session id.
-    fn metadata_dude_code(metadata: &Option<Value>) -> Option<String> {
+    fn metadata_assistant_code(metadata: &Option<Value>) -> Option<String> {
         metadata
             .as_ref()?
-            .get("dudeCode")?
+            .get("assistantCode")?
             .as_str()
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -294,7 +294,7 @@ impl TronRemotePack {
             workspace: Some(workspace.into()),
             metadata: Some(json!({
                 "sourceType": item.get("sourceType").cloned().unwrap_or(Value::Null),
-                "dudeCode": item.get("agentCode").cloned().unwrap_or(Value::Null),
+                "assistantCode": item.get("agentCode").cloned().unwrap_or(Value::Null),
                 "projectCode": item.get("projectCode").cloned().unwrap_or(Value::Null),
                 "directoryCode": item.get("directoryCode").cloned().unwrap_or(Value::Null),
             })),
@@ -356,12 +356,12 @@ impl SessionRpc for TronRemotePack {
 
     async fn history(&self, _ctx: &RemotePrincipal, params: SessionHistoryParams) -> Result<SessionHistoryResult, RpcError> {
         let workspace = self.default_workspace().await?;
-        let dude = Self::metadata_dude_code(&params.metadata);
+        let assistant = Self::metadata_assistant_code(&params.metadata);
         let data = self
-            .get_with_dude(
+            .get_with_assistant(
                 &format!("/api/v1/chats/sessions/{}/messages", params.session_id),
                 &[("workspaceCode", &workspace)],
-                dude.as_deref(),
+                assistant.as_deref(),
             )
             .await?;
         let items = data
@@ -396,7 +396,7 @@ impl SessionRpc for TronRemotePack {
         events: EventEmitter,
     ) -> Result<SendMessageResult, RpcError> {
         let workspace = self.default_workspace().await?;
-        let dude = Self::metadata_dude_code(&params.metadata);
+        let assistant = Self::metadata_assistant_code(&params.metadata);
         let mut body = json!({
             "content": params.content,
             "workspaceCode": workspace,
@@ -417,8 +417,8 @@ impl SessionRpc for TronRemotePack {
             .query(&[("workspaceCode", workspace.as_str())])
             .header("Accept-Language", "zh-CN")
             .json(&body);
-        if let Some(code) = dude.as_deref() {
-            request = request.header("X-Dude-Code", code);
+        if let Some(code) = assistant.as_deref() {
+            request = request.header("X-Assistant-Code", code);
         }
         let response = request
             .send()
@@ -474,9 +474,9 @@ impl SessionRpc for TronRemotePack {
             "sessionCode": params.session_id,
             "expectedRunCode": params.run_id.unwrap_or_default(),
         });
-        let dude = Self::metadata_dude_code(&params.metadata);
+        let assistant = Self::metadata_assistant_code(&params.metadata);
         let _ = self
-            .post_with_dude("/api/v1/chats/sessions/stop-run", body, dude.as_deref())
+            .post_with_assistant("/api/v1/chats/sessions/stop-run", body, assistant.as_deref())
             .await?;
         Ok(StopRunResult { cancelled: true })
     }
@@ -540,31 +540,31 @@ impl RpcMethod for TronMethod {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_owned();
-        let dude_code = params
-            .get("dudeCode")
+        let assistant_code = params
+            .get("assistantCode")
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_owned();
         match self.method.as_str() {
             "tron.workspaces.list" => self.pack.get("/api/v1/admin/workspaces/options", &[]).await,
-            "tron.dudes.list" => {
+            "tron.assistants.list" => {
                 self.pack
-                    .get("/api/v1/dudes", &[("workspaceCode", workspace.as_str())])
+                    .get("/api/v1/assistants", &[("workspaceCode", workspace.as_str())])
                     .await
             }
-            "tron.dudes.mainSession" => {
+            "tron.assistants.mainSession" => {
                 self.pack
                     .post_query(
-                        "/api/v1/dudes/main/session",
+                        "/api/v1/assistants/main/session",
                         &[("workspaceCode", workspace.as_str())],
                         json!({}),
                     )
                     .await
             }
-            "tron.dudes.createSession" => {
+            "tron.assistants.createSession" => {
                 self.pack
                     .post_query(
-                        &format!("/api/v1/dudes/{dude_code}/sessions"),
+                        &format!("/api/v1/assistants/{assistant_code}/sessions"),
                         &[("workspaceCode", workspace.as_str())],
                         json!({}),
                     )
@@ -597,7 +597,7 @@ impl RpcMethod for TronMethod {
                         ),
                         &[],
                         Some(workspace.as_str()),
-                        Some(dude_code.as_str()),
+                        Some(assistant_code.as_str()),
                     )
                     .await?;
                 // The phone only renders the process; text deltas already come
@@ -673,7 +673,7 @@ impl RpcMethod for TronMethod {
                             "requestedSkills": [],
                         }),
                         Some(workspace.as_str()),
-                        Some(dude_code.as_str()),
+                        Some(assistant_code.as_str()),
                     )
                     .await
             }
@@ -693,9 +693,9 @@ impl RemotePack for TronRemotePack {
     fn register(&self, registry: &mut RpcRegistry) {
         for method in [
             "tron.workspaces.list",
-            "tron.dudes.list",
-            "tron.dudes.mainSession",
-            "tron.dudes.createSession",
+            "tron.assistants.list",
+            "tron.assistants.mainSession",
+            "tron.assistants.createSession",
             "tron.projects.list",
             "tron.directories.list",
             "tron.session.groups",

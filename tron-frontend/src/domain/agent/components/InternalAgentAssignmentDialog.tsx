@@ -44,7 +44,7 @@ export function InternalAgentAssignmentDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle>{kind === "mcp" ? pageT("mcpTitle", "Choose MCP servers") : pageT("toolsTitle", "Choose tools")}</DialogTitle>
           <DialogDescription>{agentName} · {pageT("selectedCount", "{{count}} selected", { count: selectedCodes.length })}</DialogDescription>
-          {switchingFromRule && <p className="text-xs text-[var(--color-on-surface-variant)]">{t("pages:workspaceAgents.internal.dudeToolPolicy.switchToFixedHint")}</p>}
+          {switchingFromRule && <p className="text-xs text-[var(--color-on-surface-variant)]">{t("pages:workspaceAgents.internal.assistantToolPolicy.switchToFixedHint")}</p>}
         </DialogHeader>
         <div className={kind === "tools" ? "min-h-0 flex-1 overflow-hidden" : "tron-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto"}>
           {kind === "mcp" ? (

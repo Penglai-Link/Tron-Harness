@@ -73,7 +73,7 @@ Remote images require a network connection and are not bundled with the text. --
 ### Agents and collaboration
 
 - Integrated the Agent Framework runtime to unify agent sessions, tool execution and capability management.
-- Added Dude onboarding and configuration, background wakeups, delegated tasks and result notifications, with guidance during execution.
+- Added PersonAI onboarding and configuration, background wakeups, delegated tasks and result notifications, with guidance during execution.
 - Gave subagents independent sessions with background execution, status inspection and human intervention.
 - Added explicit skill and goal commands in chat, along with active-page and working-directory context for agents.
 - Added tool permissions, command-risk explanations and batch approvals, with private password entry for elevated commands.

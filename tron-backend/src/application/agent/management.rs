@@ -103,7 +103,7 @@ pub trait AgentManagementRepository: Send {
         Ok(())
     }
 
-    fn list_dude_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
+    fn list_assistant_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
         Ok(vec![])
     }
 

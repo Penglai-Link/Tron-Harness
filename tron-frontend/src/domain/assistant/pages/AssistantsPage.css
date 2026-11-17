@@ -1,0 +1,42 @@
+.assistant-session-chat {
+  container: assistant-chat / inline-size;
+}
+
+.assistant-session-chat .ef-chat {
+  --assistant-chat-content-width: 36rem;
+  --assistant-chat-inline-padding: 12px;
+}
+
+@container assistant-chat (min-width: 640px) {
+  .assistant-session-chat .ef-chat {
+    --assistant-chat-content-width: 44rem;
+    --assistant-chat-inline-padding: 20px;
+  }
+}
+
+@container assistant-chat (min-width: 1000px) {
+  .assistant-session-chat .ef-chat {
+    --assistant-chat-content-width: 54rem;
+    --assistant-chat-inline-padding: 24px;
+  }
+}
+
+.assistant-session-chat .ef-chat__transcript,
+.assistant-session-chat .ef-chat__footer {
+  padding-inline: var(--assistant-chat-inline-padding);
+}
+
+.assistant-session-chat .ef-chat__transcript-inner {
+  max-width: var(--assistant-chat-content-width);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.assistant-session-chat .ef-chat__footer > .ef-composer,
+.assistant-session-chat .ef-chat__footer > .ef-chat__pending-annotations,
+.assistant-session-chat .ef-chat__footer > .ef-chat-goal {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin-inline: 0;
+}

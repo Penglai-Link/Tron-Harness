@@ -57,7 +57,7 @@ impl TaskService {
 
     pub fn create_task(&self, command: CreateTaskCommand) -> Result<TaskDetail, TaskError> {
         let workspace_code = optional_trimmed(command.workspace_code);
-        let owner_dude_code = optional_trimmed(command.owner_dude_code);
+        let owner_assistant_code = optional_trimmed(command.owner_assistant_code);
         if let Some(workspace) = workspace_code.as_deref() {
             self.ensure_active_workspace(workspace)?;
         } else if command.task_type != TaskType::General {
@@ -72,7 +72,7 @@ impl TaskService {
             self.ensure_valid_parent(
                 parent_code,
                 workspace_code.as_deref(),
-                owner_dude_code.as_deref(),
+                owner_assistant_code.as_deref(),
             )?;
         }
         let flow = match workspace_code.as_deref() {
@@ -87,10 +87,10 @@ impl TaskService {
         let app_links =
             self.validate_scope_app_links(workspace_code.as_deref(), command.app_codes)?;
         let now_ms = chrono::Utc::now().timestamp_millis();
-        let planned_start_at = owner_dude_code
+        let planned_start_at = owner_assistant_code
             .as_ref()
             .map(|_| default_planned_start(now_ms, command.due_at));
-        // Parallel Dude sessions share this service; allocate and persist under one lock.
+        // Parallel PersonAI sessions share this service; allocate and persist under one lock.
         let mut repository = self
             .repository
             .lock()
@@ -98,13 +98,13 @@ impl TaskService {
         let id = repository.next_id()?;
         let task_code = format!("TSK-{id}");
         let agent_code = optional_trimmed(command.agent_code)
-            .or_else(|| owner_dude_code.clone())
+            .or_else(|| owner_assistant_code.clone())
             .unwrap_or_else(|| "main-agent".to_string());
         let task = Task {
             id: SnowflakeId::new(id),
             task_code: task_code.clone(),
             workspace_code,
-            owner_dude_code,
+            owner_assistant_code,
             due_at: command.due_at,
             planned_start_at,
             next_followup_at: planned_start_at,
@@ -209,7 +209,7 @@ impl TaskService {
                 return Err(TaskError::InvalidRequest);
             }
             task.due_at = due_at;
-            if task.owner_dude_code.is_some() {
+            if task.owner_assistant_code.is_some() {
                 let next = default_planned_start(chrono::Utc::now().timestamp_millis(), due_at);
                 task.planned_start_at = Some(next);
                 task.next_followup_at = Some(next);
@@ -220,7 +220,7 @@ impl TaskService {
         }
         if task.status == crate::domain::task::CLOSED_STATUS_CODE {
             task.next_followup_at = None;
-        } else if task.owner_dude_code.is_some() && task.next_followup_at.is_none() {
+        } else if task.owner_assistant_code.is_some() && task.next_followup_at.is_none() {
             task.next_followup_at = Some(chrono::Utc::now().timestamp_millis());
         }
         task.updated_at = current_timestamp();
@@ -279,7 +279,7 @@ impl TaskService {
         };
         if task.status == crate::domain::task::CLOSED_STATUS_CODE {
             task.next_followup_at = None;
-        } else if task.owner_dude_code.is_some() && task.next_followup_at.is_none() {
+        } else if task.owner_assistant_code.is_some() && task.next_followup_at.is_none() {
             task.next_followup_at = Some(chrono::Utc::now().timestamp_millis());
         }
         task.updated_at = current_timestamp();
@@ -358,7 +358,7 @@ impl TaskService {
                 .unwrap_or_else(|| crate::domain::task::NOT_STARTED_STATUS_CODE.to_string());
             task.previous_status = None;
             task.archived_at = None;
-            if task.owner_dude_code.is_some() {
+            if task.owner_assistant_code.is_some() {
                 task.next_followup_at = Some(chrono::Utc::now().timestamp_millis());
             }
             task.updated_at = current_timestamp();

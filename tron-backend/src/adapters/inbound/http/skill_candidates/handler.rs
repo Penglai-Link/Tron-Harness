@@ -1,6 +1,6 @@
 use super::{request::*, response::*};
 use crate::{
-    adapters::inbound::http::auth::RequestAuthContext, app::AppState, domain::dude_memory::*,
+    adapters::inbound::http::auth::RequestAuthContext, app::AppState, domain::assistant_memory::*,
     response::ApiResponse,
 };
 use axum::{
@@ -11,7 +11,10 @@ use axum::{
 };
 
 pub async fn list(auth: RequestAuthContext, State(state): State<AppState>) -> Response {
-    match state.dude_memory.list_candidates(&auth.user().user_code) {
+    match state
+        .assistant_memory
+        .list_candidates(&auth.user().user_code)
+    {
         Ok(items) => Json(ApiResponse::protocol_success(
             items
                 .into_iter()
@@ -28,7 +31,7 @@ pub async fn detail(
     Path(code): Path<String>,
 ) -> Response {
     match state
-        .dude_memory
+        .assistant_memory
         .get_candidate(&auth.user().user_code, &code)
     {
         Ok(item) => {
@@ -40,11 +43,11 @@ pub async fn detail(
 pub async fn batches(
     auth: RequestAuthContext,
     State(state): State<AppState>,
-    Path(dude): Path<String>,
+    Path(assistant): Path<String>,
 ) -> Response {
     match state
-        .dude_memory
-        .list_batches(&auth.user().user_code, &dude)
+        .assistant_memory
+        .list_batches(&auth.user().user_code, &assistant)
     {
         Ok(items) => Json(ApiResponse::protocol_success(
             items
@@ -62,7 +65,7 @@ pub async fn approve(
     Path(code): Path<String>,
     Json(body): Json<ApproveCandidateRequest>,
 ) -> Response {
-    match state.dude_memory.approve(
+    match state.assistant_memory.approve(
         &auth.user().user_code,
         &code,
         body.revision,
@@ -84,7 +87,7 @@ pub async fn reject(
     Path(code): Path<String>,
     Json(body): Json<RejectCandidateRequest>,
 ) -> Response {
-    match state.dude_memory.reject(
+    match state.assistant_memory.reject(
         &auth.user().user_code,
         &code,
         body.revision,
@@ -103,7 +106,7 @@ pub async fn revise(
     Path(code): Path<String>,
     Json(body): Json<ReviseCandidateRequest>,
 ) -> Response {
-    match state.dude_memory.request_revision(
+    match state.assistant_memory.request_revision(
         &auth.user().user_code,
         &code,
         body.revision,
@@ -122,7 +125,7 @@ pub async fn retry_install(
     Path(code): Path<String>,
     Json(body): Json<RetryCandidateInstallRequest>,
 ) -> Response {
-    match state.dude_memory.retry_install(
+    match state.assistant_memory.retry_install(
         &auth.user().user_code,
         &code,
         body.revision,
@@ -140,7 +143,7 @@ pub async fn retry_install(
 }
 async fn index_if_installed(state: &AppState, candidate: &SkillCandidate) -> SkillCandidate {
     match state
-        .dude_memory
+        .assistant_memory
         .index_installed(candidate, state.rag.clone())
         .await
     {
@@ -151,59 +154,59 @@ async fn index_if_installed(state: &AppState, candidate: &SkillCandidate) -> Ski
         }
     }
 }
-fn error(error: DudeMemoryError, locale: &str) -> Response {
+fn error(error: AssistantMemoryError, locale: &str) -> Response {
     let (status, code, key, en, zh) = match error {
-        DudeMemoryError::NotFound => (
+        AssistantMemoryError::NotFound => (
             StatusCode::NOT_FOUND,
             "101041001",
-            "tron.dude_memory.not_found",
+            "tron.assistant_memory.not_found",
             "Record not found",
             "记录不存在",
         ),
-        DudeMemoryError::Conflict => (
+        AssistantMemoryError::Conflict => (
             StatusCode::CONFLICT,
             "101041002",
-            "tron.dude_memory.conflict",
+            "tron.assistant_memory.conflict",
             "The artifact or installed skill changed; refresh and review again",
             "制品或已安装技能已变更，请刷新后重新审核",
         ),
-        DudeMemoryError::ExecutionBusy => (
+        AssistantMemoryError::ExecutionBusy => (
             StatusCode::CONFLICT,
             "101041007",
-            "tron.dude_memory.busy",
+            "tron.assistant_memory.busy",
             "Memory session is already running",
             "记忆会话正在运行",
         ),
-        DudeMemoryError::Invalid(_) => (
+        AssistantMemoryError::Invalid(_) => (
             StatusCode::BAD_REQUEST,
             "101041003",
-            "tron.dude_memory.invalid",
+            "tron.assistant_memory.invalid",
             "Invalid memory or Skill operation",
             "记忆或技能操作无效",
         ),
-        DudeMemoryError::Dependency(_) => (
+        AssistantMemoryError::Dependency(_) => (
             StatusCode::CONFLICT,
             "101041004",
-            "tron.dude_memory.creator_required",
+            "tron.assistant_memory.creator_required",
             "Install and enable skill-creator first",
             "请先安装并启用 skill-creator",
         ),
-        DudeMemoryError::Storage(_) => (
+        AssistantMemoryError::Storage(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "101041005",
-            "tron.dude_memory.storage",
+            "tron.assistant_memory.storage",
             "Memory workflow storage failed",
             "记忆工作流存储失败",
         ),
-        DudeMemoryError::Installation(_) => (
+        AssistantMemoryError::Installation(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "101041006",
-            "tron.dude_memory.installation",
+            "tron.assistant_memory.installation",
             "Approved Skill installation failed",
             "已批准技能安装失败",
         ),
     };
-    tracing::debug!(message_key = key, "Dude memory API error");
+    tracing::debug!(message_key = key, "PersonAI memory API error");
     (
         status,
         Json(ApiResponse::protocol_error(

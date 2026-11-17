@@ -38,24 +38,24 @@ pub(super) fn tools(tasks: TaskService) -> Vec<Arc<dyn Tool>> {
     ];
     let mut result: Vec<Arc<dyn Tool>> = Vec::new();
     for tool in tools {
-        let dude_name = match tool.name() {
-            "task_get" => "dude_task_get",
-            "task_page" => "dude_task_page",
-            "task_create" => "dude_task_create",
-            "task_update" => "dude_task_update",
-            "task_delete" => "dude_task_delete",
-            "task_restore" => "dude_task_restore",
+        let assistant_name = match tool.name() {
+            "task_get" => "assistant_task_get",
+            "task_page" => "assistant_task_page",
+            "task_create" => "assistant_task_create",
+            "task_update" => "assistant_task_update",
+            "task_delete" => "assistant_task_delete",
+            "task_restore" => "assistant_task_restore",
             _ => unreachable!(),
         };
         result.push(Arc::new(TaskScopeTool {
             name: tool.name().to_string(),
             inner: tool.clone(),
-            dude: false,
+            assistant: false,
         }));
         result.push(Arc::new(TaskScopeTool {
-            name: dude_name.into(),
+            name: assistant_name.into(),
             inner: tool,
-            dude: true,
+            assistant: true,
         }));
     }
     result
@@ -64,7 +64,7 @@ pub(super) fn tools(tasks: TaskService) -> Vec<Arc<dyn Tool>> {
 struct TaskScopeTool {
     name: String,
     inner: Arc<dyn Tool>,
-    dude: bool,
+    assistant: bool,
 }
 impl Tool for TaskScopeTool {
     fn name(&self) -> &str {
@@ -75,21 +75,21 @@ impl Tool for TaskScopeTool {
         mut request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
-        if self.dude {
-            if !context.is_owning_dude() || !context.workspace_code.trim().is_empty() {
+        if self.assistant {
+            if !context.is_owning_assistant() || !context.workspace_code.trim().is_empty() {
                 return Err(ToolError::ExecutionFailed(
-                    "Dude task tools require the owning platform Dude".into(),
+                    "PersonAI task tools require the owning platform PersonAI".into(),
                 ));
             }
             if request.input.get("workspaceCode").is_some() {
                 return Err(ToolError::ExecutionFailed(
-                    "Dude task tools do not accept workspaceCode".into(),
+                    "PersonAI task tools do not accept workspaceCode".into(),
                 ));
             }
         } else {
-            if context.is_owning_dude() {
+            if context.is_owning_assistant() {
                 return Err(ToolError::ExecutionFailed(
-                    "Dude must use dude_task tools".into(),
+                    "PersonAI must use assistant_task tools".into(),
                 ));
             }
             if request
@@ -147,7 +147,7 @@ impl Tool for TaskPageTool {
             .tasks
             .list_tasks(TaskListQuery {
                 workspace_code,
-                owner_dude_code: trusted_dude_owner(context)?,
+                owner_assistant_code: trusted_assistant_owner(context)?,
                 current: input.current,
                 size: input.size,
                 search: input.search,
@@ -216,7 +216,7 @@ impl Tool for TaskCreateTool {
         let output = self
             .tasks
             .create_task(CreateTaskCommand {
-                owner_dude_code: trusted_dude_owner(context)?,
+                owner_assistant_code: trusted_assistant_owner(context)?,
                 due_at: input.due_at,
                 workspace_code,
                 parent_task_code: input.parent_task_code,
@@ -226,7 +226,7 @@ impl Tool for TaskCreateTool {
                     .unwrap_or(TaskPriority::Medium),
                 task_type: parse_task_type(input.task_type.as_deref())?.unwrap_or(
                     if context.workspace_code.trim().is_empty()
-                        || trusted_dude_owner(context)?.is_some()
+                        || trusted_assistant_owner(context)?.is_some()
                     {
                         TaskType::General
                     } else {
@@ -308,8 +308,8 @@ impl Tool for TaskUpdateTool {
                         .map(|item| item.status_code.as_str())
                         .collect::<Vec<_>>()
                         .join(", "),
-                    if context.is_owning_dude() {
-                        "dude_"
+                    if context.is_owning_assistant() {
+                        "assistant_"
                     } else {
                         ""
                     }
@@ -318,12 +318,12 @@ impl Tool for TaskUpdateTool {
         }
         if status.as_deref() == Some(crate::domain::task::CLOSED_STATUS_CODE)
             && current
-                .owner_dude_code
+                .owner_assistant_code
                 .as_ref()
-                .is_some_and(|_| !context.is_owning_dude())
+                .is_some_and(|_| !context.is_owning_assistant())
         {
             return Err(ToolError::ExecutionFailed(
-                "Thread workers report results to their Dude; only the owning Dude may decide that the task is complete".into(),
+                "Thread workers report results to their PersonAI; only the owning PersonAI may decide that the task is complete".into(),
             ));
         }
 
@@ -401,7 +401,7 @@ fn task_observation(
         .map_err(service_tool_error)?;
     let mut value = serde_json::to_value(task).map_err(service_tool_error)?;
     value["taskFlow"] = serde_json::json!({"flowCode":flow.flow_code,"statuses":flow.statuses,"closedStatus":"CLOSED",
-        "reopen":"Use task_update (Dude: dude_task_update) with a valid non-CLOSED status. Omitted progress resets to 0 when reopening; archived tasks must first be restored."});
+        "reopen":"Use task_update (PersonAI: assistant_task_update) with a valid non-CLOSED status. Omitted progress resets to 0 when reopening; archived tasks must first be restored."});
     json_observation(name, &value)
 }
 
@@ -507,15 +507,15 @@ fn deserialize_optional_deadline<'de, D: serde::Deserializer<'de>>(
     Option::<i64>::deserialize(deserializer).map(Some)
 }
 
-fn trusted_dude_owner(context: &AgentRunContext) -> Result<Option<String>, ToolError> {
+fn trusted_assistant_owner(context: &AgentRunContext) -> Result<Option<String>, ToolError> {
     match context
         .collaboration_owner
         .as_ref()
-        .filter(|owner| owner.kind == "DUDE")
+        .filter(|owner| owner.kind == "ASSISTANT")
     {
         Some(owner) => optional_trimmed(Some(owner.code.clone()))
             .map(Some)
-            .ok_or_else(|| ToolError::ExecutionFailed("Dude owner context is invalid".into())),
+            .ok_or_else(|| ToolError::ExecutionFailed("PersonAI owner context is invalid".into())),
         None => Ok(None),
     }
 }
@@ -539,8 +539,8 @@ fn ensure_task_access(
     workspace: Option<&str>,
     task: &TaskDetail,
 ) -> Result<(), ToolError> {
-    let owner = trusted_dude_owner(context)?;
-    if task.workspace_code.as_deref() != workspace || task.owner_dude_code != owner {
+    let owner = trusted_assistant_owner(context)?;
+    if task.workspace_code.as_deref() != workspace || task.owner_assistant_code != owner {
         return Err(ToolError::ExecutionFailed(
             "task is outside the current owner or execution scope".into(),
         ));

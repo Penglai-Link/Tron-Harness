@@ -3,8 +3,8 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
+mod assistant_runner;
 mod automation_runner;
-mod dude_runner;
 mod routing;
 mod startup;
 mod state_extractors;
@@ -104,8 +104,8 @@ pub struct AppState(Arc<AppStateInner>);
 /// HTTP state must not clone every service's configuration and lookup tables.
 #[derive(Clone)]
 pub struct AppStateInner {
-    pub dude_memory: crate::application::dude_memory::DudeMemoryService,
-    pub dudes: crate::application::dude::DudeService,
+    pub assistant_memory: crate::application::assistant_memory::AssistantMemoryService,
+    pub assistants: crate::application::assistant::AssistantService,
     pub config: AppConfig,
     #[doc(hidden)]
     pub remote_access: Arc<std::sync::RwLock<crate::config::RemoteAccessConfig>>,
@@ -118,7 +118,8 @@ pub struct AppStateInner {
     pub agui_replay_store: Arc<dyn AgentAguiReplayStore>,
     pub agent_presentation: AgentAguiStreamService,
     #[doc(hidden)]
-    pub remote_service: std::sync::OnceLock<Arc<eliteforge_agent_remote_server::RemoteAccessService>>,
+    pub remote_service:
+        std::sync::OnceLock<Arc<eliteforge_agent_remote_server::RemoteAccessService>>,
     pub agent_model_client: Arc<dyn ModelClient>,
     pub runtime_http_client: reqwest::Client,
     pub agent_management: AgentManagementService,
@@ -203,7 +204,7 @@ impl AppState {
             .store(active, std::sync::atomic::Ordering::Relaxed);
     }
 
-    pub(crate) fn dude_invocation_service(&self) -> AgentInvocationService {
+    pub(crate) fn assistant_invocation_service(&self) -> AgentInvocationService {
         AgentInvocationService::new(
             self.workspaces.clone(),
             self.apps.clone(),
@@ -222,7 +223,7 @@ impl AppState {
         .with_short_term_memory(self.short_term_memory.clone())
         .with_prompt_service(self.prompts.clone())
         .with_platform_scope()
-        .with_dude_work_context(self.dudes.clone())
+        .with_assistant_work_context(self.assistants.clone())
     }
     pub fn new(config: AppConfig) -> Result<Self, AppBootstrapError> {
         Self::new_with_id_provider(config, Arc::new(SnowflakedSnowflakeIdProvider::default()))
@@ -664,16 +665,16 @@ impl AppState {
         automations
             .bootstrap_scheduler()
             .expect("automation scheduler should initialize");
-        let dudes = crate::application::dude::DudeService::new(
-            crate::adapters::outbound::persistence::sqlite::SqliteDudeRepository::connect(
+        let assistants = crate::application::assistant::AssistantService::new(
+            crate::adapters::outbound::persistence::sqlite::SqliteAssistantRepository::connect(
                 &config.database_url,
             )
-            .expect("Dude storage"),
+            .expect("PersonAI storage"),
             agent_management.clone(),
         );
-        dudes.bootstrap().expect("Dude defaults");
-        agent_framework.bind_dudes(dudes.clone());
-        chats.bind_dudes(dudes.clone());
+        assistants.bootstrap().expect("PersonAI defaults");
+        agent_framework.bind_assistants(assistants.clone());
+        chats.bind_assistants(assistants.clone());
         chats.bind_knowledge_quality(knowledge_bases.clone());
         knowledge_bases
             .recover_quality_optimizations()
@@ -690,22 +691,24 @@ impl AppState {
                 .register(tool)
                 .expect("knowledge evaluation tools should register");
         }
-        crate::application::dude::register_dude_tools(
+        crate::application::assistant::register_assistant_tools(
             agent_tool_registry.as_ref(),
-            dudes.clone(),
+            assistants.clone(),
             tasks.clone(),
             agent_framework.clone(),
         )
-        .expect("Dude tools should register");
-        let dude_memory = crate::application::dude_memory::DudeMemoryService::new(
-            crate::adapters::outbound::persistence::sqlite::SqliteDudeMemoryRepository::connect(
+        .expect("PersonAI tools should register");
+        let assistant_memory = crate::application::assistant_memory::AssistantMemoryService::new(
+            crate::adapters::outbound::persistence::sqlite::SqliteAssistantMemoryRepository::connect(
                 &config.database_url,
             )
-            .expect("Dude memory storage"),
+            .expect("PersonAI memory storage"),
             skills.clone(),
-            std::path::Path::new(&config.skills_registry_root).join(".dude-candidates"),
+            std::path::Path::new(&config.skills_registry_root).join(".assistant-candidates"),
         );
-        dude_memory.set_notifications(Arc::new(dude_runner::MemoryNotifications(dudes.clone())));
+        assistant_memory.set_notifications(Arc::new(assistant_runner::MemoryNotifications(
+            assistants.clone(),
+        )));
 
         let readiness = AppReadiness::validated_ready();
         let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
@@ -734,8 +737,8 @@ impl AppState {
         );
         let remote_access = Arc::new(std::sync::RwLock::new(config.remote_access.clone()));
         let state = Self(Arc::new(AppStateInner {
-            dude_memory,
-            dudes,
+            assistant_memory,
+            assistants,
             config,
             remote_access,
             remote_listener_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -823,7 +826,7 @@ pub fn build_remote_router_with_state(state: AppState) -> Result<Router, AppBoot
 }
 
 fn start_background_services(state: &AppState) {
-    dude_runner::start(state.clone());
+    assistant_runner::start(state.clone());
     state.account_sync.start();
     state.model_providers.start_background_sync();
     state.model_providers.start_person_ai_heartbeat();
@@ -912,7 +915,7 @@ fn remote_access_cors_layer() -> tower_http::cors::CorsLayer {
             HeaderName::from_static("x-requested-with"),
             HeaderName::from_static("x-tron-access-token"),
             HeaderName::from_static("x-tron-pairing-token"),
-            HeaderName::from_static("x-dude-code"),
+            HeaderName::from_static("x-assistant-code"),
         ])
         .allow_credentials(true)
         .max_age(std::time::Duration::from_secs(600))

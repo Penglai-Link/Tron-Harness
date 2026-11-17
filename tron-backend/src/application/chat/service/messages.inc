@@ -76,12 +76,12 @@ impl ChatService {
         self.repository().validate_annotation_sources(session_code, &annotations).map_err(ChatSendError::Chat)?;
         // Session ownership comes from persisted server state, not the caller's requested agent.
         let agent = agent.with_tool_execution_mode(session.execution_mode);
-        let dude_code = session.source_code.as_deref().and_then(|source| source.strip_prefix("__dude:"));
+        let assistant_code = session.source_code.as_deref().and_then(|source| source.strip_prefix("__assistant:"));
         let knowledge_context=self.knowledge_quality_context(&session,user_code.as_deref()).map_err(ChatSendError::Chat)?;
         let knowledge_bound=knowledge_context.is_some();
-        let agent = if let Some(dude_code) = dude_code {
+        let agent = if let Some(assistant_code) = assistant_code {
             let service = agent.with_collaboration_owner(crate::domain::agent::AgentCollaborationOwner {
-                kind: "DUDE".into(), code: dude_code.into(), origin_session_code: Some(session.session_code.clone()), task_code: session.task_code.clone(),
+                kind: "ASSISTANT".into(), code: assistant_code.into(), origin_session_code: Some(session.session_code.clone()), task_code: session.task_code.clone(),
             });
             service.with_platform_scope()
         } else if knowledge_bound {agent.with_platform_scope()} else { agent };
@@ -108,7 +108,7 @@ impl ChatService {
         } else {
             ChatMessageChannel::MainAgent
         };
-        let effective_agent_code = if session.last_run_code.is_some() || dude_code.is_some() || knowledge_bound {
+        let effective_agent_code = if session.last_run_code.is_some() || assistant_code.is_some() || knowledge_bound {
             session.agent_code.clone()
         } else {
             normalized_optional(command.agent_code.clone()).or(session.agent_code.clone())
@@ -375,8 +375,8 @@ impl ChatService {
         self.repository()
             .create_user_input_request(&request)
             .map_err(ChatSendError::Chat)?;
-        if let Some(dudes)=self.dudes.get() {
-            dudes.record_soul_question(session_code,&request.request_code).map_err(|_|ChatSendError::Chat(ChatError::StorageFailure))?;
+        if let Some(assistants)=self.assistants.get() {
+            assistants.record_soul_question(session_code,&request.request_code).map_err(|_|ChatSendError::Chat(ChatError::StorageFailure))?;
         }
         Ok(request)
     }

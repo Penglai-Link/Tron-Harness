@@ -11,7 +11,7 @@ pub(super) use store::owner;
 mod feedback;
 #[path = "host_collaboration_thread_intervention.rs"]
 mod intervention;
-pub use feedback::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
+pub use feedback::{AssistantThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
 
 pub(in crate::application::agent::framework_runtime::host) type Threads =
     RwLock<BTreeMap<String, Arc<Thread>>>;
@@ -147,7 +147,7 @@ impl Runtime {
                 let mut record = thread.state.lock().unwrap().record.clone();
                 record.summary.status = fw::ThreadStatus::Failed;
                 record.completion = Some((fw::ThreadStatus::Failed, Err(error.to_string())));
-                record.feedback_pending = record.owner.kind == "DUDE";
+                record.feedback_pending = record.owner.kind == "ASSISTANT";
                 host.persist_thread(&mut record, false).await?;
                 let mut state = thread.state.lock().unwrap();
                 state.summary = record.summary.clone();
@@ -211,7 +211,7 @@ impl Runtime {
                         .map(Clone::clone)
                         .map_err(ToString::to_string),
                 ));
-                record.feedback_pending = record.owner.kind == "DUDE";
+                record.feedback_pending = record.owner.kind == "ASSISTANT";
                 // Completion and pending feedback are one durable write. Sink failure is retried.
                 if let Err(error) = feedback_host.persist_thread(&mut record, false).await {
                     tracing::error!(session_id = %record.summary.session_id, %error, "persist Thread completion failed; native run remains authoritative");
@@ -229,7 +229,7 @@ impl Runtime {
                     .context
                     .collaboration_owner
                     .as_ref()
-                    .is_none_or(|owner| owner.kind != "DUDE")
+                    .is_none_or(|owner| owner.kind != "ASSISTANT")
                 {
                     if let Ok(result) = &result {
                         if result.interactions.iter().any(|interaction| {

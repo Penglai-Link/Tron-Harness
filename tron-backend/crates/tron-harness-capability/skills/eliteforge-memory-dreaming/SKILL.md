@@ -1,6 +1,6 @@
 ---
 name: eliteforge-memory-dreaming
-description: 在 Tron 记忆整理 Dude 中按批次和游标整理可靠事实，并保留可复用 Skill 的生成、验证和审批流程。
+description: 在 Tron 记忆整理 PersonAI 中按批次和游标整理可靠事实，并保留可复用 Skill 的生成、验证和审批流程。
 metadata:
   version: 2.0.0
 ---

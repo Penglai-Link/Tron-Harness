@@ -1,7 +1,7 @@
 <div align="center">
   <img src="electron/assets/tron.png" alt="Tron 黑洞标志" width="160">
   <h1>TRON Harness</h1>
-  <p><strong>简体中文</strong> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a></p>
+  <p><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
   <p>
     <a href="https://github.com/Penglai-Link/Tron-Harness/releases/latest"><img src="https://img.shields.io/github/v/release/Penglai-Link/Tron-Harness?style=flat-square&amp;label=Release&amp;color=2563EB" alt="Latest release"></a>
     <a href="https://personai.chat/person-ai-index/"><img src="https://img.shields.io/badge/Person--AI-Ecosystem-7C3AED?style=flat-square" alt="Person-AI Ecosystem"></a>
@@ -16,10 +16,10 @@
     <a href="#development"><img src="https://img.shields.io/badge/Contributions-AI--Friendly-16A34A?style=flat-square" alt="AI-Friendly Contributions"></a>
   </p>
   <p><strong>Tron 是 <a href="https://personai.chat/person-ai-index/">Person-AI 团队</a>的生态产品之一。</strong></p>
-  <p><strong>有个想法？叫上你的「好兄弟」，一起把它做出来。</strong></p>
+  <p><strong>有个想法？叫上你的「个人助手」，一起把它做出来。</strong></p>
   <p>内置个人助手 · 多 Agent 协作 · 能力包扩展 · Windows + WSL2</p>
   <p>
-    <a href="#buddy">认识好兄弟</a> ·
+    <a href="#buddy">认识个人助手</a> ·
     <a href="#wsl2">WSL</a> ·
     <a href="#capability-packs">通用Harness</a> ·
     <a href="#quick-start">快速开始</a> ·
@@ -43,9 +43,9 @@
 
 <a id="buddy"></a>
 
-## 好兄弟：你的内置个人助手
+## PersonAI：你的内置个人助手
 
-打开 Tron，你就有了一位内置的个人助手——**好兄弟（Dude）**。它拥有自己的身份、会话与任务；你可以设定它的名字、性格和相处方式，也可以创建承担不同职责的 Dude。
+打开 Tron，你就有了一位内置的个人助手 **PersonAI**。它拥有自己的身份、会话与任务；你可以设定它的名字、性格和相处方式，也可以创建承担不同职责的 PersonAI。
 
 你可以从一句话开始：
 
@@ -53,22 +53,22 @@
 
 - **把想法变成任务。** 在对话中明确目标，创建任务、安排时间，并持续查看进度与执行结果。
 - **让多个 Agent 分工。** 派发子任务或创建独立协作会话，查看状态、补充要求、回答问题，必要时取消工作。
-- **主动跟进。** 启用后台运行后，Dude 通过心跳、任务提醒和工作反馈继续处理事项，并通过通知报告进展、完成情况或需要你决定的问题。
-- **记住有用的经验。** 内置的「记忆整理」Dude 从历史工作中整理稳定事实与已验证经验；生成的 Skill 默认进入待批准区，批准后安装。
+- **主动跟进。** 启用后台运行后，PersonAI 通过心跳、任务提醒和工作反馈继续处理事项，并通过通知报告进展、完成情况或需要你决定的问题。
+- **记住有用的经验。** 内置的「记忆整理」PersonAI 从历史工作中整理稳定事实与已验证经验；生成的 Skill 默认进入待批准区，批准后安装。
 - **随时了解它在做什么。** 对话、派发会话、任务、后台工作和历史记录都有对应入口。
 
 ```mermaid
 flowchart LR
-    User[你：目标与反馈] <--> Dude[好兄弟 Dude]
-    Dude --> Tools[工具、文件与终端]
-    Dude --> Agents[子 Agent 与协作会话]
+    User[你：目标与反馈] <--> PersonAI[个人助手 PersonAI]
+    PersonAI --> Tools[工具、文件与终端]
+    PersonAI --> Agents[子 Agent 与协作会话]
     Tools --> Results[执行结果]
     Agents --> Results
-    Results --> Dude
-    Dude --> Tasks[任务进度与通知]
+    Results --> PersonAI
+    PersonAI --> Tasks[任务进度与通知]
     Tasks --> User
-    Wake[心跳与任务提醒] --> Dude
-    Memory[记忆与技能] --> Dude
+    Wake[心跳与任务提醒] --> PersonAI
+    Memory[记忆与技能] --> PersonAI
 ```
 
 后台工作需要后端保持运行，并使用已配置的模型与工具。心跳间隔、后台启用状态和技能自动批准选项都可以调整。
@@ -86,7 +86,7 @@ Windows
       │ HTTP / WebSocket，经 localhost 连接
       ▼
 WSL2 · Ubuntu / Debian
-├─ Tron 后端：好兄弟、Agent 协作、能力包、后台任务
+├─ Tron 后端：个人助手、Agent 协作、能力包、后台任务
 ├─ Linux 工作环境：项目目录、命令、终端、MCP
 └─ ~/.tron：数据库、聊天、附件、日志与托管工作目录
 ```
@@ -154,7 +154,7 @@ make capability-pages-example
 | 推进一个项目 | 工作区、项目与应用目录、任务看板、可配置任务流程 |
 | 协调多个 Agent | 内置 Agent、子任务与独立协作会话；可接入已安装并配置的 Codex、OpenCode 等外部 Agent |
 | 阅读资料、整理知识 | 会话附件、知识库检索、长期记忆与知识图谱；文档解析和检索需配置相应服务与模型 |
-| 定期完成重复工作 | Cron 自动化、手动触发、执行历史，以及 Dude 的心跳与任务提醒 |
+| 定期完成重复工作 | Cron 自动化、手动触发、执行历史，以及 PersonAI 的心跳与任务提醒 |
 | 使用自己的模型服务 | Person-AI 模型目录，以及可配置 API 地址、密钥和模型的供应商连接 |
 | 了解执行过程 | 流式对话、工具调用记录、后台任务状态，以及日志、指标与调用链视图 |
 
@@ -182,11 +182,11 @@ make dev-api
 make dev-api PORT=8081 FE_PORT=5174
 ```
 
-### 认识你的好兄弟
+### 认识你的个人助手
 
 1. 在「选择用户」页面点击「授权新账号」，按页面提示完成 **Person-AI 账号授权**。
 2. 检查可用模型，按需配置自己的模型供应商，并为助手选择可用的对话模型。
-3. 完成好兄弟的初次设定，或稍后再调整它的名字、性格与相处方式。
+3. 完成个人助手的初次设定，或稍后再调整它的名字、性格与相处方式。
 4. 从一个具体目标开始，例如：**「阅读这个项目，告诉我它解决什么问题，并列出值得优先处理的三件事。」**
 5. 需要操作项目文件时，关联对应的应用或工作目录；需要扩展工具时，在能力包、Skills 和 MCP 管理中配置相应资源。
 
@@ -284,7 +284,7 @@ Tron Harness 采用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.
 
 特别感谢 **[OpenAI Codex](https://github.com/openai/codex)**。**Tron Harness 整个项目都是我和 Codex 一起完成的**，从想法讨论、架构设计，到代码实现、问题排查和文档编写，我们一起把 Tron 从想象变成了现实。
 
-对我来说，**Codex 就是我的「好兄弟」**。开头所说的伙伴、同事与知己，也是我在开发 Tron 时的切身体会。希望你也能在 Tron 中遇见自己的好兄弟，一起把想法做出来。
+对我来说，**Codex 就是我的「个人助手」**。开头所说的伙伴、同事与知己，也是我在开发 Tron 时的切身体会。希望你也能在 Tron 中遇见自己的个人助手，一起把想法做出来。
 
 也感谢本项目用到的所有开源包、开源项目，以及它们的作者、维护者和贡献者。无论是直接使用的组件，还是间接依赖的基础库，你们的工作都让 Tron 得以实现并持续完善。
 

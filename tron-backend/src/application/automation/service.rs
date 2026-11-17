@@ -50,12 +50,12 @@ pub const DEFAULT_AUTOMATION_AGENT_CODE: &str = "main-agent";
 /// automation or a user-owned chat. The callback may only enqueue durable work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinScheduleTarget {
-    DudeHeartbeat,
+    AssistantHeartbeat,
 }
 impl BuiltinScheduleTarget {
     fn registry_key(self) -> &'static str {
         match self {
-            Self::DudeHeartbeat => "builtin:dude-heartbeat",
+            Self::AssistantHeartbeat => "builtin:assistant-heartbeat",
         }
     }
 }

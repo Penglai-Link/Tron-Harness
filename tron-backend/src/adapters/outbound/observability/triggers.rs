@@ -5,9 +5,10 @@ use rusqlite::{params_from_iter, types::Value};
 impl TelemetryProjection {
     pub(super) fn agent_triggers(&self, q: &TraceQuery) -> Result<TracePage, ObservabilityError> {
         let mut clause =
-            "json_extract(s.data,'$.name') IN ('tron.session.run','tron.dude.execute')".to_owned();
+            "json_extract(s.data,'$.name') IN ('tron.session.run','tron.assistant.execute')"
+                .to_owned();
         let mut values = Vec::<Value>::new();
-        clause.push_str(" AND NOT (json_extract(s.data,'$.name')='tron.session.run' AND EXISTS (SELECT 1 FROM ef_telemetry_spans p WHERE p.trace_id=s.trace_id AND p.span_id=json_extract(s.data,'$.parentSpanId') AND json_extract(p.data,'$.name')='tron.dude.execute'))");
+        clause.push_str(" AND NOT (json_extract(s.data,'$.name')='tron.session.run' AND EXISTS (SELECT 1 FROM ef_telemetry_spans p WHERE p.trace_id=s.trace_id AND p.span_id=json_extract(s.data,'$.parentSpanId') AND json_extract(p.data,'$.name')='tron.assistant.execute'))");
         for (key, value) in [
             (
                 "tron.workspace.code",
@@ -96,9 +97,9 @@ impl TelemetryProjection {
                     &[],
                 );
                 record.root_span_id = Some(root.span_id);
-                record.trigger = if root.name == "tron.dude.execute" {
+                record.trigger = if root.name == "tron.assistant.execute" {
                     root.attributes
-                        .get("tron.dude.code")
+                        .get("tron.assistant.code")
                         .cloned()
                         .unwrap_or_else(|| record.agent_code.clone())
                 } else {

@@ -6,8 +6,8 @@
 //! cancellation token and deadline: the parent run ending, failing or being
 //! cancelled never stops them. Unlike threads the registry is not durable;
 //! a completed result is delivered through `child_wait`, and completion is
-//! notified to the parent session: Dude-owned children go through the durable
-//! feedback outbox that wakes the Dude; agent-owned children steer the still
+//! notified to the parent session: PersonAI-owned children go through the durable
+//! feedback outbox that wakes the PersonAI; agent-owned children steer the still
 //! running parent run directly.
 use super::*;
 use eliteforge_agent_framework::RunControl;
@@ -534,12 +534,12 @@ struct ChildNotification {
 impl FrameworkHost {
     /// Notify the parent session that one detached child finished.
     ///
-    /// Dude-owned children use the durable feedback outbox so an idle Dude is
+    /// PersonAI-owned children use the durable feedback outbox so an idle PersonAI is
     /// woken through its event system. Everything else steers the parent run
     /// directly while it is still executing; if the parent is gone the
     /// notification is dropped and the model recovers through child_wait.
     async fn deliver_child_notification(&self, notification: ChildNotification) {
-        if notification.owner.kind == "DUDE" {
+        if notification.owner.kind == "ASSISTANT" {
             let feedback = ThreadFeedback {
                 event_key: format!(
                     "child:{}:{}:finished",

@@ -137,8 +137,8 @@ pub async fn list_tasks(
     State(state): State<AppState>,
     Query(query): Query<TaskListQuery>,
 ) -> Response {
-    if let Some(owner) = query.owner_dude_code.as_deref() {
-        if state.dudes.get(owner).is_err() {
+    if let Some(owner) = query.owner_assistant_code.as_deref() {
+        if state.assistants.get(owner).is_err() {
             return task_error_response(TaskError::InvalidRequest);
         }
     }
@@ -152,8 +152,8 @@ pub async fn create_task(
     State(state): State<AppState>,
     Json(request): Json<CreateTaskRequest>,
 ) -> Response {
-    if let Some(owner) = request.owner_dude_code.as_deref() {
-        if state.dudes.get(owner).is_err() {
+    if let Some(owner) = request.owner_assistant_code.as_deref() {
+        if state.assistants.get(owner).is_err() {
             return task_error_response(TaskError::InvalidRequest);
         }
     }
@@ -201,9 +201,9 @@ pub async fn execute_task(
         Ok(task) => task,
         Err(error) => return task_error_response(error),
     };
-    // Dude-owned work must be dispatched by the Dude event runner so its owner,
+    // PersonAI-owned work must be dispatched by the PersonAI event runner so its owner,
     // work session and feedback route survive the request lifetime.
-    if task.owner_dude_code.is_some() {
+    if task.owner_assistant_code.is_some() {
         return task_error_response(TaskError::InvalidRequest);
     }
     if task.archived_at.is_some() {

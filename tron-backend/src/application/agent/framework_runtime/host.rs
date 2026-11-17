@@ -28,7 +28,7 @@ mod capability_state;
 pub(super) mod collaboration;
 #[path = "host_subagents.rs"]
 mod subagents;
-pub use collaboration::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
+pub use collaboration::{AssistantThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
 pub use subagents::{SubagentRecord, SubagentView};
 #[path = "host_continuation.rs"]
 mod host_continuation;
@@ -121,7 +121,7 @@ struct Host {
     presentation: std::sync::RwLock<Option<crate::application::agent::AgentAguiStreamService>>,
     resources: Option<crate::application::resource::ResourceService>,
     agent_management: OnceCell<crate::application::agent::AgentManagementService>,
-    dudes: OnceCell<crate::application::dude::DudeService>,
+    assistants: OnceCell<crate::application::assistant::AssistantService>,
     memories: OnceCell<crate::app::AppMemoryService>,
     knowledge_bases: OnceCell<crate::application::knowledge_base::KnowledgeBaseService>,
     topics: OnceCell<crate::application::topic::TopicService>,
@@ -267,11 +267,11 @@ impl FrameworkHost {
         self.0.pty.clone()
     }
 
-    pub(crate) fn bind_dudes(&self, service: crate::application::dude::DudeService) {
-        let _ = self.0.dudes.set(service);
+    pub(crate) fn bind_assistants(&self, service: crate::application::assistant::AssistantService) {
+        let _ = self.0.assistants.set(service);
     }
-    pub(crate) fn dudes(&self) -> Option<crate::application::dude::DudeService> {
-        self.0.dudes.get().cloned()
+    pub(crate) fn assistants(&self) -> Option<crate::application::assistant::AssistantService> {
+        self.0.assistants.get().cloned()
     }
     pub(crate) fn attach_memory_backend(
         &self,
@@ -282,7 +282,7 @@ impl FrameworkHost {
             let binding = memory.bind_backend(
                 crate::application::memory::MemoryRunContext::new(
                     user,
-                    if context.is_owning_dude() {
+                    if context.is_owning_assistant() {
                         ""
                     } else {
                         context.execution_workspace_code()
@@ -886,7 +886,7 @@ impl FrameworkHost {
             presentation: Default::default(),
             pty: Default::default(),
             resources,
-            dudes: OnceCell::new(),
+            assistants: OnceCell::new(),
             memories: OnceCell::new(),
             knowledge_bases: OnceCell::new(),
             topics: OnceCell::new(),
@@ -946,7 +946,7 @@ impl FrameworkHost {
             presentation: Default::default(),
             pty: Default::default(),
             resources,
-            dudes: OnceCell::new(),
+            assistants: OnceCell::new(),
             memories: OnceCell::new(),
             knowledge_bases: OnceCell::new(),
             topics: OnceCell::new(),

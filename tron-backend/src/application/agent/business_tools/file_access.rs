@@ -46,7 +46,7 @@ pub(super) fn read_session_attachment_range(
         .as_ref()
         .filter(|owner| {
             (owner.kind == "USER" && owner.code == context.user_code.as_deref().unwrap_or("system"))
-                || owner.kind == "DUDE"
+                || owner.kind == "ASSISTANT"
         })
         .and_then(|owner| owner.origin_session_code.as_deref())
         .filter(|origin| !origin.trim().is_empty() && *origin != session);

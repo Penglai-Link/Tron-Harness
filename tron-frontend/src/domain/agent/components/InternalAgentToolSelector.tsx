@@ -197,10 +197,10 @@ export function InternalAgentToolSelector({
                   >
                     {onSetToolsChecked && <div className="flex flex-wrap gap-2">
                       <Button type="button" size="sm" variant="outline" disabled={busy || !visibleTools.some((tool) => tool.assignable !== false)} onClick={() => onSetToolsChecked(visibleTools.filter((tool) => tool.assignable !== false).map((tool) => tool.toolCode), true)}>
-                        {internalPageT("dudeToolPolicy.selectVisible", "Select shown tools")}
+                        {internalPageT("assistantToolPolicy.selectVisible", "Select shown tools")}
                       </Button>
                       <Button type="button" size="sm" variant="outline" disabled={busy || !visibleTools.some((tool) => selectedToolSet.has(tool.toolCode))} onClick={() => onSetToolsChecked(visibleTools.map((tool) => tool.toolCode), false)}>
-                        {internalPageT("dudeToolPolicy.clearVisible", "Clear shown tools")}
+                        {internalPageT("assistantToolPolicy.clearVisible", "Clear shown tools")}
                       </Button>
                     </div>}
                     <ul className="divide-y divide-[var(--color-outline-variant)] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">

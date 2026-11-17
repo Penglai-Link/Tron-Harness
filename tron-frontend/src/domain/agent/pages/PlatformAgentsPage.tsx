@@ -5,7 +5,7 @@ import { PageHeader } from "@/shared";
 import { WorkspaceAgentsPage } from "./WorkspaceAgentsPage";
 import { PlatformSystemAgentsSection } from "../components/PlatformSystemAgentsSection";
 import { INTERNAL_AGENT_REGISTRY_CHANGED_EVENT } from "../model";
-import { DudeDefinitions } from "@/domain/dude/components/DudeDefinitions";
+import { AssistantDefinitions } from "@/domain/assistant/components/AssistantDefinitions";
 
 export function PlatformAgentsPage() {
   const { t } = useTranslation("pages");
@@ -17,11 +17,11 @@ export function PlatformAgentsPage() {
   }, [queryClient]);
   return <div className="space-y-6">
     <PageHeader title={t("settingsAgents.title")} />
-        <DudeDefinitions
+        <AssistantDefinitions
           embedded
-          title={t("dude.category")}
-          titleHelp={t("dude.categoryHelp")}
-          titleHelpAriaLabel={t("dude.categoryHelpAria")}
+          title={t("assistant.category")}
+          titleHelp={t("assistant.categoryHelp")}
+          titleHelpAriaLabel={t("assistant.categoryHelpAria")}
         />
         <section aria-label={t("platformData.agentDefinitions")}>
           <WorkspaceAgentsPage category="internal" scope="platform" />

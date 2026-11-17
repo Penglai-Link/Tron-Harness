@@ -4,8 +4,8 @@ import type { TronNavSection } from "@/shared/types/ShellNavigation";
 
 // Mirrors the built-in navigation seed; API trees remain authoritative.
 export const tronNavigation: TronNavSection[] = [
-  { id: "DUDES", label: "Dude", translationKey: "shell:nav.items.dudes", icon: getNavigationIcon("Bot") ?? Folder, standalone: true, flyout: false, items: [
-{ menuCode: "DUDES", label: "Dude", translationKey: "shell:nav.items.dudes", href: "/dudes", icon: getNavigationIcon("Bot") ?? Folder, childDisplay: "Inline" }
+  { id: "ASSISTANTS", label: "PersonAI", translationKey: "shell:nav.items.assistants", icon: getNavigationIcon("Bot") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "ASSISTANTS", label: "PersonAI", translationKey: "shell:nav.items.assistants", href: "/assistants", icon: getNavigationIcon("Bot") ?? Folder, childDisplay: "Inline" }
 ] },
   { id: "TASKS", label: "Tasks", translationKey: "shell:nav.items.tasks", icon: getNavigationIcon("ListTodo") ?? Folder, standalone: true, flyout: false, items: [
 { menuCode: "TASKS", label: "Tasks", translationKey: "shell:nav.items.tasks", href: "/tasks", icon: getNavigationIcon("ListTodo") ?? Folder, childDisplay: "Inline" }

@@ -51,7 +51,7 @@ impl SkillRegistryService {
                     disabled_reason: if actor_allowed {
                         disabled_reason(&s)
                     } else {
-                        Some("电脑操作技能仅供主 Agent 和主 Dude 使用".into())
+                        Some("电脑操作技能仅供主 Agent 和主 PersonAI 使用".into())
                     },
                     assigned_agent_count: count,
                     assigned: s.available

@@ -18,25 +18,25 @@ pub struct BusinessToolCatalog;
 
 pub(crate) const HARNESS_TOOL_PROVIDER_ID: &str = "HarnessTools";
 
-/// Legacy workspace tool assignments resolve to Dude-specific implementations.
-pub(crate) fn dude_tool_replacement(code: &str) -> Option<&'static str> {
+/// Legacy workspace tool assignments resolve to PersonAI-specific implementations.
+pub(crate) fn assistant_tool_replacement(code: &str) -> Option<&'static str> {
     match code {
-        "memory.get" => Some("dude.memory_get"),
-        "memory.search" => Some("dude.memory_search"),
-        "memory.save" => Some("dude.memory_save"),
-        "memory.delete" => Some("dude.memory_delete"),
-        "todo.update" => Some("dude.todo_update"),
-        "task.get" => Some("dude.task_get"),
-        "task.page" => Some("dude.task_page"),
-        "task.create" => Some("dude.task_create"),
-        "task.update" => Some("dude.task_update"),
-        "task.delete" => Some("dude.task_delete"),
-        "task.restore" => Some("dude.task_restore"),
+        "memory.get" => Some("assistant.memory_get"),
+        "memory.search" => Some("assistant.memory_search"),
+        "memory.save" => Some("assistant.memory_save"),
+        "memory.delete" => Some("assistant.memory_delete"),
+        "todo.update" => Some("assistant.todo_update"),
+        "task.get" => Some("assistant.task_get"),
+        "task.page" => Some("assistant.task_page"),
+        "task.create" => Some("assistant.task_create"),
+        "task.update" => Some("assistant.task_update"),
+        "task.delete" => Some("assistant.task_delete"),
+        "task.restore" => Some("assistant.task_restore"),
         _ => None,
     }
 }
 
-pub(crate) fn dude_workspace_tool(tool: &ToolCatalogRecord) -> bool {
+pub(crate) fn assistant_workspace_tool(tool: &ToolCatalogRecord) -> bool {
     matches!(
         tool.tool_code.as_str(),
         "memory.search" | "memory.get" | "memory.save" | "memory.delete"
@@ -90,7 +90,7 @@ pub(crate) fn localize_plugin_display(record: &mut ToolCatalogRecord, locale: &s
 pub(crate) fn builtin_category(code: &str) -> eliteforge_agent_core::ToolCategory {
     let (zh, en) = match code {
         "tron.platform" => ("平台工具", "Platform tools"),
-        "tron.dude" => ("Dude 工具", "Dude tools"),
+        "tron.assistant" => ("PersonAI 工具", "PersonAI tools"),
         "system.command" => ("系统命令工具", "System command tools"),
         "document.media" => ("文档与媒体工具", "Document and media tools"),
         "network" => ("网络检索工具", "Web retrieval tools"),

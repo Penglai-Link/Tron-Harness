@@ -52,7 +52,7 @@ export function SkillCandidatesPanel() {
       {detail.data ? <SkillCandidateReview key={candidateCode} candidate={detail.data} /> : null}
     </div>
   );
-  const visible = candidates.data?.filter((candidate) => `${candidate.skillName} ${candidate.dudeCode}`.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const visible = candidates.data?.filter((candidate) => `${candidate.skillName} ${candidate.assistantCode}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   return (
     <SurfaceCard className="p-0">
       <div className="flex flex-wrap gap-3 p-4">
@@ -66,7 +66,7 @@ export function SkillCandidatesPanel() {
         {visible.map((candidate) => (
           <li key={candidate.candidateCode}>
             <button type="button" className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left hover:bg-[var(--color-surface-container)] focus-visible:outline focus-visible:outline-[var(--color-focus-ring)]" onClick={() => select(candidate.candidateCode)}>
-              <span className="min-w-0 flex-1"><span className="block break-all font-medium">{candidate.skillName}</span><span className="text-xs text-[var(--color-on-surface-variant)]">{candidate.dudeCode} · {text(`operation.${candidate.operation}`)} · {text("revision", { revision: candidate.revision })}</span></span>
+              <span className="min-w-0 flex-1"><span className="block break-all font-medium">{candidate.skillName}</span><span className="text-xs text-[var(--color-on-surface-variant)]">{candidate.assistantCode} · {text(`operation.${candidate.operation}`)} · {text("revision", { revision: candidate.revision })}</span></span>
               <Badge variant={candidate.status === "Installed" ? "success" : candidate.status === "PendingApproval" ? "warning" : "outline"}>{text(`status.${candidate.status}`)}</Badge>
             </button>
           </li>
@@ -100,7 +100,7 @@ function SkillCandidateReview({ candidate }: { candidate: SkillCandidateDetail }
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="break-all text-lg font-medium">{candidate.skillName}</h2><p className="text-sm text-[var(--color-on-surface-variant)]">{candidate.dudeCode} · {text(`operation.${candidate.operation}`)} · {text("revision", { revision: candidate.revision })}</p></div>
+        <div><h2 className="break-all text-lg font-medium">{candidate.skillName}</h2><p className="text-sm text-[var(--color-on-surface-variant)]">{candidate.assistantCode} · {text(`operation.${candidate.operation}`)} · {text("revision", { revision: candidate.revision })}</p></div>
         <Badge variant={candidate.status === "Installed" ? "success" : "outline"}>{text(`status.${candidate.status}`)}</Badge>
       </div>
       <dl className="grid gap-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">

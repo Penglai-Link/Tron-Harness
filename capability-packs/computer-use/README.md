@@ -94,11 +94,11 @@ Windows 原生后端与 WSL2 后端使用各自的数据目录，安装各自平
 
 工具在设置中归入「电脑操作」，领域为 `tron.computer-use`。界面使用简短的中英文名称和说明，例如「列出窗口」「点击元素」「查看操作指南」；上游详细调用说明保留给模型。类型严格按上游 `annotations.readOnlyHint` 映射：`true` 为查询、`false` 为操作、未声明则保持未知。当前 macOS 目录为 20 个查询、40 个操作。
 
-电脑操作工具与官方技能只允许分配给主 Agent（`main-agent`）和主 Dude（`main-dude`）。其他 Agent/Dude 的旧分配会被收回，新建角色不会从主 Agent 继承这些权限；「全部工具」「全部只读工具」和分类选择均不能绕过此限制。新安装或升级该包时为两个主角色配置技能默认授权，之后的普通扫描保留它们的手动取消选择。
+电脑操作工具与官方技能只允许分配给主 Agent（`main-agent`）和主 PersonAI（`main-assistant`）。其他 Agent/PersonAI 的旧分配会被收回，新建角色不会从主 Agent 继承这些权限；「全部工具」「全部只读工具」和分类选择均不能绕过此限制。新安装或升级该包时为两个主角色配置技能默认授权，之后的普通扫描保留它们的手动取消选择。
 
 ```mermaid
 flowchart LR
-    Caller[Agent / Dude] --> Role{是否为两个主角色之一?}
+    Caller[Agent / PersonAI] --> Role{是否为两个主角色之一?}
     Role -->|否| Deny[不分配，调用时拒绝]
     Role -->|是| Policy[现有能力包、工具和技能权限策略]
     Policy --> SDK[Cua SDK]

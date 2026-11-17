@@ -192,7 +192,7 @@ pub(super) fn effective_agent_code(
 ) -> String {
     let selected = if session.last_run_code.is_some()
         || session.source_code.as_deref().is_some_and(|source| {
-            source.starts_with("__dude:") || source.starts_with("__knowledge:")
+            source.starts_with("__assistant:") || source.starts_with("__knowledge:")
         }) {
         session.agent_code.clone()
     } else {
@@ -209,7 +209,7 @@ pub(crate) fn resolve_chat_agent_runtime(
     let effective_agent_code = effective_agent_code(session, request);
     let runtime =
         if session.source_code.as_deref().is_some_and(|source| {
-            source.starts_with("__dude:") || source.starts_with("__knowledge:")
+            source.starts_with("__assistant:") || source.starts_with("__knowledge:")
         }) {
             state
                 .agent_management

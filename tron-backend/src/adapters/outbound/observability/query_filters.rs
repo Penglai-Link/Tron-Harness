@@ -68,7 +68,7 @@ impl TelemetryProjection {
     ) -> Result<Vec<TraceAgentOption>, ObservabilityError> {
         let workspace = workspace.to_owned();
         blocking(self.database.call_read(move |c| -> rusqlite::Result<_> {
-            let mut stmt = c.prepare("SELECT DISTINCT json_extract(data,'$.attributes.\"tron.agent.code\"') FROM ef_telemetry_spans WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.dude.execute') AND (?1='' OR json_extract(data,'$.attributes.\"tron.workspace.code\"')=?1) ORDER BY 1")?;
+            let mut stmt = c.prepare("SELECT DISTINCT json_extract(data,'$.attributes.\"tron.agent.code\"') FROM ef_telemetry_spans WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute') AND (?1='' OR json_extract(data,'$.attributes.\"tron.workspace.code\"')=?1) ORDER BY 1")?;
             let codes = stmt.query_map([workspace], |r| r.get::<_, Option<String>>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(codes.into_iter().flatten().filter(|c| !c.is_empty()).map(|code| TraceAgentOption{name:code.clone(),code}).collect())
         })).map_err(failure)

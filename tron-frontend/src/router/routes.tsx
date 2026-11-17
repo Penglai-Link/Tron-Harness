@@ -29,13 +29,13 @@ export interface AppRoute {
   layout?: AppRouteLayout;
   settingsNav?: string;
   shellConfig?: AppRouteShellConfig;
-  /** Only this declared business identifier may be included in a Dude page snapshot. */
+  /** Only this declared business identifier may be included in a PersonAI page snapshot. */
   pageContextTarget?: { source: "query" | "path"; parameter: string };
 }
 
 const registeredRoutes: AppRoute[] = [
   { pageId: "capability.page", route: "/capability-pages/:packId/:pageId", activeNav: "Capability page", title: "Capability page", archetype: "detail" },
-  { pageId: "dudes.index", route: "/dudes", activeNav: "Dude", title: "Dude", titleTranslationKey: "pages:dude.title", archetype: "split-pane", shellConfig: { contentClassName: "!min-w-0 !overflow-hidden !p-0" } },
+  { pageId: "assistants.index", route: "/assistants", activeNav: "PersonAI", title: "PersonAI", titleTranslationKey: "pages:assistant.title", archetype: "split-pane", shellConfig: { contentClassName: "!min-w-0 !overflow-hidden !p-0" } },
   { pageId: "notifications.index", route: "/notifications", activeNav: "Notifications", title: "Notifications", titleTranslationKey: "pages:notifications.title", archetype: "data-table" },
   {pageId:"observability.logs", layout: "settings",route:"/settings/observability/logs",activeNav:"Logs",title:"Logs",titleTranslationKey:"observability:logs",archetype:"data-table"},
   {pageId:"observability.dashboard", layout: "settings",route:"/settings/observability/dashboard",activeNav:"Dashboard",title:"Dashboard",titleTranslationKey:"observability:dashboard",archetype:"dashboard"},

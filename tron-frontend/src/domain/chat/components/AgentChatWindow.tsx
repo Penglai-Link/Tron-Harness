@@ -101,7 +101,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
       adapter.loadAguiEvents(sessionCode),
       requestApi<{ snapshot: ContextAssemblySnapshot | null }>("GET /api/v1/chats/sessions/get-context-assembly", {
         queryParams: { sessionCode },
-        headers: activeSession?.ownerDudeCode ? { "X-Dude-Code": activeSession.ownerDudeCode } : undefined,
+        headers: activeSession?.ownerAssistantCode ? { "X-Assistant-Code": activeSession.ownerAssistantCode } : undefined,
       }),
     ]);
     const events = eventsResult.status === "fulfilled" ? eventsResult.value : [];
@@ -110,7 +110,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     if (request === metricsRequestRef.current) {
       setComposerSnapshot({ sessionCode, metrics });
     }
-  }, [adapter, activeSession?.ownerDudeCode]);
+  }, [adapter, activeSession?.ownerAssistantCode]);
   useEffect(() => {
     if (activeSessionCode) void refreshComposerMetrics(activeSessionCode);
   }, [activeSessionCode, metricsRefreshKey, refreshComposerMetrics]);
@@ -120,10 +120,10 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     }) ?? Promise.resolve(false),
   }), []);
   const { preferences: workPreferences } = useAguiWorkReplayPreferences();
-  const suggestionDudeCode = activeSession?.ownerDudeCode ?? initialSession?.ownerDudeCode
-    ?? (initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined);
+  const suggestionAssistantCode = activeSession?.ownerAssistantCode ?? initialSession?.ownerAssistantCode
+    ?? (initialSession?.sourceCode?.startsWith("__assistant:") ? initialSession.sourceCode.slice("__assistant:".length) : undefined);
   const inputSuggestions = useChatInputSuggestions(config.agentCode, activeSessionCode ?? initialSession?.sessionCode,
-    suggestionDudeCode ?? undefined, config.workspaceCode ?? activeSession?.workspaceCode, knowledgeBaseId);
+    suggestionAssistantCode ?? undefined, config.workspaceCode ?? activeSession?.workspaceCode, knowledgeBaseId);
   const { t, i18n } = useTranslation("pages");
   const workRailLabels = useChatWorkRailLabels();
   const historyLabels = useChatHistoryLabels();
@@ -179,13 +179,13 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     // Generic completion responses omit host ownership. Retain it only for
     // the same session, including approval resumes and metric inspection.
     const nextSession = mapped && origin?.sessionCode === mapped.sessionCode
-      ? { ...mapped, ownerDudeCode: mapped.ownerDudeCode ?? origin.ownerDudeCode, purpose: mapped.purpose ?? origin.purpose }
+      ? { ...mapped, ownerAssistantCode: mapped.ownerAssistantCode ?? origin.ownerAssistantCode, purpose: mapped.purpose ?? origin.purpose }
       : mapped;
     setActiveSession(nextSession);
     onSessionChange?.(nextSession);
   }, [onSessionChange]);
   const openContext = useCallback(() => {
-    if (config.floating && activeSession?.ownerDudeCode) {
+    if (config.floating && activeSession?.ownerAssistantCode) {
       setContextOpen(true);
       return;
     }
@@ -226,7 +226,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     {activeSession && tabVisible && (!config.floating || !props.windowState || (props.windowState.open && !props.windowState.collapsed)) && <SudoPasswordDialog
       key={activeSession.sessionCode} sessionCode={activeSession.sessionCode}
       workspaceCode={activeSession.workspaceCode ?? config.workspaceCode ?? ""}
-      dudeCode={activeSession.ownerDudeCode ?? undefined} knowledgeBaseId={knowledgeBaseId} />}
+      assistantCode={activeSession.ownerAssistantCode ?? undefined} knowledgeBaseId={knowledgeBaseId} />}
     <ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
     draft={draft} onDraftChange={changeDraft} composerRef={setComposerRef}
     renderAttachmentControl={props.renderAttachmentControl ?? ((control) => <ChatAttachmentButton {...control} />)}
@@ -255,7 +255,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
       <DialogContent className="flex h-[min(80dvh,900px)] flex-col sm:max-w-3xl">
         <DialogHeader><DialogTitle>{t("chat.shortTermMemory.shortTermMemoryTab")}</DialogTitle></DialogHeader>
         <div className="relative min-h-0 flex-1">
-          {contextOpen && activeSession?.ownerDudeCode && <Suspense fallback={null}><ChatContextInspector session={activeSession} /></Suspense>}
+          {contextOpen && activeSession?.ownerAssistantCode && <Suspense fallback={null}><ChatContextInspector session={activeSession} /></Suspense>}
         </div>
       </DialogContent>
     </Dialog>

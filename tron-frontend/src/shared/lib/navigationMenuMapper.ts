@@ -73,15 +73,15 @@ function mapMenu(menu: NavigationRuntimeMenu, locale: string): TronNavItem {
     external: menu.menuType === "ExternalLink",
     href,
     icon: getNavigationIcon(menu.icon) ?? Folder,
-    label: menu.menuCode === "DUDES"
-      ? localizedDudeLabel(menu.label, locale)
+    label: menu.menuCode === "ASSISTANTS"
+      ? localizedAssistantLabel(menu.label, locale)
       : menu.label,
     childDisplay: menu.childDisplay,
     translationKey: "",
   };
 }
 
-function localizedDudeLabel(label: string, locale: string): string {
+function localizedAssistantLabel(label: string, locale: string): string {
   const legacyBilingualLabel = /^(.*?)（([^）]*)）$/u.exec(label);
   if (!legacyBilingualLabel) return label;
   return locale.toLowerCase().startsWith("zh")

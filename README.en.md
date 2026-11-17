@@ -1,7 +1,7 @@
 <div align="center">
   <img src="electron/assets/tron.png" alt="Tron black hole logo" width="160">
   <h1>TRON Harness</h1>
-  <p><a href="README.md">简体中文</a> · <strong>English</strong> · <a href="README.ja.md">日本語</a></p>
+  <p><a href="README.md">简体中文</a> · <strong>English</strong></p>
   <p>
     <a href="https://github.com/Penglai-Link/Tron-Harness/releases/latest"><img src="https://img.shields.io/github/v/release/Penglai-Link/Tron-Harness?style=flat-square&amp;label=Release&amp;color=2563EB" alt="Latest release"></a>
     <a href="https://personai.chat/person-ai-index/"><img src="https://img.shields.io/badge/Person--AI-Ecosystem-7C3AED?style=flat-square" alt="Person-AI Ecosystem"></a>
@@ -19,7 +19,7 @@
   <p><strong>Got an idea? Team up with your buddy and build it together.</strong></p>
   <p>Built-in assistant · Multi-agent collaboration · Capability packs · Windows + WSL2</p>
   <p>
-    <a href="#buddy">Meet Dude</a> ·
+    <a href="#buddy">Meet PersonAI</a> ·
     <a href="#wsl2">WSL</a> ·
     <a href="#capability-packs">Capability packs</a> ·
     <a href="#quick-start">Quick start</a> ·
@@ -43,9 +43,9 @@ The desktop app supports macOS (Apple Silicon and Intel), Windows, and Linux. On
 
 <a id="buddy"></a>
 
-## Dude: your built-in personal assistant
+## PersonAI: your built-in personal assistant
 
-Open Tron and meet **Dude**, your built-in personal assistant and work buddy. Dude has its own identity, conversations, and tasks. You can choose its name, personality, and how you work together, or create additional Dudes for different roles.
+Open Tron and meet **PersonAI**, your built-in personal assistant and work buddy. PersonAI has its own identity, conversations, and tasks. You can choose its name, personality, and how you work together, or create additional PersonAIs for different roles.
 
 Start with a simple request:
 
@@ -53,22 +53,22 @@ Start with a simple request:
 
 - **Turn ideas into tasks.** Clarify goals in conversation, create tasks, set schedules, and track progress and results.
 - **Coordinate multiple agents.** Delegate subtasks or create separate collaboration sessions, check their status, add requirements, answer questions, and cancel work when needed.
-- **Follow up proactively.** With background execution enabled, Dude keeps working through heartbeats, task reminders, and feedback. Notifications report progress, completion, or decisions that need your input.
-- **Remember useful experience.** The built-in memory-organizing Dude extracts stable facts and validated experience from past work. Generated Skills await approval by default and are installed after approval.
+- **Follow up proactively.** With background execution enabled, PersonAI keeps working through heartbeats, task reminders, and feedback. Notifications report progress, completion, or decisions that need your input.
+- **Remember useful experience.** The built-in memory-organizing PersonAI extracts stable facts and validated experience from past work. Generated Skills await approval by default and are installed after approval.
 - **See what is happening.** Dedicated views show conversations, delegated sessions, tasks, background work, and history.
 
 ```mermaid
 flowchart LR
-    User[You: goals and feedback] <--> Dude[Dude]
-    Dude --> Tools[Tools, files, and terminal]
-    Dude --> Agents[Subagents and collaboration sessions]
+    User[You: goals and feedback] <--> PersonAI[PersonAI]
+    PersonAI --> Tools[Tools, files, and terminal]
+    PersonAI --> Agents[Subagents and collaboration sessions]
     Tools --> Results[Results]
     Agents --> Results
-    Results --> Dude
-    Dude --> Tasks[Task progress and notifications]
+    Results --> PersonAI
+    PersonAI --> Tasks[Task progress and notifications]
     Tasks --> User
-    Wake[Heartbeats and task reminders] --> Dude
-    Memory[Memory and skills] --> Dude
+    Wake[Heartbeats and task reminders] --> PersonAI
+    Memory[Memory and skills] --> PersonAI
 ```
 
 Background work requires the backend to stay running and uses your configured models and tools. You can adjust the heartbeat interval, enable or disable background execution, and configure automatic Skill approval.
@@ -86,7 +86,7 @@ Windows
       │ HTTP / WebSocket over localhost
       ▼
 WSL2 · Ubuntu / Debian
-├─ Tron backend: Dude, agent collaboration, capability packs, background tasks
+├─ Tron backend: PersonAI, agent collaboration, capability packs, background tasks
 ├─ Linux workspace: project directories, commands, terminal, MCP
 └─ ~/.tron: databases, chats, attachments, logs, managed working directories
 ```
@@ -148,7 +148,7 @@ Isolated pages load in restricted iframes and currently receive theme and langua
 | Move a project forward | Workspaces, project and application directories, task boards, and configurable task flows |
 | Coordinate multiple agents | Built-in agents, subtasks, and independent collaboration sessions; integration with installed and configured external agents such as Codex and OpenCode |
 | Read material and organize knowledge | Conversation attachments, knowledge base retrieval, long-term memory, and knowledge graphs; document parsing and retrieval require the appropriate services and models |
-| Repeat work on a schedule | Cron automations, manual triggers, execution history, and Dude's heartbeats and task reminders |
+| Repeat work on a schedule | Cron automations, manual triggers, execution history, and PersonAI's heartbeats and task reminders |
 | Use your own model services | The Person-AI model catalog and provider connections with configurable API URLs, keys, and models |
 | Understand execution | Streaming conversations, tool call records, background task status, and views for logs, metrics, and traces |
 
@@ -176,11 +176,11 @@ If the default ports are occupied, choose available ones. The Makefile keeps the
 make dev-api PORT=8081 FE_PORT=5174
 ```
 
-### Meet your Dude
+### Meet your PersonAI
 
 1. On the user selection page, choose the option to authorize a new account and follow the prompts to complete **Person-AI account authorization**.
 2. Review the available models, configure your own model providers if needed, and select an available chat model for your assistant.
-3. Complete Dude's initial setup, or adjust its name, personality, and working relationship later.
+3. Complete PersonAI's initial setup, or adjust its name, personality, and working relationship later.
 4. Start with a concrete goal, such as: **“Read this project, explain what problem it solves, and list the three things worth tackling first.”**
 5. To work with project files, link the relevant application or working directory. To extend the available tools, configure resources in capability pack, Skills, and MCP management.
 

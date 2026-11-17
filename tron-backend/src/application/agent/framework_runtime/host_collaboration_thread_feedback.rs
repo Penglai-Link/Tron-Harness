@@ -14,13 +14,13 @@ pub struct ThreadFeedback {
     pub result: Option<fw::ThreadResult>,
     pub error: Option<String>,
     /// Present when the feedback reports a detached child run completion
-    /// instead of an independent thread; Dude prompts name it accordingly.
+    /// instead of an independent thread; PersonAI prompts name it accordingly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child_run_id: Option<fw::RunId>,
 }
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DudeThreadCatalogItem {
+pub struct AssistantThreadCatalogItem {
     pub summary: fw::ThreadSummary,
     pub agent_code: String,
     pub closed: bool,
@@ -35,29 +35,33 @@ pub trait ThreadFeedbackSink: Send + Sync {
 }
 
 impl FrameworkHost {
-    /// The product service must authenticate access to the platform Dude before calling.
-    pub async fn dude_threads(
+    /// The product service must authenticate access to the platform PersonAI before calling.
+    pub async fn assistant_threads(
         &self,
-        dude_code: &str,
+        assistant_code: &str,
     ) -> Result<Vec<fw::ThreadSummary>, fw::AgentError> {
         Ok(self
             .thread_records()
             .await?
             .into_iter()
-            .filter(|record| record.owner.kind == "DUDE" && record.owner.code == dude_code)
+            .filter(|record| {
+                record.owner.kind == "ASSISTANT" && record.owner.code == assistant_code
+            })
             .map(|record| record.summary)
             .collect())
     }
-    pub async fn dude_thread_catalog(
+    pub async fn assistant_thread_catalog(
         &self,
-        dude_code: &str,
-    ) -> Result<Vec<DudeThreadCatalogItem>, fw::AgentError> {
+        assistant_code: &str,
+    ) -> Result<Vec<AssistantThreadCatalogItem>, fw::AgentError> {
         Ok(self
             .thread_records()
             .await?
             .into_iter()
-            .filter(|record| record.owner.kind == "DUDE" && record.owner.code == dude_code)
-            .map(|record| DudeThreadCatalogItem {
+            .filter(|record| {
+                record.owner.kind == "ASSISTANT" && record.owner.code == assistant_code
+            })
+            .map(|record| AssistantThreadCatalogItem {
                 summary: record.summary,
                 agent_code: record.agent_code,
                 closed: record.closed,
@@ -67,15 +71,17 @@ impl FrameworkHost {
             .collect())
     }
     /// Closed Threads keep their native history; ordinary user chat APIs cannot resolve them.
-    pub async fn dude_thread_history(
+    pub async fn assistant_thread_history(
         &self,
-        dude_code: &str,
+        assistant_code: &str,
         id: &str,
         query: fw::HistoryQuery,
     ) -> Result<fw::SessionHistory, fw::AgentError> {
         self.thread_record(id)
             .await?
-            .filter(|record| record.owner.kind == "DUDE" && record.owner.code == dude_code)
+            .filter(|record| {
+                record.owner.kind == "ASSISTANT" && record.owner.code == assistant_code
+            })
             .ok_or_else(|| failure("thread not found"))?;
         self.storage_framework()
             .await?
@@ -220,7 +226,7 @@ impl FrameworkHost {
                 };
                 record.summary.status = completion.0.clone();
                 record.completion = Some(completion.clone());
-                record.feedback_pending = record.owner.kind == "DUDE";
+                record.feedback_pending = record.owner.kind == "ASSISTANT";
                 if let Err(error) = self.persist_thread(&mut record, false).await {
                     // Another process or a newly materialized thread won the CAS.
                     if matches!(

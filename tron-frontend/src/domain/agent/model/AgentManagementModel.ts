@@ -76,8 +76,8 @@ export interface PlatformToolRecord {
   source?: { providerId: string | null; pluginId: string | null; packId: string | null; adapterId: string | null } | null;
   providerPackId?: string | null;
   assignable?: boolean;
-  dudeAssignable?: boolean;
-  dudeReplacementToolCode?: string | null;
+  assistantAssignable?: boolean;
+  assistantReplacementToolCode?: string | null;
   disabledReason?: string | null;
   toolCode: string;
   toolName: string;

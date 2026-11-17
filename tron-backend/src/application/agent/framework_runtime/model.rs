@@ -37,7 +37,7 @@ impl HostRunState {
     pub fn new(context: AgentRunContext) -> Self {
         let turn = TurnStateAdapter::new(
             context.model.protocol,
-            context.model.responses_stateful_enabled && !context.is_owning_dude(),
+            context.model.responses_stateful_enabled && !context.is_owning_assistant(),
         );
         let trusted_prefix = context
             .messages

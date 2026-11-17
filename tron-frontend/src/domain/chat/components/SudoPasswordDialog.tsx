@@ -13,11 +13,11 @@ interface SudoInput {
   cwd: string | null;
 }
 
-export function SudoPasswordDialog({ sessionCode, workspaceCode, dudeCode, knowledgeBaseId }: {
-  sessionCode: string; workspaceCode: string; dudeCode?: string; knowledgeBaseId?: string;
+export function SudoPasswordDialog({ sessionCode, workspaceCode, assistantCode, knowledgeBaseId }: {
+  sessionCode: string; workspaceCode: string; assistantCode?: string; knowledgeBaseId?: string;
 }) {
   const headers: Record<string, string> = { "X-Tron-Sudo-Input": "1" };
-  if (dudeCode) headers["X-Dude-Code"] = dudeCode;
+  if (assistantCode) headers["X-Assistant-Code"] = assistantCode;
   if (knowledgeBaseId) headers["X-Knowledge-Base-Code"] = knowledgeBaseId;
   const { t } = useTranslation("pages");
   const [pending, setPending] = useState<SudoInput | null>(null);
@@ -56,7 +56,7 @@ export function SudoPasswordDialog({ sessionCode, workspaceCode, dudeCode, knowl
     }
     void poll();
     return () => { disposed = true; controller.abort(); clearTimeout(timer); };
-  }, [sessionCode, workspaceCode, dudeCode, knowledgeBaseId]);
+  }, [sessionCode, workspaceCode, assistantCode, knowledgeBaseId]);
 
   async function answer(cancel: boolean) {
     if (!pending || submittingRef.current) return;

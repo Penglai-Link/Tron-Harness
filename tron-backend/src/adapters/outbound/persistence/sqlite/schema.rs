@@ -5,10 +5,16 @@ use super::framework_storage::business_transaction;
 
 const INITIAL_SCHEMA: &str = include_str!("../../../../../migrations/0001_init.sql");
 const PROFILE_SECTION: &str = "-- tron:profiles\n";
-const BUSINESS_MIGRATIONS: &[(&str, &str)] = &[(
-    "0002_rename_topics_menu",
-    include_str!("../../../../../migrations/0002_rename_topics_menu.sql"),
-)];
+const BUSINESS_MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "0002_rename_topics_menu",
+        include_str!("../../../../../migrations/0002_rename_topics_menu.sql"),
+    ),
+    (
+        "0003_rename_dude_to_assistant",
+        include_str!("../../../../../migrations/0003_rename_dude_to_assistant.sql"),
+    ),
+];
 
 pub(crate) fn initialize_business(connection: &Connection) -> rusqlite::Result<()> {
     let (business, _) = INITIAL_SCHEMA
@@ -85,7 +91,7 @@ fn refresh_builtin_run_count_defaults(connection: &Connection) -> rusqlite::Resu
                  THEN 0 ELSE json_extract(config_json, '$.maxSteps') END,
              '$.maxToolCalls', CASE WHEN json_extract(config_json, '$.maxToolCalls') = 100
                  THEN 0 ELSE json_extract(config_json, '$.maxToolCalls') END)
-         WHERE agent_code IN ('main-agent', 'explore-agent', 'prd-agent', 'main-dude', 'memory-dude')
+         WHERE agent_code IN ('main-agent', 'explore-agent', 'prd-agent', 'main-assistant', 'memory-assistant')
            AND (json_extract(config_json, '$.maxSteps') = 100
              OR json_extract(config_json, '$.maxToolCalls') = 100);",
     )?;

@@ -104,6 +104,6 @@ fn runtime_input_context_message(
 fn resolve_todo_enabled(context: &AgentRunContext) -> bool {
     context.tools.iter().any(|tool| {
         tool.tool_name.eq_ignore_ascii_case("todo_update")
-            || tool.tool_name.eq_ignore_ascii_case("dude_todo_update")
+            || tool.tool_name.eq_ignore_ascii_case("assistant_todo_update")
     })
 }

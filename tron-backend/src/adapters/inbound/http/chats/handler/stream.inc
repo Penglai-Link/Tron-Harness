@@ -66,7 +66,7 @@ pub async fn send_message(
         state.runtime_http_client.clone(),
     )
     .with_framework_host(state.agent_framework.clone())
-    .with_dude_work_context(state.dudes.clone())
+    .with_assistant_work_context(state.assistants.clone())
     .with_directory_inspector(Some(std::sync::Arc::new(
         crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
     )))
@@ -88,11 +88,11 @@ pub async fn send_message(
         .await
     {
         Ok(result) => {
-            if result.session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:"))
+            if result.session.source_code.as_deref().is_some_and(|source| source.starts_with("__assistant:"))
                 && result.run.status == "COMPLETED"
             {
-                if let Err(error) = state.dudes.resolve_awaiting_input(&session_code, &result.run.final_output) {
-                    tracing::error!("Dude human response resolution: {error}");
+                if let Err(error) = state.assistants.resolve_awaiting_input(&session_code, &result.run.final_output) {
+                    tracing::error!("PersonAI human response resolution: {error}");
                     return chat_send_error_response(ChatSendError::Agent(crate::application::agent::AgentInvocationError::RuntimeFailed(error.to_string())));
                 }
             }
@@ -225,7 +225,7 @@ pub(crate) async fn stream_message_command(
         state.runtime_http_client.clone(),
     )
     .with_framework_host(state.agent_framework.clone())
-    .with_dude_work_context(state.dudes.clone())
+    .with_assistant_work_context(state.assistants.clone())
     .with_directory_inspector(Some(std::sync::Arc::new(
         crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
     )))
@@ -239,7 +239,7 @@ pub(crate) async fn stream_message_command(
     let llm_runtime = state.llm_runtime.clone();
     let a2ui_action_id = request.a2ui_action_id.clone();
     let a2ui_host = state.agent_framework.clone();
-    let dudes = state.dudes.clone();
+    let assistants = state.assistants.clone();
     let run_task = AuthHolder::spawn(async move {
         let result = chats
             .send_message_stream(
@@ -255,10 +255,10 @@ pub(crate) async fn stream_message_command(
             .await;
         let completion = match result {
             Ok(result) => {
-                if result.session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:"))
+                if result.session.source_code.as_deref().is_some_and(|source| source.starts_with("__assistant:"))
                     && result.run.status == "COMPLETED"
                 {
-                    match dudes.resolve_awaiting_input(&session_code_for_task, &result.run.final_output) {
+                    match assistants.resolve_awaiting_input(&session_code_for_task, &result.run.final_output) {
                         Ok(()) => ChatStreamCompletion::Success(result),
                         Err(error) => ChatStreamCompletion::Error { code: "101031004".into(), message: super::error_messages::message("101031004", &error.to_string()) },
                     }

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { CodeRain } from "@/domain/dude/awakening/CodeRain";
+import { CodeRain } from "@/domain/assistant/awakening/CodeRain";
 import { mountBackgroundEffect } from "./backgroundEffectAnimation";
 import type { BackgroundEffectSettings, BackgroundImageSettings } from "./backgroundPreferences";
 

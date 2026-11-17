@@ -74,13 +74,13 @@ pub async fn list_agent_runs(
     headers: axum::http::HeaderMap,
     Query(query): Query<AgentRunHistoryQuery>,
 ) -> Response {
-    let excluded = if headers.contains_key("x-dude-code") {
+    let excluded = if headers.contains_key("x-assistant-code") {
         std::collections::BTreeSet::new()
     } else {
-        match state.dudes.list().and_then(|dudes| {
-            dudes
+        match state.assistants.list().and_then(|assistants| {
+            assistants
                 .into_iter()
-                .map(|dude| state.dudes.sessions(&dude.dude_code))
+                .map(|assistant| state.assistants.sessions(&assistant.assistant_code))
                 .collect::<Result<Vec<_>, _>>()
         }) {
             Ok(sessions) => sessions
@@ -244,9 +244,10 @@ pub async fn list_tools(
                 }
                 let assignable = tool.availability_state
                     == crate::domain::agent::ToolAvailabilityState::Available;
-                let dude_assignable = !crate::application::agent::dude_workspace_tool(&tool);
-                let dude_replacement_tool_code =
-                    crate::application::agent::dude_tool_replacement(&tool.tool_code)
+                let assistant_assignable =
+                    !crate::application::agent::assistant_workspace_tool(&tool);
+                let assistant_replacement_tool_code =
+                    crate::application::agent::assistant_tool_replacement(&tool.tool_code)
                         .map(str::to_owned);
                 let disabled_reason =
                     catalog_issue
@@ -263,8 +264,8 @@ pub async fn list_tools(
                 ToolAssignmentVo {
                     provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
                     assignable,
-                    dude_assignable,
-                    dude_replacement_tool_code,
+                    assistant_assignable,
+                    assistant_replacement_tool_code,
                     disabled_reason,
                     tool_code: tool.tool_code,
                     tool_name: tool.tool_name,
@@ -701,8 +702,8 @@ struct ToolAssignmentVo {
     sample_result_summary: String,
     provider_pack_id: Option<String>,
     assignable: bool,
-    dude_assignable: bool,
-    dude_replacement_tool_code: Option<String>,
+    assistant_assignable: bool,
+    assistant_replacement_tool_code: Option<String>,
     disabled_reason: Option<String>,
 }
 

@@ -5,7 +5,7 @@ use crate::application::agent::AgentInvocationService;
 impl FrameworkHost {
     async fn intervention_runtime(
         &self,
-        dude: &str,
+        assistant: &str,
         id: &str,
         user: &str,
         locale: &str,
@@ -16,8 +16,8 @@ impl FrameworkHost {
             .await?
             .filter(|record| {
                 !record.closed
-                    && record.owner.kind == "DUDE"
-                    && record.owner.code == dude
+                    && record.owner.kind == "ASSISTANT"
+                    && record.owner.code == assistant
                     && record.user_code.as_deref() == Some(user)
             })
             .ok_or_else(|| failure("thread not found"))?;
@@ -60,9 +60,9 @@ impl FrameworkHost {
         let thread = runtime.thread(id).await?;
         Ok((runtime, thread))
     }
-    pub async fn dude_thread_send(
+    pub async fn assistant_thread_send(
         &self,
-        dude: &str,
+        assistant: &str,
         id: &str,
         message: &str,
         user: &str,
@@ -73,7 +73,7 @@ impl FrameworkHost {
             return Err(failure("Thread message cannot be empty"));
         }
         let (runtime, thread) = self
-            .intervention_runtime(dude, id, user, locale, service)
+            .intervention_runtime(assistant, id, user, locale, service)
             .await?;
         let _transition = thread.transition.lock().await;
         runtime.ensure_registered(id, &thread).await?;
@@ -108,9 +108,9 @@ impl FrameworkHost {
             )
             .await
     }
-    pub async fn dude_thread_answer(
+    pub async fn assistant_thread_answer(
         &self,
-        dude: &str,
+        assistant: &str,
         id: &str,
         answers: Vec<(fw::RunId, serde_json::Value)>,
         user: &str,
@@ -118,7 +118,7 @@ impl FrameworkHost {
         service: &AgentInvocationService,
     ) -> Result<fw::ThreadSummary, fw::AgentError> {
         let (runtime, thread) = self
-            .intervention_runtime(dude, id, user, locale, service)
+            .intervention_runtime(assistant, id, user, locale, service)
             .await?;
         let _transition = thread.transition.lock().await;
         runtime.ensure_registered(id, &thread).await?;

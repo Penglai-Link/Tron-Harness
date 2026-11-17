@@ -37,7 +37,7 @@ export function NotificationListItem({ notification: item, disabled, pending, on
           <span className="line-clamp-2 text-sm leading-6 text-[var(--color-on-surface-variant)] [overflow-wrap:anywhere]">{notificationPreview(item.body)}</span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-[var(--color-on-surface-variant)]">
             {unread ? <span className="sr-only">{t("notifications.unread")}</span> : null}
-            <span className="max-w-48 truncate">{item.dudeCode ?? t("notifications.platform")}</span>
+            <span className="max-w-48 truncate">{item.assistantCode ?? t("notifications.platform")}</span>
             {item.resolvedAt !== null ? <Badge variant="outline">{t("notifications.resolved")}</Badge>
               : changeKind ? <Badge variant="secondary">{t(`notifications.changes.${changeKind}`)}</Badge> : null}
             <time className="tabular-nums sm:hidden" dateTime={new Date(item.createdAt).toISOString()} title={fullDate}>{date}</time>

@@ -203,18 +203,18 @@ impl SqliteChatRepository {
                 }
                 let guard_code = code.clone();
                 let blocked = db.call(move |c| c.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND (
-                        EXISTS(SELECT 1 FROM dude_events e WHERE (e.session_code=s.session_code OR e.event_id=s.correlation_key) AND (e.source!='Heartbeat' OR e.status IN ('Queued','Running','AwaitingInput')))
+                    "SELECT EXISTS(SELECT 1 FROM assistant_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND (
+                        EXISTS(SELECT 1 FROM assistant_events e WHERE (e.session_code=s.session_code OR e.event_id=s.correlation_key) AND (e.source!='Heartbeat' OR e.status IN ('Queued','Running','AwaitingInput')))
                         OR EXISTS(SELECT 1 FROM tasks t WHERE t.work_session_code=s.session_code)
                         OR EXISTS(SELECT 1 FROM collaboration_threads t WHERE t.session_id=s.session_code)
-                        OR EXISTS(SELECT 1 FROM dude_work_changes w WHERE json_extract(w.record_json,'$.sessionCode')=s.session_code AND json_extract(w.record_json,'$.resolvedAt') IS NULL)))",
+                        OR EXISTS(SELECT 1 FROM assistant_work_changes w WHERE json_extract(w.record_json,'$.sessionCode')=s.session_code AND json_extract(w.record_json,'$.resolvedAt') IS NULL)))",
                     [&guard_code], |r| r.get::<_, bool>(0),
                 )).await.map_err(|e|fw::StateError::Backend(e.to_string()))?;
                 if blocked { return Err(fw::StateError::Busy); }
                 if heartbeat_retention {
                     let guard_code = code.clone();
                     let expired = db.call(move |c| c.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND EXISTS(SELECT 1 FROM dude_sessions n WHERE n.dude_code=s.dude_code AND n.purpose='Heartbeat' AND n.rowid>s.rowid LIMIT 1 OFFSET 19))",
+                        "SELECT EXISTS(SELECT 1 FROM assistant_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND EXISTS(SELECT 1 FROM assistant_sessions n WHERE n.assistant_code=s.assistant_code AND n.purpose='Heartbeat' AND n.rowid>s.rowid LIMIT 1 OFFSET 19))",
                         [&guard_code], |r| r.get::<_, bool>(0),
                     )).await.map_err(|e|fw::StateError::Backend(e.to_string()))?;
                     if !expired { return Err(fw::StateError::Busy); }
@@ -223,8 +223,8 @@ impl SqliteChatRepository {
                 db.call(move|c| {
                     // Historical traces, logs and statistics have their own retention
                     // policy and are independent of the chat session lifecycle.
-                    c.execute("DELETE FROM dude_events WHERE source='Heartbeat' AND EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND (dude_events.session_code=s.session_code OR dude_events.event_id=s.correlation_key))",[&code])?;
-                    c.execute("DELETE FROM dude_sessions WHERE session_code=?1 AND purpose='Heartbeat'",[&code])?;
+                    c.execute("DELETE FROM assistant_events WHERE source='Heartbeat' AND EXISTS(SELECT 1 FROM assistant_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND (assistant_events.session_code=s.session_code OR assistant_events.event_id=s.correlation_key))",[&code])?;
+                    c.execute("DELETE FROM assistant_sessions WHERE session_code=?1 AND purpose='Heartbeat'",[&code])?;
                     c.execute("DELETE FROM resource_chat_session_attachments WHERE session_code=?1",[&code])?;
                     for (table, sql) in [
                         ("chat_session_auto_model_routes", "DELETE FROM chat_session_auto_model_routes WHERE session_code=?1"),
@@ -244,7 +244,9 @@ impl SqliteChatRepository {
                 );
                 Ok(())
             }).await.map_err(chat_error);
-        if result.is_ok() && let Some(staged) = staged.take() {
+        if result.is_ok()
+            && let Some(staged) = staged.take()
+        {
             staged.commit_detached();
         }
         tracing::debug!(
@@ -603,7 +605,7 @@ impl ChatRepository for SqliteChatRepository {
             let workspace = workspace_code.map(str::to_owned);
             let filter = "WHERE s.status IN ('Archived','ARCHIVED') \
                  AND (?1 IS NULL OR l.workspace_code=?1) \
-                 AND substr(coalesce(json_extract(l.business_json,'$.source_code'),''),1,7) <> '__dude:'";
+                 AND substr(coalesce(json_extract(l.business_json,'$.source_code'),''),1,12) <> '__assistant:'";
             let rows = db
                 .call_read(move |c| -> Result<(Vec<SessionProjection>, u64), ChatError> {
                     let total: u64 = c

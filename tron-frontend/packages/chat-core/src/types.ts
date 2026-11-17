@@ -36,7 +36,7 @@ export interface ChatSession {
   sourceType?: string | null;
   agentCode?: string | null;
   systemAgentSessionId?: string | null;
-  ownerDudeCode?: string | null;
+  ownerAssistantCode?: string | null;
   purpose?: string | null;
   title: string;
   status: ChatSessionStatus;

@@ -3,10 +3,10 @@ use super::*;
 
 impl AgentManagementService {
     /// Definition identity is independent from the workspace containing work.
-    pub fn is_dude_definition(&self, agent_code: &str) -> Result<bool, AgentManagementError> {
+    pub fn is_assistant_definition(&self, agent_code: &str) -> Result<bool, AgentManagementError> {
         Ok(self
             .repository()
-            .list_dude_codes()?
+            .list_assistant_codes()?
             .iter()
             .any(|code| code.eq_ignore_ascii_case(agent_code)))
     }
@@ -25,8 +25,8 @@ impl AgentManagementService {
         repository.insert_platform_internal_agent_config(&config)
     }
 
-    /// Initialize an independent Dude with a full copy of generic Agent policy.
-    pub fn initialize_dude_definition(
+    /// Initialize an independent PersonAI with a full copy of generic Agent policy.
+    pub fn initialize_assistant_definition(
         &self,
         code: &str,
         name: &str,
@@ -46,14 +46,14 @@ impl AgentManagementService {
         config.max_steps = 0;
         config.max_tool_calls = 0;
         config.avatar_id = match code {
-            "main-dude" => "neo".into(),
-            "memory-dude" => "black-hole".into(),
+            "main-assistant" => "neo".into(),
+            "memory-assistant" => "black-hole".into(),
             _ => config.avatar_id,
         };
         config.name = name.into();
         config.description = match code {
-            "main-dude" => "统筹用户事务，协调智能体执行任务并跟进结果。",
-            "memory-dude" => "整理稳定事实与已验证经验，维护长期记忆和可复用技能。",
+            "main-assistant" => "统筹用户事务，协调智能体执行任务并跟进结果。",
+            "memory-assistant" => "整理稳定事实与已验证经验，维护长期记忆和可复用技能。",
             _ => "",
         }
         .into();
@@ -96,11 +96,11 @@ impl AgentManagementService {
     pub fn list_platform_internal_agents(
         &self,
     ) -> Result<Vec<InternalAgentToolPolicy>, AgentManagementError> {
-        let dudes = self.repository().list_dude_codes()?;
+        let assistants = self.repository().list_assistant_codes()?;
         Ok(self
             .all_platform_internal_agents()?
             .into_iter()
-            .filter(|p| !dudes.contains(&p.agent_code))
+            .filter(|p| !assistants.contains(&p.agent_code))
             .collect())
     }
     /// Identity-only listing must not build tool policies or resolve capabilities.
@@ -154,7 +154,7 @@ impl AgentManagementService {
         let code = code.trim();
         if self
             .repository()
-            .list_dude_codes()?
+            .list_assistant_codes()?
             .iter()
             .any(|d| d.eq_ignore_ascii_case(code))
         {
@@ -212,7 +212,7 @@ impl AgentManagementService {
         if let Some(id) = &command.avatar_id {
             internal_definitions::validate_avatar_id(Some(id))?;
         }
-        let group_name = if self.is_dude_definition(code)? {
+        let group_name = if self.is_assistant_definition(code)? {
             Some(String::new())
         } else {
             self.validate_internal_agent_group("", command.group_name)?

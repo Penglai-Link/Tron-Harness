@@ -37,9 +37,9 @@ mod knowledge_rag_ingestion;
 
 pub mod capability;
 
+pub mod assistant;
+pub mod assistant_memory;
 pub mod document;
-pub mod dude;
-pub mod dude_memory;
 pub mod knowledge_quality;
 
 pub mod remote_service;

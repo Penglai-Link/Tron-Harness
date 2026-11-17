@@ -15,7 +15,7 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_CODES: &[&str] = &["ADVANCED"];
 pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] = &[
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "DUDES",
+        menu_code: "ASSISTANTS",
         parent_menu_code: None,
         position: 0,
         child_display: NavigationMenuChildDisplay::Inline,

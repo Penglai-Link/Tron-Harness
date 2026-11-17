@@ -47,7 +47,7 @@ export function spanErrorMessage(span: TraceSpan, t: TFunction<"observability">)
     if (message?.trim()) return message.trim();
   }
   const description = span.attributes["otel.status.description"]?.trim();
-  if (description && description !== type && description !== "Dude execution failed" && description !== "Agent run failed") {
+  if (description && description !== type && description !== "PersonAI execution failed" && description !== "Agent run failed") {
     return description;
   }
   if (span.status === "Error") {

@@ -37,7 +37,7 @@ pub struct AgentInvocationService {
     platform_scope: bool,
     collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
     runtime_input: Option<(String, serde_json::Value)>,
-    dude_work_context: Option<crate::application::dude::DudeService>,
+    assistant_work_context: Option<crate::application::assistant::AssistantService>,
     workspaces: WorkspaceService,
     apps: AppService,
     variables: VariableService,
@@ -98,7 +98,7 @@ impl AgentInvocationService {
             platform_scope: false,
             collaboration_owner: None,
             runtime_input: None,
-            dude_work_context: None,
+            assistant_work_context: None,
             workspaces,
             apps,
             variables,
@@ -142,7 +142,7 @@ impl AgentInvocationService {
         self
     }
 
-    /// Host-only input identity. Public chat payloads cannot impersonate a scheduler or a Dude.
+    /// Host-only input identity. Public chat payloads cannot impersonate a scheduler or a PersonAI.
     pub(crate) fn with_runtime_input(
         mut self,
         kind: impl Into<String>,
@@ -158,11 +158,11 @@ impl AgentInvocationService {
             .and_then(|(_, metadata)| metadata.get("source").and_then(serde_json::Value::as_str))
     }
 
-    pub(crate) fn with_dude_work_context(
+    pub(crate) fn with_assistant_work_context(
         mut self,
-        dudes: crate::application::dude::DudeService,
+        assistants: crate::application::assistant::AssistantService,
     ) -> Self {
-        self.dude_work_context = Some(dudes);
+        self.assistant_work_context = Some(assistants);
         self
     }
 
@@ -241,7 +241,7 @@ impl AgentInvocationService {
         .with_framework_host(self.framework_host.clone())
         .with_execution_identity(self.platform_scope, self.collaboration_owner.clone())
         .with_tool_execution_mode(self.tool_execution_mode)
-        .with_dude_work_context(self.dude_work_context.clone());
+        .with_assistant_work_context(self.assistant_work_context.clone());
         match &self.auto_model_router {
             Some(router) => builder.with_model_router(router.clone()),
             None => builder,

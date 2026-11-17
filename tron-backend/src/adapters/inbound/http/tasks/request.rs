@@ -9,7 +9,7 @@ use crate::{
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreateTaskRequest {
     pub workspace_code: Option<String>,
-    pub owner_dude_code: Option<String>,
+    pub owner_assistant_code: Option<String>,
     pub due_at: Option<i64>,
     pub parent_task_code: Option<String>,
     pub title: String,
@@ -35,7 +35,7 @@ impl From<CreateTaskRequest> for CreateTaskCommand {
     fn from(request: CreateTaskRequest) -> Self {
         Self {
             workspace_code: request.workspace_code,
-            owner_dude_code: request.owner_dude_code,
+            owner_assistant_code: request.owner_assistant_code,
             due_at: request.due_at,
             parent_task_code: request.parent_task_code,
             title: request.title,

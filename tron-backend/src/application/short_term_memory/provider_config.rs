@@ -81,7 +81,7 @@ impl Default for ContextProvidersConfig {
                 "seed_prompt_prefix",
                 "conversation_history_summary",
                 "runtime_identity",
-                "dude_onboarding",
+                "assistant_onboarding",
                 "tool_domains",
                 "current_session_history",
                 "agent_directory",
@@ -92,8 +92,8 @@ impl Default for ContextProvidersConfig {
                 "current_session_working_state",
                 "long_term_memory",
                 "knowledge_base",
-                "dude_environment",
-                "dude_wakeup",
+                "assistant_environment",
+                "assistant_wakeup",
             ]
             .map(str::to_owned)
             .to_vec(),
@@ -102,7 +102,7 @@ impl Default for ContextProvidersConfig {
                 ("current_session_history", 6900),
                 ("conversation_history_summary", 200),
                 ("runtime_identity", 200),
-                ("dude_onboarding", 100),
+                ("assistant_onboarding", 100),
                 ("tool_domains", 300),
                 ("agent_directory", 50),
                 ("skills.catalog", 200),
@@ -112,8 +112,8 @@ impl Default for ContextProvidersConfig {
                 ("current_session_working_state", 200),
                 ("long_term_memory", 400),
                 ("knowledge_base", 400),
-                ("dude_environment", 50),
-                ("dude_wakeup", 50),
+                ("assistant_environment", 50),
+                ("assistant_wakeup", 50),
             ]
             .into_iter()
             .map(|(id, share)| (id.into(), share))
@@ -125,9 +125,9 @@ impl Default for ContextProvidersConfig {
                 ("knowledge_base", Some(1200)),
                 ("agent_directory", Some(2048)),
                 ("runtime_identity", Some(8192)),
-                ("dude_onboarding", Some(1024)),
-                ("dude_environment", Some(1536)),
-                ("dude_wakeup", Some(8192)),
+                ("assistant_onboarding", Some(1024)),
+                ("assistant_environment", Some(1536)),
+                ("assistant_wakeup", Some(8192)),
                 ("skills.catalog", Some(8192)),
                 ("tool_domains", None),
             ]

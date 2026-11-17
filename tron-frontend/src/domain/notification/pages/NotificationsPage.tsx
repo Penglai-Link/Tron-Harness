@@ -153,12 +153,12 @@ export function NotificationsPage() {
                 {t(busy === "archive" ? "notifications.archiveAllPending" : "notifications.archiveAll")}
               </Button>
             </>}
-            <Button size="sm" variant="outline" aria-busy={query.isFetching} disabled={query.isFetching} onClick={() => void query.refetch()}>{t("dude.refresh")}</Button>
+            <Button size="sm" variant="outline" aria-busy={query.isFetching} disabled={query.isFetching} onClick={() => void query.refetch()}>{t("assistant.refresh")}</Button>
           </div>
         </header>
         {query.error || error ? <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4 text-sm text-[var(--color-error)]">
           <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{error ?? query.error?.message}</span>
-          <Button size="sm" variant="outline" onClick={() => { setError(null); void query.refetch(); }}>{t("dude.retry")}</Button>
+          <Button size="sm" variant="outline" onClick={() => { setError(null); void query.refetch(); }}>{t("assistant.retry")}</Button>
         </div> : null}
         {query.isPending ? <p role="status" className="px-5 py-16 text-center text-sm text-[var(--color-on-surface-variant)]">{t("notifications.loading")}</p> : null}
         <ul className="min-w-0 divide-y divide-[var(--color-outline-variant)]" aria-label={t("notifications.title")}>
@@ -189,7 +189,7 @@ export function NotificationsPage() {
         open={deleteTarget !== null}
         title={t(deleteTarget === "all" ? "notifications.deleteAllTitle" : "notifications.deleteTitle")}
         description={t(deleteTarget === "all" ? "notifications.deleteAllDescription" : "notifications.deleteDescription", { count: query.data?.filter((item) => item.archivedAt !== null).length ?? 0 })}
-        cancelText={t("dude.cancel")}
+        cancelText={t("assistant.cancel")}
         confirmText={t(deleteTarget === "all" ? "notifications.deleteAll" : "notifications.delete")}
         pendingText={t("notifications.deletePending")}
         pending={deletePending}

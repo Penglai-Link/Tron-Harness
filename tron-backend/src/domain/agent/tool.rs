@@ -236,7 +236,7 @@ pub(crate) fn validate_workspace_request(
                 .and_then(serde_json::Value::as_str)
                 .map(str::trim)
                 .filter(|value| !value.is_empty());
-            if context.is_owning_dude()
+            if context.is_owning_assistant()
                 || workspace.is_none()
                 || workspace != Some(context.execution_workspace_code().trim())
             {

@@ -15,7 +15,7 @@ import { InternalAgentSkillField } from "./InternalAgentSkillField";
 import { InternalAgentKnowledgeField } from "./InternalAgentKnowledgeField";
 import { InternalAgentAssignmentDialog, type InternalAgentAssignmentKind } from "./InternalAgentAssignmentDialog";
 import { AgentPolicyFields, newAgentPolicyDraft, type AgentPolicyDraft } from "./AgentPolicyFields";
-import { dudeToolsForRule, hasDudeToolAlias } from "./dudeToolPolicy";
+import { assistantToolsForRule, hasAssistantToolAlias } from "./assistantToolPolicy";
 
 export interface AgentResourcesEditorHandle { validate(): void; save(createdCode?: string): Promise<void> }
 const policyKeys = ["toolAssignmentMode", "maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const;
@@ -25,7 +25,7 @@ const sameCodes = (a: string[], b: string[]) => a.length === b.length && a.every
 /** The same draft and controls serve creation and editing. Persistence starts only on parent Save. */
 export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
   agentCode?: string; agentName: string; workspaceCode?: string; disabled?: boolean;
-  audience?: "agent" | "dude";
+  audience?: "agent" | "assistant";
   loadRecord?: (code: string, signal: AbortSignal) => Promise<WorkspaceInternalAgentRecord>;
 }>(function AgentResourcesEditor({ agentCode, agentName, workspaceCode = "$platform", disabled = false, loadRecord, audience = "agent" }, ref) {
   const { t } = useTranslation("pages");
@@ -105,11 +105,11 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
   } }), [dirty, draft, baseline, agentCode, workspaceCode, loading, error, skillDraft, knowledgeDraft, client, t]);
   const blocked = disabled || saving || loading;
   const patch = (change: Partial<AgentPolicyDraft>) => setDraft((current) => current ? { ...current, ...change } : current);
-  const assignmentTools = audience === "dude" ? tools.map((tool) => tool.dudeAssignable === false
-    ? { ...tool, assignable: false, disabledReason: t(`workspaceAgents.internal.dudeToolPolicy.${hasDudeToolAlias(tool) ? "replacedByDude" : "workspaceOnly"}`) }
+  const assignmentTools = audience === "assistant" ? tools.map((tool) => tool.assistantAssignable === false
+    ? { ...tool, assignable: false, disabledReason: t(`workspaceAgents.internal.assistantToolPolicy.${hasAssistantToolAlias(tool) ? "replacedByAssistant" : "workspaceOnly"}`) }
     : tool) : tools;
-  const initialTools = !draft || draft.toolAssignmentMode === "selected_tools" || audience !== "dude" ? draft?.selectedToolCodes ?? []
-    : dudeToolsForRule(tools, draft.toolAssignmentMode, draft.selectedCategoryCodes ?? []).map((tool) => tool.toolCode);
+  const initialTools = !draft || draft.toolAssignmentMode === "selected_tools" || audience !== "assistant" ? draft?.selectedToolCodes ?? []
+    : assistantToolsForRule(tools, draft.toolAssignmentMode, draft.selectedCategoryCodes ?? []).map((tool) => tool.toolCode);
   return <>
     <TabsContent value="resources" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
       {error ? <div role="alert">{error}<Button type="button" variant="outline" disabled={disabled} onClick={() => setAttempt((value) => value + 1)}>{t("agentSkills.retry")}</Button></div> : null}
@@ -121,7 +121,7 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
     <TabsContent value="advanced" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
       {!draft ? <p role="status">{t("agentSkills.loading")}</p> : <AgentPolicyFields panel="advanced" draft={draft} disabled={blocked} onChange={patch} />}
     </TabsContent>
-    {assignment && draft ? <InternalAgentAssignmentDialog kind={assignment} agentName={agentName} busy={blocked} initialSelectedCodes={assignment === "mcp" ? draft.selectedServerCodes : draft.toolAssignmentMode === "selected_tools" || audience === "dude" ? initialTools : []} tools={assignmentTools} toolDomains={domains} servers={servers} allowRemovingUnavailable={audience === "dude"} switchingFromRule={audience === "dude" && assignment === "tools" && draft.toolAssignmentMode !== "selected_tools"} onClose={() => setAssignment(null)} onConfirm={(codes) => {
+    {assignment && draft ? <InternalAgentAssignmentDialog kind={assignment} agentName={agentName} busy={blocked} initialSelectedCodes={assignment === "mcp" ? draft.selectedServerCodes : draft.toolAssignmentMode === "selected_tools" || audience === "assistant" ? initialTools : []} tools={assignmentTools} toolDomains={domains} servers={servers} allowRemovingUnavailable={audience === "assistant"} switchingFromRule={audience === "assistant" && assignment === "tools" && draft.toolAssignmentMode !== "selected_tools"} onClose={() => setAssignment(null)} onConfirm={(codes) => {
       patch(assignment === "mcp" ? { mcpAccessMode: "selected_servers", selectedServerCodes: codes } : { toolAssignmentMode: "selected_tools", selectedToolCodes: codes }); setAssignment(null);
     }} /> : null}
   </>;

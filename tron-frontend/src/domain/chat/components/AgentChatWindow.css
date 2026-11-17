@@ -1,4 +1,4 @@
-/* The main chat and Dude share this host-level font preference. */
+/* The main chat and PersonAI share this host-level font preference. */
 .ef-chat {
   --agent-ui-system-font-size: var(--tron-system-font-size);
   --agent-ui-composer-font-size: var(--tron-system-font-size);

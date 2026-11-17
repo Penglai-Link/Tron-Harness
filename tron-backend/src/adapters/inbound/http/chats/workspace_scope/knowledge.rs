@@ -17,7 +17,7 @@ pub(super) async fn require(
         return fail();
     };
     if state.knowledge_bases.owned(&user, &kb).is_err()
-        || request.headers().contains_key("x-dude-code")
+        || request.headers().contains_key("x-assistant-code")
     {
         return fail();
     }

@@ -34,7 +34,7 @@ impl ChatService {
         requested_workspace: Option<&str>,
         continuation: bool,
     ) -> Result<Option<AgentExecutionScope>, ChatError> {
-        if !session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:")) {
+        if !session.source_code.as_deref().is_some_and(|source| source.starts_with("__assistant:")) {
             return self.project_execution_scope(session);
         }
         // User submissions always capture a fresh workspace. Only continuation
