@@ -98,7 +98,7 @@ pub(crate) fn builtin_category(code: &str) -> eliteforge_agent_core::ToolCategor
         "interaction" => ("交互工具", "Interaction tools"),
         "execution" => ("执行工具", "Execution tools"),
         "tron.connector.tools.platform" => ("外部平台", "External platforms"),
-        "tron.connector.tools.topic" => ("主题", "Topics"),
+        "tron.connector.tools.topic" => ("工作主题", "Work Topics"),
         _ => (code, code),
     };
     eliteforge_agent_core::ToolCategory::new(

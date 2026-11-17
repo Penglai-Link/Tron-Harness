@@ -20,8 +20,8 @@ export const tronNavigation: TronNavSection[] = [
 { menuCode: "MCP_SERVERS", label: "MCP Servers", translationKey: "shell:nav.items.mcpServers", href: "/mcp-servers", icon: getNavigationIcon("PlugZap") ?? Folder, childDisplay: "Inline" },
 { menuCode: "FILE_MANAGEMENT", label: "File Management", translationKey: "shell:nav.items.fileManagement", href: "/resource-management/files", icon: getNavigationIcon("Folder") ?? Folder, childDisplay: "Inline" },
 ] },
-  { id: "CHAT_PROJECTS", label: "Topics", translationKey: "shell:nav.items.projects", icon: getNavigationIcon("FolderKanban") ?? Folder, standalone: true, flyout: false, items: [
-{ menuCode: "CHAT_PROJECTS", label: "Topics", translationKey: "shell:nav.items.projects", href: "", icon: getNavigationIcon("FolderKanban") ?? Folder, childDisplay: "Inline", widgetCode: "chat.projects" }
+  { id: "CHAT_PROJECTS", label: "Work Topics", translationKey: "shell:nav.items.projects", icon: getNavigationIcon("FolderKanban") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "CHAT_PROJECTS", label: "Work Topics", translationKey: "shell:nav.items.projects", href: "", icon: getNavigationIcon("FolderKanban") ?? Folder, childDisplay: "Inline", widgetCode: "chat.projects" }
 ] },
   { id: "CHAT_DIRECTORIES", label: "Projects", translationKey: "shell:chatSidebar.directories", icon: getNavigationIcon("Folder") ?? Folder, standalone: true, flyout: false, items: [
 { menuCode: "CHAT_DIRECTORIES", label: "Projects", translationKey: "shell:chatSidebar.directories", href: "", icon: getNavigationIcon("Folder") ?? Folder, childDisplay: "Inline", widgetCode: "chat.directories" }

@@ -94,7 +94,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
             crate::application::chat::ArchiveError::TopicNameConflict
                 .descriptor()
                 .code,
-            "An active topic already uses this name".into(),
+            "An active work topic already uses this name".into(),
         ),
         ChatError::ProjectInvalid => (
             StatusCode::UNPROCESSABLE_ENTITY,

@@ -14,9 +14,9 @@ pub fn project_error_response(error: ProjectError) -> Response {
         });
         let message = match descriptor.message_key {
             "tron.projects.duplicate_name" if en => {
-                "An active topic with this name already exists in this workspace. Choose another name."
+                "An active work topic with this name already exists in this workspace. Choose another name."
             }
-            "tron.projects.duplicate_name" => "当前工作空间已有同名的未归档主题，请使用其他名称。",
+            "tron.projects.duplicate_name" => "当前工作空间已有同名的未归档工作主题，请使用其他名称。",
             _ => unreachable!("unknown project error message"),
         };
         return (

@@ -104,7 +104,7 @@ pub(crate) async fn start(config: &AppConfig, profiles: ProfileRegistryService, 
         allowed_origins: existing.allowed_origins,
         ticket_ttl_seconds: 300,
         machine_name: if config.remote_access.machine_name.trim().is_empty() {
-            format!("Tron {}", std::env::consts::OS)
+            crate::adapters::inbound::http::remote_access::resolve_computer_name()
         } else {
             config.remote_access.machine_name.clone()
         },

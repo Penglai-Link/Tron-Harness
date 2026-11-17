@@ -87,8 +87,8 @@ impl IntoResponse for ApiError {
             ),
             "tron.archives.topic_name_conflict" => (
                 StatusCode::CONFLICT,
-                "当前工作空间已有同名的未归档主题，请先重命名该主题，再恢复归档主题。",
-                "An active topic with this name already exists. Rename it before restoring the archived topic.",
+                "当前工作空间已有同名的未归档工作主题，请先重命名该工作主题，再恢复归档工作主题。",
+                "An active work topic with this name already exists. Rename it before restoring the archived work topic.",
             ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

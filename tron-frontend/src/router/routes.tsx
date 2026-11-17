@@ -209,7 +209,7 @@ const registeredRoutes: AppRoute[] = [
     pageId: "topics.detail",
     route: "/topics/:projectCode",
     activeNav: "Chats",
-    title: "Topic",
+    title: "Work Topic",
     titleTranslationKey: "shell:nav.items.projects",
     archetype: "detail",
     pageContextTarget: { source: "path", parameter: "projectCode" },

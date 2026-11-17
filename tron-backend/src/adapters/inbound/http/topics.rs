@@ -264,8 +264,8 @@ fn error_response(error: TopicError, headers: &HeaderMap) -> Response {
         TopicError::NotFound => (
             StatusCode::NOT_FOUND,
             "TOPIC_NOT_FOUND",
-            "The topic or reference was not found.",
-            "未找到主题或引用。",
+            "The work topic or reference was not found.",
+            "未找到工作主题或引用。",
         ),
         TopicError::InvalidReference => (
             StatusCode::BAD_REQUEST,
@@ -276,20 +276,20 @@ fn error_response(error: TopicError, headers: &HeaderMap) -> Response {
         TopicError::InvalidNotes => (
             StatusCode::BAD_REQUEST,
             "TOPIC_NOTES_INVALID",
-            "Topic notes are too long.",
-            "主题说明过长。",
+            "Work topic notes are too long.",
+            "工作主题说明过长。",
         ),
         TopicError::Conflict => (
             StatusCode::CONFLICT,
             "TOPIC_REVISION_CONFLICT",
-            "The topic changed. Refresh before saving.",
-            "主题已更改，请刷新后再保存。",
+            "The work topic changed. Refresh before saving.",
+            "工作主题已更改，请刷新后再保存。",
         ),
         TopicError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "TOPIC_STORAGE_FAILED",
-            "The topic could not be saved.",
-            "无法保存主题。",
+            "The work topic could not be saved.",
+            "无法保存工作主题。",
         ),
     };
     (

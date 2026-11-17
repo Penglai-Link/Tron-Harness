@@ -9,6 +9,7 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
     process::Command,
+    sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -90,7 +91,10 @@ pub struct RemoteAccessStatusResponse {
     pub restart_required: bool,
     pub token: String,
     pub token_configured: bool,
+    /// The configured node name; falls back to the computer name.
     pub machine_name: String,
+    /// The operating system's human-readable computer name.
+    pub computer_name: String,
     pub public_base_url: String,
     pub base_url: String,
     pub pairing_uri: String,
@@ -562,6 +566,7 @@ fn status_snapshot(state: &AppState) -> RemoteAccessStatusResponse {
         token: configured.token.clone(),
         token_configured: configured.has_token(),
         machine_name: machine_name.clone(),
+        computer_name: resolve_computer_name(),
         public_base_url: configured.public_base_url.clone(),
         base_url: base_url.clone(),
         pairing_uri: if configured.enabled && configured.has_token() {
@@ -587,7 +592,11 @@ async fn sync_remote_service(
     if let Some(service) = state.remote_service() {
         let mut settings = service.current_settings().await;
         settings.enabled = next.enabled;
-        settings.machine_name = next.machine_name.clone();
+        settings.machine_name = if next.machine_name.trim().is_empty() {
+            resolve_computer_name()
+        } else {
+            next.machine_name.clone()
+        };
         settings.product_code = next.product_code().to_owned();
         settings.product_name = next.product_name().to_owned();
         let public = next.public_base_url.trim();
@@ -838,16 +847,17 @@ fn resolve_machine_name(config: &RemoteAccessConfig) -> String {
     if !config.machine_name.trim().is_empty() {
         return config.machine_name.trim().to_owned();
     }
-    if let Ok(value) = std::env::var("COMPUTERNAME") {
-        if !value.trim().is_empty() {
-            return value.trim().to_owned();
-        }
-    }
-    if let Ok(value) = std::env::var("HOSTNAME") {
-        if !value.trim().is_empty() {
-            return value.trim().to_owned();
-        }
-    }
+    resolve_computer_name()
+}
+
+/// The human-readable name of this computer. macOS exposes it through
+/// `scutil --get ComputerName`, which is friendlier than the shell hostname.
+pub(crate) fn resolve_computer_name() -> String {
+    static COMPUTER_NAME: OnceLock<String> = OnceLock::new();
+    COMPUTER_NAME.get_or_init(compute_computer_name).clone()
+}
+
+fn compute_computer_name() -> String {
     #[cfg(target_os = "macos")]
     if let Ok(output) = Command::new("scutil")
         .args(["--get", "ComputerName"])
@@ -858,6 +868,17 @@ fn resolve_machine_name(config: &RemoteAccessConfig) -> String {
             if !value.is_empty() {
                 return value;
             }
+        }
+    }
+    #[cfg(windows)]
+    if let Ok(value) = std::env::var("COMPUTERNAME") {
+        if !value.trim().is_empty() {
+            return value.trim().to_owned();
+        }
+    }
+    if let Ok(value) = std::env::var("HOSTNAME") {
+        if !value.trim().is_empty() {
+            return value.trim().to_owned();
         }
     }
     if let Ok(value) = std::fs::read_to_string("/etc/hostname") {

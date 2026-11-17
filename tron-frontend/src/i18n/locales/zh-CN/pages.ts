@@ -579,7 +579,7 @@ export const pages = {
   archivedChats: {
     archiveType: "归档类型",
     chats: "会话",
-    topics: "主题",
+    topics: "工作主题",
     projects: "工作区",
     emptyContainers: "暂无归档内容。",
     containerItems: "归档内容",
@@ -1022,7 +1022,7 @@ export const pages = {
     terminal_list: "查询终端",
   },
   apps: {
-    permanentDelete: {"action": "永久删除", "description": "永久删除应用“{{name}}”及其标签，不可撤销。本地目录、代码仓库和聊天记录保留。", "success": "应用已永久删除", "failed": "删除应用失败", "inUse": "请先解除主题和任务与此应用的关联，再永久删除。"},
+    permanentDelete: {"action": "永久删除", "description": "永久删除应用“{{name}}”及其标签，不可撤销。本地目录、代码仓库和聊天记录保留。", "success": "应用已永久删除", "failed": "删除应用失败", "inUse": "请先解除工作主题和任务与此应用的关联，再永久删除。"},
     actions: {
       archive: "归档",
       cancel: "取消",
@@ -3182,6 +3182,7 @@ export const pages = {
     actions: {
       clear: "清除 {{label}} 的快捷键",
       configure: "配置 {{label}} 的快捷键",
+      fixed: "固定快捷键：{{label}}",
     },
     capturing: "请按组合键",
     columns: {
@@ -3212,7 +3213,7 @@ export const pages = {
         description: "切换到下一个工作区标签页。",
         label: "切换到右侧标签页",
       },
-      newTopic: { label: "新建主题", description: "打开主题创建对话框。" },
+      newTopic: { label: "新建工作主题", description: "打开工作主题创建对话框。" },
       newDirectory: { label: "添加工作区", description: "选择本地目录并添加为工作区。" },
       newSession: { label: "新建随聊", description: "打开当前空间的随聊草稿。" },
       openNotifications: {
@@ -3318,18 +3319,25 @@ export const pages = {
       save: "保存",
       saving: "保存中…",
       saveFailed: "保存远程访问设置失败。",
-      publicBaseUrl: "对外访问地址（可选）",
-      publicBaseUrlHelp: "查看对外访问地址说明",
+      publicBaseUrl: "公网地址（可选）",
+      publicBaseUrlHelp: "查看公网地址说明",
       publicBaseUrlHint:
-        "填写 FRP 或反向代理后的公网地址，例如 https://tron.example.com；留空则使用局域网地址。FRP 请转发到下方显示的远程端口。",
+        "填写 FRP 或反向代理后的公网 HTTPS 地址，例如 https://tron.example.com。手机连接时优先使用局域网，局域网不可达时才走公网；留空则不提供公网入口。FRP 请转发到下方显示的远程端口。",
       product: "产品",
       allowInsecureHttp: "允许不安全 HTTP（仅调试）",
       allowInsecureHttpHint:
         "开启后手机可用明文 HTTP 连接，同一网络内可被监听。生产环境必须关闭，并在 FRP 或反向代理上终止 HTTPS。",
       insecureWarning:
         "当前地址不是 HTTPS。手机端默认会拒绝连接；请配置 HTTPS 反代，或仅为本地调试开启“允许不安全 HTTP”。",
-      machineName: "电脑名称",
-      address: "访问地址",
+      machineName: "当前节点名",
+      machineNameHelp: "查看当前节点名说明",
+      machineNameHint: "默认使用当前电脑名（{{name}}）；手机端会显示这个名称。",
+      useComputerName: "使用电脑名",
+      lanAddress: "局域网地址",
+      publicAddress: "公网地址",
+      addressPreferred: "优先",
+      addressFallback: "备用",
+      notConfigured: "未设置",
       remotePort: "远程端口",
       token: "配对令牌",
       tokenConfigured: "已生成，扫码即可配对",
@@ -3345,6 +3353,7 @@ export const pages = {
       pairingHelp: "查看加密配对说明",
       newPairingHint: "手机通过 Noise 安全通道连接，不再依赖安装证书或“不安全 HTTP”。",
       transport: "传输方式",
+      transportBoth: "局域网优先，公网 WSS 备用",
       transportPublic: "公网 WSS（由反代终止 TLS）",
       transportLan: "局域网 WS + 应用层加密",
       fingerprint: "节点指纹",
@@ -3366,10 +3375,10 @@ export const pages = {
       deleteDeviceFailed: "删除配对记录失败。",
       copyPairing: "复制配对链接",
       copyToken: "复制令牌",
-      copyAddress: "复制访问地址",
+      copyLanAddress: "复制局域网地址",
+      copyPublicAddress: "复制公网地址",
       copied: "已复制。",
       copyFailed: "复制失败，请手动选择文本。",
-      useLanAddress: "使用局域网地址",
       securityHint:
         "安全提示：配对令牌等同于这台电脑的操作权限，手机只在换取短期访问令牌时使用它。生产环境必须经 HTTPS 反代/FRP 访问，并定期轮换令牌。",
     },

@@ -587,7 +587,7 @@ export const pages = {
   archivedChats: {
     archiveType: "Archive type",
     chats: "Chats",
-    topics: "Topics",
+    topics: "Work Topics",
     projects: "Projects",
     emptyContainers: "No archived items found.",
     containerItems: "archived items",
@@ -1077,7 +1077,7 @@ export const pages = {
     terminal_list: "List terminals",
   },
   apps: {
-    permanentDelete: {"action": "Permanently delete", "description": "Permanently delete “{{name}}” and its tags. This cannot be undone. Local files, repositories and chat history are kept.", "success": "App permanently deleted", "failed": "Failed to delete app", "inUse": "Remove topic and task associations before permanently deleting this app."},
+    permanentDelete: {"action": "Permanently delete", "description": "Permanently delete “{{name}}” and its tags. This cannot be undone. Local files, repositories and chat history are kept.", "success": "App permanently deleted", "failed": "Failed to delete app", "inUse": "Remove work topic and task associations before permanently deleting this app."},
     actions: {
       archive: "Archive",
       cancel: "Cancel",
@@ -3275,6 +3275,7 @@ export const pages = {
     actions: {
       clear: "Clear shortcut for {{label}}",
       configure: "Configure shortcut for {{label}}",
+      fixed: "Fixed shortcut for {{label}}",
     },
     capturing: "Press a shortcut",
     columns: {
@@ -3306,7 +3307,7 @@ export const pages = {
         description: "Switch to the next workspace tab.",
         label: "Next tab",
       },
-      newTopic: { label: "New topic", description: "Open the topic creation dialog." },
+      newTopic: { label: "New work topic", description: "Open the work topic creation dialog." },
       newDirectory: { label: "Add project", description: "Choose a local directory to add as a project." },
       newSession: { label: "New quick chat", description: "Open a quick chat draft in the current workspace." },
       openNotifications: {
@@ -3415,15 +3416,22 @@ export const pages = {
       publicBaseUrl: "Public address (optional)",
       publicBaseUrlHelp: "Show public address help",
       publicBaseUrlHint:
-        "Use the public URL from FRP or a reverse proxy, for example https://tron.example.com. Leave empty to use the LAN address. Point FRP at the remote port shown below.",
+        "Public HTTPS URL from FRP or a reverse proxy, for example https://tron.example.com. Phones try the LAN address first and fall back to this URL; leave empty to disable the public route. Point FRP at the remote port shown below.",
       product: "Product",
       allowInsecureHttp: "Allow insecure HTTP (debug only)",
       allowInsecureHttpHint:
         "Lets phones connect over plaintext HTTP on a trusted local network. Production must disable this and terminate HTTPS at FRP or a reverse proxy.",
       insecureWarning:
         "This address is not HTTPS. The mobile app rejects it by default; configure an HTTPS reverse proxy, or enable insecure HTTP for local debugging only.",
-      machineName: "Computer name",
-      address: "Address",
+      machineName: "Current node name",
+      machineNameHelp: "Show node name help",
+      machineNameHint: "Defaults to this computer's name ({{name}}); the mobile app shows this name.",
+      useComputerName: "Use computer name",
+      lanAddress: "LAN address",
+      publicAddress: "Public address",
+      addressPreferred: "Preferred",
+      addressFallback: "Fallback",
+      notConfigured: "Not configured",
       remotePort: "Remote port",
       token: "Pairing token",
       tokenConfigured: "Ready; scan the QR code to pair",
@@ -3439,6 +3447,7 @@ export const pages = {
       pairingHelp: "Show encrypted pairing help",
       newPairingHint: "Phones connect through the Noise secure channel; no CA install or “insecure HTTP” switch.",
       transport: "Transport",
+      transportBoth: "LAN first, public WSS fallback",
       transportPublic: "Public WSS (TLS terminated by proxy)",
       transportLan: "LAN WS + application-layer encryption",
       fingerprint: "Node fingerprint",
@@ -3460,10 +3469,10 @@ export const pages = {
       deleteDeviceFailed: "Could not delete the pairing record.",
       copyPairing: "Copy pairing link",
       copyToken: "Copy token",
-      copyAddress: "Copy address",
+      copyLanAddress: "Copy LAN address",
+      copyPublicAddress: "Copy public address",
       copied: "Copied.",
       copyFailed: "Copy failed. Select the text manually.",
-      useLanAddress: "Use LAN address",
       securityHint:
         "Security note: the pairing token grants control of this computer and is only used to exchange a short-lived access token. Use HTTPS for production and rotate the token regularly.",
     },

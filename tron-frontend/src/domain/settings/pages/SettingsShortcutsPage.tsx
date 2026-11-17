@@ -142,7 +142,22 @@ export function SettingsShortcutsPage() {
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions className="w-full shrink-0 flex-nowrap justify-end gap-2 @min-[36rem]:w-56">
-                      {fixed ? <span className="font-mono text-sm">{useMacSymbols ? "⌘1–9" : "Ctrl+1–9"}</span> : <>
+                      {fixed ? <>
+                      <Button
+                        aria-label={pageT("actions.fixed", { label })}
+                        className="min-w-0 flex-1 justify-start font-mono disabled:opacity-100"
+                        disabled
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        {useMacSymbols ? "⌘1–9" : "Ctrl+1–9"}
+                      </Button>
+                      <span
+                        aria-hidden="true"
+                        className="size-[var(--tron-button-height-sm,1.75rem)] shrink-0"
+                      />
+                      </> : <>
                       <Button
                         aria-label={pageT("actions.configure", { label })}
                         className="min-w-0 flex-1 justify-start font-mono"

@@ -217,6 +217,11 @@ html[data-tron-window-chrome] :is(.tron-shell-toolbar, .tron-settings-frame > he
 @media (prefers-reduced-motion: reduce) {
   .tron-scope-selector { transition: none; }
 }
+/* The collapsed rail sits between the window edge and the workspace gutter,
+   so its control column must center on that whole span, not on the rail box. */
+.tron-shell-navigation[data-position="flow"][data-collapsible="icon"] {
+  margin-inline-start: var(--tron-shell-gutter, 0.5rem);
+}
 /* Every collapsed control uses the navigation container's shared center line. */
 .tron-shell-navigation[data-collapsible="icon"] [data-slot="sidebar-header"],
 .tron-shell-navigation[data-collapsible="icon"] [data-slot="sidebar-footer"],

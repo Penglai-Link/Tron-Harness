@@ -37,8 +37,8 @@ pub(super) fn message(code: &str, detail: &str) -> String {
             "Stop the active run or wait for it to finish before continuing.",
         ),
         "CHAT_CONTAINER_DELETE_REJECTED" => (
-            "磁盘目录仍被其他主题或会话使用，或路径不适合整目录删除。请解除共享引用或检查目录后重试。",
-            "Disk directories are shared with another topic or chat, or are unsafe to delete. Remove shared references or check the paths and retry.",
+            "磁盘目录仍被其他工作主题或会话使用，或路径不适合整目录删除。请解除共享引用或检查目录后重试。",
+            "Disk directories are shared with another work topic or chat, or are unsafe to delete. Remove shared references or check the paths and retry.",
         ),
         "CHAT_SESSION_LOCATION_CHANGED" => (
             "会话位置刚刚发生更改，请重试。",
@@ -56,14 +56,14 @@ pub(super) fn message(code: &str, detail: &str) -> String {
             "工作空间不可用，请选择有效的工作空间。",
             "The workspace is unavailable. Select an active workspace.",
         ),
-        "CHAT_PROJECT_REQUIRED" => ("请先选择主题。", "Select a topic first."),
+        "CHAT_PROJECT_REQUIRED" => ("请先选择工作主题。", "Select a work topic first."),
         "101045005" => (
-            "当前工作空间已有同名的未归档主题，请先重命名该主题，再恢复归档会话。",
-            "An active topic with this name already exists. Rename it before restoring this archived conversation.",
+            "当前工作空间已有同名的未归档工作主题，请先重命名该工作主题，再恢复归档会话。",
+            "An active work topic with this name already exists. Rename it before restoring this archived conversation.",
         ),
         "CHAT_PROJECT_INVALID" => (
-            "主题不属于当前工作空间或已不可用，请重新选择。",
-            "The topic is unavailable in this workspace. Select another topic.",
+            "工作主题不属于当前工作空间或已不可用，请重新选择。",
+            "The work topic is unavailable in this workspace. Select another work topic.",
         ),
         "CHAT_DIRECTORY_FIXED" => (
             "目录会话的工作目录不可更改。",

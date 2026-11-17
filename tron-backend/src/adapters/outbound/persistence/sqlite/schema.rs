@@ -5,6 +5,10 @@ use super::framework_storage::business_transaction;
 
 const INITIAL_SCHEMA: &str = include_str!("../../../../../migrations/0001_init.sql");
 const PROFILE_SECTION: &str = "-- tron:profiles\n";
+const BUSINESS_MIGRATIONS: &[(&str, &str)] = &[(
+    "0002_rename_topics_menu",
+    include_str!("../../../../../migrations/0002_rename_topics_menu.sql"),
+)];
 
 pub(crate) fn initialize_business(connection: &Connection) -> rusqlite::Result<()> {
     let (business, _) = INITIAL_SCHEMA
@@ -57,6 +61,7 @@ fn initialize(connection: &Connection, scope: &str, sql: &str) -> rusqlite::Resu
     }
     if scope == "business" {
         refresh_builtin_run_count_defaults(&transaction)?;
+        apply_business_migrations(&transaction)?;
     }
     transaction.commit()
 }
@@ -88,5 +93,26 @@ fn refresh_builtin_run_count_defaults(connection: &Connection) -> rusqlite::Resu
         "INSERT INTO tron_schema_initialized (scope) VALUES (?1)",
         [MARKER],
     )?;
+    Ok(())
+}
+
+// Apply each business migration once. The marker holds the migration file stem
+// so a migration never runs twice, including on databases created from 0001.
+fn apply_business_migrations(connection: &Connection) -> rusqlite::Result<()> {
+    for (name, sql) in BUSINESS_MIGRATIONS {
+        let applied: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tron_schema_initialized WHERE scope = ?1)",
+            [name],
+            |row| row.get(0),
+        )?;
+        if applied {
+            continue;
+        }
+        connection.execute_batch(sql)?;
+        connection.execute(
+            "INSERT INTO tron_schema_initialized (scope) VALUES (?1)",
+            [name],
+        )?;
+    }
     Ok(())
 }

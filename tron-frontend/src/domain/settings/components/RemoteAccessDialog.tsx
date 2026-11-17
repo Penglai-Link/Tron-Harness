@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Copy, LoaderCircle, QrCode, RefreshCw, Smartphone } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -93,7 +94,7 @@ function RemoteAccessPanel() {
   function applyStatus(next: RemoteAccessStatus) {
     setStatus(next);
     setPublicBaseUrl(next.publicBaseUrl);
-    setMachineName(next.machineName);
+    setMachineName(next.machineName || next.computerName || "");
   }
 
   useEffect(() => {
@@ -221,6 +222,24 @@ function RemoteAccessPanel() {
     );
   }
 
+  const lanBaseUrl =
+    pairing?.lanBaseUrl ||
+    (status.lanAddress ? `http://${status.lanAddress}:${status.port}` : "");
+  const publicEndpoint = pairing?.publicBaseUrl || status.publicBaseUrl;
+  const hasPublicEndpoint = Boolean(publicEndpoint.trim());
+  const remotePort = (() => {
+    try {
+      return new URL(lanBaseUrl).port || String(status.port);
+    } catch {
+      return String(status.port);
+    }
+  })();
+  const transportLabel = hasPublicEndpoint
+    ? lanBaseUrl
+      ? t("settingsGeneral.remoteAccess.transportBoth")
+      : t("settingsGeneral.remoteAccess.transportPublic")
+    : t("settingsGeneral.remoteAccess.transportLan");
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -265,11 +284,34 @@ function RemoteAccessPanel() {
             onChange={(event) => setPublicBaseUrl(event.target.value)}
           />
         </Field>
-        <Field label={t("settingsGeneral.remoteAccess.machineName")}>
+        <Field
+          actions={
+            status.computerName && machineName.trim() !== status.computerName ? (
+              <Button
+                disabled={saving}
+                onClick={() => setMachineName(status.computerName ?? "")}
+                size="xs"
+                type="button"
+                variant="ghost"
+              >
+                {t("settingsGeneral.remoteAccess.useComputerName")}
+              </Button>
+            ) : null
+          }
+          hint={
+            status.computerName
+              ? t("settingsGeneral.remoteAccess.machineNameHint", {
+                  name: status.computerName,
+                })
+              : undefined
+          }
+          hintAriaLabel={t("settingsGeneral.remoteAccess.machineNameHelp")}
+          label={t("settingsGeneral.remoteAccess.machineName")}
+        >
           <TextInput
             aria-label={t("settingsGeneral.remoteAccess.machineName")}
             disabled={saving}
-            placeholder={status.machineName}
+            placeholder={status.computerName ?? status.machineName}
             value={machineName}
             onChange={(event) => setMachineName(event.target.value)}
           />
@@ -279,15 +321,6 @@ function RemoteAccessPanel() {
             {saving
               ? t("settingsGeneral.remoteAccess.saving")
               : t("settingsGeneral.remoteAccess.save")}
-          </Button>
-          <Button
-            disabled={saving}
-            onClick={() => void save({ publicBaseUrl: "" })}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            {t("settingsGeneral.remoteAccess.useLanAddress")}
           </Button>
         </div>
         <dl className="space-y-2 text-sm">
@@ -301,24 +334,55 @@ function RemoteAccessPanel() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <dt className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
-              {t("settingsGeneral.remoteAccess.address")}
+              {t("settingsGeneral.remoteAccess.lanAddress")}
             </dt>
-            <dd className="min-w-0 break-all font-mono">{status.baseUrl}</dd>
-            <Button
-              aria-label={t("settingsGeneral.remoteAccess.copyAddress")}
-              onClick={() => void copy(status.baseUrl, t("settingsGeneral.remoteAccess.copied"))}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <Copy size={14} aria-hidden="true" />
-            </Button>
+            <dd className="min-w-0 break-all font-mono">{lanBaseUrl || "—"}</dd>
+            <Badge size="sm" variant="success">
+              {t("settingsGeneral.remoteAccess.addressPreferred")}
+            </Badge>
+            {lanBaseUrl ? (
+              <Button
+                aria-label={t("settingsGeneral.remoteAccess.copyLanAddress")}
+                onClick={() =>
+                  void copy(lanBaseUrl, t("settingsGeneral.remoteAccess.copied"))
+                }
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Copy size={14} aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <dt className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
+              {t("settingsGeneral.remoteAccess.publicAddress")}
+            </dt>
+            <dd className="min-w-0 break-all font-mono">
+              {publicEndpoint || t("settingsGeneral.remoteAccess.notConfigured")}
+            </dd>
+            <Badge size="sm" variant="outline">
+              {t("settingsGeneral.remoteAccess.addressFallback")}
+            </Badge>
+            {publicEndpoint ? (
+              <Button
+                aria-label={t("settingsGeneral.remoteAccess.copyPublicAddress")}
+                onClick={() =>
+                  void copy(publicEndpoint, t("settingsGeneral.remoteAccess.copied"))
+                }
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Copy size={14} aria-hidden="true" />
+              </Button>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <dt className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
               {t("settingsGeneral.remoteAccess.remotePort")}
             </dt>
-            <dd className="font-mono">{status.port}</dd>
+            <dd className="font-mono">{remotePort}</dd>
           </div>
         </dl>
       </div>
@@ -338,11 +402,7 @@ function RemoteAccessPanel() {
               <span className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">
                 {t("settingsGeneral.remoteAccess.transport")}
               </span>
-              <span>
-                {pairing?.transport === "public"
-                  ? t("settingsGeneral.remoteAccess.transportPublic")
-                  : t("settingsGeneral.remoteAccess.transportLan")}
-              </span>
+              <span>{transportLabel}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="w-28 shrink-0 text-[var(--color-on-surface-variant)]">

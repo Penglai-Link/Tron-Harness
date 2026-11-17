@@ -8,6 +8,7 @@ export interface RemoteAccessStatus {
   enabled: boolean;
   lanAddress: string | null;
   machineName: string;
+  computerName?: string;
   pairingUri: string;
   port: number;
   publicBaseUrl: string;
