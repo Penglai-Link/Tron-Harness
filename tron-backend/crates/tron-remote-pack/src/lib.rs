@@ -83,6 +83,37 @@ impl TronRemotePack {
         unwrap_envelope(envelope)
     }
 
+    /// Chat and AG-UI endpoints resolve ownership from the workspace header
+    /// (or query) and Dude sessions additionally from `X-Dude-Code`.
+    async fn get_with_scope(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        workspace: Option<&str>,
+        dude_code: Option<&str>,
+    ) -> Result<Value, RpcError> {
+        let mut request = self
+            .client
+            .get(format!("{}{}", self.http_base, path))
+            .query(query)
+            .header("Accept-Language", "zh-CN");
+        if let Some(code) = workspace.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Workspace-Code", code);
+        }
+        if let Some(code) = dude_code.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Dude-Code", code);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| RpcError::internal(format!("tron request failed: {e}")))?;
+        let envelope: Value = response
+            .json()
+            .await
+            .map_err(|e| RpcError::internal(format!("tron response invalid: {e}")))?;
+        unwrap_envelope(envelope)
+    }
+
     async fn post(&self, path: &str, body: Value) -> Result<Value, RpcError> {
         self.post_with_dude(path, body, None).await
     }
@@ -93,12 +124,37 @@ impl TronRemotePack {
         body: Value,
         dude_code: Option<&str>,
     ) -> Result<Value, RpcError> {
+        self.post_with_scope(path, body, None, dude_code).await
+    }
+
+    /// Chat endpoints resolve the active workspace from `X-Workspace-Code`
+    /// (or the query string) before the handler reads the JSON body; Dude
+    /// sessions are resolved through `X-Dude-Code` instead.
+    async fn post_with_workspace(
+        &self,
+        path: &str,
+        body: Value,
+        workspace: &str,
+    ) -> Result<Value, RpcError> {
+        self.post_with_scope(path, body, Some(workspace), None).await
+    }
+
+    async fn post_with_scope(
+        &self,
+        path: &str,
+        body: Value,
+        workspace: Option<&str>,
+        dude_code: Option<&str>,
+    ) -> Result<Value, RpcError> {
         let mut request = self
             .client
             .post(format!("{}{}", self.http_base, path))
             .header("Accept-Language", "zh-CN")
             .json(&body);
-        if let Some(code) = dude_code {
+        if let Some(code) = workspace.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Workspace-Code", code);
+        }
+        if let Some(code) = dude_code.map(str::trim).filter(|value| !value.is_empty()) {
             request = request.header("X-Dude-Code", code);
         }
         let response = request
@@ -326,7 +382,9 @@ impl SessionRpc for TronRemotePack {
         if let Some(title) = params.title {
             body["title"] = json!(title);
         }
-        let data = self.post("/api/v1/chats/sessions", body).await?;
+        let data = self
+            .post_with_workspace("/api/v1/chats/sessions", body, &workspace)
+            .await?;
         Self::session_from_value(&data, &workspace)
             .ok_or_else(|| RpcError::internal("tron did not return a session"))
     }
@@ -526,6 +584,99 @@ impl RpcMethod for TronMethod {
                     )
                     .await
             }
+            "tron.chat.protocolEvents" => {
+                let session_code = params
+                    .get("sessionCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let data = self
+                    .pack
+                    .get_with_scope(
+                        &format!(
+                            "/api/v1/agents/agui/streams/{session_code}/protocol-events"
+                        ),
+                        &[],
+                        Some(workspace.as_str()),
+                        Some(dude_code.as_str()),
+                    )
+                    .await?;
+                // The phone only renders the process; text deltas already come
+                // from the chat transcript. Keeping the payload small avoids
+                // hitting the tunnel's per-result size cap on long sessions.
+                Ok(Value::Array(
+                    data.as_array()
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|entry| entry.get("data").cloned())
+                        .filter(|event| {
+                            matches!(
+                                event.get("type").and_then(Value::as_str).unwrap_or_default(),
+                                "RUN_STARTED"
+                                    | "RUN_FINISHED"
+                                    | "RUN_ERROR"
+                                    | "TOOL_CALL_START"
+                                    | "TOOL_CALL_ARGS"
+                                    | "TOOL_CALL_END"
+                                    | "TOOL_CALL_RESULT"
+                                    | "REASONING_MESSAGE_CONTENT"
+                            )
+                        })
+                        .map(|mut event| {
+                            // The final answer already lives in the transcript;
+                            // replaying it again would balloon the payload.
+                            if event.get("type").and_then(Value::as_str)
+                                == Some("RUN_FINISHED")
+                            {
+                                if let Some(object) = event.as_object_mut() {
+                                    object.remove("result");
+                                }
+                            }
+                            event
+                        })
+                        .collect(),
+                ))
+            }
+            "tron.chat.steer" => {
+                let session_code = params
+                    .get("sessionCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                let run_id = params
+                    .get("runId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                let content = params
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                if session_code.is_empty() || run_id.is_empty() || content.is_empty() {
+                    return Err(RpcError::invalid_params(
+                        "sessionCode, runId and content are required",
+                    ));
+                }
+                self.pack
+                    .post_with_scope(
+                        "/api/v1/chats/sessions/steer-message",
+                        json!({
+                            "sessionCode": session_code,
+                            "expectedRunCode": run_id,
+                            "content": content,
+                            "attachments": [],
+                            "annotations": [],
+                            "requestedSkills": [],
+                        }),
+                        Some(workspace.as_str()),
+                        Some(dude_code.as_str()),
+                    )
+                    .await
+            }
             "tron.navigation.menus" => self.pack.navigation_menus().await,
             "tron.skins.list" => self.pack.get("/api/v1/system/skins", &[]).await,
             "tron.skins.active" => self.pack.get("/api/v1/system/skins/active", &[]).await,
@@ -548,6 +699,8 @@ impl RemotePack for TronRemotePack {
             "tron.projects.list",
             "tron.directories.list",
             "tron.session.groups",
+            "tron.chat.protocolEvents",
+            "tron.chat.steer",
             "tron.navigation.menus",
             "tron.skins.list",
             "tron.skins.active",
