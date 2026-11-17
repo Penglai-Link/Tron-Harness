@@ -168,6 +168,64 @@ impl TronRemotePack {
         unwrap_envelope(envelope)
     }
 
+    /// Collects a server-sent-event response into the individual JSON events
+    /// the phone already understands. Remote RPC only streams through
+    /// `session.sendMessage`; interaction resumptions complete as one payload.
+    async fn post_sse_collect(
+        &self,
+        path: &str,
+        body: Value,
+        workspace: Option<&str>,
+        assistant_code: Option<&str>,
+    ) -> Result<Vec<Value>, RpcError> {
+        let mut request = self
+            .client
+            .post(format!("{}{}", self.http_base, path))
+            .header("Accept-Language", "zh-CN")
+            .json(&body);
+        if let Some(code) = workspace.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Workspace-Code", code);
+        }
+        if let Some(code) = assistant_code.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Assistant-Code", code);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| RpcError::internal(format!("tron stream failed: {e}")))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let detail = response.text().await.unwrap_or_default();
+            return Err(RpcError::internal(format!(
+                "tron stream returned {status}: {detail}"
+            )));
+        }
+        let mut stream = response.bytes_stream();
+        let mut buffer = String::new();
+        let mut collected = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| RpcError::internal(format!("stream read failed: {e}")))?;
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+            while let Some(index) = buffer.find("\n\n") {
+                let frame = buffer[..index].to_owned();
+                buffer = buffer[index + 2..].to_owned();
+                let data = frame
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data:"))
+                    .map(str::trim_start)
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if data.is_empty() {
+                    continue;
+                }
+                if let Ok(value) = serde_json::from_str::<Value>(&data) {
+                    collected.push(value);
+                }
+            }
+        }
+        Ok(collected)
+    }
+
     /// PersonAI context travels in the RPC metadata because the session methods
     /// only carry a session id.
     fn metadata_assistant_code(metadata: &Option<Value>) -> Option<String> {
@@ -677,6 +735,113 @@ impl RpcMethod for TronMethod {
                     )
                     .await
             }
+            "tron.chat.answerUserInput" => {
+                let session_code = params
+                    .get("sessionCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                let request_code = params
+                    .get("requestCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                if session_code.is_empty() || request_code.is_empty() {
+                    return Err(RpcError::invalid_params(
+                        "sessionCode and requestCode are required",
+                    ));
+                }
+                let mut body = json!({
+                    "answers": params.get("answers").cloned().unwrap_or_else(|| json!([])),
+                    "resume": params.get("resume").cloned().unwrap_or_else(|| json!([])),
+                    "clientCapabilities": params
+                        .get("clientCapabilities")
+                        .cloned()
+                        .unwrap_or_else(|| json!({"userInputRequests": true})),
+                });
+                if let Some(metadata) = params.get("a2uiMetadata") {
+                    body["a2uiMetadata"] = metadata.clone();
+                }
+                let events = self
+                    .pack
+                    .post_sse_collect(
+                        &format!(
+                            "/api/v1/chats/sessions/{session_code}/user-input-requests/{request_code}/answers/stream"
+                        ),
+                        body,
+                        Some(workspace.as_str()),
+                        Some(assistant_code.as_str()),
+                    )
+                    .await?;
+                Ok(Value::Array(events))
+            }
+            "tron.chat.a2uiState" => {
+                let session_code = params
+                    .get("sessionCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                if session_code.is_empty() {
+                    return Err(RpcError::invalid_params("sessionCode is required"));
+                }
+                self.pack
+                    .get_with_scope(
+                        &format!("/api/v1/chats/sessions/{session_code}/a2ui-state"),
+                        &[],
+                        Some(workspace.as_str()),
+                        Some(assistant_code.as_str()),
+                    )
+                    .await
+            }
+            "tron.chat.a2uiAction" => {
+                let session_code = params
+                    .get("sessionCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                let action_id = params
+                    .get("actionId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                let surface_instance_id = params
+                    .get("surfaceInstanceId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                let expected_revision = params
+                    .get("expectedRevision")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default();
+                if session_code.is_empty() || action_id.is_empty() || surface_instance_id.is_empty()
+                {
+                    return Err(RpcError::invalid_params(
+                        "sessionCode, actionId and surfaceInstanceId are required",
+                    ));
+                }
+                let events = self
+                    .pack
+                    .post_sse_collect(
+                        &format!("/api/v1/chats/sessions/{session_code}/a2ui/actions/stream"),
+                        json!({
+                            "actionId": action_id,
+                            "surfaceInstanceId": surface_instance_id,
+                            "expectedRevision": expected_revision,
+                            "message": params.get("message").cloned().unwrap_or(Value::Null),
+                            "metadata": params.get("metadata").cloned().unwrap_or_else(|| json!({})),
+                        }),
+                        Some(workspace.as_str()),
+                        Some(assistant_code.as_str()),
+                    )
+                    .await?;
+                Ok(Value::Array(events))
+            }
             "tron.navigation.menus" => self.pack.navigation_menus().await,
             "tron.skins.list" => self.pack.get("/api/v1/system/skins", &[]).await,
             "tron.skins.active" => self.pack.get("/api/v1/system/skins/active", &[]).await,
@@ -701,6 +866,9 @@ impl RemotePack for TronRemotePack {
             "tron.session.groups",
             "tron.chat.protocolEvents",
             "tron.chat.steer",
+            "tron.chat.answerUserInput",
+            "tron.chat.a2uiState",
+            "tron.chat.a2uiAction",
             "tron.navigation.menus",
             "tron.skins.list",
             "tron.skins.active",

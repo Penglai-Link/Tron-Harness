@@ -2,7 +2,7 @@
 name: tron-theme-spec
 description: 制作、修改和打包 Tron 的 skin.json 或 ZIP 主题包，覆盖 Tron 控件、共享 Agent UI 的 Chat、Composer、A2UI 与动效、主题装饰及加载边界。用户制作主题、调整组件外观或排查导入加载时使用。
 metadata:
-  version: 1.3.0
+  version: 1.3.1
 ---
 
 # Tron 主题规范与制作
