@@ -8,7 +8,7 @@ Tron 自有的原生能力包，统一提供宿主上下文、业务工具策略
 tron-harness-capability/
 ├── src/       上下文作用域、工具授权和权限策略
 ├── build.rs   跟踪技能和配套资源变化
-└── skills/    主题规范、记忆规范、记忆做梦
+└── skills/    主题规范、记忆规范、记忆做梦、技能创建
 ```
 
 `TronHarness::new(tool_provider, shared_tool_catalog).capability_pack()` 返回能力包。
@@ -18,7 +18,7 @@ tron-harness-capability/
 技能通过 `capability_skills!()` 编译内嵌，构建脚本用 `capability_skills_build!()` 跟踪新增和修改。
 宿主配置 `capability_skills_root(...)` 后，框架准备资源并提供原生 `skill_load` / `skill_read_resource`。
 能力包内容页和 Agent 技能选择使用同一份内嵌目录，不依赖源码路径或另一个技能安装步骤。
-技能脚本只随包分发，不会自动执行；记忆做梦需要使用方另外提供 `memory-dream` 命令。
+技能脚本只随包分发，不会自动执行；记忆做梦需要使用方另外提供 `memory-dream` 命令，技能创建按 `skill-creator` 的说明在工作区运行校验和评测脚本。
 
 本 crate 保留独立 workspace。仓库根目录运行 `make harness-capability-check`；
 `agent-capability-check` 和 `agent-harness-check` 命令保留为兼容入口。

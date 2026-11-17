@@ -46,10 +46,15 @@ impl SkillRegistryService {
         let now = current_timestamp();
         let mut repository = self.repository.lock().unwrap();
         let existing = repository.list_registry_skills()?;
-        if existing.iter().any(|skill| {
+        // A capability pack can start shipping a skill that users installed by
+        // hand before it became built in. The pack is authoritative, so move
+        // the manual directory out of the managed root and let the upsert below
+        // adopt the existing row. Agent assignments are keyed by skill name and
+        // therefore survive the transition.
+        for skill in existing.iter().filter(|skill| {
             skill.provider_pack_id.is_none() && desired.contains_key(&skill.skill_name)
         }) {
-            return Err(SkillError::DuplicateSkill);
+            self.retire_manual_skill(skill)?;
         }
         let mut removed = Vec::new();
         for skill in existing
@@ -106,6 +111,32 @@ impl SkillRegistryService {
         }
         Ok(removed)
     }
+    /// Move a previously hand-installed skill out of the managed skills root so
+    /// the same name can be adopted by a capability pack. The files stay under
+    /// the registry for manual recovery; only the managed directory is retired.
+    fn retire_manual_skill(&self, skill: &RegistrySkill) -> Result<(), SkillError> {
+        let source = PathBuf::from(&skill.registry_path);
+        if !source.starts_with(self.skills_dir()) || !source.is_dir() {
+            return Ok(());
+        }
+        let root = self.registry_root().join(".replaced-skills");
+        fs::create_dir_all(&root).map_err(|_| SkillError::StorageFailure)?;
+        let stamp = current_timestamp_seconds();
+        let mut destination = root.join(format!("{}-{stamp}", skill.skill_name));
+        let mut suffix = 1;
+        while destination.exists() {
+            destination = root.join(format!("{}-{stamp}-{suffix}", skill.skill_name));
+            suffix += 1;
+        }
+        fs::rename(&source, &destination).map_err(|_| SkillError::StorageFailure)?;
+        tracing::info!(
+            skill = %skill.skill_name,
+            path = %destination.display(),
+            "replaced manually installed skill with capability-pack content"
+        );
+        Ok(())
+    }
+
     /// Read and validate the complete contribution before changing the registry.
     pub fn validate_pack_directories(
         &self,

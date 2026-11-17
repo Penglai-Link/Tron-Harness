@@ -30,6 +30,7 @@ use url::Url;
 
 use crate::{
     app::AppState,
+    application::remote_service::{lock_remote_settings, refresh_lan_endpoint},
     config::{AppConfig, RemoteAccessConfig},
     response::{ApiResponse, EmptyData},
     shared::locale::resolve_request_locale,
@@ -194,6 +195,7 @@ where
 }
 
 async fn status(State(state): State<AppState>, _local: LocalOnly) -> Response {
+    refresh_lan_endpoint(&state).await;
     no_store(Json(ApiResponse::success(status_snapshot(&state))).into_response())
 }
 
@@ -298,6 +300,7 @@ async fn update_settings(
             None,
         );
     }
+    refresh_lan_endpoint(&state).await;
     no_store(Json(ApiResponse::success(status_snapshot(&state))).into_response())
 }
 
@@ -312,6 +315,7 @@ async fn rotate_token(State(state): State<AppState>, _local: LocalOnly) -> Respo
         return response;
     }
     apply_runtime(&state, &next);
+    refresh_lan_endpoint(&state).await;
     no_store(Json(ApiResponse::success(status_snapshot(&state))).into_response())
 }
 
@@ -368,7 +372,7 @@ fn identity_snapshot(state: &AppState) -> RemoteIdentityResponse {
     let config = configured_config(state);
     let node_id = ensure_node_id(state, &config);
     let lan = detect_lan_ip();
-    let base_url = resolve_base_url(&config, lan.as_ref(), state.config.port);
+    let base_url = resolve_base_url(&config, lan.as_ref(), advertised_port(state, &config));
     let machine_name = resolve_machine_name(&config);
     let profile = state.profiles.current_context().ok().map(|context| {
         let username = context.person_ai_username.clone();
@@ -555,7 +559,8 @@ fn status_snapshot(state: &AppState) -> RemoteAccessStatusResponse {
         .map(|value| value.clone())
         .unwrap_or_default();
     let lan = detect_lan_ip();
-    let base_url = resolve_base_url(&configured, lan.as_ref(), state.config.port);
+    let port = advertised_port(state, &configured);
+    let base_url = resolve_base_url(&configured, lan.as_ref(), port);
     let machine_name = resolve_machine_name(&configured);
     let listener_active = state.remote_access_active();
     let restart_required = configured.enabled && !listener_active;
@@ -575,7 +580,7 @@ fn status_snapshot(state: &AppState) -> RemoteAccessStatusResponse {
             String::new()
         },
         bind_address: configured.listen_address().to_owned(),
-        port: configured.listen_port(state.config.port),
+        port,
         lan_address: lan.map(|value| value.to_string()),
         product_code: configured.product_code().to_owned(),
         product_name: configured.product_name().to_owned(),
@@ -589,6 +594,7 @@ async fn sync_remote_service(
     state: &AppState,
     next: &RemoteAccessConfig,
 ) -> Result<(), String> {
+    let _guard = lock_remote_settings().await;
     if let Some(service) = state.remote_service() {
         let mut settings = service.current_settings().await;
         settings.enabled = next.enabled;
@@ -671,7 +677,7 @@ fn listener_is_loopback(state: &AppState) -> bool {
     )
 }
 
-fn resolve_base_url(config: &RemoteAccessConfig, lan: Option<&IpAddr>, main_port: u16) -> String {
+fn resolve_base_url(config: &RemoteAccessConfig, lan: Option<&IpAddr>, port: u16) -> String {
     if !config.public_base_url.trim().is_empty() {
         return config
             .public_base_url
@@ -679,11 +685,18 @@ fn resolve_base_url(config: &RemoteAccessConfig, lan: Option<&IpAddr>, main_port
             .trim_end_matches('/')
             .to_owned();
     }
-    let port = config.listen_port(main_port);
     match lan {
         Some(address) => format!("http://{address}:{port}"),
         None => format!("http://127.0.0.1:{port}"),
     }
+}
+
+/// Port the remote endpoint advertises: the one the dedicated listener actually
+/// bound, or the port it would pick if remote access is enabled later.
+fn advertised_port(state: &AppState, config: &RemoteAccessConfig) -> u16 {
+    state
+        .remote_listen_port()
+        .unwrap_or_else(|| config.listen_port(state.config.port))
 }
 
 fn pairing_uri(
@@ -1134,6 +1147,7 @@ fn persist_agent_changes(
 }
 
 async fn service_status(State(state): State<AppState>, _local: LocalOnly) -> Response {
+    refresh_lan_endpoint(&state).await;
     match state.remote_service() {
         Some(service) => no_store(Json(ApiResponse::success(service.status_json().await)).into_response()),
         None => remote_error(
@@ -1147,6 +1161,7 @@ async fn service_status(State(state): State<AppState>, _local: LocalOnly) -> Res
 }
 
 async fn service_pairing(State(state): State<AppState>, _local: LocalOnly) -> Response {
+    refresh_lan_endpoint(&state).await;
     match state.remote_service() {
         Some(service) => {
             let status = service.status().await;
@@ -1180,6 +1195,7 @@ async fn service_pairing(State(state): State<AppState>, _local: LocalOnly) -> Re
 }
 
 async fn service_refresh_pairing(State(state): State<AppState>, _local: LocalOnly) -> Response {
+    refresh_lan_endpoint(&state).await;
     let Some(service) = state.remote_service() else {
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1328,6 +1344,7 @@ async fn service_set_enabled(
             None,
         );
     };
+    let _guard = lock_remote_settings().await;
     match service.set_enabled(request.enabled).await {
         Ok(status) => {
             crate::application::remote_service::ensure_remote_listener(state).await;

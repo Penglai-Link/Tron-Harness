@@ -526,6 +526,35 @@ fn check_request(
     }
     Ok(())
 }
+
+const CREATOR_PROMPT_BUDGET_BYTES: usize = 20 * 1024;
+const CREATOR_PROMPT_FILES: &[&str] = &[
+    "scripts/quick_validate.py",
+    "references/schemas.md",
+    "scripts/package_skill.py",
+];
+
+/// The authoring prompt shares the model context with evidence and the artifact
+/// being generated. `SKILL.md` is passed separately, so keep only the support
+/// files that fit the budget; large evaluation assets from a full skill-creator
+/// checkout must not crowd out the actual task. Missing files stay available to
+/// the authoring Agent through the skill provider.
+fn creator_prompt_files(files: &[SkillArtifactFile]) -> Vec<SkillArtifactFile> {
+    let mut selected = Vec::new();
+    let mut bytes = 0usize;
+    for path in CREATOR_PROMPT_FILES {
+        let Some(file) = files.iter().find(|file| file.path == *path) else {
+            continue;
+        };
+        let next = bytes + file.content.len();
+        if next <= CREATOR_PROMPT_BUDGET_BYTES {
+            bytes = next;
+            selected.push(file.clone());
+        }
+    }
+    selected
+}
+
 fn load_creator(
     skills: &SkillRegistryService,
 ) -> Result<(CreatorReceipt, String, Vec<SkillArtifactFile>), AssistantMemoryError> {
@@ -575,6 +604,7 @@ fn load_creator(
                 .or_else(|| value.as_i64().map(|value| value.to_string()))
         })
         .unwrap_or_else(|| content_hash.clone());
+    let prompt_files = creator_prompt_files(&files);
     Ok((
         CreatorReceipt {
             skill_name: "skill-creator".into(),
@@ -582,7 +612,7 @@ fn load_creator(
             content_hash,
         },
         markdown,
-        files,
+        prompt_files,
     ))
 }
 fn installed_artifact(

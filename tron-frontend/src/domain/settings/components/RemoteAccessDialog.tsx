@@ -40,6 +40,11 @@ interface RemoteAccessDialogProps {
 // reflects a new device without closing and reopening it.
 const DEVICE_REFRESH_INTERVAL_MS = 2_000;
 
+// The LAN address follows the computer's network. Poll the pairing offer while
+// the dialog is open so switching Wi-Fi updates the shown address and the QR
+// code instead of keeping the network the remote service started on.
+const PAIRING_REFRESH_INTERVAL_MS = 10_000;
+
 function sameDeviceList(left: ServiceDevice[], right: ServiceDevice[]) {
   if (left.length !== right.length) return false;
   return left.every((device, index) => {
@@ -178,6 +183,59 @@ function RemoteAccessPanel() {
     }
 
     void loadDevices();
+    schedule();
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [remoteActive]);
+
+  useEffect(() => {
+    if (!remoteActive) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    let inFlight = false;
+    let errorLogged = false;
+
+    async function loadPairing() {
+      if (inFlight || controller.signal.aborted) return;
+      inFlight = true;
+      try {
+        const next = await getServicePairing(controller.signal);
+        if (controller.signal.aborted) return;
+        errorLogged = false;
+        setPairing((current) =>
+          current &&
+          current.pairingUri === next.pairingUri &&
+          current.lanBaseUrl === next.lanBaseUrl
+            ? current
+            : next,
+        );
+      } catch (reason) {
+        if (!controller.signal.aborted && !errorLogged) {
+          errorLogged = true;
+          console.error(reason);
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    function schedule() {
+      timer = window.setTimeout(async () => {
+        if (document.visibilityState === "visible") await loadPairing();
+        if (!controller.signal.aborted) schedule();
+      }, PAIRING_REFRESH_INTERVAL_MS);
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") void loadPairing();
+    }
+
     schedule();
     window.addEventListener("focus", refreshWhenVisible);
     document.addEventListener("visibilitychange", refreshWhenVisible);

@@ -110,6 +110,8 @@ pub struct AppStateInner {
     #[doc(hidden)]
     pub remote_access: Arc<std::sync::RwLock<crate::config::RemoteAccessConfig>>,
     pub remote_listener_active: Arc<std::sync::atomic::AtomicBool>,
+    /// Port the dedicated remote listener bound; `0` while it is not running.
+    pub remote_listener_port: Arc<std::sync::atomic::AtomicU16>,
     pub disk_usage: crate::adapters::outbound::observability::disk_usage::LocalDiskUsage,
     _temporary_database: Option<Arc<tempfile::TempDir>>,
     _agent_collaboration_builder: Arc<crate::application::agent::AgentRunContextBuilder>,
@@ -202,6 +204,24 @@ impl AppState {
         self.0
             .remote_listener_active
             .store(active, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Port the dedicated remote listener is serving on, when it is running.
+    pub fn remote_listen_port(&self) -> Option<u16> {
+        match self
+            .0
+            .remote_listener_port
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            0 => None,
+            port => Some(port),
+        }
+    }
+
+    pub fn set_remote_listen_port(&self, port: Option<u16>) {
+        self.0
+            .remote_listener_port
+            .store(port.unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
     }
 
     pub(crate) fn assistant_invocation_service(&self) -> AgentInvocationService {
@@ -742,6 +762,7 @@ impl AppState {
             config,
             remote_access,
             remote_listener_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            remote_listener_port: Arc::new(std::sync::atomic::AtomicU16::new(0)),
             disk_usage,
             _temporary_database: temporary_database,
             _agent_collaboration_builder: agent_collaboration_builder,

@@ -1,0 +1,4 @@
+interface:
+  display_name: "技能创建"
+  short_description: "创建、修改和评估 Tron 技能，覆盖结构设计、测试、评分和打包。"
+  default_prompt: "用 $skill-creator 创建或改进一个 Tron 技能，补充测试用例，先给我看真实输出再迭代。"

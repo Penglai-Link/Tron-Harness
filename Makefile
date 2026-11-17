@@ -264,6 +264,9 @@ help:
 	@echo "  make skill-memory-spec-check"
 	@echo "                    Validate the memory spec skill"
 	@echo "  make skill-theme-check"
+	@echo "                    Validate the theme skill"
+	@echo "  make skill-creator-check"
+	@echo "                    Validate the skill creator skill"
 	@echo "构建缓存：默认当前用户目录下的 rust-cache，自动创建；可用 RUST_CACHE_DIR 覆盖"
 
 .PHONY: _build-cache
@@ -580,6 +583,10 @@ skill-memory-spec-check:
 .PHONY: skill-theme-check
 skill-theme-check:
 	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/tron-theme-spec
+
+.PHONY: skill-creator-check
+skill-creator-check:
+	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/skill-creator
 
 .PHONY: capability-pages-example
 capability-pages-example: | _build-cache

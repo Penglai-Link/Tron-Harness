@@ -206,6 +206,7 @@ pub async fn ensure_remote_listener(state: AppState) {
         slot.addr = None;
         service.set_active(false);
         state.set_remote_access_active(false);
+        state.set_remote_listen_port(None);
         service.shutdown().await;
         return;
     }
@@ -251,6 +252,7 @@ pub async fn ensure_remote_listener(state: AppState) {
         {
             service.set_active(true);
             state.set_remote_access_active(true);
+            state.set_remote_listen_port(Some(port));
             return;
         }
         if let Some(task) = slot.task.take() {
@@ -288,6 +290,7 @@ pub async fn ensure_remote_listener(state: AppState) {
         slot.addr = Some(addr);
         service.set_active(true);
         state.set_remote_access_active(true);
+        state.set_remote_listen_port(Some(port));
         if auto_port {
             write_preferred_port(&state.config, port);
         }
@@ -297,5 +300,53 @@ pub async fn ensure_remote_listener(state: AppState) {
 
     service.set_active(false);
     state.set_remote_access_active(false);
+    state.set_remote_listen_port(None);
     tracing::error!("tron-backend remote access could not find a free listener port");
+}
+
+/// Keep the endpoint the remote service advertises in step with the network.
+///
+/// The service snapshots the LAN base URL when its listener binds, so switching
+/// Wi-Fi (or waking up on another network) otherwise leaves the settings dialog
+/// and the pairing QR pointing at an address that no longer exists. Every
+/// status/pairing read re-detects the address and rewrites the snapshot; the
+/// service also re-issues its pairing ticket from the new address.
+pub(crate) async fn refresh_lan_endpoint(state: &AppState) {
+    let _guard = lock_remote_settings().await;
+    let Some(service) = state.remote_service() else {
+        return;
+    };
+    let Some(address) = crate::adapters::inbound::http::remote_access::detect_lan_ip() else {
+        return;
+    };
+    let current = service.current_settings().await;
+    let port = match state.remote_listen_port() {
+        Some(port) => port,
+        None if current.port != 0 => current.port,
+        None => return,
+    };
+    let wanted = format!("http://{address}:{port}");
+    if current.lan_base_url.trim().trim_end_matches('/') == wanted {
+        return;
+    }
+    tracing::info!(
+        "remote LAN endpoint moved from {} to {wanted}",
+        current.lan_base_url
+    );
+    let mut next = current;
+    next.lan_base_url = wanted;
+    if let Err(error) = service.update_settings(next).await {
+        tracing::warn!("could not refresh the remote LAN endpoint: {error}");
+    }
+}
+
+/// Serialize read-modify-write cycles over the remote service settings.
+///
+/// The remote service stores its settings as one document, so two writers that
+/// each read, edit and write whole structs lose each other's fields. Writing
+/// them also re-issues the pairing ticket, so two concurrent reads must not
+/// invalidate the ticket the other one just returned.
+pub(crate) async fn lock_remote_settings() -> tokio::sync::MutexGuard<'static, ()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(())).lock().await
 }

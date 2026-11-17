@@ -8,7 +8,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{domain::skill::*, shared::time::current_timestamp};
+use crate::{
+    domain::skill::*,
+    shared::time::{current_timestamp, current_timestamp_seconds},
+};
 
 mod approved_artifact;
 mod assignments;

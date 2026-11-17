@@ -1,0 +1,12 @@
+This skill directory contains a modified Tron port of Anthropic's skill-creator.
+
+Source: https://github.com/anthropics/skills/tree/main/skills/skill-creator
+Copyright 2026 Anthropic, PBC.
+Licensed under the Apache License, Version 2.0; see LICENSE.txt.
+
+Changes for Tron:
+- Replaced Claude Code, Claude.ai and Cowork platform instructions with Tron tools,
+  subagent orchestration, skill approval flow and workspace conventions.
+- Removed scripts that require the `claude` command-line tool.
+- Added Tron frontmatter validation and Tron-specific metadata.
+- Kept the upstream authoring method, grading guidance, schemas and evaluation viewer.
