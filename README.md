@@ -1,7 +1,6 @@
 <div align="center">
   <img src="electron/assets/tron.png" alt="Tron 黑洞标志" width="160">
   <h1>TRON Harness</h1>
-  <p><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
   <p>
     <a href="https://github.com/Penglai-Link/Tron-Harness/releases/latest"><img src="https://img.shields.io/github/v/release/Penglai-Link/Tron-Harness?style=flat-square&amp;label=Release&amp;color=2563EB" alt="Latest release"></a>
     <a href="https://personai.chat/person-ai-index/"><img src="https://img.shields.io/badge/Person--AI-Ecosystem-7C3AED?style=flat-square" alt="Person-AI Ecosystem"></a>
@@ -26,6 +25,18 @@
     <a href="#development">参与开发</a>
   </p>
 </div>
+
+## 界面预览
+
+<p align="center">
+  <img src="docs/images/workspace.png" alt="Tron 工作台：让想法成为现实" width="880">
+</p>
+<p align="center"><sub>工作台：从一句话开始，随聊、新建工作主题或添加工作区</sub></p>
+
+<p align="center">
+  <img src="docs/images/capability-center.png" alt="Tron 能力中心：内置与外部能力包" width="880">
+</p>
+<p align="center"><sub>能力中心：内置与外部能力包，按需启用</sub></p>
 
 ## 从想法到自己的工作流
 
