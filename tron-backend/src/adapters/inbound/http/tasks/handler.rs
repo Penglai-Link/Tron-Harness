@@ -225,7 +225,11 @@ pub async fn execute_task(
             project_code: None,
             directory_code: None,
             working_directory_code: None,
-            title: Some(format!("Task: {}", task.title)),
+            title: Some(tron_i18n::t!(
+                "tasks.session_title",
+                locale = &auth.locale,
+                title = task.title
+            )),
             app_code: None,
             task_code: Some(task.task_code.clone()),
             source_type: Some(ChatSessionSourceType::Task),
@@ -339,7 +343,7 @@ pub async fn execute_task(
             .agent_code
             .unwrap_or_else(|| "main-agent".to_string()),
         model_code: task.model_code,
-        summary: "Task execution started.".to_string(),
+        summary: tron_i18n::t!("tasks.execution_started", locale = &auth.locale).into_owned(),
     }))
     .into_response()
 }

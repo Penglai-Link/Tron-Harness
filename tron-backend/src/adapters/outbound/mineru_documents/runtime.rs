@@ -43,7 +43,7 @@ impl RuntimeMineruDocumentParser {
         identity: &Value,
     ) -> Result<MineruKnowledgeDocumentParser, KnowledgeBaseError> {
         let config = if let Some(config) = identity.get("runtimeConfig") {
-            serde_json::from_value(config.clone()).map_err(invalid)?
+            serde_json::from_value(config.clone()).map_err(super::invalid_detail)?
         } else {
             // Tasks created before hot updates stored the transport identity only.
             let mut config = self.runtime.snapshot().mineru;
@@ -58,12 +58,13 @@ impl RuntimeMineruDocumentParser {
                 }
             }
             if let Some(nodes) = identity.get("nodes") {
-                config.nodes = serde_json::from_value(nodes.clone()).map_err(invalid)?;
+                config.nodes =
+                    serde_json::from_value(nodes.clone()).map_err(super::invalid_detail)?;
             }
             config.enabled = true;
             config
         };
-        config.validate().map_err(invalid)?;
+        config.validate().map_err(super::invalid_detail)?;
         Ok(MineruKnowledgeDocumentParser::new(config))
     }
 }

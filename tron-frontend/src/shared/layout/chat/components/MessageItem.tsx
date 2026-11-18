@@ -110,14 +110,14 @@ const MessageItem = ({
           restored = true;
           toastManager.update(toastId, {
             type: "success",
-            description: t("pages:archivedChats.restored"),
+            description: t("shell:chatSidebar.session.restored"),
             timeout: 3000,
             actionProps: undefined,
           });
         } catch (error) {
           toastManager.update(toastId, {
             type: "error",
-            description: error instanceof Error ? error.message : t("pages:archivedChats.restoreFailed"),
+            description: error instanceof Error ? error.message : t("shell:chatSidebar.session.restoreFailed"),
             timeout: 8000,
             actionProps: undoAction,
           });

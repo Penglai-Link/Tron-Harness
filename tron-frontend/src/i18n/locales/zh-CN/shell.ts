@@ -147,6 +147,8 @@ export const shell = {
       archived: "会话已归档",
       undoArchive: "撤销",
       restoring: "正在恢复会话…",
+      restored: "会话已恢复。",
+      restoreFailed: "恢复会话失败。",
       pin: "置顶会话",
       pinned: "已置顶",
       awaitingInput: "等待你的回复",
@@ -160,13 +162,13 @@ export const shell = {
       deleteTitle: "删除会话？",
       deleteDescription: "将永久删除“{{name}}”、聊天记录、附件及这条会话在 .tron 中自己的目录，此操作无法撤销。你选择的项目目录和文件会保留。",
       deleted: "会话已删除",
-      deleteFailed: "删除会话失败；若已归档，可在归档管理中重试",
+      deleteFailed: "删除会话失败；请先停止正在运行的会话后重试",
       copyId: "复制会话 ID",
       idCopied: "会话 ID 已复制",
       copyFailed: "复制会话 ID 失败",
       createFailed: "创建会话失败",
     },
-    showMore: "展开显示",
+    showMore: "显示更多",
   },
   nav: {
     items: {
@@ -197,7 +199,6 @@ export const shell = {
       users: "用户",
       variables: "变量",
       workspaceAdmin: "工作空间",
-      archivedChats: "归档",
     },
     sections: {
       exploreMore: "探索更多",
@@ -244,7 +245,7 @@ export const shell = {
       platform: "平台能力",
     },
     items: {
-      archivedChats: "归档",
+      sessionManagement: "会话管理",
       agents: "智能体",
       appearance: "外观",
       auditLogs: "审计日志",

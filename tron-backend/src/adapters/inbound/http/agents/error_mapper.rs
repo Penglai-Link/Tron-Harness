@@ -10,211 +10,243 @@ use crate::{
     response::ApiResponse,
 };
 
+/// Locale already resolved for the current request by the profile middleware.
+fn request_locale() -> String {
+    crate::shared::auth_holder::AuthHolder::get()
+        .map(|context| context.locale.clone())
+        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_string())
+}
+
 pub fn agent_error_response(error: AgentInvocationError) -> Response {
-    let (status, code, message) = match error {
-        AgentInvocationError::PromptRequired => (
-            StatusCode::BAD_REQUEST,
-            "AGENT_PROMPT_REQUIRED",
-            "prompt is required".to_string(),
-        ),
-        AgentInvocationError::WorkspaceRequired => (
-            StatusCode::BAD_REQUEST,
-            "AGENT_WORKSPACE_REQUIRED",
-            "workspaceCode is required".to_string(),
-        ),
-        AgentInvocationError::WorkspaceInvalid => (
-            StatusCode::BAD_REQUEST,
-            "AGENT_WORKSPACE_INVALID",
-            "workspace must reference an active workspace".to_string(),
-        ),
-        AgentInvocationError::ModelRequired => (
-            StatusCode::BAD_REQUEST,
-            "AGENT_MODEL_REQUIRED",
-            "model config is required".to_string(),
-        ),
+    let locale = request_locale();
+    // Dynamic runtime details are produced by the agent runtime and forwarded as-is.
+    let (status, code, dynamic_message) = match error {
+        AgentInvocationError::PromptRequired => {
+            (StatusCode::BAD_REQUEST, "AGENT_PROMPT_REQUIRED", None)
+        }
+        AgentInvocationError::WorkspaceRequired => {
+            (StatusCode::BAD_REQUEST, "AGENT_WORKSPACE_REQUIRED", None)
+        }
+        AgentInvocationError::WorkspaceInvalid => {
+            (StatusCode::BAD_REQUEST, "AGENT_WORKSPACE_INVALID", None)
+        }
+        AgentInvocationError::ModelRequired => {
+            (StatusCode::BAD_REQUEST, "AGENT_MODEL_REQUIRED", None)
+        }
         AgentInvocationError::HistoryStorageFailed => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "AGENT_HISTORY_STORAGE_FAILED",
-            "agent run history storage failed".to_string(),
+            None,
         ),
-        AgentInvocationError::SessionBusy(_) => (
-            StatusCode::CONFLICT,
-            "RUN_ALREADY_ACTIVE",
-            "session already has an active agent run".to_string(),
-        ),
-        AgentInvocationError::RunStopped => (
-            StatusCode::CONFLICT,
-            "AGENT_RUN_STOPPED",
-            "agent run was stopped".to_string(),
-        ),
+        AgentInvocationError::SessionBusy(_) => (StatusCode::CONFLICT, "RUN_ALREADY_ACTIVE", None),
+        AgentInvocationError::RunStopped => (StatusCode::CONFLICT, "AGENT_RUN_STOPPED", None),
         AgentInvocationError::RuntimeFailed(message)
-        | AgentInvocationError::RuntimeNotStarted(message) => {
-            (StatusCode::BAD_REQUEST, "AGENT_RUNTIME_FAILED", message)
-        }
+        | AgentInvocationError::RuntimeNotStarted(message) => (
+            StatusCode::BAD_REQUEST,
+            "AGENT_RUNTIME_FAILED",
+            Some(message),
+        ),
         error @ AgentInvocationError::RuntimeVariableResolutionFailed(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             error.code(),
-            error.message(),
+            Some(error.message()),
         ),
         AgentInvocationError::RuntimeSecretDeliveryUntrusted => (
             StatusCode::BAD_REQUEST,
             "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",
-            "Sensitive runtime variable delivery is not trusted".to_string(),
+            None,
         ),
         AgentInvocationError::ModelFailed(message) => {
-            (StatusCode::BAD_GATEWAY, "AGENT_MODEL_FAILED", message)
+            (StatusCode::BAD_GATEWAY, "AGENT_MODEL_FAILED", Some(message))
         }
         AgentInvocationError::ToolFailed(message) => {
-            (StatusCode::BAD_GATEWAY, "AGENT_TOOL_FAILED", message)
+            (StatusCode::BAD_GATEWAY, "AGENT_TOOL_FAILED", Some(message))
         }
-        AgentInvocationError::EmptyFinalOutput(message) => {
-            (StatusCode::BAD_GATEWAY, "AGENT_EMPTY_FINAL_OUTPUT", message)
-        }
-        AgentInvocationError::MaxStepsExceeded => (
-            StatusCode::BAD_REQUEST,
-            "AGENT_MAX_STEPS_EXCEEDED",
-            "agent run exceeded max steps".to_string(),
+        AgentInvocationError::EmptyFinalOutput(message) => (
+            StatusCode::BAD_GATEWAY,
+            "AGENT_EMPTY_FINAL_OUTPUT",
+            Some(message),
         ),
+        AgentInvocationError::MaxStepsExceeded => {
+            (StatusCode::BAD_REQUEST, "AGENT_MAX_STEPS_EXCEEDED", None)
+        }
         AgentInvocationError::MaxToolCallsExceeded => (
             StatusCode::BAD_REQUEST,
             "AGENT_MAX_TOOL_CALLS_EXCEEDED",
-            "agent run exceeded max tool calls".to_string(),
+            None,
         ),
+    };
+    let message = match dynamic_message {
+        Some(message) => message,
+        None => tron_i18n::t!(agent_message_key(code), locale = &locale).into_owned(),
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
 }
 
+fn agent_message_key(code: &str) -> &'static str {
+    match code {
+        "AGENT_PROMPT_REQUIRED" => "agents.agent.prompt_required",
+        "AGENT_WORKSPACE_REQUIRED" => "agents.agent.workspace_required",
+        "AGENT_WORKSPACE_INVALID" => "agents.agent.workspace_invalid",
+        "AGENT_MODEL_REQUIRED" => "agents.agent.model_required",
+        "AGENT_HISTORY_STORAGE_FAILED" => "agents.agent.history_storage_failed",
+        "RUN_ALREADY_ACTIVE" => "agents.agent.run_already_active",
+        "AGENT_RUN_STOPPED" => "agents.agent.run_stopped",
+        "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED" => "agents.agent.runtime_secret_untrusted",
+        "AGENT_MAX_STEPS_EXCEEDED" => "agents.agent.max_steps_exceeded",
+        "AGENT_MAX_TOOL_CALLS_EXCEEDED" => "agents.agent.max_tool_calls_exceeded",
+        _ => "agents.agent.run_stopped",
+    }
+}
+
 pub fn agent_history_error_response(error: AgentRunHistoryError) -> Response {
-    let (status, code, message) = match error {
+    let locale = request_locale();
+    let (status, code, message_key) = match error {
         AgentRunHistoryError::RunNotFound => (
             StatusCode::NOT_FOUND,
             "AGENT_RUN_NOT_FOUND",
-            "agent run was not found".to_string(),
+            "agents.agent.run_not_found",
         ),
         AgentRunHistoryError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "AGENT_HISTORY_STORAGE_FAILED",
-            "agent run history storage failed".to_string(),
+            "agents.agent.history_storage_failed",
         ),
     };
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    (
+        status,
+        Json(ApiResponse::error(
+            code,
+            tron_i18n::t!(message_key, locale = &locale),
+        )),
+    )
+        .into_response()
 }
 
 pub fn agent_agui_error_response(error: AgentAguiStreamError, locale: &str) -> Response {
-    let (status, code, message) = match error {
+    let (status, code, message_key) = match error {
         AgentAguiStreamError::StreamKeyRequired => (
             StatusCode::BAD_REQUEST,
             "AGENT_AGUI_STREAM_KEY_REQUIRED",
-            "stream key is required".to_string(),
+            "agents.agui.stream_key_required",
         ),
         AgentAguiStreamError::ReplayReadFailed(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             "AGENT_AGUI_REPLAY_READ_FAILED",
-            "agent presentation replay is unavailable".to_string(),
+            "agents.agui.replay_read_failed",
         ),
         AgentAguiStreamError::ReplayWriteFailed(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             "AGENT_AGUI_REPLAY_WRITE_FAILED",
-            "agent presentation replay could not be saved".to_string(),
+            "agents.agui.replay_write_failed",
         ),
         AgentAguiStreamError::ReplayIncomplete(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             "AGENT_AGUI_REPLAY_INCOMPLETE",
-            "agent presentation replay is incomplete".to_string(),
+            "agents.agui.replay_incomplete",
         ),
     };
-    let message = if locale.starts_with("zh") {
-        match code {
-            "AGENT_AGUI_STREAM_KEY_REQUIRED" => "流标识不能为空",
-            "AGENT_AGUI_REPLAY_READ_FAILED" => "展示回放暂时无法读取",
-            "AGENT_AGUI_REPLAY_WRITE_FAILED" => "展示回放未能保存",
-            _ => "展示回放不完整，执行结果会单独报告",
-        }
-        .to_string()
-    } else {
-        message
-    };
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    (
+        status,
+        Json(ApiResponse::error(
+            code,
+            tron_i18n::t!(message_key, locale = locale),
+        )),
+    )
+        .into_response()
 }
 
 pub fn agent_management_error_response(error: AgentManagementError) -> Response {
-    let (status, code, message) = match error {
+    let locale = request_locale();
+    let (status, code, message_key) = match &error {
         AgentManagementError::BuiltinAgentReadOnly => (
             StatusCode::FORBIDDEN,
             "101028017",
-            "Built-in agent definitions are read-only".to_owned(),
+            "tron.agent.builtin_read_only",
         ),
         AgentManagementError::PlatformAgentReadOnly => (
             StatusCode::FORBIDDEN,
             "101028018",
-            "Platform agents can only be deleted in platform settings".to_owned(),
+            "tron.agent.platform_read_only",
         ),
         AgentManagementError::InternalAgentGroupInvalid => (
             StatusCode::BAD_REQUEST,
             "101028016",
-            "Invalid internal agent group".to_owned(),
+            "tron.agent.group_invalid",
         ),
         AgentManagementError::ToolPermissionInvalid => (
             StatusCode::BAD_REQUEST,
             "101028015",
-            "Invalid tool permission configuration".to_string(),
+            "tron.agent.tool_permission_invalid",
         ),
-        AgentManagementError::InternalAgentDefinitionInvalid
-        | AgentManagementError::InternalAgentPolicyInvalid => (
+        AgentManagementError::InternalAgentDefinitionInvalid => (
             StatusCode::BAD_REQUEST,
             "101028001",
-            "internal agent name or role prompt is invalid".to_string(),
+            "tron.agent.definition_invalid",
+        ),
+        AgentManagementError::InternalAgentPolicyInvalid => (
+            StatusCode::BAD_REQUEST,
+            "101028001",
+            "tron.agent.policy_invalid",
         ),
         AgentManagementError::InternalAgentCodeInvalid => (
             StatusCode::BAD_REQUEST,
             "101028009",
-            "internal agent code is invalid".to_string(),
+            "tron.agent.code_invalid",
         ),
         AgentManagementError::InternalAgentCodeConflict => (
             StatusCode::CONFLICT,
             "101028010",
-            "internal agent code is already in use".to_string(),
+            "tron.agent.code_conflict",
         ),
         AgentManagementError::InvalidWorkspace => (
             StatusCode::BAD_REQUEST,
             "AGENT_WORKSPACE_INVALID",
-            "workspace must reference an active workspace".to_string(),
+            "tron.agent.workspace_invalid",
         ),
         AgentManagementError::InternalAgentNotFound => (
             StatusCode::NOT_FOUND,
             "AGENT_INTERNAL_NOT_FOUND",
-            "internal agent was not found".to_string(),
+            "tron.agent.internal_not_found",
         ),
         AgentManagementError::SystemAgentNotFound => (
             StatusCode::NOT_FOUND,
             "AGENT_SYSTEM_NOT_FOUND",
-            "system agent was not found".to_string(),
+            "agents.agent.management_system_agent_not_found",
         ),
         AgentManagementError::SystemAgentUnavailable => (
             StatusCode::BAD_REQUEST,
             "AGENT_SYSTEM_UNAVAILABLE",
-            "system agent is unavailable on the current machine".to_string(),
+            "agents.agent.management_system_agent_unavailable",
         ),
-        AgentManagementError::InternalToolAssignmentStale(message) => (
+        AgentManagementError::InternalToolAssignmentStale(_) => (
             StatusCode::BAD_REQUEST,
             "AGENT_INTERNAL_TOOL_ASSIGNMENT_STALE",
-            format!("internal tool assignment is stale: {message}"),
+            "tron.agent.tool_unavailable",
         ),
-        AgentManagementError::InternalMcpServerAssignmentStale(message) => (
+        AgentManagementError::InternalMcpServerAssignmentStale(_) => (
             StatusCode::BAD_REQUEST,
             "AGENT_INTERNAL_MCP_SERVER_ASSIGNMENT_STALE",
-            format!("internal MCP server assignment is stale: {message}"),
+            "tron.agent.mcp_unavailable",
         ),
-        AgentManagementError::InternalToolUnknown(message) => (
+        AgentManagementError::InternalToolUnknown(_) => (
             StatusCode::BAD_REQUEST,
             "AGENT_INTERNAL_TOOL_UNKNOWN",
-            format!("unknown internal tool: {message}"),
+            "tron.agent.tool_unknown",
         ),
         AgentManagementError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "AGENT_MANAGEMENT_STORAGE_FAILED",
-            "agent management storage operation failed".to_string(),
+            "agents.agent.management_storage_failed",
         ),
+    };
+    let message = match &error {
+        AgentManagementError::InternalToolUnknown(code)
+        | AgentManagementError::InternalToolAssignmentStale(code)
+        | AgentManagementError::InternalMcpServerAssignmentStale(code) => {
+            format!("{}: {code}", tron_i18n::t!(message_key, locale = &locale))
+        }
+        _ => tron_i18n::t!(message_key, locale = &locale).into_owned(),
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
 }

@@ -318,67 +318,33 @@ pub(super) fn error_response(error: ConfiguredProviderError, headers: &HeaderMap
             .get("accept-language")
             .and_then(|header| header.to_str().ok()),
     );
-    let (status, en, zh) = match descriptor.message_key {
-        "model_provider.not_found" => (
-            StatusCode::NOT_FOUND,
-            "Provider not found.",
-            "未找到供应商。",
-        ),
-        "model_provider.already_exists" => (
-            StatusCode::CONFLICT,
-            "Provider ID already exists.",
-            "供应商标识已存在。",
-        ),
-        "model_provider.invalid_id" => (
-            StatusCode::BAD_REQUEST,
-            "Use 1–80 lowercase letters, numbers, dots, underscores or hyphens for the provider ID.",
-            "供应商标识需为1至80位小写字母、数字、点、下划线或连字符。",
-        ),
-        "model_provider.invalid_name" => (
-            StatusCode::BAD_REQUEST,
-            "Enter a provider name of at most 200 characters.",
-            "请填写不超过200个字符的供应商名称。",
-        ),
-        "model_provider.invalid_url" => (
-            StatusCode::BAD_REQUEST,
-            "Enter an HTTP(S) API base URL without credentials, query parameters or fragments.",
-            "请输入不含凭据、查询参数或片段的HTTP(S) API基础地址。",
-        ),
-        "model_provider.invalid_headers" => (
-            StatusCode::BAD_REQUEST,
-            "Request headers are invalid or contain reserved authentication or connection headers. Enter credentials in the API key field.",
-            "请求头无效或含保留的认证、连接请求头；请在API密钥字段填写凭据。",
-        ),
-        "model_provider.invalid_models" => (
-            StatusCode::BAD_REQUEST,
-            "Add 1–500 models with unique IDs, names and valid token limits. Supported model inputs are text and images.",
-            "请添加1至500个模型，使用唯一模型ID、名称及有效Token上限；当前支持的模型输入为文本和图像。",
-        ),
+    let (status, message_key) = match descriptor.message_key {
+        "model_provider.not_found" => (StatusCode::NOT_FOUND, "model_provider.not_found"),
+        "model_provider.already_exists" => (StatusCode::CONFLICT, "model_provider.already_exists"),
+        "model_provider.invalid_id" => (StatusCode::BAD_REQUEST, "model_provider.invalid_id"),
+        "model_provider.invalid_name" => (StatusCode::BAD_REQUEST, "model_provider.invalid_name"),
+        "model_provider.invalid_url" => (StatusCode::BAD_REQUEST, "model_provider.invalid_url"),
+        "model_provider.invalid_headers" => {
+            (StatusCode::BAD_REQUEST, "model_provider.invalid_headers")
+        }
+        "model_provider.invalid_models" => {
+            (StatusCode::BAD_REQUEST, "model_provider.invalid_models")
+        }
         "model_provider.invalid_model_ownership" => (
             StatusCode::BAD_REQUEST,
-            "A model does not belong to this provider.",
-            "模型不属于当前供应商。",
+            "model_provider.invalid_model_ownership",
         ),
-        "model_provider.conflict" => (
-            StatusCode::CONFLICT,
-            "The provider changed. Reload before saving.",
-            "供应商配置已变化，请重新加载后保存。",
-        ),
+        "model_provider.conflict" => (StatusCode::CONFLICT, "model_provider.conflict"),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Could not save provider configuration.",
-            "供应商配置存储失败。",
+            "model_provider.storage_failed",
         ),
     };
     (
         status,
         Json(ApiResponse::error(
             descriptor.code,
-            if locale == SupportedLocale::EnUs {
-                en
-            } else {
-                zh
-            },
+            tron_i18n::t!(message_key, locale = locale),
         )),
     )
         .into_response()

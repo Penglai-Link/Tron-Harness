@@ -44,9 +44,13 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
             Ok((hits, limited)) => {
                 result.hits = hits;
                 if limited {
-                    result
-                        .warnings
-                        .push("来源关联达到预算；部分命中保留原始片段，可继续查看来源图谱".into());
+                    result.warnings.push(
+                        crate::shared::i18n_message::MessageText::new(
+                            "rag.graph.relation_budget_reached",
+                        )
+                        .encode()
+                        .into(),
+                    );
                 }
                 result.stages.push(RagRetrievalStage {
                     corpus_id: String::new(),
@@ -58,9 +62,13 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
                 });
             }
             Err(error) => {
-                result
-                    .warnings
-                    .push(format!("来源图文关联暂不可用，已保留原始命中：{error}"));
+                result.warnings.push(
+                    crate::shared::i18n_message::MessageText::new(
+                        "rag.graph.relation_temporarily_unavailable",
+                    )
+                    .arg("detail", error.to_string())
+                    .encode(),
+                );
                 result.stages.push(RagRetrievalStage {
                     corpus_id: String::new(),
                     channel: "source.structure".into(),

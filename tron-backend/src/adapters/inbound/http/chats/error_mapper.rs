@@ -12,9 +12,22 @@ use crate::{
     },
     domain::chat::ChatError,
     response::ApiResponse,
+    shared::locale::SupportedLocale,
 };
+use tron_i18n::t;
 
+/// Render a chat error for the request locale.
+///
+/// Kept for callers outside the chat inbound layer that do not extract the
+/// request locale themselves; it resolves the request-scoped [`AuthHolder`]
+/// locale instead of any process-global setting.
+///
+/// [`AuthHolder`]: crate::shared::auth_holder::AuthHolder
 pub fn chat_error_response(error: ChatError) -> Response {
+    chat_error_response_for(error, super::error_messages::request_locale())
+}
+
+pub(crate) fn chat_error_response_for(error: ChatError, locale: SupportedLocale) -> Response {
     if let Some(descriptor) = crate::application::chat::composer_input::descriptor(&error) {
         let status = match error {
             ChatError::RequestedSkillForbidden => StatusCode::FORBIDDEN,
@@ -22,7 +35,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
             ChatError::GoalCommandUnavailable => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::BAD_REQUEST,
         };
-        let message = composer_error_message(&error);
+        let message = composer_error_message_for(&error, locale);
         return (status, Json(ApiResponse::error(descriptor.code, message))).into_response();
     }
     let (status, code, message) = match error {
@@ -134,7 +147,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
         ChatError::UserInputAnswerInvalid(message) => (
             StatusCode::BAD_REQUEST,
             "CHAT_USER_INPUT_ANSWER_INVALID",
-            user_input_error_message(&message),
+            user_input_error_message(&message, locale),
         ),
         ChatError::UserInputPending => (
             StatusCode::CONFLICT,
@@ -162,67 +175,50 @@ pub fn chat_error_response(error: ChatError) -> Response {
         status,
         Json(ApiResponse::error(
             code,
-            super::error_messages::message(code, &message),
+            super::error_messages::message(code, &message, locale),
         )),
     )
         .into_response()
 }
 
-pub(super) fn user_input_error_message(detail: &str) -> String {
-    use crate::shared::locale::SupportedLocale;
+pub(super) fn user_input_error_message(detail: &str, locale: SupportedLocale) -> String {
     tracing::warn!(detail, "chat interaction response rejected");
-    let en = crate::shared::auth_holder::AuthHolder::get()
-        .is_some_and(|auth| SupportedLocale::from_raw(&auth.locale) == SupportedLocale::EnUs);
-    if en {
-        "The approval or answer could not be submitted. The request may have changed or expired; refresh the conversation and try again.".into()
-    } else {
-        "审批或回答提交失败，请求可能已变化或过期。请刷新会话后重试。".into()
-    }
+    t!("error.chat.user_input_submit_failed", locale = locale).into_owned()
 }
 
-pub(super) fn composer_error_message(error: &ChatError) -> String {
-    use crate::shared::locale::SupportedLocale;
-    let locale = crate::shared::auth_holder::AuthHolder::get()
-        .map(|auth| SupportedLocale::from_raw(&auth.locale));
+pub(crate) fn composer_error_message_for(error: &ChatError, locale: SupportedLocale) -> String {
     let key = crate::application::chat::composer_input::descriptor(error)
         .expect("composer error descriptor")
         .message_key;
-    let (zh, en) = match key {
-        "tron.chat.requested_skill_forbidden" => (
-            "所选技能未授权给当前 Agent，或已被禁用",
-            "Selected skills are not granted to this Agent or have been disabled",
-        ),
-        "tron.chat.annotations_invalid" => (
-            "评论无效，最多支持 32 条评论",
-            "Invalid annotations; at most 32 comments are allowed",
-        ),
-        "tron.chat.requested_skills_invalid" => (
-            "技能选择无效，最多选择 32 个技能",
-            "Invalid skill selection; select at most 32 skills",
-        ),
-        "tron.chat.goal_command_invalid" => {
-            ("请在 /goal 后输入目标", "Enter an objective after /goal")
+    let message = match key {
+        "tron.chat.requested_skill_forbidden" => {
+            t!("tron.chat.requested_skill_forbidden", locale = locale)
         }
-        "tron.chat.goal_command_conflict" => (
-            "目标已发生变化，请重试",
-            "The goal changed; please try again",
-        ),
+        "tron.chat.annotations_invalid" => t!("tron.chat.annotations_invalid", locale = locale),
+        "tron.chat.requested_skills_invalid" => {
+            t!("tron.chat.requested_skills_invalid", locale = locale)
+        }
+        "tron.chat.goal_command_invalid" => t!("tron.chat.goal_command_invalid", locale = locale),
+        "tron.chat.goal_command_conflict" => t!("tron.chat.goal_command_conflict", locale = locale),
         "tron.chat.goal_command_unavailable" => {
-            ("当前 Agent 无法使用 /goal", "This Agent cannot use /goal")
+            t!("tron.chat.goal_command_unavailable", locale = locale)
         }
         _ => unreachable!("unknown composer message key"),
     };
-    if locale == Some(SupportedLocale::EnUs) {
-        en.into()
-    } else {
-        zh.into()
-    }
+    message.into_owned()
 }
 
-pub fn chat_send_error_response(error: ChatSendError) -> Response {
+pub(crate) fn chat_send_error_response(error: ChatSendError) -> Response {
+    chat_send_error_response_for(error, super::error_messages::request_locale())
+}
+
+pub(crate) fn chat_send_error_response_for(
+    error: ChatSendError,
+    locale: SupportedLocale,
+) -> Response {
     match error {
-        ChatSendError::Chat(error) => chat_error_response(error),
-        ChatSendError::Agent(error) => agent_error_response(error),
+        ChatSendError::Chat(error) => chat_error_response_for(error, locale),
+        ChatSendError::Agent(error) => agent_error_response(error, locale),
         ChatSendError::RunAlreadyActive { .. } => (
             StatusCode::CONFLICT,
             Json(ApiResponse::error(
@@ -230,6 +226,7 @@ pub fn chat_send_error_response(error: ChatSendError) -> Response {
                 super::error_messages::message(
                     "CHAT_RUN_ALREADY_ACTIVE",
                     "chat session already has an active run",
+                    locale,
                 ),
             )),
         )
@@ -237,9 +234,16 @@ pub fn chat_send_error_response(error: ChatSendError) -> Response {
     }
 }
 
-pub fn chat_steer_error_response(error: ChatSteerError) -> Response {
+pub(crate) fn chat_steer_error_response(error: ChatSteerError) -> Response {
+    chat_steer_error_response_for(error, super::error_messages::request_locale())
+}
+
+pub(crate) fn chat_steer_error_response_for(
+    error: ChatSteerError,
+    locale: SupportedLocale,
+) -> Response {
     let (status, code, message) = match error {
-        ChatSteerError::Chat(error) => return chat_error_response(error),
+        ChatSteerError::Chat(error) => return chat_error_response_for(error, locale),
         ChatSteerError::SessionCodeRequired => (
             StatusCode::BAD_REQUEST,
             "CHAT_SESSION_CODE_REQUIRED",
@@ -287,13 +291,20 @@ pub fn chat_steer_error_response(error: ChatSteerError) -> Response {
         status,
         Json(ApiResponse::error(
             code,
-            super::error_messages::message(code, &message),
+            super::error_messages::message(code, &message, locale),
         )),
     )
         .into_response()
 }
 
-pub fn chat_run_control_error_response(error: ChatRunControlError) -> Response {
+pub(crate) fn chat_run_control_error_response(error: ChatRunControlError) -> Response {
+    chat_run_control_error_response_for(error, super::error_messages::request_locale())
+}
+
+pub(crate) fn chat_run_control_error_response_for(
+    error: ChatRunControlError,
+    locale: SupportedLocale,
+) -> Response {
     let (status, code, message) = match error {
         ChatRunControlError::SessionCodeRequired => (
             StatusCode::BAD_REQUEST,
@@ -335,13 +346,20 @@ pub fn chat_run_control_error_response(error: ChatRunControlError) -> Response {
         status,
         Json(ApiResponse::error(
             code,
-            super::error_messages::message(code, &message),
+            super::error_messages::message(code, &message, locale),
         )),
     )
         .into_response()
 }
 
-pub fn stop_chat_run_request_rejection_response(_error: JsonRejection) -> Response {
+pub(crate) fn stop_chat_run_request_rejection_response(_error: JsonRejection) -> Response {
+    stop_chat_run_request_rejection_response_for(_error, super::error_messages::request_locale())
+}
+
+pub(crate) fn stop_chat_run_request_rejection_response_for(
+    _error: JsonRejection,
+    locale: SupportedLocale,
+) -> Response {
     (
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
@@ -349,13 +367,21 @@ pub fn stop_chat_run_request_rejection_response(_error: JsonRejection) -> Respon
             super::error_messages::message(
                 "CHAT_STOP_RUN_REQUEST_INVALID",
                 "stop run request body is invalid",
+                locale,
             ),
         )),
     )
         .into_response()
 }
 
-pub fn active_chat_run_query_rejection_response(_error: QueryRejection) -> Response {
+pub(crate) fn active_chat_run_query_rejection_response(_error: QueryRejection) -> Response {
+    active_chat_run_query_rejection_response_for(_error, super::error_messages::request_locale())
+}
+
+pub(crate) fn active_chat_run_query_rejection_response_for(
+    _error: QueryRejection,
+    locale: SupportedLocale,
+) -> Response {
     (
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
@@ -363,13 +389,24 @@ pub fn active_chat_run_query_rejection_response(_error: QueryRejection) -> Respo
             super::error_messages::message(
                 "CHAT_ACTIVE_RUN_QUERY_INVALID",
                 "active run query is invalid",
+                locale,
             ),
         )),
     )
         .into_response()
 }
 
-pub fn steer_chat_message_request_rejection_response(_error: JsonRejection) -> Response {
+pub(crate) fn steer_chat_message_request_rejection_response(_error: JsonRejection) -> Response {
+    steer_chat_message_request_rejection_response_for(
+        _error,
+        super::error_messages::request_locale(),
+    )
+}
+
+pub(crate) fn steer_chat_message_request_rejection_response_for(
+    _error: JsonRejection,
+    locale: SupportedLocale,
+) -> Response {
     (
         StatusCode::BAD_REQUEST,
         Json(ApiResponse::error(
@@ -377,13 +414,14 @@ pub fn steer_chat_message_request_rejection_response(_error: JsonRejection) -> R
             super::error_messages::message(
                 "CHAT_STEER_REQUEST_INVALID",
                 "steer message request body is invalid",
+                locale,
             ),
         )),
     )
         .into_response()
 }
 
-fn agent_error_response(error: AgentInvocationError) -> Response {
+fn agent_error_response(error: AgentInvocationError, locale: SupportedLocale) -> Response {
     let (status, code, message) = match error {
         AgentInvocationError::PromptRequired => (
             StatusCode::BAD_REQUEST,
@@ -458,7 +496,7 @@ fn agent_error_response(error: AgentInvocationError) -> Response {
         status,
         Json(ApiResponse::error(
             code,
-            super::error_messages::message(code, &message),
+            super::error_messages::message(code, &message, locale),
         )),
     )
         .into_response()

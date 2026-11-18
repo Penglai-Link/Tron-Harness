@@ -188,6 +188,8 @@ pub struct MemoryWorkDomainResponse {
 }
 
 impl From<MemoryWorkDomain> for MemoryWorkDomainResponse {
+    /// `status` stays a stable `Active`/`Disabled` protocol value; the client
+    /// localizes the label from it (see the memory domains page adapter).
     fn from(domain: MemoryWorkDomain) -> Self {
         Self {
             domain_code: domain.domain_code,

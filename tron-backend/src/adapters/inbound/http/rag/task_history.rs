@@ -21,29 +21,27 @@ pub(super) struct DeleteTaskView {
 pub(super) struct TaskHistoryApiError(RagTaskHistoryError, String);
 impl IntoResponse for TaskHistoryApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.rag.task_history_not_found" => (
-                StatusCode::NOT_FOUND,
-                "任务记录不存在",
-                "Task record not found",
-            ),
-            "tron.rag.task_history_active" => (
-                StatusCode::CONFLICT,
-                "请先取消运行中的任务，再删除记录",
-                "Cancel the active task before deleting its record",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "任务记录删除失败",
-                "Could not delete the task record",
-            ),
+        let status = match descriptor.message_key {
+            "tron.rag.task_history_not_found" => StatusCode::NOT_FOUND,
+            "tron.rag.task_history_active" => StatusCode::CONFLICT,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match descriptor.message_key {
+            "tron.rag.task_history_not_found" => {
+                t!("tron.rag.task_history_not_found", locale = &self.1)
+            }
+            "tron.rag.task_history_active" => {
+                t!("tron.rag.task_history_active", locale = &self.1)
+            }
+            _ => t!("tron.rag.task_history_storage_failed", locale = &self.1),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

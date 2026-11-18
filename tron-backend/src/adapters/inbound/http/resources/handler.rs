@@ -55,9 +55,10 @@ pub async fn page_resources(
             ResourcePageResponse::from(page),
         ))
         .into_response(),
-        Err(error) => {
-            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
-        }
+        Err(error) => resource_error_response(
+            resource_error_with_field(error, "resourceCode", &locale),
+            &locale,
+        ),
     }
 }
 
@@ -76,9 +77,10 @@ pub async fn get_resource(
             record,
         )))
         .into_response(),
-        Err(error) => {
-            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
-        }
+        Err(error) => resource_error_response(
+            resource_error_with_field(error, "resourceCode", &locale),
+            &locale,
+        ),
     }
 }
 
@@ -99,7 +101,10 @@ pub async fn create_resource(
             return malformed_request_response(status, &locale);
         }
         Err(UploadParseError::Resource(error)) => {
-            return resource_error_response(resource_error_with_field(error, "command"), &locale);
+            return resource_error_response(
+                resource_error_with_field(error, "command", &locale),
+                &locale,
+            );
         }
         Err(UploadParseError::Internal) => return internal_error_response(&locale),
     };
@@ -120,7 +125,7 @@ pub async fn create_resource(
         ))
         .into_response(),
         Ok(Err(error)) => resource_error_response(
-            resource_error_with_field(error, "command.resourceCode"),
+            resource_error_with_field(error, "command.resourceCode", &locale),
             &locale,
         ),
         Err(_) => internal_error_response(&locale),
@@ -146,9 +151,10 @@ pub async fn update_resource(
             ResourceCommitResponse::from(result),
         ))
         .into_response(),
-        Err(error) => {
-            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
-        }
+        Err(error) => resource_error_response(
+            resource_error_with_field(error, "resourceCode", &locale),
+            &locale,
+        ),
     }
 }
 
@@ -168,9 +174,10 @@ pub async fn delete_resource(
             ResourceDeleteResponse::from(result),
         ))
         .into_response(),
-        Err(error) => {
-            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
-        }
+        Err(error) => resource_error_response(
+            resource_error_with_field(error, "resourceCode", &locale),
+            &locale,
+        ),
     }
 }
 
@@ -199,7 +206,7 @@ pub async fn upload_binary(
         }
         Err(UploadParseError::Resource(error)) => {
             return resource_error_response(
-                resource_error_with_field(error, "resourceCode"),
+                resource_error_with_field(error, "resourceCode", &locale),
                 &locale,
             );
         }
@@ -223,9 +230,10 @@ pub async fn upload_binary(
             ResourceBinaryActionResponse::from(result),
         ))
         .into_response(),
-        Ok(Err(error)) => {
-            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
-        }
+        Ok(Err(error)) => resource_error_response(
+            resource_error_with_field(error, "resourceCode", &locale),
+            &locale,
+        ),
         Err(_) => internal_error_response(&locale),
     }
 }
@@ -247,7 +255,7 @@ pub async fn download_binary(
         Ok(value) => value,
         Err(error) => {
             return resource_error_response(
-                resource_error_with_field(error, "resourceCode"),
+                resource_error_with_field(error, "resourceCode", &locale),
                 &locale,
             );
         }

@@ -1,6 +1,6 @@
 include!("service/foundation.inc");
-mod archives;
 mod knowledge_quality;
+pub mod management;
 include!("service/sessions.inc");
 include!("service/messages.inc");
 include!("service/artifacts.inc");

@@ -46,8 +46,8 @@ impl KnowledgeQualityService {
             return Err(KnowledgeBaseError::Conflict);
         }
         if serde_json::to_value(self.host.rag.settings_for_corpus(&snapshot.library.id)?)
-            .map_err(invalid)?
-            != serde_json::to_value(&snapshot.settings).map_err(invalid)?
+            .map_err(invalid_error)?
+            != serde_json::to_value(&snapshot.settings).map_err(invalid_error)?
         {
             return Err(KnowledgeBaseError::Conflict);
         }
@@ -110,7 +110,7 @@ impl KnowledgeQualityService {
                 let graph = candidate
                     .rag
                     .graph_infrastructure()
-                    .ok_or_else(|| invalid("候选图谱未配置"))?;
+                    .ok_or_else(|| invalid("knowledge.quality.candidate_graph_unconfigured"))?;
                 self.host
                     .rag
                     .copy_graph_generation(
@@ -121,7 +121,7 @@ impl KnowledgeQualityService {
                         &tested.prepared,
                         &super::runtime::QualityCheckpoint(candidate.rag.runtime_handle().budget),
                     )
-                    .map_err(invalid)?;
+                    .map_err(invalid_error)?;
             }
             repository.persist_ingest(persist_command(
                 user,
@@ -157,7 +157,7 @@ impl KnowledgeQualityService {
         run.published = true;
         run.updated_at = chrono::Utc::now().timestamp_millis();
         let cleanups = {
-            let _guard = self.host.cleanup_gate.lock().map_err(invalid)?;
+            let _guard = self.host.cleanup_gate.lock().map_err(invalid_error)?;
             self.host.repository.publish_quality_candidate(
                 user,
                 &snapshot.library.id,

@@ -68,16 +68,21 @@ impl MineruConfig {
                     .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
                 || !ids.insert(&node.id)
             {
-                return Err("MinerU 节点 ID 必须唯一，只能使用字母、数字、下划线或连字符".into());
+                return Err("settings.mineru.node_id_invalid".into());
             }
             if node.capacity == 0 || node.weight == 0 || node.resource_group_capacity == 0 {
                 return Err(format!(
-                    "MinerU 节点 {} 的并发、权重和共享组并发必须大于 0",
+                    "MinerU node {} concurrency, weight and shared-group concurrency must be greater than 0",
                     node.id
                 ));
             }
-            let url = reqwest::Url::parse(&node.base_url)
-                .map_err(|_| format!("MinerU 节点 {} 的地址无效", node.id))?;
+            let url = reqwest::Url::parse(&node.base_url).map_err(|_| {
+                crate::shared::i18n_message::MessageText::new(
+                    "settings.mineru.node_address_invalid",
+                )
+                .arg("node", node.id.clone())
+                .encode()
+            })?;
             if !matches!(url.scheme(), "http" | "https")
                 || url.host_str().is_none()
                 || !url.username().is_empty()
@@ -86,7 +91,7 @@ impl MineruConfig {
                 || url.fragment().is_some()
             {
                 return Err(format!(
-                    "MinerU 节点 {} 必须使用不含账号、查询参数或片段的 HTTP/HTTPS 地址",
+                    "MinerU node {} must use an HTTP/HTTPS address without credentials, query parameters or fragments",
                     node.id
                 ));
             }
@@ -96,7 +101,7 @@ impl MineruConfig {
             );
             if node.enabled && !local && !node.allow_remote {
                 return Err(format!(
-                    "启用远程 MinerU 节点 {} 前，请允许向该节点传输文档",
+                    "Allow document transfer to MinerU node {} before enabling it",
                     node.id
                 ));
             }
@@ -248,12 +253,12 @@ impl KnowledgeIngestionConfig {
             || self.max_attempts == 0
             || self.retry_backoff_ms < 0
         {
-            return Err("知识库并发、租约或重试配置无效".into());
+            return Err("settings.mineru.concurrency_invalid".into());
         }
         if self.embedding_resource_group.as_ref().is_some_and(|g| {
             g.trim().is_empty() || !(1..=32).contains(&self.embedding_resource_group_capacity)
         }) {
-            return Err("Embedding共享硬件组配置无效".into());
+            return Err("settings.mineru.embedding_group_invalid".into());
         }
         Ok(())
     }

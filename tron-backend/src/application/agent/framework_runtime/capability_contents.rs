@@ -140,7 +140,7 @@ fn harness_tool_descriptors() -> Vec<eliteforge_agent_core::ToolDescriptor> {
         .clone()
 }
 
-pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
+pub(super) fn builtin_contents(id: &str, locale: &str) -> Vec<CapabilityContentInfo> {
     let mut items: Vec<_> = builtin_tool_descriptors(id)
         .into_iter()
         .map(|tool| content("Tool", tool.call_name, tool.description))
@@ -192,7 +192,7 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
     }
     // Keep detail contributions and the extension catalog on the same source.
     items.extend(
-        super::pack_extension_implementations()
+        super::pack_extension_implementations(locale)
             .into_iter()
             .filter(|implementation| implementation.provider_pack_id == id)
             .map(|implementation| {
@@ -333,7 +333,9 @@ fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityCon
         _ => ("", &[]),
     };
     let mut item = content("Plugin", id, description);
-    if let Some(name) = plugin_display_name(id, "en-US") {
+    // `builtin_contents` has no request locale (identity-only catalog callers use
+    // it too); the localized label is applied by the locale-aware listing path.
+    if let Some(name) = plugin_name_key(id) {
         item.display_name = name.into();
     }
     item.provides = provides.iter().map(|name| (*name).into()).collect();
@@ -359,28 +361,28 @@ fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityCon
     item
 }
 
-pub(super) fn plugin_display_name(id: &str, locale: &str) -> Option<&'static str> {
-    let (english, chinese) = match id {
-        "framework.external-agent" => ("External Agent Binding", "外部 Agent 绑定"),
-        "framework.loop" => ("External Agent Loop", "外部 Agent 执行循环"),
-        "framework.pty.service" => ("Scoped Terminal Service", "授权终端服务"),
-        "framework.local.scoped.tools" => ("Scoped Local Tools", "授权本地工具"),
-        "tools.agents" => ("Agent Collaboration Tools", "Agent 协作工具"),
-        "agent.a2ui" => ("A2UI Interfaces", "A2UI 交互界面"),
-        "capability.personai" => ("PersonAI Services", "PersonAI 服务"),
-        "framework.tools.discovery" => ("Tool Discovery", "工具发现"),
-        "framework.web.tools" => ("Web Tools", "网页工具"),
-        "framework.media.tools" => ("Media Tools", "媒体工具"),
-        "tron.harness.tools" => ("Tron Business Tools", "Tron 业务工具"),
-        "tron.harness.tool-permissions" => ("Tron Tool Permissions", "Tron 工具权限"),
-        "framework.context-assembler" => ("Context Assembly", "上下文组装"),
+fn plugin_name_key(id: &str) -> Option<&'static str> {
+    Some(match id {
+        "framework.external-agent" => "agent_runtime.capability.plugin.external_agent",
+        "framework.loop" => "agent_runtime.capability.plugin.external_agent_loop",
+        "framework.pty.service" => "agent_runtime.capability.plugin.scoped_terminal_service",
+        "framework.local.scoped.tools" => "agent_runtime.capability.plugin.scoped_local_tools",
+        "tools.agents" => "agent_runtime.capability.plugin.agent_collaboration_tools",
+        "agent.a2ui" => "agent_runtime.capability.plugin.a2ui_interfaces",
+        "capability.personai" => "agent_runtime.capability.plugin.personai_services",
+        "framework.tools.discovery" => "agent_runtime.capability.plugin.tool_discovery",
+        "framework.web.tools" => "agent_runtime.capability.plugin.web_tools",
+        "framework.media.tools" => "agent_runtime.capability.plugin.media_tools",
+        "tron.harness.tools" => "agent_runtime.capability.plugin.tron_business_tools",
+        "tron.harness.tool-permissions" => "agent_runtime.capability.plugin.tron_tool_permissions",
+        "framework.context-assembler" => "agent_runtime.capability.plugin.context_assembly",
         _ => return None,
-    };
-    Some(if locale.starts_with("zh") {
-        chinese
-    } else {
-        english
     })
+}
+
+pub(super) fn plugin_display_name(id: &str, locale: &str) -> Option<String> {
+    let key = plugin_name_key(id)?;
+    Some(tron_i18n::translate(locale, key).into_owned())
 }
 
 pub(super) fn navigation_contents(
@@ -393,11 +395,7 @@ pub(super) fn navigation_contents(
     for page in super::super::host::host_pages::read_pages(path, manifest)? {
         let title = page
             .title
-            .get(if locale.starts_with("zh") {
-                "zh-CN"
-            } else {
-                "en-US"
-            })
+            .get(tron_i18n::Locale::from_raw(locale).as_str())
             .cloned()
             .unwrap_or_else(|| page.id.clone());
         let mut item = content("Page", &page.id, "");

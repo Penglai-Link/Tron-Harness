@@ -2,6 +2,7 @@
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext, app::AppState,
     application::agent::SubagentView, domain::chat::ChatError, response::ApiResponse,
+    shared::locale::SupportedLocale,
 };
 use axum::{
     Json,
@@ -11,6 +12,7 @@ use axum::{
 };
 use eliteforge_agent_core as fw;
 use serde::Serialize;
+use tron_i18n::t;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,14 +53,14 @@ fn authorize(state: &AppState, auth: &RequestAuthContext, session: &str) -> Resu
     }
     Ok(())
 }
-fn error(error: fw::StateError, locale: &str) -> Response {
+fn error(error: fw::StateError, locale: SupportedLocale) -> Response {
     let descriptor = crate::application::chat::subagent_error::descriptor(&error);
     let missing = matches!(error, fw::StateError::NotFound);
-    let message = match (missing, locale.starts_with("en")) {
-        (true, true) => "Subagent session not found",
-        (true, false) => "子代理会话不存在",
-        (false, true) => "Could not read subagent sessions",
-        (false, false) => "读取子代理会话失败",
+    let message = match descriptor.message_key {
+        "tron.chat.subagent_not_found" => {
+            t!("tron.chat.subagent_not_found", locale = locale)
+        }
+        _ => t!("tron.chat.subagent_read_failed", locale = locale),
     };
     (
         if missing {
@@ -76,11 +78,12 @@ pub async fn list(
     Path(session): Path<String>,
 ) -> Result<Json<ApiResponse<Vec<SubagentListItem>>>, Response> {
     authorize(&state, &auth, &session)?;
+    let locale = SupportedLocale::from_raw(&auth.locale);
     let items = state
         .agent_framework
         .subagents(&session, &auth.user().user_code)
         .await
-        .map_err(|e| error(e, &auth.locale))?;
+        .map_err(|e| error(e, locale))?;
     Ok(Json(ApiResponse::success(
         items
             .into_iter()
@@ -105,13 +108,13 @@ pub async fn read(
     Path((session, id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<SubagentDetail>>, Response> {
     authorize(&state, &auth, &session)?;
-    let id =
-        fw::RunId::parse_str(&id).map_err(|_| error(fw::StateError::NotFound, &auth.locale))?;
+    let locale = SupportedLocale::from_raw(&auth.locale);
+    let id = fw::RunId::parse_str(&id).map_err(|_| error(fw::StateError::NotFound, locale))?;
     let (item, history) = state
         .agent_framework
         .subagent_history(&session, id, &auth.user().user_code)
         .await
-        .map_err(|e| error(e, &auth.locale))?;
+        .map_err(|e| error(e, locale))?;
     let mut records = history.records;
     for message in &mut records.messages {
         message.content = message
@@ -126,7 +129,7 @@ pub async fn read(
         .map_err(|_| {
             error(
                 fw::StateError::Backend("presentation unavailable".into()),
-                &auth.locale,
+                locale,
             )
         })?
         .into_iter()

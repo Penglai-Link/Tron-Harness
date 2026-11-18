@@ -69,29 +69,33 @@ impl From<DocumentParsePlan> for PreflightPlanView {
 pub(super) struct PreflightApiError(KnowledgeBaseError, String);
 impl IntoResponse for PreflightApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, english) = match self.0 {
-            KnowledgeBaseError::Forbidden => (
-                StatusCode::FORBIDDEN,
-                "Access to this knowledge base is denied",
-            ),
-            KnowledgeBaseError::NotFound => (StatusCode::NOT_FOUND, "Knowledge base not found"),
-            KnowledgeBaseError::Conflict => {
-                (StatusCode::CONFLICT, "File checking is busy. Please retry.")
-            }
-            KnowledgeBaseError::Invalid(_) => (
-                StatusCode::BAD_REQUEST,
-                "The file or parsing choice is invalid. No parsing task was submitted.",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "File checking failed. No parsing task was submitted.",
-            ),
+        let status = match &self.0 {
+            KnowledgeBaseError::Forbidden => StatusCode::FORBIDDEN,
+            KnowledgeBaseError::NotFound => StatusCode::NOT_FOUND,
+            KnowledgeBaseError::Conflict => StatusCode::CONFLICT,
+            KnowledgeBaseError::Invalid(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        let message = if self.1.starts_with("en") {
-            english.to_owned()
-        } else {
-            self.0.to_string()
+        let message: String = match &self.0 {
+            KnowledgeBaseError::Forbidden => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1).into_owned()
+            }
+            KnowledgeBaseError::NotFound => {
+                t!("tron.knowledge_base.not_found", locale = &self.1).into_owned()
+            }
+            KnowledgeBaseError::Conflict => {
+                t!("knowledge.preflight.conflict", locale = &self.1).into_owned()
+            }
+            // The inspection error already carries a stable locale-independent
+            // message; render it with the request locale instead of forwarding text.
+            KnowledgeBaseError::Invalid(_) | KnowledgeBaseError::Storage(_) => {
+                self.0.localized(&self.1)
+            }
+            KnowledgeBaseError::NotEmpty => {
+                t!("tron.knowledge_base.not_empty", locale = &self.1).into_owned()
+            }
         };
         (
             status,
@@ -110,29 +114,34 @@ pub(super) async fn inspect(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResponse<PreflightView>>, PreflightApiError> {
+    use tron_i18n::t;
     let locale = auth.locale.clone();
-    let error = |message: &str| {
-        PreflightApiError(KnowledgeBaseError::Invalid(message.into()), locale.clone())
+    let error = |message: String| {
+        PreflightApiError(KnowledgeBaseError::from_detail(message), locale.clone())
     };
     let mut file = None;
     let mut preference = None;
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|_| error("上传表单无效"))?
+        .map_err(|_| error(t!("knowledge.preflight.form_invalid", locale = &locale).into_owned()))?
     {
         match field.name().unwrap_or("") {
             "file" => {
                 let name = field.file_name().unwrap_or_default().to_owned();
                 if file.is_some() {
-                    return Err(error("每次检查只允许一个文件"));
+                    return Err(error(
+                        t!("knowledge.preflight.single_file", locale = &locale).into_owned(),
+                    ));
                 }
                 file = Some((
                     name,
-                    field
-                        .bytes()
-                        .await
-                        .map_err(|_| error("文件超过上传限制或读取失败"))?,
+                    field.bytes().await.map_err(|_| {
+                        error(
+                            t!("knowledge.preflight.file_unreadable", locale = &locale)
+                                .into_owned(),
+                        )
+                    })?,
                 ));
             }
             "parsePreference" => {
@@ -141,13 +150,20 @@ pub(super) async fn inspect(
                         .ok()
                 }) {
                     Some(value) => Some(value),
-                    None => return Err(error("解析方式无效")),
+                    None => {
+                        return Err(error(
+                            t!("knowledge.preflight.preference_invalid", locale = &locale)
+                                .into_owned(),
+                        ));
+                    }
                 };
             }
             _ => {}
         }
     }
-    let (name, bytes) = file.ok_or_else(|| error("需要file"))?;
+    let (name, bytes) = file.ok_or_else(|| {
+        error(t!("knowledge.preflight.file_required", locale = &locale).into_owned())
+    })?;
     // Bound CPU-heavy inspections across requests; a timed-out inspection keeps
     // its permit until the worker exits and can never create a supplier task.
     static INSPECTIONS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
@@ -165,6 +181,8 @@ pub(super) async fn inspect(
                 .map_err(|e| PreflightApiError(e, locale.clone()))?
                 .into(),
         }))),
-        _ => Err(error("文件检查超时或失败；尚未提交解析")),
+        _ => Err(error(
+            t!("knowledge.preflight.timeout", locale = &locale).into_owned(),
+        )),
     }
 }

@@ -203,7 +203,11 @@ where
                     })
                 };
                 let vector = if !fingerprint_matches(&before) {
-                    Err("查询模型配置与已发布向量空间不同，请重建索引".into())
+                    Err(crate::shared::i18n_message::MessageText::new(
+                        "rag.search.query_model_space_mismatch",
+                    )
+                    .encode()
+                    .into())
                 } else {
                     self.runtime
                         .embed_for_retrieval(
@@ -233,7 +237,11 @@ where
                                 self.repository
                                     .invalidate_vector_cache(invalidation)
                                     .map_err(|e| e.to_string())?;
-                                return Err("查询模型与已发布索引模型不一致".into());
+                                return Err(crate::shared::i18n_message::MessageText::new(
+                                    "rag.search.query_model_mismatch",
+                                )
+                                .encode()
+                                .into());
                             }
                             let values = value.embedding;
                             if values.is_empty()
@@ -242,7 +250,11 @@ where
                                     .1
                                     .is_some_and(|dimension| dimension != values.len())
                             {
-                                Err("查询向量与已发布索引维度不一致".into())
+                                Err(crate::shared::i18n_message::MessageText::new(
+                                    "rag.search.query_dimension_mismatch",
+                                )
+                                .encode()
+                                .into())
                             } else {
                                 Ok(values)
                             }
@@ -254,7 +266,11 @@ where
                                 geometry.1.unwrap_or(1024),
                             );
                             if after != before || !fingerprint_matches(&after) {
-                                Err("查询过程中Embedding模型配置改变，请重试或重建索引".into())
+                                Err(crate::shared::i18n_message::MessageText::new(
+                                    "rag.search.query_embedding_changed",
+                                )
+                                .encode()
+                                .into())
                             } else {
                                 Ok(values)
                             }
@@ -446,14 +462,21 @@ where
                         .collect();
                 }
                 Ok(_) => {
-                    let error = "Reranker returned invalid results; fallback recall filters applied / 重排返回无效结果，已按召回阈值降级筛选".to_string();
+                    let error = crate::shared::i18n_message::MessageText::new(
+                        "rag.search.rerank_invalid_fallback",
+                    )
+                    .encode();
                     result.warnings.push(error.clone());
                     rerank_error = Some(error);
                 }
                 Err(error) => {
-                    result
-                        .warnings
-                        .push(format!("Rerank failed; fallback recall filters applied / 重排失败，已按召回阈值降级筛选: {error}"));
+                    result.warnings.push(
+                        crate::shared::i18n_message::MessageText::new(
+                            "rag.search.rerank_failed_fallback",
+                        )
+                        .arg("detail", error.to_string())
+                        .encode(),
+                    );
                     rerank_error = Some(error);
                 }
             }
@@ -615,9 +638,11 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
             .graph_context
             .retain(|context| visible.get(&context.partition) == Some(&context.generations));
         if result.graph_context.len() != old {
-            result
-                .warnings
-                .push("图谱授权或发布快照已改变，相关图谱上下文已移除".into());
+            result.warnings.push(
+                crate::shared::i18n_message::MessageText::new("rag.search.graph_scope_changed")
+                    .encode()
+                    .into(),
+            );
         }
         Ok(())
     }
@@ -767,9 +792,11 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
             ))
         });
         if result.hits.len() != count {
-            result
-                .warnings
-                .push("检索期间来源已删除、变更或撤销发布，相关证据已移除".into());
+            result.warnings.push(
+                crate::shared::i18n_message::MessageText::new("rag.search.source_changed")
+                    .encode()
+                    .into(),
+            );
         }
         Ok(())
     }

@@ -6,44 +6,59 @@ use axum::{
 
 use crate::{domain::workspace::WorkspaceError, response::ApiResponse};
 
+/// Locale already resolved for the current request by the profile middleware.
+fn request_locale() -> String {
+    crate::shared::auth_holder::AuthHolder::get()
+        .map(|context| context.locale.clone())
+        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_string())
+}
+
 pub fn workspace_error_response(error: WorkspaceError) -> Response {
-    let (status, code, message) = match error {
+    let locale = request_locale();
+    let (status, code, message_key) = match error {
         WorkspaceError::NotFound => (
             StatusCode::NOT_FOUND,
             "ADMIN_WORKSPACE_NOT_FOUND",
-            "workspace was not found",
+            "admin.workspaces.not_found",
         ),
         WorkspaceError::InvalidWorkspaceCode => (
             StatusCode::BAD_REQUEST,
             "ADMIN_WORKSPACE_CODE_INVALID",
-            "workspaceCode must contain uppercase letters, digits, underscore, or hyphen only",
+            "admin.workspaces.code_invalid",
         ),
         WorkspaceError::DuplicateWorkspaceCode => (
             StatusCode::CONFLICT,
             "ADMIN_WORKSPACE_CODE_DUPLICATE",
-            "workspaceCode already exists",
+            "admin.workspaces.code_duplicate",
         ),
         WorkspaceError::WorkspaceNameRequired => (
             StatusCode::BAD_REQUEST,
             "ADMIN_WORKSPACE_NAME_REQUIRED",
-            "workspace name is required",
+            "admin.workspaces.name_required",
         ),
         WorkspaceError::InvalidHierarchy => (
             StatusCode::BAD_REQUEST,
             "ADMIN_WORKSPACE_HIERARCHY_INVALID",
-            "workspace hierarchy operation is invalid",
+            "admin.workspaces.hierarchy_invalid",
         ),
         WorkspaceError::ArchivedMutationDenied => (
             StatusCode::BAD_REQUEST,
             "ADMIN_WORKSPACE_ARCHIVED_INVALID",
-            "archived workspace cannot be modified in this operation",
+            "admin.workspaces.archived_invalid",
         ),
         WorkspaceError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "ADMIN_WORKSPACE_STORAGE_FAILED",
-            "workspace storage operation failed",
+            "admin.workspaces.storage_failed",
         ),
     };
 
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    (
+        status,
+        Json(ApiResponse::error(
+            code,
+            tron_i18n::t!(message_key, locale = &locale),
+        )),
+    )
+        .into_response()
 }

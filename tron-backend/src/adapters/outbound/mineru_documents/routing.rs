@@ -29,14 +29,14 @@ impl MineruKnowledgeDocumentParser {
                 .join(
                     upload["upload_url"]
                         .as_str()
-                        .ok_or_else(|| invalid("MinerU未返回上传地址"))?,
+                        .ok_or_else(|| invalid("integration.mineru.upload_url_missing"))?,
                 )
-                .map_err(invalid)?;
+                .map_err(super::invalid_detail)?;
             if target.origin() != self.url("/")?.origin()
                 || !target.username().is_empty()
                 || target.password().is_some()
             {
-                return Err(invalid("MinerU返回跨域上传地址，拒绝发送资料"));
+                return Err(invalid("integration.mineru.upload_url_cross_origin"));
             }
             self.bytes(self.client.put(target).body(bytes.to_vec()))
                 .await?;
@@ -49,7 +49,7 @@ impl MineruKnowledgeDocumentParser {
     }
     pub(super) fn nodes(&self) -> Result<Vec<MineruNode>, KnowledgeBaseError> {
         if !self.config.enabled {
-            return Err(invalid("MinerU解析已禁用"));
+            return Err(invalid("integration.mineru.disabled"));
         }
         let nodes = if self.config.nodes.is_empty() {
             vec![MineruNode {
@@ -83,23 +83,23 @@ impl MineruKnowledgeDocumentParser {
                 || node.weight == 0
                 || node.resource_group_capacity == 0
             {
-                return Err(invalid("MinerU节点身份或容量无效"));
+                return Err(invalid("integration.mineru.node_capacity_invalid"));
             }
-            let url = Url::parse(&node.base_url).map_err(invalid)?;
+            let url = Url::parse(&node.base_url).map_err(super::invalid_detail)?;
             if !matches!(url.scheme(), "http" | "https")
                 || !url.username().is_empty()
                 || url.password().is_some()
                 || url.query().is_some()
                 || url.fragment().is_some()
             {
-                return Err(invalid("MinerU节点地址无效"));
+                return Err(invalid("integration.mineru.node_url_invalid"));
             }
             let local = matches!(
                 url.host_str(),
                 Some("localhost" | "127.0.0.1" | "::1" | "[::1]")
             );
             if !local && !node.allow_remote {
-                return Err(invalid("MinerU远程节点需要显式allowRemote授权"));
+                return Err(invalid("integration.mineru.remote_not_allowed"));
             }
         }
         Ok(nodes)
@@ -109,7 +109,7 @@ impl MineruKnowledgeDocumentParser {
             .nodes()?
             .into_iter()
             .find(|n| n.id == id)
-            .ok_or_else(|| invalid("原MinerU节点已移除或禁用，不能切换在途任务"))?;
+            .ok_or_else(|| invalid("integration.mineru.original_node_gone"))?;
         let mut config = self.config.clone();
         config.base_url = node.base_url;
         config.nodes.clear();
@@ -233,12 +233,14 @@ impl MineruKnowledgeDocumentParser {
             tiers.extend(endpoint.supported_tiers);
         }
         if !tiers.contains(self.config.default_tier.as_str()) {
-            return Err(invalid("没有健康节点支持平台默认解析质量"));
+            return Err(invalid(
+                "integration.mineru.no_healthy_default_quality_node",
+            ));
         }
         Ok(ParsingCapabilities {
             default_tier: self.config.default_tier,
             default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode)
-                .ok_or_else(|| invalid("MinerU OCR模式无效"))?,
+                .ok_or_else(|| invalid("integration.mineru.ocr_mode_invalid"))?,
             available_tiers: tiers
                 .into_iter()
                 .filter_map(|t| serde_json::from_value(json!(t)).ok())
@@ -262,10 +264,10 @@ impl MineruKnowledgeDocumentParser {
                 url.query_pairs_mut().append_pair("after", id);
             }
             let list: Value = serde_json::from_slice(&self.bytes(self.client.get(url)).await?)
-                .map_err(invalid)?;
+                .map_err(super::invalid_detail)?;
             let items = list["data"]
                 .as_array()
-                .ok_or_else(|| invalid("MinerU任务对账响应无效"))?;
+                .ok_or_else(|| invalid("integration.mineru.reconcile_response_invalid"))?;
             // List metadata can exclude unrelated jobs; incomplete summaries still
             // require details. Keep list order and cap in-flight GETs per node.
             let candidates = items
@@ -306,8 +308,8 @@ impl MineruKnowledgeDocumentParser {
             }
             after = Some(last);
         }
-        Err(KnowledgeBaseError::Storage(
-            "MinerU提交响应丢失，原节点尚未对账到任务；不会重复提交".into(),
+        Err(KnowledgeBaseError::storage(
+            "integration.mineru.submit_response_lost",
         ))
     }
 }

@@ -33,7 +33,7 @@ impl ModelProviderService {
                 })
             {
                 return Err(ModelProviderError::InvalidSelection(
-                    "Person-AI transcription cannot restrict its active speech model pool".into(),
+                    tron_i18n::Message::new("tron.model_provider.transcription_pool_locked"),
                 ));
             }
         }
@@ -144,9 +144,10 @@ impl ModelProviderService {
                 ServerApiError::Business { code: 401, .. }
                 | ServerApiError::Gateway { status: 401, .. } => ModelProviderError::Unauthorized,
                 ServerApiError::Business { code: 400, message }
-                | ServerApiError::Validation(message) => {
-                    ModelProviderError::InvalidSelection(message)
-                }
+                | ServerApiError::Validation(message) => ModelProviderError::InvalidSelection(
+                    tron_i18n::Message::new("tron.model_provider.remote_selection_rejected")
+                        .arg("detail", message),
+                ),
                 error => server_api_error(error),
             };
             self.mark_auth_required_after_rejected_credentials(&mapped);
@@ -189,7 +190,7 @@ impl ModelProviderService {
                 .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
         {
             return Err(ModelProviderError::InvalidSelection(
-                "Invalid market skin ID".into(),
+                tron_i18n::Message::new("tron.model_provider.invalid_skin_id"),
             ));
         }
         let credentials = self.active_credentials(ModelProviderCode::PersonAi).await?;

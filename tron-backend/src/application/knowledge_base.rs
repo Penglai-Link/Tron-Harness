@@ -22,6 +22,7 @@ mod source_locations;
 mod visual_evidence;
 pub use visual_evidence::{KnowledgeBaseVisualContext, KnowledgeBaseVisualEvidence};
 pub mod image_descriptions;
+use crate::shared::i18n_message::{MessageText, StoredMessage};
 use crate::{
     adapters::outbound::persistence::sqlite::SqliteKnowledgeBaseRepository,
     app::AppRagService,
@@ -52,24 +53,125 @@ pub enum KnowledgeBaseError {
     Forbidden,
     Conflict,
     NotEmpty,
-    Invalid(String),
-    Storage(String),
+    /// User-facing validation failure. Carries a locale-independent message;
+    /// display layers call [`KnowledgeBaseError::localized`].
+    Invalid(StoredMessage),
+    /// Storage/provider failure. Carries a locale-independent message; the
+    /// plain variant is reserved for technical detail that has no stable key.
+    Storage(StoredMessage),
+}
+impl KnowledgeBaseError {
+    pub fn invalid(key: &'static str) -> Self {
+        Self::Invalid(StoredMessage::message(MessageText::new(key)))
+    }
+    pub fn invalid_message(message: MessageText) -> Self {
+        Self::Invalid(StoredMessage::message(message))
+    }
+    pub fn storage(key: &'static str) -> Self {
+        Self::Storage(StoredMessage::message(MessageText::new(key)))
+    }
+    pub fn storage_message(message: MessageText) -> Self {
+        Self::Storage(StoredMessage::message(message))
+    }
+    /// Technical detail (I/O, SQL, provider failures) that has no stable key.
+    pub fn storage_detail(detail: impl std::fmt::Display) -> Self {
+        Self::Storage(StoredMessage::plain(detail.to_string()))
+    }
+    /// Convert an error/detail that may already carry an encoded structured
+    /// message; plain values become technical detail for the display layer.
+    pub fn from_detail(error: impl std::fmt::Display) -> Self {
+        let text = error.to_string();
+        match MessageText::decode(&text) {
+            Some(message) => Self::invalid_message(message),
+            None => Self::Invalid(StoredMessage::plain(text)),
+        }
+    }
+    /// Locale-independent payload for persistence (key + arguments only).
+    pub fn persisted_message(&self) -> Option<&StoredMessage> {
+        match self {
+            Self::Invalid(message) | Self::Storage(message) => Some(message),
+            _ => None,
+        }
+    }
+    /// Stable translation key, when the error carries a structured message.
+    pub fn message_key(&self) -> Option<&str> {
+        match self {
+            Self::Invalid(message) | Self::Storage(message) => message.message_key(),
+            _ => None,
+        }
+    }
+    /// Locale-independent persisted form for stored/background diagnostics.
+    pub fn persisted(&self) -> String {
+        match self.persisted_message() {
+            Some(message) => message.encode(),
+            None => {
+                let key = match self {
+                    Self::NotFound => "knowledge.base.document_not_found",
+                    Self::Forbidden => "tron.knowledge_base.forbidden",
+                    Self::Conflict => "knowledge.base.document_conflict",
+                    Self::NotEmpty => "tron.knowledge_base.not_empty",
+                    Self::Invalid(_) | Self::Storage(_) => unreachable!(),
+                };
+                MessageText::new(key).encode()
+            }
+        }
+    }
+    /// Display-layer rendering. The request/session locale is always explicit.
+    pub fn localized(&self, locale: &str) -> String {
+        use tron_i18n::t;
+        match self {
+            Self::NotFound => t!("knowledge.base.document_not_found", locale = locale).into_owned(),
+            Self::Forbidden => t!("tron.knowledge_base.forbidden", locale = locale).into_owned(),
+            Self::Conflict => t!("knowledge.base.document_conflict", locale = locale).into_owned(),
+            Self::NotEmpty => t!("tron.knowledge_base.not_empty", locale = locale).into_owned(),
+            Self::Invalid(message) => message.render(locale, Some("knowledge.base.invalid_detail")),
+            Self::Storage(message) => {
+                message.render(locale, Some("knowledge.base.storage_failure"))
+            }
+        }
+    }
 }
 impl std::fmt::Display for KnowledgeBaseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Diagnostics only; user-facing output must call `localized(locale)`.
         match self {
-            Self::NotFound => f.write_str("知识库或文档不存在"),
-            Self::Forbidden => f.write_str("无知识库权限"),
-            Self::Conflict => f.write_str("文档正在索引或状态已改变，请刷新后重试"),
-            Self::NotEmpty => f.write_str("请先删除知识库内的所有资源"),
-            Self::Invalid(s) | Self::Storage(s) => f.write_str(s),
+            Self::NotFound => f.write_str("knowledge.base.document_not_found"),
+            Self::Forbidden => f.write_str("tron.knowledge_base.forbidden"),
+            Self::Conflict => f.write_str("knowledge.base.document_conflict"),
+            Self::NotEmpty => f.write_str("tron.knowledge_base.not_empty"),
+            Self::Invalid(message) | Self::Storage(message) => {
+                f.write_str(&message.render_diagnostic())
+            }
         }
     }
 }
 impl std::error::Error for KnowledgeBaseError {}
+impl From<crate::application::document::LocalDocumentError> for KnowledgeBaseError {
+    fn from(error: crate::application::document::LocalDocumentError) -> Self {
+        Self::invalid_message(error.0)
+    }
+}
 impl From<RagError> for KnowledgeBaseError {
     fn from(e: RagError) -> Self {
-        Self::Storage(e.to_string())
+        Self::Storage(StoredMessage::message(MessageText::new(rag_error_key(&e))))
+    }
+}
+fn rag_error_key(error: &RagError) -> &'static str {
+    match error {
+        RagError::SchemaIncompatible => "rag.error.schema_incompatible",
+        RagError::CorpusNotFound => "rag.error.ingest_request_invalid",
+        RagError::SourceNotFound => "rag.error.source_not_found",
+        RagError::IngestRequestInvalid => "rag.error.ingest_request_invalid",
+        RagError::IngestScopeInvalid => "rag.error.ingest_scope_invalid",
+        RagError::EmbeddingFailed | RagError::EmbeddingFailure(_) => "rag.error.embedding_failed",
+        RagError::SearchRequestInvalid => "rag.error.search_request_invalid",
+        RagError::SearchFilterInvalid => "rag.error.search_filter_invalid",
+        RagError::SearchScopeInvalid => "rag.error.search_scope_invalid",
+        RagError::SearchRouteUnavailable => "rag.error.search_route_unavailable",
+        RagError::DebugRequestInvalid => "rag.error.debug_request_invalid",
+        RagError::TracePayloadInvalid => "rag.error.trace_payload_invalid",
+        RagError::StorageBindingInvalid => "rag.error.ingest_request_invalid",
+        RagError::StorageFailure => "rag.error.storage_failed",
     }
 }
 impl From<crate::domain::resource::ResourceError> for KnowledgeBaseError {
@@ -79,11 +181,14 @@ impl From<crate::domain::resource::ResourceError> for KnowledgeBaseError {
             ResourceError::NotFound => Self::NotFound,
             ResourceError::Forbidden => Self::Forbidden,
             ResourceError::Conflict => Self::Conflict,
-            ResourceError::InvalidInput
-            | ResourceError::InvalidCode
-            | ResourceError::InvalidWorkspace
-            | ResourceError::WorkspaceRequired => Self::Invalid(e.to_string()),
-            _ => Self::Storage(e.to_string()),
+            ResourceError::InvalidInput => Self::invalid("resource.error.invalid_input"),
+            ResourceError::InvalidCode => Self::invalid("resource.error.invalid_code"),
+            ResourceError::InvalidWorkspace => Self::invalid("resource.error.invalid_workspace"),
+            ResourceError::WorkspaceRequired => Self::invalid("resource.error.workspace_required"),
+            ResourceError::InvalidVariableReference => {
+                Self::invalid("resource.error.invalid_variable_reference")
+            }
+            _ => Self::storage_detail(e.to_string()),
         }
     }
 }
@@ -324,7 +429,9 @@ impl KnowledgeBaseService {
         self.require_user(user)?;
         self.parser
             .as_ref()
-            .ok_or_else(|| KnowledgeBaseError::Invalid("文档解析服务未配置".into()))?
+            .ok_or_else(|| {
+                KnowledgeBaseError::invalid("knowledge.base.parse_service_unconfigured")
+            })?
             .capabilities()
             .await
     }
@@ -411,8 +518,8 @@ impl KnowledgeBaseService {
         let kb = self.owned(user, id)?;
         let doc = self.repository.document(&kb.id, document)?;
         if page == 0 || page_size == 0 || page_size > 100 || page > 1_000_000 {
-            return Err(KnowledgeBaseError::Invalid(
-                "Invalid chunk pagination".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.chunk_pagination_invalid",
             ));
         }
         let Some(source) = doc.active_source_code else {
@@ -483,16 +590,14 @@ impl KnowledgeBaseService {
         // Validate before inserting the library: no partially configured draft on invalid input.
         index_settings
             .validate()
-            .map_err(|_| KnowledgeBaseError::Invalid("索引配置无效".into()))?;
+            .map_err(|_| KnowledgeBaseError::invalid("knowledge.base.index_settings_invalid"))?;
         if index_settings.graph && index_settings.graph_model_code.is_none() {
-            return Err(KnowledgeBaseError::Invalid(
-                "开启图谱索引需要选择抽取模型".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.graph_model_required",
             ));
         }
         if name.trim().is_empty() || name.chars().count() > 120 {
-            return Err(KnowledgeBaseError::Invalid(
-                "知识库名称需为1–120字符".into(),
-            ));
+            return Err(KnowledgeBaseError::invalid("knowledge.base.name_invalid"));
         }
         let id = format!("kb_{}", new_id());
         let kb = KnowledgeBase {
@@ -614,8 +719,8 @@ impl KnowledgeBaseService {
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
         let plan = self.preflight_document(user, kb_id, filename, bytes, preference)?;
         if confirmed.is_some_and(|confirmed| confirmed != &plan) {
-            return Err(KnowledgeBaseError::Invalid(
-                "文件或解析选择已改变，请重新检查后上传".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.parse_choice_changed",
             ));
         }
         // Serialize original creation across service clones; stable content IDs also
@@ -624,7 +729,7 @@ impl KnowledgeBaseService {
         let _upload_guard = UPLOAD_GATE.lock().map_err(invalid_storage)?;
         crate::domain::resource::validate_binary_name(filename, 255)?;
         if bytes.len() > 20 * 1024 * 1024 {
-            return Err(KnowledgeBaseError::Invalid("资料超过20 MiB上限".into()));
+            return Err(KnowledgeBaseError::invalid("knowledge.base.file_too_large"));
         }
         let ext = std::path::Path::new(filename)
             .extension()
@@ -635,8 +740,8 @@ impl KnowledgeBaseService {
             && !crate::application::document::preflight::DIRECT_READ_EXTENSIONS
                 .contains(&ext.as_str())
         {
-            return Err(KnowledgeBaseError::Invalid(
-                "此格式不在MinerU支持范围内".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.format_unsupported",
             ));
         }
         let id = format!(
@@ -658,9 +763,7 @@ impl KnowledgeBaseService {
                 .as_ref()
                 .is_some_and(|stored| stored.method != plan.method)
             {
-                return Err(KnowledgeBaseError::Invalid(
-                    "同一文件已存在；如需更换解析方式，请修改已有文档设置".into(),
-                ));
+                return Err(KnowledgeBaseError::invalid("knowledge.base.duplicate_file"));
             }
             if request_ingestion {
                 self.repository.request_ingestion(kb_id, &existing)?;
@@ -780,7 +883,9 @@ impl KnowledgeBaseService {
         match (&self.parser, doc.ocr_mode) {
             (Some(parser), Some(mode)) => parser.with_ocr_mode(mode).map(Some),
             (_, None) => Ok(self.parser.clone()),
-            (None, Some(_)) => Err(KnowledgeBaseError::Invalid("文档解析服务未配置".into())),
+            (None, Some(_)) => Err(KnowledgeBaseError::invalid(
+                "knowledge.base.parse_service_unconfigured",
+            )),
         }
     }
     pub(crate) async fn chunks(
@@ -833,10 +938,9 @@ impl KnowledgeBaseService {
                 .await?
         };
         if generate_descriptions && fidelity::blocked(&parsed_doc) {
-            return Err(KnowledgeBaseError::Invalid(format!(
-                "解析质量校验失败，索引未发布：{}；请核对原件及图片",
-                fidelity::failure_reason(&parsed_doc)
-            )));
+            return Err(KnowledgeBaseError::invalid_message(
+                fidelity::failure_message(&parsed_doc),
+            ));
         }
         let (parsed, mut parsed_doc) = self
             .supplement_image_descriptions(
@@ -861,7 +965,7 @@ impl KnowledgeBaseService {
             &doc.id,
             &doc.file_name,
         )
-        .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+        .map_err(|e| KnowledgeBaseError::from_detail(e))?;
         let image_vectors = match self
             .parse_checkpoint
             .as_ref()
@@ -1008,7 +1112,7 @@ impl KnowledgeBaseService {
         &self,
         kb: &str,
         mut document: KnowledgeBaseDocument,
-        message: &str,
+        key: &'static str,
     ) -> Result<(), KnowledgeBaseError> {
         if ingestion_worker::in_progress(&document.status) || document.status == "NEEDS_REBUILD" {
             return Ok(());
@@ -1016,7 +1120,7 @@ impl KnowledgeBaseService {
         let revision = document.revision;
         document.revision += 1;
         document.status = "NEEDS_REBUILD".into();
-        document.error = Some(message.into());
+        document.error = Some(crate::shared::i18n_message::MessageText::new(key).encode());
         // Preserve the published pointer and avoid overwriting concurrent document changes.
         match self.repository.save_document(kb, &document, revision) {
             Ok(()) | Err(KnowledgeBaseError::Conflict) => Ok(()),
@@ -1163,7 +1267,7 @@ impl KnowledgeBaseService {
                     self.require_rebuild(
                         &kb.id,
                         document.clone(),
-                        "Embedding模型配置与已发布索引不同，请重建索引",
+                        "knowledge.base.embedding_config_changed",
                     )?;
                 }
                 // Preserve the published partition so RAG reports a failed vector
@@ -1428,7 +1532,7 @@ pub(crate) fn hash(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
 pub(crate) fn invalid_storage(error: impl std::fmt::Display) -> KnowledgeBaseError {
-    KnowledgeBaseError::Storage(error.to_string())
+    KnowledgeBaseError::storage_detail(error.to_string())
 }
 
 fn new_id() -> String {

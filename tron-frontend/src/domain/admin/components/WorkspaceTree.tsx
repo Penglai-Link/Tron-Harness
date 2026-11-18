@@ -100,10 +100,10 @@ export function WorkspaceTree({ records, expandedCodes, selectedCode, label, arc
         <span className={`min-w-0 flex-1 truncate px-1.5 ${selected ? "font-medium" : "font-normal"}`} title={`${record.name}\n${code}`}>{record.name}</span>
         <span id={`${id}-${code}`} className="sr-only">{code}</span>
         {record.status === "Archived" ? <span className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">{archivedLabel}</span> : null}
-        <Button type="button" variant="ghost" size="icon-xs" tabIndex={focusCode === code ? 0 : -1}
+        {record.status === "Archived" ? <span aria-hidden="true" className="size-6 shrink-0" /> : <Button type="button" variant="ghost" size="icon-xs" tabIndex={focusCode === code ? 0 : -1}
           className="shrink-0 text-[var(--color-on-surface-variant)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
           aria-label={createChildLabel(record.name)}
-          onClick={event => { event.stopPropagation(); onCreateChild(code); }}><Plus size={14} /></Button>
+          onClick={event => { event.stopPropagation(); onCreateChild(code); }}><Plus size={14} /></Button>}
       </div>;
     })}
   </div>;

@@ -30,12 +30,14 @@ impl KnowledgeBaseService {
         let valid = self
             .agents
             .all_platform_internal_agents()
-            .map_err(|e| KnowledgeBaseError::Storage(format!("{e:?}")))?;
+            .map_err(|e| KnowledgeBaseError::storage_detail(format!("{e:?}")))?;
         if agents
             .iter()
             .any(|code| !valid.iter().any(|agent| agent.agent_code == *code))
         {
-            return Err(KnowledgeBaseError::Invalid("只支持平台内部智能体".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.internal_agent_only",
+            ));
         }
         self.repository
             .replace_library_agent_grants(user, id, agents)

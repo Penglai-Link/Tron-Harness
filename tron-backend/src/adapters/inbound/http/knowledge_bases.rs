@@ -3,7 +3,8 @@ use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
     application::knowledge_base::{
-        KnowledgeBaseError, KnowledgeBaseService, local_documents::ChunkConfig,
+        KnowledgeBase, KnowledgeBaseDocument, KnowledgeBaseError, KnowledgeBasePreview,
+        KnowledgeBaseService, local_documents::ChunkConfig,
     },
     response::ApiResponse,
 };
@@ -115,11 +116,55 @@ pub fn routes() -> Router<AppState> {
         )
         .layer(DefaultBodyLimit::max(21 * 1024 * 1024))
 }
+fn request_locale() -> String {
+    crate::shared::auth_holder::AuthHolder::get()
+        .map(|context| context.locale.clone())
+        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_owned())
+}
+
+/// Render persisted, locale-independent document diagnostics for the request
+/// locale. Legacy plain-text rows (written before the migration) pass through
+/// unchanged so no data migration is required.
+fn localize_document(mut document: KnowledgeBaseDocument, locale: &str) -> KnowledgeBaseDocument {
+    use crate::shared::i18n_message::{render_optional_stored, render_stored};
+    document.error = render_optional_stored(
+        document.error.as_deref(),
+        locale,
+        Some("knowledge.base.failure_detail"),
+    );
+    document.warnings = document
+        .warnings
+        .iter()
+        .map(|warning| render_stored(warning, locale, None))
+        .collect();
+    document
+}
+
+fn localize_library(mut library: KnowledgeBase, locale: &str) -> KnowledgeBase {
+    library.documents = library
+        .documents
+        .into_iter()
+        .map(|document| localize_document(document, locale))
+        .collect();
+    library
+}
+
+fn localize_preview(mut preview: KnowledgeBasePreview, locale: &str) -> KnowledgeBasePreview {
+    use crate::shared::i18n_message::render_stored;
+    preview.warnings = preview
+        .warnings
+        .iter()
+        .map(|warning| render_stored(warning, locale, None))
+        .collect();
+    preview
+}
+
 fn response<T: serde::Serialize>(result: Result<T, KnowledgeBaseError>) -> Response {
     match result {
         Ok(v) => Json(ApiResponse::success(v)).into_response(),
         Err(e) => {
-            let (status, code) = match e {
+            let locale = request_locale();
+            let (status, code) = match &e {
                 KnowledgeBaseError::NotFound => (StatusCode::NOT_FOUND, "KB_NOT_FOUND"),
                 KnowledgeBaseError::Forbidden => (StatusCode::FORBIDDEN, "KB_FORBIDDEN"),
                 KnowledgeBaseError::Conflict => (StatusCode::CONFLICT, "KB_CONFLICT"),
@@ -127,7 +172,10 @@ fn response<T: serde::Serialize>(result: Result<T, KnowledgeBaseError>) -> Respo
                 KnowledgeBaseError::Invalid(_) => (StatusCode::BAD_REQUEST, "KB_INVALID"),
                 KnowledgeBaseError::Storage(_) => (StatusCode::INTERNAL_SERVER_ERROR, "KB_STORAGE"),
             };
-            (status, Json(ApiResponse::error(code, e.to_string()))).into_response()
+            // Structured application messages are rendered with the request locale
+            // at this display boundary; no translated text crosses the layer below.
+            let message = e.localized(&locale);
+            (status, Json(ApiResponse::error(code, message))).into_response()
         }
     }
 }
@@ -148,14 +196,20 @@ async fn detail(
     auth: RequestAuthContext,
     Path(id): Path<String>,
 ) -> Response {
-    response(kb.detail(&auth.user().user_code, &id))
+    response(
+        kb.detail(&auth.user().user_code, &id)
+            .map(|library| localize_library(library, &auth.locale)),
+    )
 }
 async fn documents(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path(id): Path<String>,
 ) -> Response {
-    response(kb.detail(&auth.user().user_code, &id).map(|k| k.documents))
+    response(
+        kb.detail(&auth.user().user_code, &id)
+            .map(|library| localize_library(library, &auth.locale).documents),
+    )
 }
 async fn upload(
     State(kb): State<KnowledgeBaseService>,
@@ -175,8 +229,8 @@ async fn upload(
                     match field.bytes().await {
                         Ok(bytes) => file = Some((name, bytes)),
                         Err(_) => {
-                            return response::<()>(Err(KnowledgeBaseError::Invalid(
-                                "文件超过上传限制或读取失败".into(),
+                            return response::<()>(Err(KnowledgeBaseError::invalid(
+                                "knowledge.upload.file_unreadable",
                             )));
                         }
                     }
@@ -184,8 +238,8 @@ async fn upload(
                 "idempotencyKey" => match field.text().await {
                     Ok(value) => request_key = Some(value),
                     Err(_) => {
-                        return response::<()>(Err(KnowledgeBaseError::Invalid(
-                            "入库请求标识无效".into(),
+                        return response::<()>(Err(KnowledgeBaseError::invalid(
+                            "knowledge.upload.request_key_invalid",
                         )));
                     }
                 },
@@ -198,47 +252,53 @@ async fn upload(
                     }) {
                         Some(value) => Some(value),
                         None => {
-                            return response::<()>(Err(KnowledgeBaseError::Invalid(
-                                "解析方式无效".into(),
+                            return response::<()>(Err(KnowledgeBaseError::invalid(
+                                "knowledge.upload.preference_invalid",
                             )));
                         }
                     };
                 }
                 "parsePlan" => {
-                    plan =
-                        match field.text().await.ok().and_then(|v| {
-                            serde_json::from_str::<
+                    plan = match field.text().await.ok().and_then(|v| {
+                        serde_json::from_str::<
                                 crate::application::knowledge_base::DocumentParsePlan,
                             >(&v)
                             .ok()
-                        }) {
-                            Some(value) => Some(value),
-                            None => {
-                                return response::<()>(Err(KnowledgeBaseError::Invalid(
-                                    "解析计划无效".into(),
-                                )));
-                            }
-                        };
+                    }) {
+                        Some(value) => Some(value),
+                        None => {
+                            return response::<()>(Err(KnowledgeBaseError::invalid(
+                                "knowledge.upload.parse_plan_invalid",
+                            )));
+                        }
+                    };
                 }
                 _ => {}
             },
             Ok(None) => break,
             Err(_) => {
-                return response::<()>(Err(KnowledgeBaseError::Invalid("上传表单无效".into())));
+                return response::<()>(Err(KnowledgeBaseError::invalid(
+                    "knowledge.upload.form_invalid",
+                )));
             }
         }
     }
     match file {
-        Some((name, bytes)) => response(kb.upload_with_parsing_options(
-            &auth.user().user_code,
-            &id,
-            &name,
-            &bytes,
-            request_key.as_deref(),
-            preference,
-            plan.as_ref(),
-        )),
-        _ => response::<()>(Err(KnowledgeBaseError::Invalid("需要file".into()))),
+        Some((name, bytes)) => response(
+            kb.upload_with_parsing_options(
+                &auth.user().user_code,
+                &id,
+                &name,
+                &bytes,
+                request_key.as_deref(),
+                preference,
+                plan.as_ref(),
+            )
+            .map(|document| localize_document(document, &auth.locale)),
+        ),
+        _ => response::<()>(Err(KnowledgeBaseError::invalid(
+            "knowledge.upload.file_required",
+        ))),
     }
 }
 async fn configure(
@@ -256,7 +316,8 @@ async fn configure(
             q.parsing_tier,
             q.ocr_mode,
         )
-        .await,
+        .await
+        .map(|document| localize_document(document, &auth.locale)),
     )
 }
 async fn preview(
@@ -264,14 +325,21 @@ async fn preview(
     auth: RequestAuthContext,
     Path((id, doc)): Path<(String, String)>,
 ) -> Response {
-    response(kb.preview(&auth.user().user_code, &id, &doc).await)
+    response(
+        kb.preview(&auth.user().user_code, &id, &doc)
+            .await
+            .map(|preview| localize_preview(preview, &auth.locale)),
+    )
 }
 async fn index(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path((id, doc)): Path<(String, String)>,
 ) -> Response {
-    response(kb.start_index(&auth.user().user_code, &id, &doc))
+    response(
+        kb.start_index(&auth.user().user_code, &id, &doc)
+            .map(|document| localize_document(document, &auth.locale)),
+    )
 }
 
 #[derive(serde::Serialize)]
@@ -315,7 +383,11 @@ async fn tasks(
                         cancellation_pending: t.cancellation_pending,
                         retry_after_ms: t.retry_after_ms,
                         endpoint_id: t.endpoint_id,
-                        error: t.error,
+                        error: crate::shared::i18n_message::render_optional_stored(
+                            t.error.as_deref(),
+                            &auth.locale,
+                            Some("knowledge.base.failure_detail"),
+                        ),
                         wait_reason: t.wait_reason,
                     })
                     .collect::<Vec<_>>()
@@ -334,7 +406,10 @@ async fn retry(
     auth: RequestAuthContext,
     Path((id, doc)): Path<(String, String)>,
 ) -> Response {
-    response(kb.retry_index(&auth.user().user_code, &id, &doc))
+    response(
+        kb.retry_index(&auth.user().user_code, &id, &doc)
+            .map(|document| localize_document(document, &auth.locale)),
+    )
 }
 async fn remove(
     State(kb): State<KnowledgeBaseService>,
@@ -381,7 +456,7 @@ async fn binary(
         Ok(Ok(value)) => value,
         Ok(Err(error)) => return response::<()>(Err(error)),
         Err(error) => {
-            return response::<()>(Err(KnowledgeBaseError::Storage(error.to_string())));
+            return response::<()>(Err(KnowledgeBaseError::storage_detail(error.to_string())));
         }
     };
     let stream = async_stream::stream! {

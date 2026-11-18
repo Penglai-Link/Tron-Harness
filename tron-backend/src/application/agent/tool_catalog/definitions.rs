@@ -232,6 +232,11 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             name_i18n_key: "agent.toolCatalog.domains.workspace.name",
             description_i18n_key: "agent.toolCatalog.domains.workspace.description",
         },
+        ToolDomainDefinition {
+            domain_code: "artifacts",
+            name_i18n_key: "agent.toolCatalog.domains.artifacts.name",
+            description_i18n_key: "agent.toolCatalog.domains.artifacts.description",
+        },
     ]
 }
 

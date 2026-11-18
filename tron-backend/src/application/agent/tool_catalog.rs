@@ -75,6 +75,9 @@ pub(crate) fn is_fixed_code(code: &str) -> bool {
 
 pub(crate) fn localize_plugin_display(record: &mut ToolCatalogRecord, locale: &str) {
     if let Some(display) = &record.display {
+        // Resolve with the canonical locale tag so raw header values and the
+        // request/session locale render the same plugin text.
+        let locale = SupportedLocale::from_raw(locale).as_str();
         let resolved = display.resolve(
             locale,
             &record.name,
@@ -88,25 +91,38 @@ pub(crate) fn localize_plugin_display(record: &mut ToolCatalogRecord, locale: &s
 }
 
 pub(crate) fn builtin_category(code: &str) -> eliteforge_agent_core::ToolCategory {
-    let (zh, en) = match code {
-        "tron.platform" => ("平台工具", "Platform tools"),
-        "tron.assistant" => ("PersonAI 工具", "PersonAI tools"),
-        "system.command" => ("系统命令工具", "System command tools"),
-        "document.media" => ("文档与媒体工具", "Document and media tools"),
-        "network" => ("网络检索工具", "Web retrieval tools"),
-        "agent.collaboration" => ("协作工具", "Collaboration tools"),
-        "interaction" => ("交互工具", "Interaction tools"),
-        "execution" => ("执行工具", "Execution tools"),
-        "tron.connector.tools.platform" => ("外部平台", "External platforms"),
-        "tron.connector.tools.topic" => ("工作主题", "Work Topics"),
-        _ => (code, code),
+    let key = match code {
+        "tron.platform" => Some("agent.toolCatalog.categories.platform"),
+        "tron.assistant" => Some("agent.toolCatalog.categories.assistant"),
+        "system.command" => Some("agent.toolCatalog.categories.system_command"),
+        "document.media" => Some("agent.toolCatalog.categories.document_media"),
+        "network" => Some("agent.toolCatalog.categories.network"),
+        "agent.collaboration" => Some("agent.toolCatalog.categories.collaboration"),
+        "interaction" => Some("agent.toolCatalog.categories.interaction"),
+        "execution" => Some("agent.toolCatalog.categories.execution"),
+        "tron.connector.tools.platform" => Some("agent.toolCatalog.categories.connector_platform"),
+        "tron.connector.tools.topic" => Some("agent.toolCatalog.categories.connector_topic"),
+        _ => None,
     };
-    eliteforge_agent_core::ToolCategory::new(
-        code,
-        [("zh-CN".into(), zh.into()), ("en-US".into(), en.into())]
-            .into_iter()
-            .collect(),
-    )
+    let names = match key {
+        Some(key) => [
+            (
+                SupportedLocale::ZhCn.as_str().to_string(),
+                tron_i18n::t!(key, locale = SupportedLocale::ZhCn).into_owned(),
+            ),
+            (
+                SupportedLocale::EnUs.as_str().to_string(),
+                tron_i18n::t!(key, locale = SupportedLocale::EnUs).into_owned(),
+            ),
+        ],
+        None => [
+            (SupportedLocale::ZhCn.as_str().to_string(), code.to_string()),
+            (SupportedLocale::EnUs.as_str().to_string(), code.to_string()),
+        ],
+    }
+    .into_iter()
+    .collect();
+    eliteforge_agent_core::ToolCategory::new(code, names)
 }
 
 impl BusinessToolCatalog {
@@ -296,10 +312,7 @@ fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
     entries
         .into_iter()
         .map(|(tool, category, source)| {
-            let resolved = tool.resolve_display(match locale {
-                SupportedLocale::ZhCn => "zh-CN",
-                SupportedLocale::EnUs => "en-US",
-            });
+            let resolved = tool.resolve_display(locale.as_str());
             let domain = if tool.call_name == "topic_read" {
                 "topic"
             } else if tool.call_name.starts_with("connector_") {

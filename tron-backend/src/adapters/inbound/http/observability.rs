@@ -333,29 +333,25 @@ impl IntoResponse for ObservabilityApiError {
 }
 fn error_response(error: ObservabilityError, locale: &str) -> Response {
     let descriptor = error.descriptor();
-    let (status, zh, en) = match descriptor.message_key {
+    let (status, message_key) = match descriptor.message_key {
         "tron.observability.invalid_log_query" => (
             StatusCode::BAD_REQUEST,
-            "日志查询参数无效：Trace ID 为 32 位、Span ID 为 16 位非零十六进制字符",
-            "Invalid log query: Trace ID must be 32 and Span ID 16 nonzero hexadecimal characters",
+            "tron.observability.invalid_log_query",
         ),
-        "tron.observability.invalid_query" => (
-            StatusCode::BAD_REQUEST,
-            "查询参数无效，Trace ID 必须是 32 位十六进制字符",
-            "Invalid query; Trace ID must contain 32 hexadecimal characters",
-        ),
-        "tron.observability.not_found" => (StatusCode::NOT_FOUND, "链路不存在", "Trace not found"),
+        "tron.observability.invalid_query" => {
+            (StatusCode::BAD_REQUEST, "tron.observability.invalid_query")
+        }
+        "tron.observability.not_found" => (StatusCode::NOT_FOUND, "tron.observability.not_found"),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "读取链路失败",
-            "Could not read traces",
+            "tron.observability.storage_failure",
         ),
     };
     (
         status,
         Json(ApiResponse::<EmptyData>::error(
             descriptor.code,
-            if locale.starts_with("en") { en } else { zh },
+            tron_i18n::t!(message_key, locale = locale),
         )),
     )
         .into_response()

@@ -162,10 +162,10 @@ export const settingsNavigation = [
         translationKey: "shell:settings.items.workspaceAdmin",
       },
       {
-        label: "Archived Chats",
-        href: "/settings/archived-chats",
-        icon: Archive,
-        translationKey: "shell:settings.items.archivedChats",
+        label: "Session Management",
+        href: "/settings/session-management",
+        icon: MessageSquareText,
+        translationKey: "shell:settings.items.sessionManagement",
       },
       {
         label: "Memory Domains",

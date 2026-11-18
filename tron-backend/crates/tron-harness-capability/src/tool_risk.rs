@@ -1,4 +1,9 @@
 //! Risk classification uses trusted tool identity and actual parameters, never model hints.
+//!
+//! Classification is language independent. [`assess_tool_risk`] returns a
+//! structured [`RiskReason`] that the approval/display layer translates with
+//! the run locale; logs, approvals and the frontend can reuse the same code
+//! without re-deriving the risk.
 use eliteforge_agent_core::ToolDescriptor;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,43 +18,198 @@ pub enum ToolRisk {
     Critical,
 }
 
+/// Why a command invocation was classified at its risk level.
+///
+/// This mirrors [`assess_command`] and deliberately carries no localized text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CommandRiskReason {
+    /// Environment overrides, an interactive TTY or standard input.
+    EnvironmentOrInteractiveInput,
+    /// No statically inspectable command string was provided.
+    UninspectableCommand,
+    /// `args` is present but is not a literal string array.
+    UnparsableArguments,
+    /// Shell control, expansion or syntax outside the static parser.
+    ShellSyntax,
+    /// The command mutates data inside a protected directory.
+    ProtectedDirectoryMutation,
+    /// The command runs an interpreter or dynamic executor.
+    InterpreterExecution,
+    /// The command deletes files or directories.
+    FileDeletion,
+    /// The command accesses the network, transfers data or runs remotely.
+    NetworkAccess,
+    /// Input is written to an already running command or terminal.
+    StatefulProcessInput,
+    /// The command stops or otherwise controls a running process.
+    ProcessControl,
+    /// The executable and arguments matched the configured execution rules.
+    RiskRuleMatch,
+}
+
+impl CommandRiskReason {
+    /// Stable, language-independent reason code.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::EnvironmentOrInteractiveInput => "environmentOrInteractiveInput",
+            Self::UninspectableCommand => "uninspectableCommand",
+            Self::UnparsableArguments => "unparsableArguments",
+            Self::ShellSyntax => "shellSyntax",
+            Self::ProtectedDirectoryMutation => "protectedDirectoryMutation",
+            Self::InterpreterExecution => "interpreterExecution",
+            Self::FileDeletion => "fileDeletion",
+            Self::NetworkAccess => "networkAccess",
+            Self::StatefulProcessInput => "statefulProcessInput",
+            Self::ProcessControl => "processControl",
+            Self::RiskRuleMatch => "riskRuleMatch",
+        }
+    }
+
+    /// Translation key owned by the display layer.
+    pub fn message_key(self) -> &'static str {
+        match self {
+            Self::EnvironmentOrInteractiveInput => {
+                "tool.risk.command.environment_or_interactive_input"
+            }
+            Self::UninspectableCommand => "tool.risk.command.uninspectable",
+            Self::UnparsableArguments => "tool.risk.command.unparsable_arguments",
+            Self::ShellSyntax => "tool.risk.command.shell_syntax",
+            Self::ProtectedDirectoryMutation => "tool.risk.command.protected_directory",
+            Self::InterpreterExecution => "tool.risk.command.interpreter",
+            Self::FileDeletion => "tool.risk.command.file_deletion",
+            Self::NetworkAccess => "tool.risk.command.network",
+            Self::StatefulProcessInput => "tool.risk.command.stateful_input",
+            Self::ProcessControl => "tool.risk.command.process_control",
+            Self::RiskRuleMatch => "tool.risk.command.rule_match",
+        }
+    }
+}
+
+/// Structured, language-independent reason for a tool risk classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RiskReason {
+    /// A remote MCP tool whose side effects the host cannot verify.
+    RemoteMcp,
+    /// A remote image generation task that may incur charges.
+    ImageGeneration,
+    /// Local file reads or writes, assessed from the actual paths.
+    LocalFileAccess,
+    /// A persistent terminal session that can run arbitrary commands.
+    PersistentTerminal,
+    /// The tool changes business data or runtime state.
+    BusinessMutation,
+    /// The tool deletes business data or runtime state.
+    BusinessDeletion,
+    /// A query tool whose arguments contain executable or batch operations.
+    QueryExecutableArguments,
+    /// An unknown native tool whose side effects the host cannot verify.
+    UnknownNativeTool,
+    /// Nested tool invocations inside the arguments increase the risk.
+    NestedToolInvocation,
+    /// A call to a remote platform service.
+    RemoteServiceCall,
+    /// A call that accesses the external network.
+    WebAccess,
+    /// A change to remote access configuration, pairing or tokens.
+    RemoteAccess,
+    /// A command invocation with a specific command-level reason.
+    Command(CommandRiskReason),
+}
+
+impl RiskReason {
+    /// Stable, language-independent reason code for logs and structured output.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::RemoteMcp => "remoteMcp",
+            Self::ImageGeneration => "imageGeneration",
+            Self::LocalFileAccess => "localFileAccess",
+            Self::PersistentTerminal => "persistentTerminal",
+            Self::BusinessMutation => "businessMutation",
+            Self::BusinessDeletion => "businessDeletion",
+            Self::QueryExecutableArguments => "queryExecutableArguments",
+            Self::UnknownNativeTool => "unknownNativeTool",
+            Self::NestedToolInvocation => "nestedToolInvocation",
+            Self::RemoteServiceCall => "remoteServiceCall",
+            Self::WebAccess => "webAccess",
+            Self::RemoteAccess => "remoteAccess",
+            Self::Command(reason) => reason.code(),
+        }
+    }
+
+    /// Translation key owned by the display layer.
+    pub fn message_key(self) -> &'static str {
+        match self {
+            Self::RemoteMcp => "tool.risk.remote_mcp",
+            Self::ImageGeneration => "tool.risk.image_generation",
+            Self::LocalFileAccess => "tool.risk.local_file_access",
+            Self::PersistentTerminal => "tool.risk.persistent_terminal",
+            Self::BusinessMutation => "tool.risk.business_mutation",
+            Self::BusinessDeletion => "tool.risk.business_deletion",
+            Self::QueryExecutableArguments => "tool.risk.query_executable_arguments",
+            Self::UnknownNativeTool => "tool.risk.unknown_native_tool",
+            Self::NestedToolInvocation => "tool.risk.nested_tool_invocation",
+            Self::RemoteServiceCall => "tool.risk.remote_service_call",
+            Self::WebAccess => "tool.risk.web_access",
+            Self::RemoteAccess => "tool.risk.remote_access",
+            Self::Command(reason) => reason.message_key(),
+        }
+    }
+}
+
+/// Risk level plus the structured reason for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolRiskAssessment {
+    pub risk: ToolRisk,
+    pub reason: RiskReason,
+}
+
 /// `operation` is host catalog metadata: false = query, true = mutation.
 /// Missing metadata is intentionally conservative; MCP descriptions/hints are untrusted.
-pub fn identify_tool_risk(
+pub fn assess_tool_risk(
     descriptor: &ToolDescriptor,
     args: &Value,
     operation: Option<bool>,
-) -> ToolRisk {
+) -> ToolRiskAssessment {
+    use CommandRiskReason as Command;
+    use RiskReason as Reason;
+
     let id = descriptor.id.as_str();
     if id.starts_with("mcp/")
         || id.starts_with("mcp.")
         || id.starts_with("mcp:")
         || descriptor.call_name.starts_with("mcp__")
     {
-        return ToolRisk::High;
+        return assessment(ToolRisk::High, Reason::RemoteMcp);
     }
     if matches!(
         descriptor.call_name.as_str(),
         "terminal_start" | "terminal_write"
     ) {
-        return ToolRisk::High;
+        return assessment(ToolRisk::High, Reason::PersistentTerminal);
     }
     if matches!(
         descriptor.call_name.as_str(),
         "terminal_read" | "terminal_list"
     ) {
-        return ToolRisk::Safe;
+        return assessment(ToolRisk::Safe, Reason::LocalFileAccess);
     }
     match id {
-        "system.command.exec" | "framework.terminal.start" => command_risk(args),
+        "system.command.exec" | "framework.terminal.start" => command_assessment(args),
         // Input may be interpreted by an already running shell. Its state is
         // unavailable here, so a Critical threshold must still ask for approval.
-        "system.command.task.write" | "framework.terminal.write" => ToolRisk::Critical,
-        "system.command.task.stop" | "framework.terminal.stop" => ToolRisk::High,
+        "system.command.task.write" | "framework.terminal.write" => assessment(
+            ToolRisk::Critical,
+            Reason::Command(Command::StatefulProcessInput),
+        ),
+        "system.command.task.stop" | "framework.terminal.stop" => {
+            assessment(ToolRisk::High, Reason::Command(Command::ProcessControl))
+        }
         "system.command.task.read"
         | "system.command.list"
         | "framework.terminal.read"
-        | "framework.terminal.list" => ToolRisk::Safe,
+        | "framework.terminal.list" => assessment(ToolRisk::Safe, Reason::LocalFileAccess),
         "filesystem.read_text"
         | "filesystem.list"
         | "filesystem.stat"
@@ -57,35 +217,70 @@ pub fn identify_tool_risk(
         | "filesystem.search.glob"
         | "filesystem.search.path"
         | "media.read_image"
-        | "media.read_pdf" => ToolRisk::Low,
-        "filesystem.write_text" => write_risk(args),
-        "filesystem.apply_patch" | "filesystem.apply_unified_patch" => patch_risk(args),
+        | "media.read_pdf" => assessment(ToolRisk::Low, Reason::LocalFileAccess),
+        "filesystem.write_text" => assessment(write_risk(args), Reason::LocalFileAccess),
+        "filesystem.apply_patch" | "filesystem.apply_unified_patch" => {
+            assessment(patch_risk(args), Reason::LocalFileAccess)
+        }
         "personai.search"
         | "personai.query_image"
         | "personai.detect_text"
-        | "personai.detect_image"
-        | "web.fetch" => ToolRisk::Low,
-        "personai.generate_image" => ToolRisk::Medium,
+        | "personai.detect_image" => assessment(ToolRisk::Low, Reason::RemoteServiceCall),
+        "web.fetch" => assessment(ToolRisk::Low, Reason::WebAccess),
+        "personai.generate_image" => assessment(ToolRisk::Medium, Reason::ImageGeneration),
         // Remote access changes pairing state and tokens; require the same
         // approval threshold as other host mutations.
-        "framework.remote-access.manage" => ToolRisk::High,
+        "framework.remote-access.manage" => assessment(ToolRisk::High, Reason::RemoteAccess),
         _ => match operation {
-            Some(false) => nested_risk(args, 0).max(ToolRisk::Low),
+            Some(false) => {
+                let nested = nested_risk(args, 0);
+                let risk = nested.max(ToolRisk::Low);
+                let reason = if nested > ToolRisk::Low {
+                    Reason::NestedToolInvocation
+                } else {
+                    Reason::QueryExecutableArguments
+                };
+                assessment(risk, reason)
+            }
             Some(true) => {
-                let base = if descriptor
+                let deleting = descriptor
                     .call_name
                     .split('_')
-                    .any(|part| matches!(part, "delete" | "remove" | "destroy" | "drop"))
-                {
+                    .any(|part| matches!(part, "delete" | "remove" | "destroy" | "drop"));
+                let base = if deleting {
                     ToolRisk::High
                 } else {
                     ToolRisk::Medium
                 };
-                nested_risk(args, 0).max(base)
+                let nested = nested_risk(args, 0);
+                let reason = if nested > base {
+                    Reason::NestedToolInvocation
+                } else if deleting {
+                    Reason::BusinessDeletion
+                } else {
+                    Reason::BusinessMutation
+                };
+                assessment(nested.max(base), reason)
             }
-            None => nested_risk(args, 0).max(ToolRisk::High),
+            None => assessment(
+                nested_risk(args, 0).max(ToolRisk::High),
+                Reason::UnknownNativeTool,
+            ),
         },
     }
+}
+
+/// Compatibility wrapper: callers that only need the level use this.
+pub fn identify_tool_risk(
+    descriptor: &ToolDescriptor,
+    args: &Value,
+    operation: Option<bool>,
+) -> ToolRisk {
+    assess_tool_risk(descriptor, args, operation).risk
+}
+
+fn assessment(risk: ToolRisk, reason: RiskReason) -> ToolRiskAssessment {
+    ToolRiskAssessment { risk, reason }
 }
 
 // A wrapper cannot hide a dangerous command behind query metadata. Nested tool
@@ -196,6 +391,15 @@ fn patch_risk(args: &Value) -> ToolRisk {
 }
 
 fn command_risk(input: &Value) -> ToolRisk {
+    command_assessment(input).risk
+}
+
+/// Classify one command invocation and explain the classification in the same
+/// interpretation, so approval text can never drift from the risk level.
+pub fn command_assessment(input: &Value) -> ToolRiskAssessment {
+    use CommandRiskReason as Command;
+    use RiskReason as Reason;
+
     if input
         .get("env")
         .is_some_and(|v| v.as_object().is_none_or(|v| !v.is_empty()))
@@ -205,122 +409,56 @@ fn command_risk(input: &Value) -> ToolRisk {
             .get("stdin")
             .is_some_and(|v| v.as_str().is_none_or(|s| !s.is_empty()))
     {
-        return ToolRisk::High;
+        return assessment(
+            ToolRisk::High,
+            Reason::Command(Command::EnvironmentOrInteractiveInput),
+        );
     }
     let Some(command) = input.get("command").and_then(Value::as_str) else {
-        return ToolRisk::High;
+        return assessment(
+            ToolRisk::High,
+            Reason::Command(Command::UninspectableCommand),
+        );
     };
     let words = if let Some(argv) = input.get("args") {
         let Some(argv) = argv.as_array() else {
-            return ToolRisk::High;
+            return assessment(
+                ToolRisk::High,
+                Reason::Command(Command::UnparsableArguments),
+            );
         };
         let Some(mut words) = argv
             .iter()
             .map(|v| v.as_str().map(str::to_owned))
             .collect::<Option<Vec<_>>>()
         else {
-            return ToolRisk::High;
+            return assessment(
+                ToolRisk::High,
+                Reason::Command(Command::UnparsableArguments),
+            );
         };
         // With args present (even []), command is ONE executable name, never shell text.
         words.insert(0, command.to_owned());
         words
     } else {
         let Some(words) = shell_words(command) else {
-            return ToolRisk::Critical;
+            return assessment(ToolRisk::Critical, Reason::Command(Command::ShellSyntax));
         };
         words
     };
-    let risk = argv_risk(&words);
+    let (risk, reason) = argv_assessment(&words);
     if risk >= ToolRisk::Medium
         && input
             .get("cwd")
             .and_then(Value::as_str)
             .is_some_and(protected_path)
     {
-        ToolRisk::Critical
-    } else {
-        risk
-    }
-}
-
-/// Explain the same command interpretation used by the risk classifier.
-pub(crate) fn command_approval_reason(input: &Value) -> (&'static str, &'static str) {
-    if input
-        .get("env")
-        .is_some_and(|v| v.as_object().is_none_or(|v| !v.is_empty()))
-        || input.get("interactive").and_then(Value::as_bool) == Some(true)
-        || input.get("tty").and_then(Value::as_bool) == Some(true)
-        || input
-            .get("stdin")
-            .is_some_and(|v| v.as_str().is_none_or(|s| !s.is_empty()))
-    {
-        return (
-            "调用包含环境变量、交互终端或标准输入，无法仅凭命令名确认执行影响",
-            "The call includes environment overrides, an interactive terminal, or standard input; its effects cannot be determined from the executable alone",
+        return assessment(
+            ToolRisk::Critical,
+            Reason::Command(Command::ProtectedDirectoryMutation),
         );
     }
-    let Some(command) = input.get("command").and_then(Value::as_str) else {
-        return (
-            "调用未提供可静态检查的命令，需要人工确认",
-            "No statically inspectable command was provided; manual approval is required",
-        );
-    };
-    let words = if let Some(args) = input.get("args") {
-        let Some(mut words) = args.as_array().and_then(|args| {
-            args.iter()
-                .map(|v| v.as_str().map(str::to_owned))
-                .collect::<Option<Vec<_>>>()
-        }) else {
-            return (
-                "命令参数无法静态解析",
-                "The command arguments cannot be statically parsed",
-            );
-        };
-        words.insert(0, command.to_owned());
-        words
-    } else {
-        let Some(words) = shell_words(command) else {
-            return (
-                "命令包含 shell 控制、展开或无法静态解析的语法",
-                "The command contains shell control, expansion, or syntax outside the static parser",
-            );
-        };
-        words
-    };
-    if argv_risk(&words) >= ToolRisk::Medium
-        && input
-            .get("cwd")
-            .and_then(Value::as_str)
-            .is_some_and(protected_path)
-    {
-        return (
-            "命令在受保护目录中执行且可能修改数据",
-            "The command runs in a protected directory and may modify data",
-        );
-    }
-    let name = words[0]
-        .strip_prefix("/bin/")
-        .or_else(|| words[0].strip_prefix("/usr/bin/"))
-        .unwrap_or(&words[0]);
-    match name {
-        "sh" | "bash" | "zsh" | "fish" | "python" | "python3" | "node" | "ruby" | "perl"
-        | "eval" | "exec" | "env" | "xargs" => (
-            "命令通过解释器或动态执行程序运行，可执行任意脚本",
-            "The command uses an interpreter or dynamic executor and can run arbitrary scripts",
-        ),
-        "rm" | "rmdir" => (
-            "命令会删除文件或目录",
-            "The command deletes files or directories",
-        ),
-        "curl" | "wget" | "scp" | "sftp" | "ssh" | "rsync" | "nc" | "ncat" | "telnet" => (
-            "命令会访问网络、传输数据或执行远端操作",
-            "The command can access the network, transfer data, or run remote operations",
-        ),
-        _ => (
-            "命令的可执行程序与参数命中了当前执行风险规则，达到你配置的确认阈值",
-            "The executable and arguments match the execution risk rules and meet your configured approval threshold",
-        ),
-    }
+    assessment(risk, Reason::Command(reason))
 }
 
 /// Parse only a deliberately small shell subset. Any expansion, control operator,
@@ -368,9 +506,10 @@ fn shell_words(command: &str) -> Option<Vec<String>> {
     (!words.is_empty()).then_some(words)
 }
 
-fn argv_risk(words: &[String]) -> ToolRisk {
+fn argv_assessment(words: &[String]) -> (ToolRisk, CommandRiskReason) {
+    use CommandRiskReason::{FileDeletion, InterpreterExecution, NetworkAccess, RiskRuleMatch};
     let Some(command) = words.first() else {
-        return ToolRisk::High;
+        return (ToolRisk::High, RiskRuleMatch);
     };
     // Arbitrary executables named `ls` outside standard locations are not trusted queries.
     let name = if command.contains('/') {
@@ -378,10 +517,10 @@ fn argv_risk(words: &[String]) -> ToolRisk {
             .strip_prefix("/bin/")
             .or_else(|| command.strip_prefix("/usr/bin/"))
         else {
-            return ToolRisk::High;
+            return (ToolRisk::High, RiskRuleMatch);
         };
         if name.contains('/') {
-            return ToolRisk::High;
+            return (ToolRisk::High, RiskRuleMatch);
         }
         name
     } else {
@@ -390,24 +529,26 @@ fn argv_risk(words: &[String]) -> ToolRisk {
     let args = &words[1..];
     match name {
         "sudo" | "su" | "doas" | "dd" | "mkfs" | "shutdown" | "reboot" | "launchctl"
-        | "systemctl" | "diskutil" | "mount" | "umount" => ToolRisk::Critical,
+        | "systemctl" | "diskutil" | "mount" | "umount" => (ToolRisk::Critical, RiskRuleMatch),
         "rm" | "rmdir" => {
             if args.iter().any(|a| {
                 protected_path(a) || a == "--recursive" || a.starts_with('-') && a.contains('r')
             }) {
-                ToolRisk::Critical
+                (ToolRisk::Critical, FileDeletion)
             } else {
-                ToolRisk::High
+                (ToolRisk::High, FileDeletion)
             }
         }
-        "chmod" | "chown" | "chgrp" | "kill" | "killall" | "pkill" => ToolRisk::High,
+        "chmod" | "chown" | "chgrp" | "kill" | "killall" | "pkill" => {
+            (ToolRisk::High, RiskRuleMatch)
+        }
         "curl" | "wget" | "scp" | "sftp" | "ssh" | "rsync" | "nc" | "ncat" | "telnet" => {
-            ToolRisk::High
+            (ToolRisk::High, NetworkAccess)
         }
         "sh" | "bash" | "zsh" | "fish" | "python" | "python3" | "node" | "ruby" | "perl"
-        | "eval" | "exec" | "env" | "xargs" => ToolRisk::Critical,
-        "git" => git_risk(args),
-        "mysql" | "psql" | "sqlite3" => database_risk(args),
+        | "eval" | "exec" | "env" | "xargs" => (ToolRisk::Critical, InterpreterExecution),
+        "git" => (git_risk(args), RiskRuleMatch),
+        "mysql" | "psql" | "sqlite3" => (database_risk(args), RiskRuleMatch),
         "npm" | "pnpm" | "yarn" | "cargo" | "pip" | "pip3" | "docker" | "kubectl" | "make" => {
             if args.iter().any(|a| {
                 matches!(
@@ -415,16 +556,16 @@ fn argv_risk(words: &[String]) -> ToolRisk {
                     "publish" | "push" | "deploy" | "release" | "delete" | "prune"
                 )
             }) {
-                ToolRisk::Critical
+                (ToolRisk::Critical, RiskRuleMatch)
             } else {
-                ToolRisk::High
+                (ToolRisk::High, RiskRuleMatch)
             }
         }
         "cp" | "mv" | "mkdir" | "touch" | "tee" => {
             if args.iter().any(|a| protected_path(a)) {
-                ToolRisk::Critical
+                (ToolRisk::Critical, RiskRuleMatch)
             } else {
-                ToolRisk::Medium
+                (ToolRisk::Medium, RiskRuleMatch)
             }
         }
         "find" => {
@@ -441,9 +582,9 @@ fn argv_risk(words: &[String]) -> ToolRisk {
                         | "-fprintf"
                 )
             }) {
-                ToolRisk::High
+                (ToolRisk::High, RiskRuleMatch)
             } else {
-                ToolRisk::Low
+                (ToolRisk::Low, RiskRuleMatch)
             }
         }
         "rg" => {
@@ -453,26 +594,26 @@ fn argv_risk(words: &[String]) -> ToolRisk {
                     || a == "--hostname-bin"
                     || a.starts_with("--hostname-bin=")
             }) {
-                ToolRisk::High
+                (ToolRisk::High, RiskRuleMatch)
             } else {
-                ToolRisk::Low
+                (ToolRisk::Low, RiskRuleMatch)
             }
         }
         "hostname" => {
             if args.is_empty() {
-                ToolRisk::Safe
+                (ToolRisk::Safe, RiskRuleMatch)
             } else {
-                ToolRisk::High
+                (ToolRisk::High, RiskRuleMatch)
             }
         }
         "file" => {
             if args.iter().any(|arg| arg == "-C" || arg == "--compile") {
-                ToolRisk::Medium
+                (ToolRisk::Medium, RiskRuleMatch)
             } else {
-                ToolRisk::Low
+                (ToolRisk::Low, RiskRuleMatch)
             }
         }
-        "sed" | "awk" | "gawk" | "sort" => ToolRisk::High, // Scripts/output options can execute or overwrite.
+        "sed" | "awk" | "gawk" | "sort" => (ToolRisk::High, RiskRuleMatch), // Scripts/output options can execute or overwrite.
         "date" => {
             if args.is_empty()
                 || args.iter().all(|a| {
@@ -483,15 +624,17 @@ fn argv_risk(words: &[String]) -> ToolRisk {
                         )
                 })
             {
-                ToolRisk::Safe
+                (ToolRisk::Safe, RiskRuleMatch)
             } else {
-                ToolRisk::High
+                (ToolRisk::High, RiskRuleMatch)
             }
         }
-        "echo" | "printf" | "pwd" | "whoami" | "uname" | "true" | "false" => ToolRisk::Safe,
+        "echo" | "printf" | "pwd" | "whoami" | "uname" | "true" | "false" => {
+            (ToolRisk::Safe, RiskRuleMatch)
+        }
         "ls" | "cat" | "head" | "tail" | "wc" | "stat" | "du" | "df" | "grep" | "readlink"
-        | "realpath" | "which" | "type" | "ps" | "id" => ToolRisk::Low,
-        _ => ToolRisk::High,
+        | "realpath" | "which" | "type" | "ps" | "id" => (ToolRisk::Low, RiskRuleMatch),
+        _ => (ToolRisk::High, RiskRuleMatch),
     }
 }
 

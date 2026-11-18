@@ -11,6 +11,7 @@ import ActionsMenu from "./ActionsMenu";
 import CreateByProject from "./CreateByProject";
 import ActionButton from "./ActionButton";
 import Item from "./Item";
+import { ShowMoreButton } from "./ShowMoreButton";
 
 const sessionListPageSize = 5;
 
@@ -98,14 +99,12 @@ const SessionGroup = ({
             <p className="py-1 pl-6 text-sm opacity-45">{t("shell:chatSidebar.noSessions")}</p>
           ) : null}
           {sessions.length > visibleSessionCount ? (
-            <button
-              className="py-1 pl-6 text-base! opacity-45 text-left"
+            <ShowMoreButton
+              className="ml-2"
               onClick={() =>
                 setVisibleSessionCount((count) => count + sessionListPageSize)
               }
-            >
-              {t("shell:chatSidebar.showMore")}
-            </button>
+            />
           ) : null}
         </div>
       ) : null}

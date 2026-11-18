@@ -5,8 +5,14 @@ use crate::application::document::{
 use sha2::{Digest, Sha256};
 use std::io::{Cursor, Read};
 
-fn invalid(message: impl std::fmt::Display) -> LocalDocumentError {
-    LocalDocumentError(message.to_string())
+fn invalid(key: &'static str) -> LocalDocumentError {
+    LocalDocumentError::new(key)
+}
+fn invalid_detail(error: impl std::fmt::Display) -> LocalDocumentError {
+    LocalDocumentError::with_message(
+        crate::shared::i18n_message::MessageText::new("document.preflight.invalid_detail")
+            .arg("detail", error.to_string()),
+    )
 }
 
 pub fn inspect_document(
@@ -14,7 +20,7 @@ pub fn inspect_document(
     bytes: &[u8],
 ) -> Result<DocumentFeatures, LocalDocumentError> {
     if bytes.is_empty() || bytes.len() > MAX_RAW_BYTES {
-        return Err(invalid("文件必须非空且不超过20 MiB"));
+        return Err(invalid("document.preflight.file_required"));
     }
     let format = std::path::Path::new(filename)
         .extension()
@@ -24,7 +30,7 @@ pub fn inspect_document(
     if !PARSE_EXTENSIONS.contains(&format.as_str())
         && !DIRECT_READ_EXTENSIONS.contains(&format.as_str())
     {
-        return Err(invalid("此格式不在MinerU支持范围内"));
+        return Err(invalid("document.preflight.format_unsupported"));
     }
     let mut facts = DocumentFeatures {
         format: format.clone(),
@@ -48,7 +54,9 @@ pub fn inspect_document(
         "pdf" => inspect_pdf(bytes, &mut facts)?,
         "doc" | "ppt" | "xls" => {
             if !bytes.starts_with(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1") {
-                return Err(invalid("旧版Office文件签名无效"));
+                return Err(invalid(
+                    "document.preflight.legacy_office_signature_invalid",
+                ));
             }
             // Do not inspect or convert old binary Office content; the host's
             // fixed OCR policy forwards these exact original bytes.
@@ -69,7 +77,7 @@ pub fn inspect_document(
                 }
             };
             if !signature {
-                return Err(invalid("图片内容与格式不匹配"));
+                return Err(invalid("document.preflight.image_mismatch"));
             }
             facts.images = 1;
             facts.image_only_units = 1;
@@ -78,13 +86,13 @@ pub fn inspect_document(
         }
         "odt" | "ods" | "odp" | "epub" | "ofd" => {
             if !bytes.starts_with(b"PK") {
-                return Err(invalid("压缩文档包签名无效"));
+                return Err(invalid("document.preflight.archive_signature_invalid"));
             }
             crate::application::document::validate_office(bytes, None)?;
         }
         "rtf" => {
             if !bytes.starts_with(b"{\\rtf") {
-                return Err(invalid("RTF签名无效"));
+                return Err(invalid("document.preflight.rtf_signature_invalid"));
             }
         }
         "html" | "htm" | "shtml" | "csv" | "tsv" => {
@@ -92,15 +100,15 @@ pub fn inspect_document(
                 .chars()
                 .count();
         }
-        _ => return Err(invalid("此格式不在MinerU支持范围内")),
+        _ => return Err(invalid("document.preflight.format_unsupported")),
     }
     Ok(facts)
 }
 
 fn inspect_office(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), LocalDocumentError> {
-    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(invalid)?;
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(invalid_detail)?;
     if zip.len() > 4096 {
-        return Err(invalid("Office包条目超过4096上限"));
+        return Err(invalid("document.preflight.office_entry_limit"));
     }
     let required = match facts.format.as_str() {
         "docx" => "word/document.xml",
@@ -111,13 +119,13 @@ fn inspect_office(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), Loca
     let mut total = 0usize;
     let mut names = std::collections::BTreeSet::new();
     for i in 0..zip.len() {
-        let mut entry = zip.by_index(i).map_err(invalid)?;
+        let mut entry = zip.by_index(i).map_err(invalid_detail)?;
         let name = entry.name().to_owned();
         if !names.insert(name.clone()) {
-            return Err(invalid("Office包有重复条目"));
+            return Err(invalid("document.preflight.office_duplicate_entry"));
         }
         if entry.size() > MAX_EXPANDED_BYTES as u64 {
-            return Err(invalid("Office解压内容超过100 MiB"));
+            return Err(invalid("document.preflight.office_unpacked_too_large"));
         }
         found |= name == required;
         if name.contains("/media/") {
@@ -135,19 +143,19 @@ fn inspect_office(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), Loca
         let mut data = Vec::new();
         let mut buffer = [0_u8; 16 * 1024];
         loop {
-            let n = entry.read(&mut buffer).map_err(invalid)?;
+            let n = entry.read(&mut buffer).map_err(invalid_detail)?;
             if n == 0 {
                 break;
             }
             total = total
                 .checked_add(n)
-                .ok_or_else(|| invalid("Office包过大"))?;
+                .ok_or_else(|| invalid("document.preflight.office_package_too_large"))?;
             if total > MAX_EXPANDED_BYTES {
-                return Err(invalid("Office解压内容超过100 MiB"));
+                return Err(invalid("document.preflight.office_unpacked_too_large"));
             }
             if relevant {
                 if data.len() + n > 8 * 1024 * 1024 {
-                    return Err(invalid("Office结构XML超过8 MiB"));
+                    return Err(invalid("document.preflight.office_structure_too_large"));
                 }
                 data.extend_from_slice(&buffer[..n]);
             }
@@ -155,7 +163,7 @@ fn inspect_office(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), Loca
         if !relevant {
             continue;
         }
-        let xml = std::str::from_utf8(&data).map_err(invalid)?;
+        let xml = std::str::from_utf8(&data).map_err(invalid_detail)?;
         let doc = roxmltree::Document::parse_with_options(
             xml,
             roxmltree::ParsingOptions {
@@ -163,7 +171,7 @@ fn inspect_office(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), Loca
                 ..Default::default()
             },
         )
-        .map_err(invalid)?;
+        .map_err(invalid_detail)?;
         let mut text = 0;
         let mut image_refs = 0;
         for node in doc.descendants().filter(|n| n.is_element()) {
@@ -186,7 +194,7 @@ fn inspect_office(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), Loca
         }
         facts.text_characters += text;
         if facts.text_characters > MAX_TEXT_BYTES {
-            return Err(invalid("文档文字超过2 MiB预检上限"));
+            return Err(invalid("document.preflight.office_text_too_large"));
         }
         if name != "xl/sharedStrings.xml" {
             facts.units += 1;
@@ -197,14 +205,14 @@ fn inspect_office(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), Loca
         }
     }
     if !found {
-        return Err(invalid("Office内容与文件格式不匹配"));
+        return Err(invalid("document.preflight.office_mismatch"));
     }
     Ok(())
 }
 
 fn inspect_pdf(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), LocalDocumentError> {
     if !bytes.starts_with(b"%PDF-") {
-        return Err(invalid("PDF签名无效"));
+        return Err(invalid("document.preflight.pdf_signature_invalid"));
     }
     // Inspection must cost much less than parsing. Large image/font streams
     // are left to the supplier; unknown structure chooses layout once, without
@@ -226,11 +234,11 @@ fn inspect_pdf(bytes: &[u8], facts: &mut DocumentFeatures) -> Result<(), LocalDo
         }
     };
     if doc.is_encrypted() {
-        return Err(invalid("请先解锁加密PDF"));
+        return Err(invalid("document.preflight.pdf_encrypted"));
     }
     let pages = doc.get_pages();
     if pages.is_empty() {
-        return Err(invalid("PDF没有页面"));
+        return Err(invalid("document.preflight.pdf_no_pages"));
     }
     facts.units = pages.len();
     let sample = pages

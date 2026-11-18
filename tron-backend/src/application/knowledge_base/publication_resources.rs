@@ -49,7 +49,9 @@ impl KnowledgeBaseService {
                 continue;
             }
             if record.byte_size > local_documents::MAX_EXPANDED_BYTES as u64 {
-                return Err(KnowledgeBaseError::Invalid("解析附件超过上限".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.publication_attachment_limit",
+                ));
             }
             let mut bytes = Vec::new();
             self.resources

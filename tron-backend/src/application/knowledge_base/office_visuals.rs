@@ -5,8 +5,11 @@ use std::{
     io::{Cursor, Read},
 };
 use zip::ZipArchive;
-fn invalid(message: impl std::fmt::Display) -> KnowledgeBaseError {
-    KnowledgeBaseError::Invalid(format!("Office图表预览：{message}"))
+fn invalid(key: &'static str) -> KnowledgeBaseError {
+    KnowledgeBaseError::invalid(key)
+}
+fn invalid_detail(error: impl std::fmt::Display) -> KnowledgeBaseError {
+    KnowledgeBaseError::from_detail(error)
 }
 #[derive(Debug, Clone)]
 pub struct OfficeChartPlan {
@@ -27,28 +30,28 @@ fn xml(text: &str) -> Result<roxmltree::Document<'_>, KnowledgeBaseError> {
             ..Default::default()
         },
     )
-    .map_err(invalid)
+    .map_err(invalid_detail)
 }
 fn package(bytes: &[u8], depth: usize) -> Result<BTreeMap<String, String>, KnowledgeBaseError> {
     if bytes.len() > MAX_RAW_BYTES || depth > 1 {
-        return Err(invalid("包大小或嵌套层数超过限制"));
+        return Err(invalid("knowledge.office.package_too_large"));
     }
-    let mut zip = ZipArchive::new(Cursor::new(bytes)).map_err(invalid)?;
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).map_err(invalid_detail)?;
     if zip.len() > 4096 {
-        return Err(invalid("包文件数量超过限制"));
+        return Err(invalid("knowledge.office.package_file_count_limit"));
     }
     let mut parts = BTreeMap::new();
     let mut seen = BTreeSet::new();
     let mut total = 0usize;
     for i in 0..zip.len() {
-        let mut entry = zip.by_index(i).map_err(invalid)?;
+        let mut entry = zip.by_index(i).map_err(invalid_detail)?;
         let name = entry.name().to_owned();
         if !seen.insert(name.clone())
             || entry.enclosed_name().is_none()
             || name.contains('\\')
             || name.starts_with('/')
         {
-            return Err(invalid("非法或重复包路径"));
+            return Err(invalid("knowledge.office.package_path_invalid"));
         }
         let lower = name.to_ascii_lowercase();
         if [
@@ -64,24 +67,24 @@ fn package(bytes: &[u8], depth: usize) -> Result<BTreeMap<String, String>, Knowl
         .any(|bad| lower.contains(bad))
             || lower.ends_with(".bin")
         {
-            return Err(invalid("宏、OLE对象和外部数据连接不支持安全预览"));
+            return Err(invalid("knowledge.office.unsafe_preview_unsupported"));
         }
         if entry.size() > MAX_EXPANDED_BYTES as u64 {
-            return Err(invalid("解压内容超过限制"));
+            return Err(invalid("knowledge.office.unpacked_limit"));
         }
         let mut data = Vec::new();
         entry
             .by_ref()
             .take(MAX_EXPANDED_BYTES as u64 + 1)
             .read_to_end(&mut data)
-            .map_err(invalid)?;
+            .map_err(invalid_detail)?;
         total = total.saturating_add(data.len());
         if total > MAX_EXPANDED_BYTES {
-            return Err(invalid("解压内容超过100 MiB"));
+            return Err(invalid("knowledge.office.unpacked_too_large"));
         }
         if lower.contains("/embeddings/") {
             if !lower.ends_with(".xlsx") {
-                return Err(invalid("仅支持图表内嵌的安全xlsx数据"));
+                return Err(invalid("knowledge.office.embedded_xlsx_only"));
             }
             package(&data, depth + 1)?;
         }
@@ -89,9 +92,9 @@ fn package(bytes: &[u8], depth: usize) -> Result<BTreeMap<String, String>, Knowl
             continue;
         }
         if data.len() > 5 * 1024 * 1024 {
-            return Err(invalid("XML大小超过限制"));
+            return Err(invalid("knowledge.office.xml_too_large"));
         }
-        let text = String::from_utf8(data).map_err(invalid)?;
+        let text = String::from_utf8(data).map_err(invalid_detail)?;
         let tree = xml(&text)?; // DTD disabled by default; no external entity expansion.
         for node in tree.descendants().filter(|n| n.is_element()) {
             let tag = node.tag_name().name();
@@ -99,20 +102,20 @@ fn package(bytes: &[u8], depth: usize) -> Result<BTreeMap<String, String>, Knowl
                 tag,
                 "oleObject" | "altChunk" | "externalLink" | "connection"
             ) {
-                return Err(invalid("OLE、外部内容及数据连接不支持"));
+                return Err(invalid("knowledge.office.ole_external_unsupported"));
             }
             if node.attributes().any(|a| {
                 a.value().to_ascii_lowercase().contains("macroenabled")
                     || a.value().to_ascii_lowercase().contains("vbaproject")
             }) {
-                return Err(invalid("含宏的包不支持"));
+                return Err(invalid("knowledge.office.macro_package_unsupported"));
             }
             if tag == "Relationship"
                 && node
                     .attribute("TargetMode")
                     .is_some_and(|v| v.eq_ignore_ascii_case("external"))
             {
-                return Err(invalid("外部链接不支持；请先在原文件移除"));
+                return Err(invalid("knowledge.office.external_link_unsupported"));
             }
             if matches!(tag, "f" | "instrText" | "fldSimple") {
                 let code = node
@@ -143,7 +146,7 @@ fn package(bytes: &[u8], depth: usize) -> Result<BTreeMap<String, String>, Knowl
                 .iter()
                 .any(|bad| code.contains(bad))
                 {
-                    return Err(invalid("外部引用或主动公式不支持"));
+                    return Err(invalid("knowledge.office.external_reference_unsupported"));
                 }
             }
         }
@@ -157,7 +160,7 @@ fn resolve(base: &str, target: &str) -> Result<String, KnowledgeBaseError> {
         || target.starts_with("//")
         || target.contains('%')
     {
-        return Err(invalid("非法关系目标"));
+        return Err(invalid("knowledge.office.relation_target_invalid"));
     }
     let mut segments: Vec<_> = base
         .rsplit_once('/')
@@ -172,7 +175,7 @@ fn resolve(base: &str, target: &str) -> Result<String, KnowledgeBaseError> {
         match segment {
             ".." => {
                 if segments.pop().is_none() {
-                    return Err(invalid("关系目标越界"));
+                    return Err(invalid("knowledge.office.relation_target_out_of_bounds"));
                 }
             }
             "." | "" => {}
@@ -196,12 +199,14 @@ fn relationships(
         .descendants()
         .filter(|n| n.tag_name().name() == "Relationship")
     {
-        let id = n.attribute("Id").ok_or_else(|| invalid("关系标识缺失"))?;
+        let id = n
+            .attribute("Id")
+            .ok_or_else(|| invalid("knowledge.office.relation_id_missing"))?;
         let target = n
             .attribute("Target")
-            .ok_or_else(|| invalid("关系目标缺失"))?;
+            .ok_or_else(|| invalid("knowledge.office.relation_target_missing"))?;
         if result.insert(id.into(), resolve(base, target)?).is_some() {
-            return Err(invalid("重复关系标识"));
+            return Err(invalid("knowledge.office.relation_id_duplicate"));
         }
     }
     Ok(result)
@@ -216,7 +221,9 @@ fn chart_reference(
     parts: &BTreeMap<String, String>,
     path: &str,
 ) -> Result<String, KnowledgeBaseError> {
-    let tree = xml(parts.get(path).ok_or_else(|| invalid("图表原件缺失"))?)?;
+    let tree = xml(parts
+        .get(path)
+        .ok_or_else(|| invalid("knowledge.office.chart_part_missing"))?)?;
     let formulas: Vec<_> = tree
         .descendants()
         .filter(|n| n.tag_name().name() == "f")
@@ -229,7 +236,7 @@ fn chart_reference(
         .collect();
     let text = format!("{path} [{}] {}", formulas.join(", "), title.join(" "));
     if text.len() > 8192 {
-        return Err(invalid("图表来源过长"));
+        return Err(invalid("knowledge.office.chart_source_too_long"));
     }
     Ok(text)
 }
@@ -243,7 +250,7 @@ pub fn validate_office_chart_input(
     } else if filename.to_ascii_lowercase().ends_with(".xlsx") {
         "xlsx"
     } else {
-        return Err(invalid("仅支持docx/xlsx"));
+        return Err(invalid("knowledge.office.docx_xlsx_only"));
     };
     let parts = package(bytes, 0)?;
     let mut plan = OfficeChartPlan {
@@ -254,7 +261,7 @@ pub fn validate_office_chart_input(
     if format == "docx" {
         let tree = xml(parts
             .get("word/document.xml")
-            .ok_or_else(|| invalid("正文缺失"))?)?;
+            .ok_or_else(|| invalid("knowledge.office.word_body_missing"))?)?;
         let rel = relationships(&parts, "word/document.xml")?;
         let mut refs = Vec::new();
         for (i, p) in tree
@@ -275,9 +282,9 @@ pub fn validate_office_chart_input(
             }) {
                 let path = relation_id(chart)
                     .and_then(|id| rel.get(id))
-                    .ok_or_else(|| invalid("Word图表关联缺失"))?;
+                    .ok_or_else(|| invalid("knowledge.office.word_chart_relation_missing"))?;
                 refs.push(format!(
-                    "Word段{} {}",
+                    "Word paragraph {} {}",
                     i + 1,
                     chart_reference(&parts, path)?
                 ));
@@ -287,23 +294,25 @@ pub fn validate_office_chart_input(
     } else {
         let tree = xml(parts
             .get("xl/workbook.xml")
-            .ok_or_else(|| invalid("工作簿缺失"))?)?;
+            .ok_or_else(|| invalid("knowledge.office.workbook_missing"))?)?;
         let rel = relationships(&parts, "xl/workbook.xml")?;
         for sheet in tree
             .descendants()
             .filter(|n| n.tag_name().name() == "sheet")
         {
             if sheet.attribute("state").is_some_and(|v| v != "visible") {
-                return Err(invalid("隐藏Sheet无法完整预览；请先取消隐藏"));
+                return Err(invalid("knowledge.office.hidden_sheet_unsupported"));
             }
             let name = sheet
                 .attribute("name")
-                .ok_or_else(|| invalid("Sheet名称缺失"))?
+                .ok_or_else(|| invalid("knowledge.office.sheet_name_missing"))?
                 .to_owned();
             let path = relation_id(sheet)
                 .and_then(|id| rel.get(id))
-                .ok_or_else(|| invalid("Sheet关联缺失"))?;
-            let sheet_xml = xml(parts.get(path).ok_or_else(|| invalid("Sheet原件缺失"))?)?;
+                .ok_or_else(|| invalid("knowledge.office.sheet_relation_missing"))?;
+            let sheet_xml = xml(parts
+                .get(path)
+                .ok_or_else(|| invalid("knowledge.office.sheet_part_missing"))?)?;
             let sheet_rel = relationships(&parts, path)?;
             let mut refs = Vec::new();
             for drawing in sheet_xml
@@ -312,10 +321,10 @@ pub fn validate_office_chart_input(
             {
                 let draw_path = relation_id(drawing)
                     .and_then(|id| sheet_rel.get(id))
-                    .ok_or_else(|| invalid("绘图关联缺失"))?;
+                    .ok_or_else(|| invalid("knowledge.office.drawing_relation_missing"))?;
                 let draw_xml = xml(parts
                     .get(draw_path)
-                    .ok_or_else(|| invalid("绘图原件缺失"))?)?;
+                    .ok_or_else(|| invalid("knowledge.office.drawing_part_missing"))?)?;
                 let draw_rel = relationships(&parts, draw_path)?;
                 for chart in draw_xml.descendants().filter(|n| {
                     n.has_tag_name((
@@ -325,7 +334,7 @@ pub fn validate_office_chart_input(
                 }) {
                     let chart_path = relation_id(chart)
                         .and_then(|id| draw_rel.get(id))
-                        .ok_or_else(|| invalid("Excel图表关联缺失"))?;
+                        .ok_or_else(|| invalid("knowledge.office.excel_chart_relation_missing"))?;
                     refs.push(format!(
                         "Sheet {name} {}",
                         chart_reference(&parts, chart_path)?
@@ -333,12 +342,12 @@ pub fn validate_office_chart_input(
                 }
             }
             if plan.chart_sources.insert(name.clone(), refs).is_some() {
-                return Err(invalid("Sheet名称重复"));
+                return Err(invalid("knowledge.office.sheet_name_duplicate"));
             }
             plan.sheets.push(name);
         }
         if plan.sheets.len() > 16 {
-            return Err(invalid("图表预览最多16个Sheet"));
+            return Err(invalid("knowledge.office.chart_sheet_limit"));
         }
     }
     Ok(plan)
@@ -355,7 +364,10 @@ pub(super) fn append_rendered_sections(
         summary.image_count += count;
         summary.originals_only += count;
         document.warnings.push(
-            "Office图表已生成本地视觉预览；转换页不等于原文页码，布局以预览及原件为准".into(),
+            crate::shared::i18n_message::MessageText::new(
+                "knowledge.office.visual_preview_generated",
+            )
+            .encode(),
         );
     }
     let mut offset = 0;
@@ -363,7 +375,7 @@ pub(super) fn append_rendered_sections(
     for section in &mut document.sections {
         bytes += section.text.len();
         if bytes > MAX_PARSED_TEXT_BYTES {
-            return Err(invalid("文本超过16 MiB"));
+            return Err(invalid("knowledge.office.text_too_large"));
         }
         section.location.char_start = offset;
         offset += section.text.chars().count();

@@ -18,6 +18,7 @@ use eliteforge_agent_official_plugin_a2ui as a2ui;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{convert::Infallible, time::Duration};
+use tron_i18n::t;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ActionRequest {
@@ -78,7 +79,7 @@ pub async fn state(
             pending_interactions: s.pending_interactions,
         }))
         .into_response(),
-        Err(e) => error(e, &auth.locale),
+        Err(e) => error(e, SupportedLocale::from_raw(&auth.locale)),
     }
 }
 pub async fn action(
@@ -87,6 +88,7 @@ pub async fn action(
     Path(session): Path<String>,
     request: Result<Json<ActionRequest>, JsonRejection>,
 ) -> Response {
+    let locale = SupportedLocale::from_raw(&auth.locale);
     if let Err(e) = app.chats.ensure_session_writable(&session) {
         return super::error_mapper::chat_error_response(e);
     }
@@ -94,23 +96,20 @@ pub async fn action(
     if !packs.get(a2ui::A2UI_PACK_ID).copied().unwrap_or(true)
         || !extensions.get("tool").copied().unwrap_or(true)
     {
-        return error(
-            fw::AgentError::State(fw::StateError::NotFound),
-            &auth.locale,
-        );
+        return error(fw::AgentError::State(fw::StateError::NotFound), locale);
     }
     let Json(request) = match request {
         Ok(v) => v,
         Err(_) => {
             return error(
                 fw::AgentError::InvalidConfiguration("Invalid request".into()),
-                &auth.locale,
+                locale,
             );
         }
     };
     let service = match service(&app).await {
         Ok(s) => s,
-        Err(e) => return error(e, &auth.locale),
+        Err(e) => return error(e, locale),
     };
     let input = a2ui::ActionInput {
         action_id: request.action_id,
@@ -131,20 +130,19 @@ pub async fn action(
     }
     let receipt = match service.admit_action(&session, input).await {
         Ok(r) => r,
-        Err(e) => return error(e, &auth.locale),
+        Err(e) => return error(e, locale),
     };
     let claimed = match service
         .claim_action(&session, &receipt.input.action_id)
         .await
     {
         Ok(v) => v,
-        Err(e) => return error(e, &auth.locale),
+        Err(e) => return error(e, locale),
     };
     if !claimed {
         // Reconnect to the original product completion. Never dispatch a second run.
         let id = receipt.input.action_id;
         let run = receipt.run_id;
-        let locale = auth.locale;
         let host = app.agent_framework.clone();
         let stream = async_stream::stream! {
             let started=tokio::time::Instant::now();
@@ -164,7 +162,7 @@ pub async fn action(
                         _ => true,
                     }
                 } else {false};
-                if uncertain || tokio::time::Instant::now()>deadline {yield Ok(Event::default().event("RUN_ERROR").json_data(json!({"type":"RUN_ERROR","threadId":session,"runId":run,"productCompletion":true,"code":"101031005","message":if SupportedLocale::from_raw(&locale)==SupportedLocale::EnUs {"Original run state is uncertain; refresh the session"} else {"原运行状态未确定，请刷新会话"}})).unwrap_or_default());break;}
+                if uncertain || tokio::time::Instant::now()>deadline {yield Ok(Event::default().event("RUN_ERROR").json_data(json!({"type":"RUN_ERROR","threadId":session,"runId":run,"productCompletion":true,"code":"101031005","message":t!("error.chat.a2ui_run_uncertain", locale = locale)})).unwrap_or_default());break;}
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         };
@@ -244,46 +242,38 @@ pub async fn action(
                 json!({
                     "type":"RUN_ERROR","threadId":session,"runId":run_id,
                     "productCompletion":true,"code":"101031006",
-                    "message":"UI action could not start; check session configuration"
+                    "message":t!("error.chat.a2ui_action_not_started", locale = locale)
                 }),
             )
             .await;
     }
     response
 }
-fn error(e: fw::AgentError, locale: &str) -> Response {
+fn error(e: fw::AgentError, locale: SupportedLocale) -> Response {
     let descriptor = crate::application::chat::a2ui_error::descriptor(&e);
-    let (status, zh, en) = match descriptor.message_key {
+    let (status, message) = match descriptor.message_key {
         "tron.chat.a2ui_conflict" => (
             StatusCode::CONFLICT,
-            "卡片状态已更新，请刷新后重试",
-            "Surface changed; refresh and retry",
+            t!("tron.chat.a2ui_conflict", locale = locale),
         ),
         "tron.chat.a2ui_not_found" => (
             StatusCode::NOT_FOUND,
-            "卡片已失效",
-            "Surface no longer exists",
+            t!("tron.chat.a2ui_not_found", locale = locale),
         ),
         "tron.chat.a2ui_invalid" => (
             StatusCode::BAD_REQUEST,
-            "界面操作参数无效",
-            "Invalid UI action",
+            t!("tron.chat.a2ui_invalid", locale = locale),
         ),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "界面状态服务暂不可用",
-            "UI state service unavailable",
+            t!("tron.chat.a2ui_unavailable", locale = locale),
         ),
     };
     (
         status,
         Json(ApiResponse::<crate::response::EmptyData>::error(
             descriptor.code,
-            if SupportedLocale::from_raw(locale) == SupportedLocale::EnUs {
-                en
-            } else {
-                zh
-            },
+            message,
         )),
     )
         .into_response()

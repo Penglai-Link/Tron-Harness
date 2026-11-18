@@ -18,9 +18,9 @@ export const routePages: Record<string, RoutePageComponent> = {
   "observability.metrics": lazy(() =>
     import("@/domain/observability/pages/MetricsPage").then((module) => ({ default: module.MetricsPage }))
   ),
-  "admin.archivedChats": lazy(() =>
-    import("@/domain/admin/pages/ArchivedChatsPage").then((module) => ({
-      default: module.ArchivedChatsPage,
+  "admin.sessionManagement": lazy(() =>
+    import("@/domain/admin/pages/SessionManagementPage").then((module) => ({
+      default: module.SessionManagementPage,
     }))
   ),
   "admin.auditLogs": lazy(() =>

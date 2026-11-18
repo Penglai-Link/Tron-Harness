@@ -13,6 +13,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use tron_i18n::t;
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -54,16 +55,25 @@ impl QualityTool {
         input: &Value,
         context: &AgentRunContext,
     ) -> Result<(String, Option<String>), ToolError> {
+        let locale = context.locale.as_str();
         let user = context
             .user_code
             .clone()
             .filter(|user| !user.is_empty())
-            .ok_or_else(|| failure("缺少可信用户身份"))?;
+            .ok_or_else(|| {
+                failure(t!(
+                    "agent_runtime.tool.quality.missing_user_identity",
+                    locale = locale
+                ))
+            })?;
         let mut library = input["libraryId"].as_str().map(str::to_owned);
         if let Some(code) = &context.conversation_code {
             let session = self.chats.get_session(code).map_err(failure)?;
             if session.user_code.as_deref() != Some(user.as_str()) {
-                return Err(failure("无会话权限"));
+                return Err(failure(t!(
+                    "agent_runtime.tool.quality.no_session_permission",
+                    locale = locale
+                )));
             }
             if let Some(bound) = session
                 .source_code
@@ -71,7 +81,10 @@ impl QualityTool {
                 .and_then(|source| source.strip_prefix("__knowledge:"))
             {
                 if library.as_deref().is_some_and(|id| id != bound) {
-                    return Err(failure("当前会话只能操作绑定的知识库"));
+                    return Err(failure(t!(
+                        "agent_runtime.tool.quality.bound_library_only",
+                        locale = locale
+                    )));
                 }
                 library = Some(bound.into());
             }
@@ -86,10 +99,14 @@ impl QualityTool {
         user: &str,
         library: Option<String>,
         mut input: Value,
+        locale: &str,
     ) -> Result<Value, ToolError> {
         let Some(library) = library else {
             if !matches!(self.kind, Kind::Sources) {
-                return Err(failure("需要libraryId"));
+                return Err(failure(t!(
+                    "agent_runtime.tool.quality.library_required",
+                    locale = locale
+                )));
             }
             let libraries=self.service.host.platform_libraries(user).map_err(failure)?.into_iter().map(|library|json!({"id":library.id,"name":library.name,"documentCount":library.document_count})).collect::<Vec<_>>();
             return Ok(
@@ -118,7 +135,12 @@ impl QualityTool {
                 }
                 let fingerprint = input["sourceFingerprint"]
                     .as_str()
-                    .ok_or_else(|| failure("需要sourceFingerprint"))?
+                    .ok_or_else(|| {
+                        failure(t!(
+                            "agent_runtime.tool.quality.source_fingerprint_required",
+                            locale = locale
+                        ))
+                    })?
                     .to_owned();
                 if let Some(cases) = input["cases"].as_array_mut() {
                     for case in cases {
@@ -135,9 +157,12 @@ impl QualityTool {
                 .map_err(failure)
             }
             Kind::Start => {
-                let request = input["requestId"]
-                    .as_str()
-                    .ok_or_else(|| failure("需要唯一requestId，重试同一操作时沿用"))?;
+                let request = input["requestId"].as_str().ok_or_else(|| {
+                    failure(t!(
+                        "agent_runtime.tool.quality.request_id_required",
+                        locale = locale
+                    ))
+                })?;
                 let options: QualityOptimizationOptions = serde_json::from_value(
                     input.get("options").cloned().unwrap_or_else(|| json!({})),
                 )
@@ -159,7 +184,10 @@ impl QualityTool {
                 };
                 let seconds = input["waitSeconds"].as_u64().unwrap_or(0);
                 if seconds > 25 {
-                    return Err(failure("waitSeconds不能超过25秒"));
+                    return Err(failure(t!(
+                        "agent_runtime.tool.quality.wait_seconds_limit",
+                        locale = locale
+                    )));
                 }
                 let deadline = Instant::now() + Duration::from_secs(seconds);
                 loop {
@@ -176,9 +204,12 @@ impl QualityTool {
                 }
             }
             Kind::Cancel => {
-                let id = input["runId"]
-                    .as_str()
-                    .ok_or_else(|| failure("需要runId"))?;
+                let id = input["runId"].as_str().ok_or_else(|| {
+                    failure(t!(
+                        "agent_runtime.tool.quality.run_id_required",
+                        locale = locale
+                    ))
+                })?;
                 serde_json::to_value(self.service.cancel(user, &library, id).map_err(failure)?)
                     .map_err(failure)
             }
@@ -204,7 +235,8 @@ impl Tool for QualityTool {
         Some(Box::pin(async move {
             control.check_active()?;
             let (user, library) = self.principal(&request.input, context)?;
-            let output = tokio::select! {_ = control.cancelled()=>return Err(failure("工具调用已取消；已启动的优化可通过rag_quality_cancel停止")),result=tokio::time::timeout(control.remaining(),self.execute(&user,library,request.input))=>result.map_err(|_|failure("工具等待超时；可用rag_quality_status继续查询"))??};
+            let locale = context.locale.as_str();
+            let output = tokio::select! {_ = control.cancelled()=>return Err(failure(t!("agent_runtime.tool.quality.cancelled", locale = locale))),result=tokio::time::timeout(control.remaining(),self.execute(&user,library,request.input,locale))=>result.map_err(|_|failure(t!("agent_runtime.tool.quality.timed_out", locale = locale)))??};
             observation(self.name(), output)
         }))
     }
@@ -220,13 +252,24 @@ impl Tool for QualityTool {
             kind: self.kind,
         };
         let name = self.name().to_owned();
-        let runtime = tokio::runtime::Handle::try_current()
-            .map_err(|_| failure("检索优化需要宿主异步运行时"))?;
+        let locale = context.locale.clone();
+        let runtime = tokio::runtime::Handle::try_current().map_err(|_| {
+            failure(t!(
+                "agent_runtime.tool.quality.async_runtime_required",
+                locale = &locale
+            ))
+        })?;
+        let worker_locale = locale.clone();
         let output = std::thread::spawn(move || {
-            runtime.block_on(tool.execute(&user, library, request.input))
+            runtime.block_on(tool.execute(&user, library, request.input, &worker_locale))
         })
         .join()
-        .map_err(|_| failure("评测工具异常退出"))??;
+        .map_err(|_| {
+            failure(t!(
+                "agent_runtime.tool.quality.worker_failed",
+                locale = &locale
+            ))
+        })??;
         observation(&name, output)
     }
 }

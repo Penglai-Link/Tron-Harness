@@ -13,6 +13,13 @@
 - 不要在项目内新增技术设计文档、脑爆文档、产品设计等过程文档
 - 发布新的正式版都要修改CHANGELOG和推送tag，tag不要带"v"前缀
 
+## 国际化（i18n）
+
+- 后端用户可见文案统一存放在 `tron-backend/locales/*.yml`（rust-i18n `_version: 2`），业务代码只通过 `tron_i18n::t!("语义化 Key", locale = locale)` 引用，禁止硬编码中英文文案对（包括 `locale.text("中文", "English")` 和按语言分支写死的字符串）。
+- 新增或修改文案必须同时补齐 `zh-CN` 与 `en`，提交前运行 `make be-i18n-check`；CI 会拒绝缺失翻译或未定义的 Key。
+- 请求、会话、Agent 运行的语言必须显式传入（`Accept-Language`、会话 locale、`AgentRunContext.locale`），不要依赖进程级全局语言设置，避免并发会话互相影响。
+- 业务层返回结构化类型（如风险原因、错误码），由展示层负责翻译；不要在领域逻辑里拼接本地化文本。
+
 
 ## SQLite 空间回收（改动持久化前必读）
 

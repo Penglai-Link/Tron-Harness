@@ -4,6 +4,7 @@ use crate::{
     app::AppState,
     application::agent::framework_runtime::{PendingSudoInput, SudoInputError},
     response::{ApiResponse, EmptyData},
+    shared::locale::SupportedLocale,
 };
 use axum::{
     Json,
@@ -12,6 +13,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use tron_i18n::t;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,21 +41,20 @@ fn authorize(state: &AppState, auth: &RequestAuthContext, session: &str) -> Resu
         .get_session(session)
         .map_err(super::error_mapper::chat_error_response)?;
     if chat.user_code.as_deref() != Some(auth.user().user_code.as_str()) {
-        return Err(error(SudoInputError::Unavailable, &auth.locale));
+        return Err(error(
+            SudoInputError::Unavailable,
+            SupportedLocale::from_raw(&auth.locale),
+        ));
     }
     Ok(())
 }
-fn error(error: SudoInputError, locale: &str) -> Response {
+fn error(error: SudoInputError, locale: SupportedLocale) -> Response {
     let descriptor = error.descriptor();
-    let message = match (descriptor.message_key, locale.starts_with("en")) {
-        ("tron.chat.sudo_input_invalid", true) => {
-            "Enter a valid sudo password (one line, up to 4096 bytes)."
+    let message = match descriptor.message_key {
+        "tron.chat.sudo_input_invalid" => {
+            t!("tron.chat.sudo_input_invalid", locale = locale)
         }
-        ("tron.chat.sudo_input_invalid", false) => {
-            "请输入有效的 sudo 密码（单行，最多 4096 字节）。"
-        }
-        (_, true) => "This sudo input is unavailable, expired or already answered.",
-        (_, false) => "此 sudo 输入请求不可用、已过期或已提交。",
+        _ => t!("tron.chat.sudo_input_unavailable", locale = locale),
     };
     (
         match error {
@@ -98,7 +99,8 @@ pub async fn answer(
     Path((session, id)): Path<(String, String)>,
     body: Result<Json<AnswerSudoInputRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<EmptyData>>, Response> {
-    let Json(body) = body.map_err(|_| error(SudoInputError::Invalid, &auth.locale))?;
+    let locale = SupportedLocale::from_raw(&auth.locale);
+    let Json(body) = body.map_err(|_| error(SudoInputError::Invalid, locale))?;
     // Wrap immediately so denied, invalid and consumed values are wiped on drop.
     let password = body
         .password
@@ -107,7 +109,7 @@ pub async fn answer(
     state
         .agent_framework
         .answer_sudo_input(&session, &auth.user().user_code, &id, password)
-        .map_err(|e| error(e, &auth.locale))?;
+        .map_err(|e| error(e, locale))?;
     Ok(Json(ApiResponse::protocol_success(EmptyData {})))
 }
 
@@ -124,13 +126,13 @@ pub async fn private_response(
     {
         next.run(request).await
     } else {
-        let locale = crate::shared::locale::resolve_request_locale(
+        let locale = SupportedLocale::from_request(
             request
                 .headers()
                 .get("accept-language")
                 .and_then(|value| value.to_str().ok()),
         );
-        error(SudoInputError::Unavailable, &locale)
+        error(SudoInputError::Unavailable, locale)
     };
     response.headers_mut().insert(
         axum::http::header::CACHE_CONTROL,

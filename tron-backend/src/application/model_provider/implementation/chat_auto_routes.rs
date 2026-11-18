@@ -50,9 +50,9 @@ impl ModelProviderService {
             .context_window_tokens
             .filter(|value| *value > 0)
             .ok_or_else(|| {
-                ModelProviderError::InvalidSelection(
-                    "Auto model route requires a valid context window".into(),
-                )
+                ModelProviderError::InvalidSelection(tron_i18n::Message::new(
+                    "tron.model_provider.auto_route_context_window",
+                ))
             })?;
         let selection_json =
             serde_json::to_string(selection).map_err(|_| ModelProviderError::Storage)?;

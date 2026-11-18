@@ -152,98 +152,52 @@ pub(super) struct InternalAgentApiError(pub(super) AgentManagementError, pub(sup
 impl IntoResponse for InternalAgentApiError {
     fn into_response(self) -> Response {
         let descriptor = self.0.internal_definition_descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.agent.builtin_read_only" => (
-                StatusCode::FORBIDDEN,
-                "内置智能体定义为只读",
-                "Built-in agent definitions are read-only",
-            ),
-            "tron.agent.platform_read_only" => (
-                StatusCode::FORBIDDEN,
-                "平台智能体只能在平台设置中删除",
-                "Platform agents can only be deleted in platform settings",
-            ),
-            "tron.agent.group_invalid" => (
-                StatusCode::BAD_REQUEST,
-                "分组名称为 1–60 个字符，且必须选择当前范围内已有的分组",
-                "Group names must contain 1–60 characters; select an existing group in this scope",
-            ),
+        let (status, message_key) = match descriptor.message_key {
+            "tron.agent.builtin_read_only" => {
+                (StatusCode::FORBIDDEN, "tron.agent.builtin_read_only")
+            }
+            "tron.agent.platform_read_only" => {
+                (StatusCode::FORBIDDEN, "tron.agent.platform_read_only")
+            }
+            "tron.agent.group_invalid" => (StatusCode::BAD_REQUEST, "tron.agent.group_invalid"),
             "tron.agent.tool_permission_invalid" => (
                 StatusCode::BAD_REQUEST,
-                "工具权限配置无效，请检查工具编码和重复项",
-                "Invalid tool permission configuration; check tool codes and duplicates",
+                "tron.agent.tool_permission_invalid",
             ),
-            "tron.agent.loop_invalid" => (
-                StatusCode::BAD_REQUEST,
-                "Loop 配置无效，请检查节点、依赖、分支和并行限制",
-                "Invalid loop nodes, dependencies, branch conditions or concurrency",
-            ),
-            "tron.agent.loop_not_found" => (StatusCode::NOT_FOUND, "Loop 不存在", "Loop not found"),
-            "tron.agent.loop_conflict" => (
-                StatusCode::CONFLICT,
-                "Loop 已存在或版本已变化，请刷新后重试",
-                "Loop already exists or version changed; refresh and retry",
-            ),
-            "tron.agent.loop_in_use" => (
-                StatusCode::CONFLICT,
-                "Loop 已被智能体引用，无法删除",
-                "Loop is referenced by an agent and cannot be deleted",
-            ),
-            "tron.agent.code_invalid" => (
-                StatusCode::BAD_REQUEST,
-                "编码为 1–64 位，以小写字母开头，仅支持小写字母、数字、连字符和下划线",
-                "Code must contain 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter",
-            ),
-            "tron.agent.code_conflict" => (
-                StatusCode::CONFLICT,
-                "智能体编码已被使用，请更换编码",
-                "Agent code is already in use; choose another code",
-            ),
-            "tron.agent.definition_invalid" => (
-                StatusCode::BAD_REQUEST,
-                "名称为 1–100 个字符，指令不超过 64 KB，头像必须从内置列表选择",
-                "Name must contain 1 to 100 characters; role prompt must not exceed 64 KB; select a built-in avatar",
-            ),
-            "tron.agent.internal_not_found" => (
-                StatusCode::NOT_FOUND,
-                "内部智能体不存在",
-                "Internal agent not found",
-            ),
-            "tron.agent.workspace_invalid" => (
-                StatusCode::BAD_REQUEST,
-                "请选择有效的工作区",
-                "Select an active workspace",
-            ),
-            "tron.agent.policy_invalid" => (
-                StatusCode::BAD_REQUEST,
-                "智能体策略或运行限制无效",
-                "Invalid agent policy or execution limits",
-            ),
-            "tron.agent.tool_unknown" => (StatusCode::BAD_REQUEST, "工具不存在", "Unknown tool"),
-            "tron.agent.tool_unavailable" => (
-                StatusCode::BAD_REQUEST,
-                "工具已不可用，请重新选择",
-                "Selected tool is no longer available",
-            ),
-            "tron.agent.mcp_unavailable" => (
-                StatusCode::BAD_REQUEST,
-                "MCP 服务已不可用，请重新选择",
-                "Selected MCP server is no longer available",
-            ),
+            "tron.agent.loop_invalid" => (StatusCode::BAD_REQUEST, "tron.agent.loop_invalid"),
+            "tron.agent.loop_not_found" => (StatusCode::NOT_FOUND, "tron.agent.loop_not_found"),
+            "tron.agent.loop_conflict" => (StatusCode::CONFLICT, "tron.agent.loop_conflict"),
+            "tron.agent.loop_in_use" => (StatusCode::CONFLICT, "tron.agent.loop_in_use"),
+            "tron.agent.code_invalid" => (StatusCode::BAD_REQUEST, "tron.agent.code_invalid"),
+            "tron.agent.code_conflict" => (StatusCode::CONFLICT, "tron.agent.code_conflict"),
+            "tron.agent.definition_invalid" => {
+                (StatusCode::BAD_REQUEST, "tron.agent.definition_invalid")
+            }
+            "tron.agent.internal_not_found" => {
+                (StatusCode::NOT_FOUND, "tron.agent.internal_not_found")
+            }
+            "tron.agent.workspace_invalid" => {
+                (StatusCode::BAD_REQUEST, "tron.agent.workspace_invalid")
+            }
+            "tron.agent.policy_invalid" => (StatusCode::BAD_REQUEST, "tron.agent.policy_invalid"),
+            "tron.agent.tool_unknown" => (StatusCode::BAD_REQUEST, "tron.agent.tool_unknown"),
+            "tron.agent.tool_unavailable" => {
+                (StatusCode::BAD_REQUEST, "tron.agent.tool_unavailable")
+            }
+            "tron.agent.mcp_unavailable" => (StatusCode::BAD_REQUEST, "tron.agent.mcp_unavailable"),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "智能体配置保存失败",
-                "Could not save agent configuration",
+                "tron.agent.storage_failed",
             ),
         };
-        let message = if self.1.starts_with("en") { en } else { zh };
+        let base = tron_i18n::t!(message_key, locale = &self.1).into_owned();
         let message = match &self.0 {
             AgentManagementError::InternalToolUnknown(code)
             | AgentManagementError::InternalToolAssignmentStale(code)
             | AgentManagementError::InternalMcpServerAssignmentStale(code) => {
-                format!("{message}: {code}")
+                format!("{base}: {code}")
             }
-            _ => message.to_owned(),
+            _ => base,
         };
         (
             status,

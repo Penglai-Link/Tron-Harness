@@ -28,8 +28,16 @@ pub struct MineruKnowledgeDocumentParser {
     config: MineruConfig,
     client: Client,
 }
-fn invalid(e: impl std::fmt::Display) -> KnowledgeBaseError {
-    KnowledgeBaseError::Invalid(e.to_string())
+fn invalid(key: &'static str) -> KnowledgeBaseError {
+    KnowledgeBaseError::invalid(key)
+}
+/// Technical/detail errors (HTTP, serde, reqwest) keep their English detail and
+/// are rendered through the generic invalid message at the display edge.
+fn invalid_detail(error: impl std::fmt::Display) -> KnowledgeBaseError {
+    KnowledgeBaseError::from_detail(error)
+}
+fn invalid_with(message: crate::shared::i18n_message::MessageText) -> KnowledgeBaseError {
+    KnowledgeBaseError::invalid_message(message)
 }
 impl MineruKnowledgeDocumentParser {
     pub fn new(config: MineruConfig) -> Self {
@@ -42,29 +50,29 @@ impl MineruKnowledgeDocumentParser {
     }
     fn url(&self, path: &str) -> Result<Url, KnowledgeBaseError> {
         if !self.config.enabled {
-            return Err(invalid("MinerU解析已禁用，请检查平台设置"));
+            return Err(invalid("integration.mineru.disabled_check_settings"));
         }
-        let base = Url::parse(&self.config.base_url).map_err(invalid)?;
+        let base = Url::parse(&self.config.base_url).map_err(invalid_detail)?;
         if !matches!(base.scheme(), "http" | "https")
             || !base.username().is_empty()
             || base.password().is_some()
             || base.query().is_some()
             || base.fragment().is_some()
         {
-            return Err(invalid("MinerU服务地址无效"));
+            return Err(invalid("integration.mineru.service_url_invalid"));
         }
         Url::parse(&format!(
             "{}{}",
             self.config.base_url.trim_end_matches('/'),
             path
         ))
-        .map_err(invalid)
+        .map_err(invalid_detail)
     }
     async fn bytes(&self, request: reqwest::RequestBuilder) -> Result<Vec<u8>, KnowledgeBaseError> {
         let response = request
             .send()
             .await
-            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+            .map_err(|e| KnowledgeBaseError::storage_detail(e))?;
         self.response_bytes(response).await
     }
     async fn response_bytes(
@@ -73,14 +81,14 @@ impl MineruKnowledgeDocumentParser {
     ) -> Result<Vec<u8>, KnowledgeBaseError> {
         if !response.status().is_success() {
             let message = format!(
-                "MinerU返回HTTP {}，资料解析未完成",
+                "MinerU returned HTTP {}; the document was not parsed",
                 response.status().as_u16()
             );
             return Err(
                 if response.status().is_server_error() || response.status().as_u16() == 429 {
-                    KnowledgeBaseError::Storage(message)
+                    KnowledgeBaseError::storage_detail(message)
                 } else {
-                    invalid(message)
+                    invalid_detail(message)
                 },
             );
         }
@@ -88,16 +96,16 @@ impl MineruKnowledgeDocumentParser {
             .content_length()
             .is_some_and(|s| s > MAX_EXPANDED_BYTES as u64)
         {
-            return Err(invalid("MinerU响应超过100 MiB上限"));
+            return Err(invalid("integration.mineru.response_too_large"));
         }
         let mut result = Vec::new();
         while let Some(chunk) = response
             .chunk()
             .await
-            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?
+            .map_err(|e| KnowledgeBaseError::storage_detail(e))?
         {
             if result.len().saturating_add(chunk.len()) > MAX_EXPANDED_BYTES {
-                return Err(invalid("MinerU响应超过100 MiB上限"));
+                return Err(invalid("integration.mineru.response_too_large"));
             }
             result.extend_from_slice(&chunk);
         }
@@ -105,7 +113,7 @@ impl MineruKnowledgeDocumentParser {
     }
     async fn get(&self, path: &str) -> Result<Value, KnowledgeBaseError> {
         serde_json::from_slice(&self.bytes(self.client.get(self.url(path)?)).await?)
-            .map_err(invalid)
+            .map_err(invalid_detail)
     }
     async fn post(&self, path: &str, value: Value) -> Result<Value, KnowledgeBaseError> {
         serde_json::from_slice(
@@ -113,7 +121,7 @@ impl MineruKnowledgeDocumentParser {
                 .bytes(self.client.post(self.url(path)?).json(&value))
                 .await?,
         )
-        .map_err(invalid)
+        .map_err(invalid_detail)
     }
     async fn submit_job(&self, value: Value) -> Result<Value, KnowledgeBaseError> {
         let response = self
@@ -122,7 +130,7 @@ impl MineruKnowledgeDocumentParser {
             .json(&value)
             .send()
             .await
-            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+            .map_err(|e| KnowledgeBaseError::storage_detail(e))?;
         if !response.status().is_success() {
             return self.response_bytes(response).await.map(|_| Value::Null);
         }
@@ -131,23 +139,25 @@ impl MineruKnowledgeDocumentParser {
         let bytes = self
             .response_bytes(response)
             .await
-            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
-        let job: Value = serde_json::from_slice(&bytes)
-            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
-        Self::id(&job, "job_id").map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+            .map_err(|e| KnowledgeBaseError::storage_detail(e))?;
+        let job: Value =
+            serde_json::from_slice(&bytes).map_err(|e| KnowledgeBaseError::storage_detail(e))?;
+        Self::id(&job, "job_id").map_err(|e| KnowledgeBaseError::storage_detail(e))?;
         Ok(job)
     }
     fn id<'a>(v: &'a Value, key: &str) -> Result<&'a str, KnowledgeBaseError> {
-        let id = v
-            .get(key)
-            .and_then(Value::as_str)
-            .ok_or_else(|| invalid(format!("MinerU缺少{key}")))?;
+        let id = v.get(key).and_then(Value::as_str).ok_or_else(|| {
+            invalid_with(
+                crate::shared::i18n_message::MessageText::new("integration.mineru.field_missing")
+                    .arg("field", key),
+            )
+        })?;
         if id.is_empty()
             || !id
                 .bytes()
                 .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
         {
-            return Err(invalid("MinerU返回非法标识"));
+            return Err(invalid("integration.mineru.invalid_identifier"));
         }
         Ok(id)
     }
@@ -198,7 +208,7 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
         let parser = self.on_endpoint(
             task.endpoint_id
                 .as_deref()
-                .ok_or_else(|| invalid("解析节点未认领"))?,
+                .ok_or_else(|| invalid("integration.mineru.node_unclaimed"))?,
         )?;
         parser
             .parse_internal(filename, bytes, tier, Some(checkpoint))
@@ -212,14 +222,14 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
             .delete(parser.url(&format!("/v1/parse/jobs/{job}"))?)
             .send()
             .await
-            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+            .map_err(|e| KnowledgeBaseError::storage_detail(e))?;
         if response.status().is_success() || matches!(response.status().as_u16(), 404 | 409) {
             Ok(())
         } else {
-            Err(KnowledgeBaseError::Storage(format!(
-                "MinerU取消失败HTTP {}",
-                response.status()
-            )))
+            Err(KnowledgeBaseError::storage_message(
+                crate::shared::i18n_message::MessageText::new("integration.mineru.cancel_failed")
+                    .arg("status", response.status().to_string()),
+            ))
         }
     }
     async fn cancel_task(
@@ -231,7 +241,7 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
         let mut snapshot = self.clone();
         if let Some(mode) = task.configuration["parser"]["ocrMode"].as_str() {
             snapshot.config.ocr_mode = OcrMode::from_wire(mode)
-                .ok_or_else(|| invalid("解析任务OCR模式无效"))?
+                .ok_or_else(|| invalid("integration.mineru.task_ocr_mode_invalid"))?
                 .as_str()
                 .into();
         }
@@ -239,12 +249,13 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
             snapshot.config.base_url = base.into();
         }
         if let Some(nodes) = task.configuration["parser"].get("nodes") {
-            snapshot.config.nodes = serde_json::from_value(nodes.clone()).map_err(invalid)?;
+            snapshot.config.nodes =
+                serde_json::from_value(nodes.clone()).map_err(invalid_detail)?;
         }
         let endpoint = task
             .endpoint_id
             .as_deref()
-            .ok_or_else(|| invalid("原解析节点身份缺失"))?;
+            .ok_or_else(|| invalid("integration.mineru.original_node_missing"))?;
         let parser = snapshot.on_endpoint(endpoint)?;
         let job = if let Some(job) = &task.remote_job_id {
             job.clone()
@@ -252,9 +263,9 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
             let file = task
                 .remote_file_id
                 .as_deref()
-                .ok_or_else(|| invalid("原解析文件身份缺失"))?;
+                .ok_or_else(|| invalid("integration.mineru.original_file_missing"))?;
             let tier = serde_json::from_value(task.configuration["parsingTier"].clone())
-                .map_err(invalid)?;
+                .map_err(invalid_detail)?;
             Self::id(&parser.reconcile_job(file, tier).await?, "job_id")?.to_owned()
         } else {
             return Ok(None);
@@ -279,31 +290,31 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
         }
         let health = self.get("/v1/health").await?;
         if health["status"] != "ok" {
-            return Err(invalid("MinerU服务未就绪"));
+            return Err(invalid("integration.mineru.service_not_ready"));
         }
         let version = health["version"]
             .as_str()
-            .ok_or_else(|| invalid("MinerU未报告版本"))?;
+            .ok_or_else(|| invalid("integration.mineru.version_missing"))?;
         if version != self.config.expected_parser_version {
-            return Err(invalid("MinerU版本与固定解析配置不匹配"));
+            return Err(invalid("integration.mineru.version_mismatch"));
         }
         if !version.starts_with("4.") {
-            return Err(invalid("知识库需要MinerU 4 V1服务"));
+            return Err(invalid("integration.mineru.v4_v1_required"));
         }
         let tiers = self.get("/v1/tiers").await?;
         let available = tiers["data"]
             .as_array()
-            .ok_or_else(|| invalid("MinerU未报告解析能力"))?
+            .ok_or_else(|| invalid("integration.mineru.capabilities_missing"))?
             .iter()
             .filter_map(|v| serde_json::from_value(v["id"].clone()).ok())
             .collect::<Vec<ParsingTier>>();
         if !available.contains(&self.config.default_tier) {
-            return Err(invalid("MinerU不支持平台默认解析质量"));
+            return Err(invalid("integration.mineru.default_quality_unsupported"));
         }
         Ok(ParsingCapabilities {
             default_tier: self.config.default_tier,
             default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode)
-                .ok_or_else(|| invalid("MinerU OCR模式无效"))?,
+                .ok_or_else(|| invalid("integration.mineru.ocr_mode_invalid"))?,
             available_tiers: available,
             parser_version: version.into(),
             office_tier: ParsingTier::Flash,
@@ -319,7 +330,7 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
             let capacities = self.routing_capacities().await?;
             let first = capacities
                 .first()
-                .ok_or_else(|| invalid("没有可用解析节点"))?;
+                .ok_or_else(|| invalid("integration.mineru.no_available_node"))?;
             return self
                 .on_endpoint(&first.endpoint_id)?
                 .parse_internal(filename, bytes, tier, None)
@@ -339,10 +350,10 @@ impl MineruKnowledgeDocumentParser {
         >,
     ) -> Result<StructuredParse, KnowledgeBaseError> {
         if !matches!(self.config.ocr_mode.as_str(), "auto" | "txt" | "ocr") {
-            return Err(invalid("MinerU OCR模式无效"));
+            return Err(invalid("integration.mineru.ocr_mode_invalid"));
         }
         if bytes.len() > self.config.max_bytes.min(20 * 1024 * 1024) {
-            return Err(invalid("资料超过解析大小上限"));
+            return Err(invalid("integration.mineru.file_too_large"));
         }
         let extension = std::path::Path::new(filename)
             .extension()
@@ -351,13 +362,11 @@ impl MineruKnowledgeDocumentParser {
             .to_ascii_lowercase();
         let office = matches!(extension.as_str(), "docx" | "xlsx");
         if !office && extension != "pdf" {
-            return Err(invalid("MinerU适配仅处理.docx/.xlsx/.pdf"));
+            return Err(invalid("integration.mineru.format_unsupported"));
         }
         let selected = if office {
             if tier.is_some_and(|t| t != ParsingTier::Flash) {
-                return Err(invalid(
-                    "Word/Excel使用原生解析，请选择继承平台或原生文本解析",
-                ));
+                return Err(invalid("integration.mineru.office_native_required"));
             }
             ParsingTier::Flash
         } else {
@@ -367,7 +376,7 @@ impl MineruKnowledgeDocumentParser {
         probe.config.default_tier = selected;
         let capabilities = probe.capabilities().await?;
         if !capabilities.available_tiers.contains(&selected) {
-            return Err(invalid("MinerU当前不支持选定解析质量，不会自动降级"));
+            return Err(invalid("integration.mineru.selected_quality_unsupported"));
         }
         let saved = checkpoint.as_ref().map(|c| c.task()).transpose()?;
         let reusable = if let Some(task) = &saved {
@@ -377,13 +386,13 @@ impl MineruKnowledgeDocumentParser {
                     .get(self.url(&format!("/v1/parse/jobs/{id}"))?)
                     .send()
                     .await
-                    .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+                    .map_err(|e| KnowledgeBaseError::storage_detail(e))?;
                 if response.status().as_u16() == 404 {
                     checkpoint.as_ref().unwrap().save(None, None, false)?;
                     None
                 } else {
                     let job: Value = serde_json::from_slice(&self.response_bytes(response).await?)
-                        .map_err(invalid)?;
+                        .map_err(invalid_detail)?;
                     if matches!(
                         job["status"].as_str(),
                         Some("failed" | "partial" | "canceled")
@@ -403,7 +412,7 @@ impl MineruKnowledgeDocumentParser {
                     self.reconcile_job(
                         task.remote_file_id
                             .as_deref()
-                            .ok_or_else(|| invalid("MinerU对账文件身份缺失"))?,
+                            .ok_or_else(|| invalid("integration.mineru.reconcile_file_missing"))?,
                         selected,
                     )
                     .await?,
@@ -469,29 +478,34 @@ impl MineruKnowledgeDocumentParser {
                 Some("completed") => break,
                 Some("queued" | "running") => {
                     if Instant::now() >= deadline {
-                        return Err(KnowledgeBaseError::Storage(format!(
-                            "MinerU解析超时，可重试（任务{job_id}）"
-                        )));
+                        return Err(KnowledgeBaseError::storage_message(
+                            crate::shared::i18n_message::MessageText::new(
+                                "integration.mineru.parse_timeout",
+                            )
+                            .arg("job_id", job_id.clone()),
+                        ));
                     }
                     sleep(Duration::from_millis(750)).await;
                     job = self.get(&format!("/v1/parse/jobs/{job_id}")).await?;
                 }
                 Some("failed" | "partial" | "canceled") => {
-                    return Err(invalid(parse_failure(&job, &job_id)));
+                    return Err(KnowledgeBaseError::from_detail(parse_failure(
+                        &job, &job_id,
+                    )));
                 }
-                _ => return Err(invalid("MinerU返回未知任务状态")),
+                _ => return Err(invalid("integration.mineru.unknown_job_state")),
             }
         }
         let files = job["files"]
             .as_array()
-            .ok_or_else(|| invalid("MinerU缺少解析输出"))?;
+            .ok_or_else(|| invalid("integration.mineru.output_missing"))?;
         if files.len() != 1 {
-            return Err(invalid("MinerU返回了不匹配的资料输出"));
+            return Err(invalid("integration.mineru.output_mismatch"));
         }
         if (resumed || checkpoint.is_some())
             && files[0]["parse"]["parser_version"] != capabilities.parser_version
         {
-            return Err(invalid("MinerU复用任务的解析版本发生变化，拒绝发布"));
+            return Err(invalid("integration.mineru.reused_parse_changed"));
         }
         let output = &files[0]["output_files"];
         let zip_id = Self::id(&output["zip"], "file_id")?;
@@ -539,9 +553,9 @@ pub fn decode_archive(
     version: &str,
     job: &str,
 ) -> Result<StructuredParse, KnowledgeBaseError> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(invalid)?;
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(invalid_detail)?;
     if archive.len() > 4096 {
-        return Err(invalid("MinerU输出文件过多"));
+        return Err(invalid("integration.mineru.output_too_many_files"));
     }
     let mut expanded = 0usize;
     let mut middle = None;
@@ -550,41 +564,41 @@ pub fn decode_archive(
     let mut assets = Vec::new();
     let mut paths = BTreeSet::new();
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(invalid)?;
+        let mut file = archive.by_index(i).map_err(invalid_detail)?;
         let path = file
             .enclosed_name()
-            .ok_or_else(|| invalid("MinerU输出含非法路径"))?;
+            .ok_or_else(|| invalid("integration.mineru.output_path_invalid"))?;
         let name = path
             .to_str()
-            .ok_or_else(|| invalid("MinerU输出路径无效"))?
+            .ok_or_else(|| invalid("integration.mineru.output_path_unresolved"))?
             .replace('\\', "/");
         if file.is_dir() {
             continue;
         }
         if !paths.insert(name.clone()) {
-            return Err(invalid("MinerU输出含重复文件"));
+            return Err(invalid("integration.mineru.output_duplicate_file"));
         }
         let remaining = MAX_EXPANDED_BYTES.saturating_sub(expanded);
         if file.size() > remaining as u64 {
-            return Err(invalid("MinerU解压内容超过100 MiB上限"));
+            return Err(invalid("integration.mineru.unpacked_too_large"));
         }
         let mut data = Vec::new();
         file.by_ref()
             .take(remaining as u64 + 1)
             .read_to_end(&mut data)
-            .map_err(invalid)?;
+            .map_err(invalid_detail)?;
         expanded = expanded.saturating_add(data.len());
         if expanded > MAX_EXPANDED_BYTES {
-            return Err(invalid("MinerU解压内容超过100 MiB上限"));
+            return Err(invalid("integration.mineru.unpacked_too_large"));
         }
         match name.as_str() {
             "middle_json.json" => {
-                middle = Some(serde_json::from_slice::<Value>(&data).map_err(invalid)?)
+                middle = Some(serde_json::from_slice::<Value>(&data).map_err(invalid_detail)?)
             }
             "structured_content.json" => {
-                structured = Some(serde_json::from_slice::<Value>(&data).map_err(invalid)?)
+                structured = Some(serde_json::from_slice::<Value>(&data).map_err(invalid_detail)?)
             }
-            "markdown.md" => markdown = Some(String::from_utf8(data).map_err(invalid)?),
+            "markdown.md" => markdown = Some(String::from_utf8(data).map_err(invalid_detail)?),
             _ if name.starts_with("images/") => {
                 let extension = path
                     .extension()
@@ -592,7 +606,7 @@ pub fn decode_archive(
                     .unwrap_or("")
                     .to_ascii_lowercase();
                 if !matches!(extension.as_str(), "png" | "jpg" | "jpeg" | "webp") {
-                    return Err(invalid("MinerU图片附件格式不受支持"));
+                    return Err(invalid("integration.mineru.image_format_unsupported"));
                 }
                 assets.push(ParsedAsset {
                     path: name,
@@ -602,20 +616,21 @@ pub fn decode_archive(
             _ => {}
         }
     }
-    let middle = middle.ok_or_else(|| invalid("MinerU缺少结构化中间结果"))?;
+    let middle = middle.ok_or_else(|| invalid("integration.mineru.structured_middle_missing"))?;
     if middle["schema"] != "docvortex.middle" || middle["schema_version"] != "2.0" {
-        return Err(invalid("MinerU结构化结果版本不受支持"));
+        return Err(invalid("integration.mineru.structured_version_unsupported"));
     }
     if middle["extensions"]["mineru"]["tier"] != tier.as_str() {
-        return Err(invalid("MinerU实际解析质量与请求不同，拒绝发布"));
+        return Err(invalid("integration.mineru.quality_mismatch"));
     }
     let paths = assets.iter().map(|a| a.path.clone()).collect();
     let document = normalize_middle(&middle, &paths)?;
     Ok(StructuredParse {
         document,
         middle,
-        structured: structured.ok_or_else(|| invalid("MinerU缺少structured_content"))?,
-        markdown: markdown.ok_or_else(|| invalid("MinerU缺少Markdown输出"))?,
+        structured: structured
+            .ok_or_else(|| invalid("integration.mineru.structured_content_missing"))?,
+        markdown: markdown.ok_or_else(|| invalid("integration.mineru.markdown_missing"))?,
         assets,
         effective_tier: tier,
         parser_version: version.into(),

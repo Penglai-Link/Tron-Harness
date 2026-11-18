@@ -1,0 +1,389 @@
+_version: 2
+
+integration.mineru.disabled:
+  en: "MinerU parsing is disabled"
+  zh-CN: "MinerU解析已禁用"
+
+integration.mineru.disabled_check_settings:
+  en: "MinerU parsing is disabled; check the platform settings"
+  zh-CN: "MinerU解析已禁用，请检查平台设置"
+
+integration.mineru.service_url_invalid:
+  en: "The MinerU service URL is invalid"
+  zh-CN: "MinerU服务地址无效"
+
+integration.mineru.response_too_large:
+  en: "The MinerU response exceeds the 100 MiB limit"
+  zh-CN: "MinerU响应超过100 MiB上限"
+
+integration.mineru.invalid_identifier:
+  en: "MinerU returned an invalid identifier"
+  zh-CN: "MinerU返回非法标识"
+
+integration.mineru.node_unclaimed:
+  en: "The parsing node is not claimed"
+  zh-CN: "解析节点未认领"
+
+integration.mineru.original_node_missing:
+  en: "The original parsing node identity is missing"
+  zh-CN: "原解析节点身份缺失"
+
+integration.mineru.original_file_missing:
+  en: "The original parsing file identity is missing"
+  zh-CN: "原解析文件身份缺失"
+
+integration.mineru.service_not_ready:
+  en: "The MinerU service is not ready"
+  zh-CN: "MinerU服务未就绪"
+
+integration.mineru.version_missing:
+  en: "MinerU did not report a version"
+  zh-CN: "MinerU未报告版本"
+
+integration.mineru.version_mismatch:
+  en: "The MinerU version does not match the pinned parsing configuration"
+  zh-CN: "MinerU版本与固定解析配置不匹配"
+
+integration.mineru.v4_v1_required:
+  en: "The knowledge base requires the MinerU 4 V1 service"
+  zh-CN: "知识库需要MinerU 4 V1服务"
+
+integration.mineru.capabilities_missing:
+  en: "MinerU did not report its parsing capabilities"
+  zh-CN: "MinerU未报告解析能力"
+
+integration.mineru.default_quality_unsupported:
+  en: "MinerU does not support the platform default parse quality"
+  zh-CN: "MinerU不支持平台默认解析质量"
+
+integration.mineru.ocr_mode_invalid:
+  en: "The MinerU OCR mode is invalid"
+  zh-CN: "MinerU OCR模式无效"
+
+integration.mineru.task_ocr_mode_invalid:
+  en: "The parsing task OCR mode is invalid"
+  zh-CN: "解析任务OCR模式无效"
+
+integration.mineru.no_available_node:
+  en: "No parsing node is available"
+  zh-CN: "没有可用解析节点"
+
+integration.mineru.file_too_large:
+  en: "The file exceeds the parsing size limit"
+  zh-CN: "资料超过解析大小上限"
+
+integration.mineru.format_unsupported:
+  en: "The MinerU adapter only handles .docx/.xlsx/.pdf files"
+  zh-CN: "MinerU适配仅处理.docx/.xlsx/.pdf"
+
+integration.mineru.office_native_required:
+  en: "Word/Excel use native parsing; choose inherit-platform or native text parsing"
+  zh-CN: "Word/Excel使用原生解析，请选择继承平台或原生文本解析"
+
+integration.mineru.selected_quality_unsupported:
+  en: "MinerU does not support the selected parse quality and does not downgrade automatically"
+  zh-CN: "MinerU当前不支持选定解析质量，不会自动降级"
+
+integration.mineru.reconcile_file_missing:
+  en: "The MinerU reconcile file identity is missing"
+  zh-CN: "MinerU对账文件身份缺失"
+
+integration.mineru.unknown_job_state:
+  en: "MinerU returned an unknown job state"
+  zh-CN: "MinerU返回未知任务状态"
+
+integration.mineru.output_missing:
+  en: "MinerU returned no parsing output"
+  zh-CN: "MinerU缺少解析输出"
+
+integration.mineru.output_mismatch:
+  en: "MinerU returned output that does not match the document"
+  zh-CN: "MinerU返回了不匹配的资料输出"
+
+integration.mineru.reused_parse_changed:
+  en: "The reused MinerU task changed its parse version; publication was refused"
+  zh-CN: "MinerU复用任务的解析版本发生变化，拒绝发布"
+
+integration.mineru.output_too_many_files:
+  en: "MinerU returned too many output files"
+  zh-CN: "MinerU输出文件过多"
+
+integration.mineru.output_path_invalid:
+  en: "The MinerU output contains an invalid path"
+  zh-CN: "MinerU输出含非法路径"
+
+integration.mineru.output_path_unresolved:
+  en: "The MinerU output path is invalid"
+  zh-CN: "MinerU输出路径无效"
+
+integration.mineru.output_duplicate_file:
+  en: "The MinerU output contains duplicate files"
+  zh-CN: "MinerU输出含重复文件"
+
+integration.mineru.unpacked_too_large:
+  en: "The unpacked MinerU content exceeds the 100 MiB limit"
+  zh-CN: "MinerU解压内容超过100 MiB上限"
+
+integration.mineru.image_format_unsupported:
+  en: "The MinerU image attachment format is not supported"
+  zh-CN: "MinerU图片附件格式不受支持"
+
+integration.mineru.structured_middle_missing:
+  en: "MinerU did not return the structured intermediate result"
+  zh-CN: "MinerU缺少结构化中间结果"
+
+integration.mineru.structured_version_unsupported:
+  en: "The MinerU structured result version is not supported"
+  zh-CN: "MinerU结构化结果版本不受支持"
+
+integration.mineru.quality_mismatch:
+  en: "MinerU parsed with a different quality than requested; publication was refused"
+  zh-CN: "MinerU实际解析质量与请求不同，拒绝发布"
+
+integration.mineru.structured_content_missing:
+  en: "MinerU did not return structured_content"
+  zh-CN: "MinerU缺少structured_content"
+
+integration.mineru.markdown_missing:
+  en: "MinerU did not return Markdown output"
+  zh-CN: "MinerU缺少Markdown输出"
+
+integration.mineru.upload_url_missing:
+  en: "MinerU did not return an upload URL"
+  zh-CN: "MinerU未返回上传地址"
+
+integration.mineru.upload_url_cross_origin:
+  en: "MinerU returned a cross-origin upload URL; the document was not sent"
+  zh-CN: "MinerU返回跨域上传地址，拒绝发送资料"
+
+integration.mineru.node_capacity_invalid:
+  en: "The MinerU node identity or capacity is invalid"
+  zh-CN: "MinerU节点身份或容量无效"
+
+integration.mineru.node_url_invalid:
+  en: "The MinerU node URL is invalid"
+  zh-CN: "MinerU节点地址无效"
+
+integration.mineru.remote_not_allowed:
+  en: "A remote MinerU node requires explicit allowRemote authorization"
+  zh-CN: "MinerU远程节点需要显式allowRemote授权"
+
+integration.mineru.original_node_gone:
+  en: "The original MinerU node was removed or disabled; an in-flight task cannot switch"
+  zh-CN: "原MinerU节点已移除或禁用，不能切换在途任务"
+
+integration.mineru.no_healthy_default_quality_node:
+  en: "No healthy node supports the platform default parse quality"
+  zh-CN: "没有健康节点支持平台默认解析质量"
+
+integration.mineru.reconcile_response_invalid:
+  en: "The MinerU task reconcile response is invalid"
+  zh-CN: "MinerU任务对账响应无效"
+
+integration.mineru.submit_response_lost:
+  en: "The MinerU submit response was lost and the original node has not reconciled the task; it is not resubmitted"
+  zh-CN: "MinerU提交响应丢失，原节点尚未对账到任务；不会重复提交"
+
+integration.office.no_native_charts:
+  en: "The file has no locatable native charts"
+  zh-CN: "文件没有可定位的原生图表"
+
+integration.office.local_render_macos_only:
+  en: "Local isolated LibreOffice rendering currently supports macOS only; it neither downgrades nor uploads to third parties"
+  zh-CN: "本地隔离的LibreOffice渲染当前仅支持macOS；不会降级或上传到第三方"
+
+integration.office.runtime_missing:
+  en: "No installed LibreOffice with a system sandbox was found"
+  zh-CN: "未找到已安装的LibreOffice及系统沙箱"
+
+integration.office.isolation_path_invalid:
+  en: "The isolation configuration path is invalid"
+  zh-CN: "隔离配置路径无效"
+
+integration.office.conversion_timeout:
+  en: "The isolated conversion timed out"
+  zh-CN: "隔离转换超时"
+
+integration.office.pdf_missing:
+  en: "The sandbox produced no PDF; the index was not published"
+  zh-CN: "沙箱未生成PDF，未发布索引"
+
+integration.office.output_too_large:
+  en: "The output exceeds the 20 MiB limit"
+  zh-CN: "输出超过20 MiB限制"
+
+integration.office.output_invalid:
+  en: "The output is invalid"
+  zh-CN: "输出无效"
+
+integration.person_ai.file_required:
+  en: "The file must be non-empty and at most 50 MB"
+  zh-CN: "文件必须非空且不超过 50 MB"
+
+integration.person_ai.artifact_file_list_missing:
+  en: "The platform parsing artifact has no file list"
+  zh-CN: "平台解析产物缺少文件列表"
+
+integration.person_ai.artifact_file_mismatch:
+  en: "The parsing result files do not match"
+  zh-CN: "解析结果文件不匹配"
+
+integration.person_ai.artifact_hash_mismatch:
+  en: "The parsing result hash differs from the original file"
+  zh-CN: "解析结果与原始文件哈希不一致"
+
+integration.person_ai.no_parsed_pages:
+  en: "The document has no successfully parsed pages"
+  zh-CN: "文档没有成功解析的页面"
+
+integration.person_ai.incomplete_pages:
+  en: "The document has pages that failed to parse; an incomplete index was not published"
+  zh-CN: "文档有未成功解析的页面，未发布不完整索引"
+
+integration.person_ai.structured_invalid:
+  en: "The platform parsing structured result is invalid"
+  zh-CN: "平台解析结构化结果无效"
+
+integration.person_ai.markdown_not_utf8:
+  en: "The platform Markdown result is not UTF-8"
+  zh-CN: "平台 Markdown 结果不是 UTF-8"
+
+integration.person_ai.structured_format_unsupported:
+  en: "The platform structured result format is not supported; an index without chart structure was not published"
+  zh-CN: "平台结构化结果格式不受支持；未发布缺少图表结构的索引"
+
+integration.person_ai.segment_index_invalid:
+  en: "The parsed segment index is invalid"
+  zh-CN: "解析分段序号无效"
+
+integration.person_ai.segment_range_missing:
+  en: "Parsed segment source ranges are missing or duplicated"
+  zh-CN: "解析分段来源范围缺失或重复"
+
+integration.person_ai.segment_range_invalid:
+  en: "The parsed segment source range is invalid"
+  zh-CN: "解析分段来源范围无效"
+
+integration.person_ai.segment_start_page_invalid:
+  en: "The parsed segment start page is invalid"
+  zh-CN: "解析分段起始页无效"
+
+integration.person_ai.segment_end_page_invalid:
+  en: "The parsed segment end page is invalid"
+  zh-CN: "解析分段结束页无效"
+
+integration.person_ai.segment_page_missing:
+  en: "Parsed segment page information is missing"
+  zh-CN: "解析分段页信息缺失"
+
+integration.person_ai.segment_page_mismatch:
+  en: "Parsed segments do not match the original page ranges"
+  zh-CN: "解析分段与原始页范围不一致"
+
+integration.person_ai.artifact_zip_invalid:
+  en: "The platform parsing ZIP is invalid"
+  zh-CN: "平台解析 ZIP 无效"
+
+integration.person_ai.attachment_limit:
+  en: "There are too many parsing attachments"
+  zh-CN: "解析附件数量超过上限"
+
+integration.person_ai.attachment_path_invalid:
+  en: "A parsing attachment path is invalid"
+  zh-CN: "解析附件路径无效"
+
+integration.person_ai.attachment_unpacked_too_large:
+  en: "Unpacked parsing attachments exceed 100 MiB"
+  zh-CN: "解析附件解压内容超过100 MiB"
+
+integration.person_ai.image_zip_invalid:
+  en: "The platform parsed image ZIP is invalid"
+  zh-CN: "平台解析图片 ZIP 无效"
+
+integration.person_ai.image_limit:
+  en: "There are too many parsed images"
+  zh-CN: "解析图片数量超过上限"
+
+integration.person_ai.image_path_invalid:
+  en: "A parsed image path is invalid"
+  zh-CN: "解析图片路径无效"
+
+integration.person_ai.image_too_large:
+  en: "A parsed image exceeds 20 MiB"
+  zh-CN: "单张解析图片超过20 MiB"
+
+integration.person_ai.zip_too_large:
+  en: "The parsing ZIP exceeds the 100 MiB limit"
+  zh-CN: "解析 ZIP 超过100 MiB上限"
+
+integration.person_ai.artifact_too_large:
+  en: "The parsing artifact exceeds the size limit"
+  zh-CN: "解析产物超过大小上限"
+
+integration.person_ai.supplier_changed:
+  en: "The original parsing task supplier changed"
+  zh-CN: "原解析任务的供应方已改变"
+
+integration.person_ai.original_ocr_mode_invalid:
+  en: "The original parsing task OCR mode is invalid"
+  zh-CN: "原解析任务的文字识别模式无效"
+
+integration.person_ai.user_identity_required:
+  en: "Parsing requires a user identity"
+  zh-CN: "解析需要用户身份"
+
+integration.person_ai.task_deleted:
+  en: "The original task was deleted or is being deleted; use a new request_id"
+  zh-CN: "原任务已删除或正在删除，请使用新的 request_id"
+
+integration.person_ai.task_cleaned:
+  en: "The original task was cleaned up; use a new request_id"
+  zh-CN: "原任务已清理，请使用新的 request_id"
+
+integration.person_ai.resubmit_unavailable:
+  en: "The parsing task is still unavailable after resubmission; retry later. An incomplete index was not published"
+  zh-CN: "解析任务重新提交后仍不可用，请稍后重试；未发布不完整索引"
+
+integration.person_ai.insufficient_credits:
+  en: "The parsing result awaits settlement: insufficient credits. Top up and retry the original task"
+  zh-CN: "解析结果待结算：积分不足，请充值后重试原任务"
+
+integration.person_ai.submit_unconfirmed:
+  en: "The platform has not confirmed the parsing submission; query the original task later"
+  zh-CN: "平台暂未确认解析提交，稍后继续查询原任务"
+
+integration.person_ai.settled_without_artifacts:
+  en: "The platform settled the task but returned no artifact list"
+  zh-CN: "平台已结算，但未返回解析产物清单"
+
+integration.person_ai.check_result:
+  en: "Check the parsing result"
+  zh-CN: "请检查解析结果"
+
+integration.mineru.parse_timeout:
+  en: "MinerU parsing timed out; retry (task %{job_id})"
+  zh-CN: "MinerU解析超时，可重试（任务%{job_id}）"
+
+integration.mineru.cancel_failed:
+  en: "MinerU cancellation failed with HTTP %{status}"
+  zh-CN: "MinerU取消失败HTTP %{status}"
+
+integration.mineru.field_missing:
+  en: "MinerU did not return %{field}"
+  zh-CN: "MinerU缺少%{field}"
+
+integration.person_ai.account_unavailable:
+  en: "The Person-AI parsing account is temporarily unavailable: %{detail}"
+  zh-CN: "Person-AI 解析账号暂不可用：%{detail}"
+
+integration.person_ai.artifact_kind_missing:
+  en: "The parsing artifact is missing %{kind}"
+  zh-CN: "解析产物缺少%{kind}"
+
+integration.person_ai.file_parse_failed:
+  en: "Person-AI file parsing failed: %{detail}"
+  zh-CN: "Person-AI 文件解析失败：%{detail}"
+
+integration.person_ai.incomplete_index:
+  en: "Parsing task %{task}: an incomplete index was not published: %{detail}"
+  zh-CN: "解析任务%{task}，未发布不完整的索引：%{detail}"

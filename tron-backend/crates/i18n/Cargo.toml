@@ -1,0 +1,18 @@
+[package]
+license = "AGPL-3.0-only"
+name = "tron-i18n"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Single translation entry point for Tron: locale types, rust-i18n registry and t! macro."
+
+[dependencies]
+# Pinned: the shared lookup API forwards to this version's codegen.
+rust-i18n = "=4.2.4"
+
+[package.metadata.i18n]
+# Read by the rust-i18n extractor. Runtime loading uses the explicit path in
+# `src/lib.rs`, which must keep pointing at the same directory.
+available-locales = ["zh-CN", "en"]
+default-locale = "zh-CN"
+load-path = "../../locales"

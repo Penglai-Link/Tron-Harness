@@ -1,5 +1,6 @@
 use axum::response::sse::Event;
 use serde_json::{Value, json};
+use tron_i18n::t;
 
 use crate::{
     app::AppState,
@@ -14,6 +15,7 @@ use crate::{
             ModelProviderCode, ModelSelection, ModelSelectionKind, ProviderRouteCode,
         },
     },
+    shared::locale::SupportedLocale,
 };
 
 pub(crate) fn protocol_event_belongs_to_run(data: &Value, run_code: &str) -> bool {
@@ -24,13 +26,21 @@ pub(crate) fn protocol_event_belongs_to_run(data: &Value, run_code: &str) -> boo
 pub(crate) struct ChatSsePayload {
     pub(crate) event_name: String,
     pub(crate) data: Value,
+    /// Request locale, kept so the serialization fallback can be localized even
+    /// after the middleware scope has handed the body stream to the server.
+    pub(crate) locale: SupportedLocale,
 }
 
 impl ChatSsePayload {
-    pub(crate) fn agui(event_name: impl Into<String>, data: Value) -> Self {
+    pub(crate) fn agui(
+        event_name: impl Into<String>,
+        data: Value,
+        locale: SupportedLocale,
+    ) -> Self {
         Self {
             event_name: event_name.into(),
             data,
+            locale,
         }
     }
 
@@ -41,7 +51,7 @@ impl ChatSsePayload {
             .unwrap_or_else(|_| {
                 Event::default()
                     .event("RUN_ERROR")
-                    .data(json!({"type":"RUN_ERROR","code":"CHAT_STREAM_SERIALIZATION_FAILED","message":"chat stream serialization failed"}).to_string())
+                    .data(json!({"type":"RUN_ERROR","code":"CHAT_STREAM_SERIALIZATION_FAILED","message":t!("error.chat.stream_serialization_failed", locale = self.locale)}).to_string())
             })
     }
 }
@@ -52,7 +62,12 @@ pub(crate) enum ChatStreamCompletion {
 }
 
 impl ChatStreamCompletion {
-    pub(crate) fn payload(&self, session_code: &str, run_code: &str) -> ChatSsePayload {
+    pub(crate) fn payload(
+        &self,
+        session_code: &str,
+        run_code: &str,
+        locale: SupportedLocale,
+    ) -> ChatSsePayload {
         match self {
             Self::Success(result) => {
                 if matches!(result.run.status, "STEP_LIMIT" | "TOOL_CALL_LIMIT") {
@@ -60,9 +75,10 @@ impl ChatStreamCompletion {
                         "RUN_ERROR",
                         json!({
                             "type": "RUN_ERROR", "threadId": session_code, "runId": result.run.run_code,
-                            "code": result.run.status, "message": super::super::error_messages::message(result.run.status, ""),
+                            "code": result.run.status, "message": super::super::error_messages::message(result.run.status, "", locale),
                             "result": result, "timestamp": chrono::Utc::now().timestamp_millis(),
                         }),
+                        locale,
                     );
                 }
                 let outcome = result
@@ -95,6 +111,7 @@ impl ChatStreamCompletion {
                         "result": result,
                         "timestamp": chrono::Utc::now().timestamp_millis(),
                     }),
+                    locale,
                 )
             }
             Self::Error { code, message } => ChatSsePayload::agui(
@@ -107,6 +124,7 @@ impl ChatStreamCompletion {
                     "message": message,
                     "timestamp": chrono::Utc::now().timestamp_millis(),
                 }),
+                locale,
             ),
         }
     }
@@ -142,7 +160,11 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "CHAT_WORKSPACE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => "CHAT_WORKSPACE_FORBIDDEN",
         ChatSendError::Chat(ChatError::ProjectRequired) => "CHAT_PROJECT_REQUIRED",
-        ChatSendError::Chat(ChatError::ProjectNameConflict) => crate::application::chat::ArchiveError::TopicNameConflict.descriptor().code,
+        ChatSendError::Chat(ChatError::ProjectNameConflict) => {
+            crate::application::chat::ArchiveError::TopicNameConflict
+                .descriptor()
+                .code
+        }
         ChatSendError::Chat(ChatError::ProjectInvalid) => "CHAT_PROJECT_INVALID",
         ChatSendError::Chat(ChatError::DirectoryFixed) => "CHAT_DIRECTORY_FIXED",
         ChatSendError::Chat(ChatError::DirectoryInvalid) => "CHAT_DIRECTORY_INVALID",
@@ -162,10 +184,10 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
     }
 }
 
-pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
+pub(crate) fn chat_send_error_message(error: ChatSendError, locale: SupportedLocale) -> String {
     if let ChatSendError::Chat(ref chat_error) = error {
         if crate::application::chat::composer_input::descriptor(chat_error).is_some() {
-            return super::super::error_mapper::composer_error_message(chat_error);
+            return super::super::error_mapper::composer_error_message_for(chat_error, locale);
         }
     }
     let code = chat_send_error_code(&error);
@@ -174,7 +196,7 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
         ChatSendError::Chat(error) => format!("{error:?}"),
         ChatSendError::RunAlreadyActive { .. } => String::new(),
     };
-    super::super::error_messages::message(code, &detail)
+    super::super::error_messages::message(code, &detail, locale)
 }
 
 pub(crate) fn normalized_required(value: Option<String>) -> Option<String> {
@@ -210,19 +232,18 @@ pub(crate) fn resolve_chat_agent_runtime(
     request: &SendChatMessageCommand,
 ) -> Result<ResolvedAgentRuntime, ChatSendError> {
     let effective_agent_code = effective_agent_code(session, request);
-    let runtime =
-        if session.source_code.as_deref().is_some_and(|source| {
-            source.starts_with("__assistant:") || source.starts_with("__knowledge:")
-        }) {
-            state
-                .agent_management
-                .resolve_platform_agent_runtime(Some(effective_agent_code.as_str()))
-        } else {
-            state.agent_management.resolve_workspace_agent_runtime(
-                &session.workspace_code,
-                Some(effective_agent_code.as_str()),
-            )
-        };
+    let runtime = if session.source_code.as_deref().is_some_and(|source| {
+        source.starts_with("__assistant:") || source.starts_with("__knowledge:")
+    }) {
+        state
+            .agent_management
+            .resolve_platform_agent_runtime(Some(effective_agent_code.as_str()))
+    } else {
+        state.agent_management.resolve_workspace_agent_runtime(
+            &session.workspace_code,
+            Some(effective_agent_code.as_str()),
+        )
+    };
     runtime.map_err(|error| match error {
         crate::domain::agent::AgentManagementError::InvalidWorkspace => {
             ChatSendError::Chat(ChatError::WorkspaceForbidden)
@@ -489,8 +510,6 @@ fn validate_system_agent_model(
         ),
     )))
 }
-
-
 
 // This decorates the independently completed product response when replay failed;
 // normal streaming preserves the SDK's native terminal verbatim.

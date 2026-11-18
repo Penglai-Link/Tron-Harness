@@ -18,16 +18,42 @@ pub const MAX_PARSED_TEXT_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_CHUNKS: usize = 2_000;
 const WORD_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
+/// Document parsing/validation failure carrying a locale-independent message.
+///
+/// The display layer renders [`Self::message`] with the request locale; logs use
+/// the stable key. Plain `String` payloads are no longer accepted so translated
+/// text cannot leak into this layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LocalDocumentError(pub String);
+pub struct LocalDocumentError(pub crate::shared::i18n_message::MessageText);
+impl LocalDocumentError {
+    pub fn new(key: &'static str) -> Self {
+        Self(crate::shared::i18n_message::MessageText::new(key))
+    }
+    pub fn with_message(message: crate::shared::i18n_message::MessageText) -> Self {
+        Self(message)
+    }
+    pub fn message(&self) -> &crate::shared::i18n_message::MessageText {
+        &self.0
+    }
+}
 impl fmt::Display for LocalDocumentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        // Diagnostics only; user-facing output must render with a locale.
+        f.write_str(self.0.key())
     }
 }
 impl std::error::Error for LocalDocumentError {}
-fn failed(message: impl fmt::Display) -> LocalDocumentError {
-    LocalDocumentError(message.to_string())
+fn failed(key: &'static str) -> LocalDocumentError {
+    LocalDocumentError::new(key)
+}
+fn failed_with(message: crate::shared::i18n_message::MessageText) -> LocalDocumentError {
+    LocalDocumentError::with_message(message)
+}
+fn failed_detail(error: impl std::fmt::Display) -> LocalDocumentError {
+    LocalDocumentError::with_message(
+        crate::shared::i18n_message::MessageText::new("document.parse.invalid_detail")
+            .arg("detail", error.to_string()),
+    )
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -94,15 +120,13 @@ impl Default for ChunkConfig {
 impl ChunkConfig {
     pub fn validate(&self) -> Result<(), LocalDocumentError> {
         if !(200..=8_000).contains(&self.max_chars) {
-            return Err(failed(
-                "maxChars must be between 200 and 8000 Unicode characters",
-            ));
+            return Err(failed("document.chunk.max_chars_range"));
         }
         if self.overlap_chars > self.max_chars / 4 {
-            return Err(failed("overlapChars must not exceed 25% of maxChars"));
+            return Err(failed("document.chunk.overlap_limit"));
         }
         if !(1..=6).contains(&self.heading_depth) {
-            return Err(failed("headingDepth must be between 1 and 6"));
+            return Err(failed("document.chunk.heading_depth_range"));
         }
         Ok(())
     }
@@ -245,7 +269,7 @@ fn parse_document(
     text_limit: usize,
 ) -> Result<ParsedDocument, LocalDocumentError> {
     if bytes.len() > MAX_RAW_BYTES {
-        return Err(failed("document exceeds 20 MiB upload limit"));
+        return Err(failed("document.parse.too_large"));
     }
     let extension = Path::new(filename)
         .extension()
@@ -259,14 +283,10 @@ fn parse_document(
         "xlsx" => parse_xlsx(bytes)?,
         "pdf" => parse_pdf(bytes)?,
         "doc" | "xls" => {
-            return Err(failed(
-                "legacy .doc/.xls are unsupported; save as .docx/.xlsx first",
-            ));
+            return Err(failed("document.parse.legacy_office_unsupported"));
         }
         _ => {
-            return Err(failed(
-                "supported local formats: .md, .docx, .xlsx, text .pdf (OCR is unsupported)",
-            ));
+            return Err(failed("document.parse.format_unsupported"));
         }
     };
     let mut total_bytes = 0usize;
@@ -277,12 +297,14 @@ fn parse_document(
     for section in &mut document.sections {
         total_bytes = total_bytes
             .checked_add(section.text.len() + 1)
-            .ok_or_else(|| failed("document text too large"))?;
+            .ok_or_else(|| failed("document.parse.text_too_large"))?;
         if total_bytes > text_limit {
-            return Err(failed(format!(
-                "normalized document text exceeds {} MiB",
-                text_limit / 1024 / 1024
-            )));
+            return Err(failed_with(
+                crate::shared::i18n_message::MessageText::new(
+                    "document.parse.normalized_too_large",
+                )
+                .arg("limit", (text_limit / 1024 / 1024).to_string()),
+            ));
         }
         section.location.char_start = offset;
         offset += section.text.chars().count();
@@ -290,9 +312,7 @@ fn parse_document(
         offset += 1; // A newline separates adjacent sections in the canonical text.
     }
     if document.sections.is_empty() {
-        return Err(failed(
-            "document contains no extractable text; scanned PDFs require OCR, which is unsupported",
-        ));
+        return Err(failed("document.parse.no_extractable_text"));
     }
     Ok(document)
 }
@@ -306,11 +326,11 @@ fn parsed(format: &str, sections: Vec<LocatedSection>) -> ParsedDocument {
 }
 pub fn decode_plain_text(bytes: &[u8]) -> Result<String, LocalDocumentError> {
     if bytes.len() > MAX_TEXT_BYTES {
-        return Err(failed("文字文件超过2 MiB上限"));
+        return Err(failed("document.preflight.text_too_large"));
     }
     let text = if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
         if bytes.len() % 2 != 0 {
-            return Err(failed("UTF-16文字文件编码无效"));
+            return Err(failed("document.preflight.utf16_invalid"));
         }
         let little = bytes[0] == 0xff;
         let units = bytes[2..]
@@ -323,18 +343,18 @@ pub fn decode_plain_text(bytes: &[u8]) -> Result<String, LocalDocumentError> {
                 }
             })
             .collect::<Vec<_>>();
-        String::from_utf16(&units).map_err(failed)?
+        String::from_utf16(&units).map_err(failed_detail)?
     } else {
         std::str::from_utf8(bytes)
-            .map_err(|_| failed("文字文件需为UTF-8或带BOM的UTF-16"))?
+            .map_err(|_| failed("document.preflight.text_encoding"))?
             .trim_start_matches('\u{feff}')
             .to_owned()
     };
     if text.contains('\0') {
-        return Err(failed("文字文件包含二进制内容"));
+        return Err(failed("document.preflight.text_binary"));
     }
     if text.len() > MAX_TEXT_BYTES {
-        return Err(failed("解码文字超过2 MiB上限"));
+        return Err(failed("document.preflight.decoded_text_too_large"));
     }
     Ok(text)
 }
@@ -363,10 +383,10 @@ fn section(text: String, heading_level: Option<u8>, location: DocumentLocation) 
 }
 fn parse_markdown(bytes: &[u8], text_limit: usize) -> Result<ParsedDocument, LocalDocumentError> {
     if bytes.len() > text_limit {
-        return Err(failed(format!(
-            "normalized document text exceeds {} MiB",
-            text_limit / 1024 / 1024
-        )));
+        return Err(failed_with(
+            crate::shared::i18n_message::MessageText::new("document.parse.normalized_too_large")
+                .arg("limit", (text_limit / 1024 / 1024).to_string()),
+        ));
     }
     let text = std::str::from_utf8(bytes)
         .map_err(|_| failed("Markdown must be UTF-8"))?
@@ -488,9 +508,9 @@ pub(super) fn validate_office(
     wanted: Option<&str>,
 ) -> Result<Option<Vec<u8>>, LocalDocumentError> {
     let mut archive = ZipArchive::new(Cursor::new(bytes))
-        .map_err(|e| failed(format!("invalid Office package: {e}")))?;
+        .map_err(|e| failed_detail(format!("invalid Office package: {e}")))?;
     if archive.len() > 4_096 {
-        return Err(failed("Office package exceeds 4096 entries"));
+        return Err(failed("document.preflight.office_entry_limit"));
     }
     let mut names = std::collections::BTreeSet::new();
     let mut total_declared = 0u64;
@@ -498,7 +518,7 @@ pub(super) fn validate_office(
     let mut selected = None;
     let mut buffer = [0u8; 16 * 1024];
     for index in 0..archive.len() {
-        let mut file = archive.by_index(index).map_err(failed)?;
+        let mut file = archive.by_index(index).map_err(failed_detail)?;
         if !names.insert(file.name().to_string()) {
             return Err(failed("duplicate Office package entry"));
         }
@@ -511,7 +531,7 @@ pub(super) fn validate_office(
         let capture = wanted == Some(file.name());
         let mut captured = Vec::new();
         loop {
-            let count = file.read(&mut buffer).map_err(failed)?;
+            let count = file.read(&mut buffer).map_err(failed_detail)?;
             if count == 0 {
                 break;
             }
@@ -532,7 +552,7 @@ pub(super) fn validate_office(
 fn parse_docx(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
     let xml_bytes = validate_office(bytes, Some("word/document.xml"))?
         .ok_or_else(|| failed("DOCX is missing word/document.xml"))?;
-    let xml = std::str::from_utf8(&xml_bytes).map_err(failed)?;
+    let xml = std::str::from_utf8(&xml_bytes).map_err(failed_detail)?;
     let doc = roxmltree::Document::parse_with_options(
         xml,
         roxmltree::ParsingOptions {
@@ -540,7 +560,7 @@ fn parse_docx(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
             ..Default::default()
         },
     )
-    .map_err(failed)?;
+    .map_err(failed_detail)?;
     let mut sections = Vec::new();
     let mut total = 0;
     let mut heading = None;
@@ -596,8 +616,8 @@ fn parse_docx(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
 }
 pub(super) fn parse_xlsx(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
     validate_office(bytes, None)?;
-    let book =
-        umya_spreadsheet::reader::xlsx::read_reader(Cursor::new(bytes), true).map_err(failed)?;
+    let book = umya_spreadsheet::reader::xlsx::read_reader(Cursor::new(bytes), true)
+        .map_err(failed_detail)?;
     let mut sections = Vec::new();
     let mut total = 0usize;
     for sheet in book.sheet_collection() {
@@ -678,13 +698,13 @@ fn parse_pdf(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
             ..Default::default()
         },
     )
-    .map_err(|e| failed(format!("invalid PDF: {e}")))?;
+    .map_err(|e| failed_detail(format!("invalid PDF: {e}")))?;
     if doc.is_encrypted() {
-        return Err(failed("encrypted PDF is unsupported"));
+        return Err(failed("document.preflight.pdf_encrypted"));
     }
     let pages = doc.get_pages();
     if pages.len() > 1_000 {
-        return Err(failed("PDF exceeds 1000 pages"));
+        return Err(failed("document.parse.pdf_page_limit"));
     }
     let mut remaining = MAX_TEXT_BYTES;
     let mut sections = Vec::new();
@@ -699,9 +719,9 @@ fn parse_pdf(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
             &mut pdf_extract::PlainTextOutput::new(&mut output as &mut dyn Write),
             page,
         )
-        .map_err(|e| failed(format!("PDF page {page} extraction failed: {e}")))?;
+        .map_err(|e| failed_detail(format!("PDF page {page} extraction failed: {e}")))?;
         remaining = output.remaining;
-        let text = String::from_utf8(output.bytes).map_err(failed)?;
+        let text = String::from_utf8(output.bytes).map_err(failed_detail)?;
         if text.trim().is_empty() {
             empty_pages.push(page);
         } else {

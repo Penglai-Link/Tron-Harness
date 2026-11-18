@@ -28,6 +28,18 @@ export interface DesktopBackendStatus {
   graphPath?: string;
 }
 
+export interface DesktopSystemNotificationRequest {
+  title: string;
+  body: string;
+  id?: string;
+  silent?: boolean;
+}
+
+export interface DesktopSystemNotificationResult {
+  shown: boolean;
+  error?: string;
+}
+
 export type BackendEnvironmentSelection = { mode: "local" } | { mode: "wsl"; distribution: string };
 export interface BackendEnvironmentState {
   supported: boolean;
@@ -117,10 +129,12 @@ type InvokeCommand<T> = (command: string, payload: Record<string, unknown>) => P
 
 type WindowWithElectronDesktop = Window & {
   tronDesktop?: {
+    platform?: string;
     targetPreloadUrl?: string;
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
     onUpdateStatus?: (listener: (payload: unknown) => void) => () => void;
     onBackendEnvironmentStatus?: (listener: (status: BackendEnvironmentState["status"]) => void) => () => void;
+    onNotificationActivated?: (listener: (payload: { id?: unknown }) => void) => () => void;
   };
   __TAURI_INTERNALS__?: {
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
@@ -348,6 +362,12 @@ export class DesktopBridge {
     return this.electronHost;
   }
 
+  public desktopPlatform(): string | null {
+    if (typeof window === "undefined") return null;
+    const platform = (window as unknown as WindowWithElectronDesktop).tronDesktop?.platform;
+    return typeof platform === "string" ? platform : null;
+  }
+
   public async getProcessMetrics(): Promise<DesktopProcessMetrics> {
     if (!this.electronHost || !this.invoke) throw new Error("Electron metrics unavailable");
     return this.invoke("desktopProcessMetrics", {}) as Promise<DesktopProcessMetrics>;
@@ -391,6 +411,35 @@ export class DesktopBridge {
   public async getAppVersion(): Promise<string> {
     const response = await this.requireInvoke()("getAppVersion", {});
     return typeof response === "string" ? response : "";
+  }
+
+  public async showSystemNotification(request: DesktopSystemNotificationRequest): Promise<DesktopSystemNotificationResult> {
+    if (!this.electronHost || !this.invoke) throw new Error("Electron notifications unavailable");
+    const response = await this.invoke("showSystemNotification", {
+      title: request.title,
+      body: request.body,
+      id: request.id,
+      silent: request.silent === true,
+    });
+    const payload = response as { shown?: unknown; error?: unknown } | null;
+    return {
+      shown: payload?.shown === true,
+      error: typeof payload?.error === "string" ? payload.error : undefined,
+    };
+  }
+
+  public async openSystemNotificationSettings(): Promise<boolean> {
+    if (!this.electronHost || !this.invoke) return false;
+    return await this.invoke("openSystemNotificationSettings", {}) === true;
+  }
+
+  public onSystemNotificationActivated(listener: (id: string) => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    const desktopWindow = window as unknown as WindowWithElectronDesktop;
+    if (typeof desktopWindow.tronDesktop?.onNotificationActivated !== "function") return () => {};
+    return desktopWindow.tronDesktop.onNotificationActivated((payload) => {
+      if (typeof payload?.id === "string" && payload.id) listener(payload.id);
+    });
   }
 
   public async isReleaseNotesAcknowledged(version: string): Promise<boolean> {

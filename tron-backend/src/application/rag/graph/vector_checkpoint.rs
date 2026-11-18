@@ -24,7 +24,11 @@ impl GraphNodeVectorManifest {
             || (self.batch_count == 0) != (self.completed_units == 0)
             || self.batch_count > self.completed_units
         {
-            return Err("图谱节点向量检查点清单无效".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.vector_manifest_invalid",
+            )
+            .encode()
+            .into());
         }
         Ok(())
     }
@@ -44,13 +48,20 @@ impl GraphNodeVectorBatch {
                 .iter()
                 .any(|v| v.len() != dimension || v.iter().any(|x| !x.is_finite()))
         {
-            return Err("图谱节点向量批次维度或数值无效".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.vector_batch_invalid",
+            )
+            .encode()
+            .into());
         }
         let size = values
             .len()
             .checked_mul(dimension)
             .and_then(|n| n.checked_mul(4))
-            .ok_or("图谱节点向量批次过大")?;
+            .ok_or(
+                crate::shared::i18n_message::MessageText::new("rag.graph.vector_batch_too_large")
+                    .encode(),
+            )?;
         let mut bytes = Vec::with_capacity(size);
         for value in values.iter().flatten() {
             bytes.extend_from_slice(&value.to_le_bytes());
@@ -73,7 +84,11 @@ impl GraphNodeVectorBatch {
                 .checked_add(self.count)
                 .is_none_or(|end| end > manifest.completed_units)
         {
-            return Err("图谱节点向量批次不连续或数量无效".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.vector_batch_count_invalid",
+            )
+            .encode()
+            .into());
         }
         vectors.extend(self.decode(manifest.dimension)?);
         Ok(())
@@ -83,23 +98,37 @@ impl GraphNodeVectorBatch {
             .count
             .checked_mul(dimension)
             .and_then(|n| n.checked_mul(4))
-            .ok_or("图谱节点向量批次过大")?;
+            .ok_or(
+                crate::shared::i18n_message::MessageText::new("rag.graph.vector_batch_too_large")
+                    .encode(),
+            )?;
         if self.count == 0
             || !(1..=8192).contains(&dimension)
             || size > 16 * 1024 * 1024
             || self.data_base64.len()
-                != size
-                    .div_ceil(3)
-                    .checked_mul(4)
-                    .ok_or("图谱节点向量批次过大")?
+                != size.div_ceil(3).checked_mul(4).ok_or(
+                    crate::shared::i18n_message::MessageText::new(
+                        "rag.graph.vector_batch_too_large",
+                    )
+                    .encode(),
+                )?
         {
-            return Err("图谱节点向量批次维度或字节数无效".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.vector_batch_dimension_invalid",
+            )
+            .encode()
+            .into());
         }
-        let bytes = STANDARD
-            .decode(&self.data_base64)
-            .map_err(|_| "图谱节点向量批次编码无效")?;
+        let bytes = STANDARD.decode(&self.data_base64).map_err(|_| {
+            crate::shared::i18n_message::MessageText::new("rag.graph.vector_batch_encoding_invalid")
+                .encode()
+        })?;
         if bytes.len() != size {
-            return Err("图谱节点向量批次字节数无效".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.vector_batch_byte_count_invalid",
+            )
+            .encode()
+            .into());
         }
         let mut vectors = Vec::with_capacity(self.count);
         for row in bytes.chunks_exact(dimension * 4) {
@@ -108,7 +137,11 @@ impl GraphNodeVectorBatch {
                 .map(|b| f32::from_le_bytes(b.try_into().expect("four bytes")))
                 .collect::<Vec<_>>();
             if values.iter().any(|v| !v.is_finite()) {
-                return Err("图谱节点向量批次包含非有限数值".into());
+                return Err(crate::shared::i18n_message::MessageText::new(
+                    "rag.graph.vector_batch_non_finite",
+                )
+                .encode()
+                .into());
             }
             vectors.push(values);
         }
@@ -137,14 +170,22 @@ impl GraphNodeVectorCheckpoint {
             || manifest.completed_units > input_count
             || manifest.batch_count != self.batches.len()
         {
-            return Err("图谱节点向量检查点的模型空间或数量不匹配".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.vector_checkpoint_mismatch",
+            )
+            .encode()
+            .into());
         }
         let mut vectors = Vec::with_capacity(manifest.completed_units);
         for batch in self.batches {
             batch.append_decoded(&manifest, &mut vectors)?;
         }
         if vectors.len() != manifest.completed_units {
-            return Err("图谱节点向量检查点不完整".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.vector_checkpoint_incomplete",
+            )
+            .encode()
+            .into());
         }
         Ok((
             RagPreparedVectors {

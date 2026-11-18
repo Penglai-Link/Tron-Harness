@@ -18,6 +18,7 @@ if (windowChromePlatform) {
 }
 
 contextBridge.exposeInMainWorld("tronDesktop", {
+  platform: process.platform,
   targetPreloadUrl: pathToFileURL(path.resolve(__dirname, "target-preload.cjs")).href,
   invoke(command, payload) {
     return ipcRenderer.invoke("tron-desktop:invoke", command, payload || {});
@@ -31,6 +32,11 @@ contextBridge.exposeInMainWorld("tronDesktop", {
     const handler = (_event, payload) => listener(payload);
     ipcRenderer.on("backend-environment:status", handler);
     return () => ipcRenderer.removeListener("backend-environment:status", handler);
+  },
+  onNotificationActivated(listener) {
+    const handler = (_event, payload) => listener(payload);
+    ipcRenderer.on("tron-desktop:notification-activated", handler);
+    return () => ipcRenderer.removeListener("tron-desktop:notification-activated", handler);
   }
 });
 

@@ -1,6 +1,6 @@
 mod admission;
 mod archives;
-pub use archives::{ArchiveError, ArchivedContainer, ArchivedContainerKind};
+pub use archives::ArchiveError;
 mod attachments;
 pub(crate) mod composer_input;
 mod dto;
@@ -14,16 +14,18 @@ pub(crate) mod subagent_error;
 mod title;
 
 pub use dto::{
-    ArchivedChatSessionPage, ArchivedChatSessionQuery, BatchDeleteArchivedSessionItem,
-    BatchDeleteArchivedSessionsCommand, BatchDeleteArchivedSessionsResult, ChatResumeEntry,
-    ChatSendResult, ChatSessionAttachmentUploadCommand, ChatSessionQuery, ChatSteerResult,
-    CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
+    ChatResumeEntry, ChatSendResult, ChatSessionAttachmentUploadCommand, ChatSessionQuery,
+    ChatSteerResult, CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
     UpdateChatSessionCommand,
 };
 pub use port::{ChatContainer, ChatContainerSnapshot, ChatRepository, ChatSessionTitle};
 pub use run_control::{
     ActiveChatRunSnapshot, ChatActiveRunState, ChatRunControlError, GetActiveChatRunResult,
     StopChatRunCommand, StopChatRunResult,
+};
+pub use service::management::{
+    ChatSessionBatchItem, ChatSessionBatchResult, ChatSessionManagementQuery,
+    ChatSessionMoveCommand, ChatSessionStopError, ManagedChatSession,
 };
 pub use service::{ArtifactContent, ChatSendError, ChatService};
 pub use steer::ChatSteerError;

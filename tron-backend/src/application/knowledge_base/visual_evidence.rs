@@ -69,7 +69,7 @@ impl KnowledgeBaseService {
                         .as_array()
                         .is_some_and(|a| !a.is_empty())
                 }) {
-                    vec!["图片上下文未启用；当前回答模型仅收到检索文本，未查看原图".into()]
+                    vec!["knowledge.base.image_only_context_disabled".into()]
                 } else {
                     vec![]
                 },
@@ -111,7 +111,7 @@ impl KnowledgeBaseService {
                 if output.evidence.len() >= 4 {
                     output
                         .warnings
-                        .push("部分视觉证据超过单步4张图片上限，未载入".into());
+                        .push("knowledge.base.visual_evidence_image_limit".into());
                     break;
                 }
                 self.validate_visual_hits(user, workspace, agent, hits)?;
@@ -127,16 +127,24 @@ impl KnowledgeBaseService {
                         return Err(KnowledgeBaseError::Forbidden);
                     }
                     Err(_) => {
-                        output
-                            .warnings
-                            .push(format!("视觉资源{code}读取失败，未载入；可重试"));
+                        output.warnings.push(
+                            crate::shared::i18n_message::MessageText::new(
+                                "knowledge.base.visual_evidence_read_failed",
+                            )
+                            .arg("code", code)
+                            .encode(),
+                        );
                         continue;
                     }
                 };
                 if record.byte_size > 20 * 1024 * 1024 {
-                    output
-                        .warnings
-                        .push(format!("视觉资源{code}超过大小上限，未载入"));
+                    output.warnings.push(
+                        crate::shared::i18n_message::MessageText::new(
+                            "knowledge.base.visual_evidence_too_large",
+                        )
+                        .arg("code", code)
+                        .encode(),
+                    );
                     continue;
                 }
                 let mut bytes = BoundedBytes(Vec::new());
@@ -146,14 +154,17 @@ impl KnowledgeBaseService {
                 {
                     output
                         .warnings
-                        .push(format!("视觉资源{code}读取失败，未载入；可重试"));
+                        .push(format!("knowledge.base.visual_evidence_read_failed"));
                     continue;
                 }
                 total = total.saturating_add(bytes.0.len());
                 if total > 32 * 1024 * 1024 {
-                    output
-                        .warnings
-                        .push("视觉证据超过单步读取大小上限，未载入".into());
+                    output.warnings.push(
+                        crate::shared::i18n_message::MessageText::new(
+                            "knowledge.base.visual_evidence_total_limit",
+                        )
+                        .encode(),
+                    );
                     break;
                 }
                 let mime = if bytes.0.starts_with(b"\x89PNG\r\n\x1a\n") {
@@ -165,9 +176,13 @@ impl KnowledgeBaseService {
                 {
                     "image/webp"
                 } else {
-                    output
-                        .warnings
-                        .push(format!("视觉资源{code}格式不支持，未载入"));
+                    output.warnings.push(
+                        crate::shared::i18n_message::MessageText::new(
+                            "knowledge.base.visual_evidence_format_unsupported",
+                        )
+                        .arg("code", code)
+                        .encode(),
+                    );
                     continue;
                 };
                 output.evidence.push(KnowledgeBaseVisualEvidence {

@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import MessageItem from "./MessageItem";
 import { SectionHeader } from "./SectionHeader";
+import { ShowMoreButton } from "./ShowMoreButton";
 import type { ChatSession } from "@/domain/chat/model";
-import { Button } from "@/components/ui/button";
 import { sortPinnedSessions } from "../hooks/usePinnedSessionCodes";
 
 const recentSessionListPageSize = 5;
@@ -60,19 +60,14 @@ export default function RecentSessionGroup({
             />
           ))}
           {sessions.length > visibleSessionCount ? (
-            <Button
-              className="ml-6 w-fit"
-              size="sm"
-              type="button"
-              variant="ghost"
+            <ShowMoreButton
+              className="ml-2"
               onClick={() =>
                 setVisibleSessionCount(
                   (count) => count + recentSessionListPageSize
                 )
               }
-            >
-              {t("shell:chatSidebar.showMore")}
-            </Button>
+            />
           ) : null}
         </div>
       ) : null}

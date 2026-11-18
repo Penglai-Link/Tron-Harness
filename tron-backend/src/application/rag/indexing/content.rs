@@ -33,7 +33,11 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
             || completed.vectors.len() > inputs.len()
             || completed.vectors.iter().any(|v| !valid(v, dimension))
         {
-            return Err("向量检查点维度、数值或数量无效".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.index.vector_checkpoint_invalid",
+            )
+            .encode()
+            .into());
         }
         let resolved = if !completed.vectors.is_empty() && completed.model_code.is_some() {
             completed.model_code.clone()
@@ -45,7 +49,11 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
             .runtime
             .embedding_fingerprint(workspace, model, dimension)?;
         if !completed.vectors.is_empty() && completed.fingerprint != fingerprint {
-            return Err("检查点的Embedding模型配置已改变，请重建索引".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.index.embedding_config_changed",
+            )
+            .encode()
+            .into());
         }
         completed.fingerprint = fingerprint.clone();
         let hashes = inputs.iter().map(embedding_input_hash).collect::<Vec<_>>();
@@ -63,7 +71,11 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
                 })
                 .unwrap_or(self.embedding_batch_limits);
             if limits.max_inputs == 0 || limits.max_tokens == 0 {
-                return Err("Embedding批次上限必须大于零".into());
+                return Err(crate::shared::i18n_message::MessageText::new(
+                    "rag.index.embedding_batch_limit_invalid",
+                )
+                .encode()
+                .into());
             }
             let reuse = cached
                 .get(&hashes[start])
@@ -71,7 +83,11 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
             if !reuse {
                 if let Some(maximum) = self.runtime.embedding_batch_input_limit(workspace, model)? {
                     if maximum == 0 {
-                        return Err("供应商Embedding批次上限必须大于零".into());
+                        return Err(crate::shared::i18n_message::MessageText::new(
+                            "rag.index.provider_embedding_batch_limit_invalid",
+                        )
+                        .encode()
+                        .into());
                     }
                     limits.max_inputs = limits.max_inputs.min(maximum);
                 }
@@ -85,11 +101,19 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
                 .take(limits.max_inputs)
             {
                 if input.is_empty() || (!input.has_media() && input.text().trim().is_empty()) {
-                    return Err("Embedding分块正文不能为空".into());
+                    return Err(crate::shared::i18n_message::MessageText::new(
+                        "rag.index.embedding_chunk_empty",
+                    )
+                    .encode()
+                    .into());
                 }
                 let cost = input.estimated_tokens();
                 if cost > limits.max_tokens {
-                    return Err("单个分块超过Embedding批次token上限，请缩小分块后重建".into());
+                    return Err(crate::shared::i18n_message::MessageText::new(
+                        "rag.index.chunk_over_token_limit",
+                    )
+                    .encode()
+                    .into());
                 }
                 if cost > limits.max_tokens - tokens
                     || cached
@@ -107,7 +131,14 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
             }
             let mut result = if reuse {
                 RagEmbeddingBatchResult {
-                    model_code: model.ok_or("缓存向量缺少模型身份")?.into(),
+                    model_code: model
+                        .ok_or(
+                            crate::shared::i18n_message::MessageText::new(
+                                "rag.index.cached_vector_model_missing",
+                            )
+                            .encode(),
+                        )?
+                        .into(),
                     provider_model: completed.provider_model.clone(),
                     vectors: (start..end)
                         .enumerate()
@@ -138,10 +169,19 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
             }
             .validate(end - start, Some(dimension))
             .map_err(|error| {
-                format!("Embedding批次返回的数量、索引或向量无效（要求{dimension}维）: {error}")
+                crate::shared::i18n_message::MessageText::new(
+                    "rag.index.embedding_batch_response_invalid",
+                )
+                .arg("dimension", dimension.to_string())
+                .arg("detail", error.to_string())
+                .encode()
             })?;
             if model.is_some_and(|m| m != result.model_code) {
-                return Err("Embedding模型不匹配，整份索引未发布".into());
+                return Err(crate::shared::i18n_message::MessageText::new(
+                    "rag.index.embedding_model_mismatch",
+                )
+                .encode()
+                .into());
             }
             if !completed.vectors.is_empty()
                 && (completed.provider_model != result.provider_model
@@ -150,14 +190,22 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
                         .as_ref()
                         .is_some_and(|m| *m != result.model_code))
             {
-                return Err("实际Embedding模型发生变化，整份索引未发布".into());
+                return Err(crate::shared::i18n_message::MessageText::new(
+                    "rag.index.embedding_model_changed",
+                )
+                .encode()
+                .into());
             }
             if self
                 .runtime
                 .embedding_fingerprint(workspace, model, dimension)?
                 != fingerprint
             {
-                return Err("Embedding模型配置已改变，整份索引未发布".into());
+                return Err(crate::shared::i18n_message::MessageText::new(
+                    "rag.index.embedding_config_changed_unpublished",
+                )
+                .encode()
+                .into());
             }
             result.vectors.sort_by_key(|v| v.index);
             if let Some(c) = checkpoint {

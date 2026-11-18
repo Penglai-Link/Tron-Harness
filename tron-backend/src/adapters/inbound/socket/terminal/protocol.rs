@@ -18,16 +18,27 @@ pub(super) enum TerminalSocketGatewayError {
     WriteFailed,
 }
 
+impl TerminalSocketGatewayError {
+    /// Stable translation key; the socket handler renders it with the locale
+    /// negotiated by the handshake request.
+    pub(super) fn message_key(&self) -> &'static str {
+        match self {
+            Self::InputTooLarge => "socket.terminal.input_too_large",
+            Self::PtyFailed => "socket.terminal.start_failed",
+            Self::ResizeFailed => "socket.terminal.resize_failed",
+            Self::SessionNotFound => "socket.terminal.session_not_found",
+            Self::Terminal(TerminalError::TicketInvalid) => "socket.terminal.ticket_invalid",
+            Self::Terminal(TerminalError::TicketExpired) => "socket.terminal.ticket_expired",
+            Self::Terminal(_) => "socket.terminal.unavailable",
+            Self::WriteFailed => "socket.terminal.write_failed",
+        }
+    }
+}
+
 impl std::fmt::Display for TerminalSocketGatewayError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InputTooLarge => formatter.write_str("终端输入过长"),
-            Self::PtyFailed => formatter.write_str("终端会话无法启动"),
-            Self::ResizeFailed => formatter.write_str("终端窗口大小无法调整"),
-            Self::SessionNotFound => formatter.write_str("终端会话不存在"),
-            Self::Terminal(error) => write!(formatter, "{error}"),
-            Self::WriteFailed => formatter.write_str("终端输入无法发送"),
-        }
+        // Diagnostics only; user-facing text is rendered from `message_key`.
+        formatter.write_str(self.message_key())
     }
 }
 

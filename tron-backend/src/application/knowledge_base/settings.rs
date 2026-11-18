@@ -36,15 +36,17 @@ impl KnowledgeBaseService {
             || settings.name.chars().count() > 120
             || settings.description.chars().count() > 2000
         {
-            return Err(KnowledgeBaseError::Invalid("知识库名称或说明无效".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.settings_invalid",
+            ));
         }
         settings
             .index_settings
             .validate()
-            .map_err(|_| KnowledgeBaseError::Invalid("索引配置无效".into()))?;
+            .map_err(|_| KnowledgeBaseError::invalid("knowledge.base.index_settings_invalid"))?;
         if settings.index_settings.graph && settings.index_settings.graph_model_code.is_none() {
-            return Err(KnowledgeBaseError::Invalid(
-                "开启图谱索引需要选择抽取模型".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.graph_model_required",
             ));
         }
         // Update only library settings, never a stale copy of documents or grants.

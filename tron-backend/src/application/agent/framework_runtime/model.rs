@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use eliteforge_agent_core as fw;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tron_i18n::t;
 
 pub(super) struct HostRunState {
     pub onboarding: bool,
@@ -257,6 +258,9 @@ impl fw::ChatModel for TronChatModel {
             last_model_failure,
             ..
         } = &mut *state;
+        // Captured before the native turn borrows `context` mutably; run-failure
+        // text still follows the session locale.
+        let locale = context.locale.clone();
         let response = {
             let response = {
                 let invocation = harness.framework_model_turn(
@@ -271,7 +275,8 @@ impl fw::ChatModel for TronChatModel {
                 loop {
                     if overflow.load(std::sync::atomic::Ordering::Acquire) {
                         break Err(crate::domain::agent::AgentError::InvalidConfiguration(
-                            "model stream exceeded the bounded host handoff capacity".into(),
+                            t!("agent_runtime.model.stream_overflow", locale = &locale)
+                                .into_owned(),
                         ));
                     }
                     tokio::select! {
@@ -324,13 +329,12 @@ impl fw::ChatModel for TronChatModel {
             emit_model_event(stream, event).await;
         }
         if overflow.load(std::sync::atomic::Ordering::Acquire) {
+            let message = t!("agent_runtime.model.stream_overflow", locale = &locale).into_owned();
             *native_error = Some(crate::domain::agent::AgentError::InvalidConfiguration(
-                "model stream exceeded the bounded host handoff capacity".into(),
+                message.clone(),
             ));
             *last_model_failure = None;
-            return Err(fw::ModelError::Fatal(
-                "model stream exceeded the bounded host handoff capacity".into(),
-            ));
+            return Err(fw::ModelError::Fatal(message));
         }
         *last_model_failure = None;
         *native_error = None;
@@ -349,8 +353,18 @@ impl fw::ChatModel for TronChatModel {
             // Segmented responses still need to reach the Framework so it can
             // persist late phase metadata before reporting an incomplete run.
             if text.trim().is_empty() && response.output_items.is_empty() {
-                let message = last_tool_failure.as_ref().map(|failure| format!("agent completed without an assistant response; last tool failure: {failure}"))
-                    .unwrap_or_else(|| "agent completed without an assistant response".into());
+                let message = last_tool_failure
+                    .as_ref()
+                    .map(|failure| {
+                        t!(
+                            "agent_runtime.model.empty_final_output_with_tool_failure",
+                            locale = &locale,
+                            failure = failure
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        t!("agent_runtime.model.empty_final_output", locale = &locale).into_owned()
+                    });
                 *native_error = Some(crate::domain::agent::AgentError::EmptyFinalOutput(
                     message.clone(),
                 ));

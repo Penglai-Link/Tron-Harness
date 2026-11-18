@@ -15,8 +15,8 @@ import { usePinnedSessionCodes } from "./hooks/usePinnedSessionCodes";
 import type { ProjectRecord } from "@/domain/project";
 import { CHAT_PANEL_WIDGET_KEYS } from "@/shared/constants/chatPanelMenu";
 
-import { Button } from "@/components/ui/button";
 import { SectionHeader } from "./components/SectionHeader";
+import { ShowMoreButton } from "./components/ShowMoreButton";
 
 const sidebarListPageSize = 5;
 
@@ -131,19 +131,14 @@ export function ChatNavigationProvider({
                   />
                 ))}
               {orderedProjects.length > visibleProjectCount ? (
-                <Button
-                  className="ml-2 w-fit"
-                  size="sm"
-                  type="button"
-                  variant="ghost"
+                <ShowMoreButton
+                  className="ml-2"
                   onClick={() =>
                     setVisibleProjectCount(
                       (count) => count + sidebarListPageSize
                     )
                   }
-                >
-                  {t("shell:chatSidebar.showMore")}
-                </Button>
+                />
               ) : null}
             </div>
           ) : null}

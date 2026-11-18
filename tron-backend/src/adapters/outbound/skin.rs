@@ -50,9 +50,10 @@ impl FileSkinStore {
             return Err(SkinError::Invalid);
         }
         // Reserved built-in skins follow the running application version.
-        if let Some(content) = BUILTINS.iter().find(|content| {
-            serde_json::from_str::<Skin>(content).is_ok_and(|skin| skin.id == id)
-        }) {
+        if let Some(content) = BUILTINS
+            .iter()
+            .find(|content| serde_json::from_str::<Skin>(content).is_ok_and(|skin| skin.id == id))
+        {
             return serde_json::from_str(content).map_err(|_| SkinError::Storage);
         }
         let result = self
@@ -181,25 +182,34 @@ impl FileSkinStore {
                 let mime = match resource_mime(path) {
                     Some(mime) => mime,
                     None if expected == "text/css" => {
-                        return Err(SkinError::CssRejected(format!(
-                            "{path}: CSS resource must use a .css file"
-                        )));
+                        return Err(SkinError::CssRejected(
+                            crate::shared::i18n_message::MessageText::new(
+                                "tron.skin.css_resource_must_be_css",
+                            )
+                            .arg("path", path),
+                        ));
                     }
                     None => return Err(SkinError::Invalid),
                 };
                 if !mime.starts_with(expected) {
                     if expected == "text/css" {
-                        return Err(SkinError::CssRejected(format!(
-                            "{path}: CSS resource must use a .css file"
-                        )));
+                        return Err(SkinError::CssRejected(
+                            crate::shared::i18n_message::MessageText::new(
+                                "tron.skin.css_resource_must_be_css",
+                            )
+                            .arg("path", path),
+                        ));
                     }
                     return Err(SkinError::Invalid);
                 }
                 if !staging.path().join(path).is_file() {
                     if expected == "text/css" {
-                        return Err(SkinError::CssRejected(format!(
-                            "{path}: CSS file is missing from the package"
-                        )));
+                        return Err(SkinError::CssRejected(
+                            crate::shared::i18n_message::MessageText::new(
+                                "tron.skin.css_resource_missing",
+                            )
+                            .arg("path", path),
+                        ));
                     }
                     return Err(SkinError::Invalid);
                 }
@@ -212,10 +222,20 @@ impl FileSkinStore {
         }
         if let Some(path) = &skin.resources.css {
             let css = fs::read_to_string(staging.path().join(path)).map_err(|_| {
-                SkinError::CssRejected(format!("{path}: CSS file is missing or is not UTF-8"))
+                SkinError::CssRejected(
+                    crate::shared::i18n_message::MessageText::new(
+                        "tron.skin.css_resource_unreadable",
+                    )
+                    .arg("path", path),
+                )
             })?;
-            validate_theme_css(&css, staging.path())
-                .map_err(|reason| SkinError::CssRejected(format!("{path}: {reason}")))?;
+            validate_theme_css(&css, staging.path()).map_err(|reason| {
+                SkinError::CssRejected(
+                    crate::shared::i18n_message::MessageText::new("tron.skin.css_rejected")
+                        .arg("path", path)
+                        .arg("detail", reason),
+                )
+            })?;
         }
         if let Some(id) = market_id {
             let metadata = serde_json::to_vec(id).map_err(|_| SkinError::Storage)?;
@@ -232,13 +252,21 @@ impl SkinStore for FileSkinStore {
     fn list(&self) -> Result<Vec<Skin>, SkinError> {
         let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
         self.initialize()?;
-        let mut skins = vec![self.read_skin("default")?, self.read_skin("brand")?, self.read_skin("matrix")?];
+        let mut skins = vec![
+            self.read_skin("default")?,
+            self.read_skin("brand")?,
+            self.read_skin("matrix")?,
+        ];
         for entry in fs::read_dir(&self.root)
             .map_err(|_| SkinError::Storage)?
             .flatten()
         {
             let id = entry.file_name().to_string_lossy().to_string();
-            if id == "default" || id == "brand" || id == "matrix" || RETIRED_BUILTINS.contains(&id.as_str()) {
+            if id == "default"
+                || id == "brand"
+                || id == "matrix"
+                || RETIRED_BUILTINS.contains(&id.as_str())
+            {
                 continue;
             }
             if let Ok(skin) = self.read_skin(&id) {
@@ -359,10 +387,10 @@ fn parse_skin(bytes: &[u8]) -> Result<Skin, SkinError> {
     }
     let skin: Skin = serde_json::from_slice(bytes).map_err(|_| SkinError::Invalid)?;
     if skin.version != 3 {
-        return Err(SkinError::Incompatible(format!(
-            "skin.json: unsupported theme format version {}; only version 3 is supported",
-            skin.version
-        )));
+        return Err(SkinError::Incompatible(
+            crate::shared::i18n_message::MessageText::new("tron.skin.incompatible_version")
+                .arg("version", skin.version.to_string()),
+        ));
     }
     if skin
         .resources
@@ -371,7 +399,9 @@ fn parse_skin(bytes: &[u8]) -> Result<Skin, SkinError> {
         .is_some_and(|path| !valid_resource_path(path))
     {
         return Err(SkinError::CssRejected(
-            "skin.json: resources.css must reference a file inside the theme package".into(),
+            crate::shared::i18n_message::MessageText::new(
+                "tron.skin.css_reference_outside_package",
+            ),
         ));
     }
     if !skin.validate() {

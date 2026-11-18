@@ -218,13 +218,20 @@ impl FrameworkHost {
                 })
                 .collect::<BTreeMap<_, _>>();
             resources.retain_kind("skill", &skill_owners)?;
+            // This reconciliation runs in the background without a request
+            // locale; only tool codes are consumed, so use the product default.
+            let listing_locale = tron_i18n::DEFAULT_LOCALE.as_str();
             let tools = self
                 .0
                 .agent_management
                 .get()
-                .map(|management| management.list_tools(None, None, "en-US"))
+                .map(|management| management.list_tools(None, None, listing_locale))
                 .unwrap_or_else(|| {
-                    crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US")
+                    crate::application::agent::BusinessToolCatalog::list_tools(
+                        None,
+                        None,
+                        listing_locale,
+                    )
                 });
             let mut owned = Vec::new();
             for pack in super::super::capability_catalog::capability_pack_catalog() {
@@ -413,8 +420,11 @@ impl FrameworkHost {
         let options = fw::ModelInvocationOptions::for_call(&fw::RunLimits::default())
             .map_err(|e| e.to_string())?;
         let run = options.run.as_ref().ok_or("catalog context unavailable")?;
-        let bundled =
-            crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US");
+        let bundled = crate::application::agent::BusinessToolCatalog::list_tools(
+            None,
+            None,
+            tron_i18n::DEFAULT_LOCALE.as_str(),
+        );
         let mut issues = Vec::new();
         let mut ids = catalog_entries
             .iter()

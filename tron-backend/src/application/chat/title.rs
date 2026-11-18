@@ -1,6 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use serde_json::Value;
+use tron_i18n::t;
 
 use crate::{
     application::{
@@ -22,28 +23,46 @@ const MAX_GENERATED_TITLE_CHARS: usize = 64;
 const TITLE_GENERATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl ChatService {
+    /// Generate and persist a session title.
+    ///
+    /// `locale` is the sending request's resolved locale. Title generation runs
+    /// after the request returns, so the caller must hand it over explicitly;
+    /// a missing locale follows Tron's documented default instead of the
+    /// process-global rust-i18n locale.
     pub(super) async fn try_generate_manual_session_title(
         &self,
         session_code: &str,
         workspace_code: &str,
         user_message: &str,
         run_code: &str,
+        locale: Option<String>,
         llm_runtime: LlmRuntimeService,
     ) {
+        let locale =
+            crate::shared::locale::SupportedLocale::from_request(locale.as_deref()).as_str();
         let Some(prompt) = manual_session_title_prompt(self.prompt_service.as_ref(), user_message)
         else {
             self.publish_title_generation_failure(
                 session_code,
                 run_code,
                 "TITLE_PROMPT_UNAVAILABLE",
-                "标题生成提示词不可用",
+                t!(
+                    "agent_runtime.chat.title.prompt_unavailable",
+                    locale = locale
+                ),
             );
             return;
         };
         let preferred = match self
             .llm_router
             .as_ref()
-            .ok_or_else(|| "文本生成自动路由未配置".to_string())
+            .ok_or_else(|| {
+                t!(
+                    "agent_runtime.chat.title.routing_unavailable",
+                    locale = locale
+                )
+                .into_owned()
+            })
             .and_then(|router| {
                 router.route_text(workspace_code, Some("PERSON_AI:ROUTE:TextGenerationAuto"))
             }) {
@@ -58,7 +77,7 @@ impl ChatService {
                 return;
             }
         };
-        let title = match generate_title(&llm_runtime, vec![preferred], &prompt).await {
+        let title = match generate_title(&llm_runtime, vec![preferred], &prompt, locale).await {
             Ok(title) => title,
             Err((code, message)) => {
                 self.publish_title_generation_failure(session_code, run_code, code, message);
@@ -70,7 +89,10 @@ impl ChatService {
                 session_code,
                 run_code,
                 "TITLE_PERSISTENCE_FAILED",
-                "读取会话失败，标题未保存",
+                t!(
+                    "agent_runtime.chat.title.session_read_failed",
+                    locale = locale
+                ),
             );
             return;
         };
@@ -87,7 +109,10 @@ impl ChatService {
                 session_code,
                 run_code,
                 "TITLE_PERSISTENCE_FAILED",
-                "会话标题保存失败",
+                t!(
+                    "agent_runtime.chat.title.persistence_failed",
+                    locale = locale
+                ),
             );
         }
     }
@@ -122,8 +147,16 @@ async fn generate_title(
     runtime: &LlmRuntimeService,
     candidates: Vec<crate::application::model::RuntimeModelConfig>,
     prompt: &str,
+    locale: &str,
 ) -> Result<String, (&'static str, String)> {
-    let mut failure = ("LLM_MODEL_UNAVAILABLE", "标题生成模型不可用".into());
+    let mut failure = (
+        "LLM_MODEL_UNAVAILABLE",
+        t!(
+            "agent_runtime.chat.title.model_unavailable",
+            locale = locale
+        )
+        .into_owned(),
+    );
     for mut config in candidates {
         // Keep the no-reasoning preference local to this title-generation call.
         // Providers that require reasoning may apply their own default; title parsing
@@ -144,11 +177,25 @@ async fn generate_title(
                 }
                 failure = (
                     "TITLE_FORMAT_INVALID",
-                    "模型返回的标题为空或格式无效".into(),
+                    t!("agent_runtime.chat.title.format_invalid", locale = locale).into_owned(),
                 );
             }
-            Ok(Err(error)) => failure = (title_generation_error_code(&error), error.to_string()),
-            Err(_) => failure = ("LLM_UPSTREAM_TIMEOUT", "标题生成模型调用超时".into()),
+            Ok(Err(error)) => {
+                failure = (
+                    title_generation_error_code(&error),
+                    t!(
+                        "agent_runtime.chat.title.upstream_failed",
+                        locale = locale,
+                        detail = error.to_string()
+                    ),
+                )
+            }
+            Err(_) => {
+                failure = (
+                    "LLM_UPSTREAM_TIMEOUT",
+                    t!("agent_runtime.chat.title.upstream_timeout", locale = locale).into_owned(),
+                )
+            }
         }
     }
     Err(failure)

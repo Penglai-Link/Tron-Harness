@@ -93,6 +93,26 @@ impl NativeRegistration {
     }
 }
 impl FrameworkHost {
+    /// Runs this process is executing right now. Persisted `RUNNING` state is
+    /// not enough: an interrupted process leaves it behind forever.
+    pub(super) fn executing_run_ids(&self) -> Vec<fw::RunId> {
+        self.0
+            .control
+            .entries
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .values()
+            .filter_map(|control| {
+                control
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .sdk
+                    .as_ref()
+                    .map(|(_, control)| control.run_id())
+            })
+            .collect()
+    }
+
     pub(crate) fn native_run_observer(&self) -> Arc<dyn Fn(&str) -> bool + Send + Sync> {
         let host = Arc::downgrade(&self.0);
         Arc::new(move |key| {
@@ -143,7 +163,7 @@ impl FrameworkHost {
     }
     /// Queue host-owned context into a still-executing native run without
     /// attributing the notification to the human sender.
-    pub fn notify_native_run(&self, key: &str, message: &str) -> bool {
+    pub fn notify_native_run(&self, key: &str, message: &str, locale: &str) -> bool {
         let control = self
             .0
             .control
@@ -162,7 +182,13 @@ impl FrameworkHost {
                             sender: fw::MessageSender {
                                 kind: "SYSTEM".into(),
                                 id: None,
-                                display_name: Some("系统通知".into()),
+                                display_name: Some(
+                                    tron_i18n::translate(
+                                        locale,
+                                        "agent_runtime.message.sender.system_notification",
+                                    )
+                                    .into_owned(),
+                                ),
                                 avatar_url: None,
                             },
                             source: Some("ChildRunCompletion".into()),

@@ -346,19 +346,6 @@ impl ChatService {
         self.repository().get_session(session_code)
     }
 
-    pub fn list_archived_sessions(
-        &self,
-        workspace_code: Option<&str>,
-        current: u32,
-        size: u32,
-    ) -> Result<(Vec<ChatSession>, u64), ChatError> {
-        let current = current.max(1);
-        let size = size.clamp(1, 100);
-        let offset = current.saturating_sub(1).saturating_mul(size);
-        self.repository()
-            .list_archived_sessions(workspace_code, offset, size)
-    }
-
     pub fn prepare_session_deletion(&self, session_code: &str) -> Result<(), ChatError> {
         self.repository().get_session(session_code)?;
         self.ensure_session_inactive(session_code)

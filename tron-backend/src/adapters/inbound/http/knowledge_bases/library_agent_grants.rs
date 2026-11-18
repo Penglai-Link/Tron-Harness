@@ -4,34 +4,37 @@ use crate::response::EmptyData;
 pub(super) struct LibraryAgentGrantsApiError(KnowledgeBaseError, String);
 impl IntoResponse for LibraryAgentGrantsApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.knowledge_base.not_found" => (
-                StatusCode::NOT_FOUND,
-                "知识库不存在",
-                "Knowledge base not found",
-            ),
-            "tron.knowledge_base.forbidden" => (
-                StatusCode::FORBIDDEN,
-                "无知识库权限",
-                "Access to this knowledge base is denied",
-            ),
-            "tron.knowledge_base.invalid" => (
-                StatusCode::BAD_REQUEST,
-                "请选择平台内部智能体",
-                "Choose an internal agent on the platform",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "知识库智能体授权失败",
-                "Could not update knowledge base agent authorization",
+        let status = match descriptor.message_key {
+            "tron.knowledge_base.not_found" => StatusCode::NOT_FOUND,
+            "tron.knowledge_base.forbidden" => StatusCode::FORBIDDEN,
+            "tron.knowledge_base.invalid" => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match descriptor.message_key {
+            "tron.knowledge_base.not_found" => {
+                t!("tron.knowledge_base.not_found", locale = &self.1)
+            }
+            "tron.knowledge_base.forbidden" => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1)
+            }
+            "tron.knowledge_base.invalid" => {
+                t!(
+                    "knowledge.base.library_agent_grants.invalid",
+                    locale = &self.1
+                )
+            }
+            _ => t!(
+                "knowledge.base.library_agent_grants.failed",
+                locale = &self.1
             ),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

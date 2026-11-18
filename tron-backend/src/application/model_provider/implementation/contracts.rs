@@ -41,7 +41,8 @@ pub enum ModelProviderError {
     InvalidEncryptionKey,
     ConnectionNotReady,
     CatalogModelUnavailable(String),
-    InvalidSelection(String),
+    /// User-facing selection/validation failure with a stable translation key.
+    InvalidSelection(tron_i18n::Message),
     AuthenticationRequired,
     Unauthorized,
     DeviceUnbound,
@@ -75,7 +76,7 @@ impl std::fmt::Display for ModelProviderError {
                     "Person-AI model `{model_code}` is no longer available"
                 )
             }
-            Self::InvalidSelection(message) => formatter.write_str(message),
+            Self::InvalidSelection(message) => formatter.write_str(message.key()),
             Self::AuthenticationRequired => {
                 formatter.write_str("Person-AI authorization is required")
             }
@@ -92,6 +93,59 @@ impl std::fmt::Display for ModelProviderError {
 }
 
 impl std::error::Error for ModelProviderError {}
+
+impl ModelProviderError {
+    /// Structured, locale-independent user-facing message.
+    ///
+    /// Display stays English for logs and diagnostics; display layers render
+    /// this message with the request, session or run locale instead.
+    pub fn user_message(&self) -> tron_i18n::Message {
+        use tron_i18n::Message;
+        match self {
+            Self::AuthorizationSessionNotFound => {
+                Message::new("tron.model_provider.authorization_session_not_found")
+            }
+            Self::AuthorizationPending => Message::new("tron.model_provider.authorization_pending"),
+            Self::AuthorizationEnded(status) => {
+                Message::new("tron.model_provider.authorization_ended")
+                    .arg("status", status.clone())
+            }
+            Self::AuthorizationAccountMismatch => {
+                Message::new("tron.model_provider.authorization_account_mismatch")
+            }
+            Self::InvalidServerBaseUrl => {
+                Message::new("tron.model_provider.invalid_server_base_url")
+            }
+            Self::InvalidEncryptionKey => {
+                Message::new("tron.model_provider.invalid_encryption_key")
+            }
+            Self::ConnectionNotReady => Message::new("tron.model_provider.connection_not_ready"),
+            Self::CatalogModelUnavailable(model_code) => {
+                Message::new("tron.model_provider.model_unavailable")
+                    .arg("model_code", model_code.clone())
+            }
+            Self::InvalidSelection(message) => message.clone(),
+            Self::AuthenticationRequired => {
+                Message::new("tron.model_provider.authentication_required")
+            }
+            Self::Unauthorized => Message::new("tron.model_provider.unauthorized"),
+            Self::DeviceUnbound => Message::new("tron.model_provider.device_unbound"),
+            Self::CapabilityPackUnavailable => Message::new("tron.capability.pack_unavailable"),
+            Self::CapabilityReleaseUnavailable => {
+                Message::new("tron.capability.release_unavailable")
+            }
+            Self::Remote(detail) => {
+                Message::new("tron.model_provider.remote_failed").arg("detail", detail.clone())
+            }
+            Self::Storage => Message::new("tron.model_provider.storage_failed"),
+        }
+    }
+
+    /// Render the user-facing message for an explicit locale.
+    pub fn user_message_text(&self, locale: &str) -> String {
+        self.user_message().render(locale)
+    }
+}
 
 /// The stable provider integration point. A later provider only needs to implement this
 /// adapter; the connection/catalogue/default-selection storage stays shared.

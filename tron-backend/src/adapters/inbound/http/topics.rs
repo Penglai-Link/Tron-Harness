@@ -205,32 +205,13 @@ fn checkout_error_response(
         CheckoutError::Topic(error) => error_response(error, headers),
         CheckoutError::Directory(error) => super::directories::error_response(error, headers),
         error => {
-            let (code, en, zh) = match error {
-                CheckoutError::InvalidPath => (
-                    "CHECKOUT_PATH_INVALID",
-                    "Choose an absolute path that does not already exist and a valid Git username.",
-                    "请选择尚不存在的绝对路径，并填写有效的 Git 用户名。",
-                ),
-                CheckoutError::DifferentRepository => (
-                    "CHECKOUT_REPOSITORY_MISMATCH",
-                    "The selected directory is not a checkout of this repository.",
-                    "所选目录不是此仓库的检出目录。",
-                ),
-                CheckoutError::UnsupportedRemote => (
-                    "CHECKOUT_REMOTE_UNSUPPORTED",
-                    "The platform returned an unsupported HTTPS clone address.",
-                    "平台返回了不受支持的 HTTPS 克隆地址。",
-                ),
-                CheckoutError::GitFailed => (
-                    "CHECKOUT_GIT_FAILED",
-                    "Clone failed. Check Git, the account name and repository access; the destination may contain partial files.",
-                    "克隆失败，请检查 Git、账户名和仓库权限；目标目录可能包含未完成的文件。",
-                ),
-                CheckoutError::TimedOut => (
-                    "CHECKOUT_TIMEOUT",
-                    "Clone timed out; the destination may contain partial files.",
-                    "克隆超时；目标目录可能包含未完成的文件。",
-                ),
+            use tron_i18n::t;
+            let code = match error {
+                CheckoutError::InvalidPath => "CHECKOUT_PATH_INVALID",
+                CheckoutError::DifferentRepository => "CHECKOUT_REPOSITORY_MISMATCH",
+                CheckoutError::UnsupportedRemote => "CHECKOUT_REMOTE_UNSUPPORTED",
+                CheckoutError::GitFailed => "CHECKOUT_GIT_FAILED",
+                CheckoutError::TimedOut => "CHECKOUT_TIMEOUT",
                 _ => unreachable!(),
             };
             let locale = SupportedLocale::from_request(
@@ -238,16 +219,24 @@ fn checkout_error_response(
                     .get("accept-language")
                     .and_then(|value| value.to_str().ok()),
             );
+            let message = match code {
+                "CHECKOUT_PATH_INVALID" => {
+                    t!("tron.checkout.path_invalid", locale = locale)
+                }
+                "CHECKOUT_REPOSITORY_MISMATCH" => {
+                    t!("tron.checkout.repository_mismatch", locale = locale)
+                }
+                "CHECKOUT_REMOTE_UNSUPPORTED" => {
+                    t!("tron.checkout.remote_unsupported", locale = locale)
+                }
+                "CHECKOUT_GIT_FAILED" => {
+                    t!("tron.checkout.git_failed", locale = locale)
+                }
+                _ => t!("tron.checkout.timeout", locale = locale),
+            };
             (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(ApiResponse::protocol_error(
-                    code,
-                    if locale == SupportedLocale::EnUs {
-                        en
-                    } else {
-                        zh
-                    },
-                )),
+                Json(ApiResponse::protocol_error(code, message)),
             )
                 .into_response()
         }
@@ -255,53 +244,25 @@ fn checkout_error_response(
 }
 
 fn error_response(error: TopicError, headers: &HeaderMap) -> Response {
+    use tron_i18n::t;
     let locale = SupportedLocale::from_request(
         headers
             .get("accept-language")
             .and_then(|value| value.to_str().ok()),
     );
-    let (status, code, en, zh) = match error {
-        TopicError::NotFound => (
-            StatusCode::NOT_FOUND,
-            "TOPIC_NOT_FOUND",
-            "The work topic or reference was not found.",
-            "未找到工作主题或引用。",
-        ),
-        TopicError::InvalidReference => (
-            StatusCode::BAD_REQUEST,
-            "TOPIC_REFERENCE_INVALID",
-            "The resource reference is invalid or unavailable.",
-            "资源引用无效或不可用。",
-        ),
-        TopicError::InvalidNotes => (
-            StatusCode::BAD_REQUEST,
-            "TOPIC_NOTES_INVALID",
-            "Work topic notes are too long.",
-            "工作主题说明过长。",
-        ),
-        TopicError::Conflict => (
-            StatusCode::CONFLICT,
-            "TOPIC_REVISION_CONFLICT",
-            "The work topic changed. Refresh before saving.",
-            "工作主题已更改，请刷新后再保存。",
-        ),
-        TopicError::StorageFailure => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "TOPIC_STORAGE_FAILED",
-            "The work topic could not be saved.",
-            "无法保存工作主题。",
-        ),
+    let (status, code) = match error {
+        TopicError::NotFound => (StatusCode::NOT_FOUND, "TOPIC_NOT_FOUND"),
+        TopicError::InvalidReference => (StatusCode::BAD_REQUEST, "TOPIC_REFERENCE_INVALID"),
+        TopicError::InvalidNotes => (StatusCode::BAD_REQUEST, "TOPIC_NOTES_INVALID"),
+        TopicError::Conflict => (StatusCode::CONFLICT, "TOPIC_REVISION_CONFLICT"),
+        TopicError::StorageFailure => (StatusCode::INTERNAL_SERVER_ERROR, "TOPIC_STORAGE_FAILED"),
     };
-    (
-        status,
-        Json(ApiResponse::protocol_error(
-            code,
-            if locale == SupportedLocale::EnUs {
-                en
-            } else {
-                zh
-            },
-        )),
-    )
-        .into_response()
+    let message = match code {
+        "TOPIC_NOT_FOUND" => t!("tron.topic.not_found", locale = locale),
+        "TOPIC_REFERENCE_INVALID" => t!("tron.topic.reference_invalid", locale = locale),
+        "TOPIC_NOTES_INVALID" => t!("tron.topic.notes_invalid", locale = locale),
+        "TOPIC_REVISION_CONFLICT" => t!("tron.topic.conflict", locale = locale),
+        _ => t!("tron.topic.storage_failed", locale = locale),
+    };
+    (status, Json(ApiResponse::protocol_error(code, message))).into_response()
 }

@@ -1,0 +1,1470 @@
+# Knowledge base, RAG and resource text for the Tron backend.
+#
+# Stable `tron.*` keys mirror the descriptor `message_key` values returned by
+# the application/domain error types; other keys are display-layer semantic keys.
+# Every key carries both supported locales.
+_version: 2
+
+tron.knowledge_base.not_empty:
+  en: "Delete all resources in the knowledge base first"
+  zh-CN: "请先删除知识库内的所有资源"
+
+tron.knowledge_base.not_found:
+  en: "Knowledge base not found"
+  zh-CN: "知识库不存在"
+
+tron.knowledge_base.forbidden:
+  en: "Access to this knowledge base is denied"
+  zh-CN: "无知识库权限"
+
+tron.knowledge_base.conflict:
+  en: "Knowledge base changed; refresh and try again"
+  zh-CN: "知识库状态已改变，请刷新后重试"
+
+tron.knowledge_base.invalid:
+  en: "Invalid knowledge base request"
+  zh-CN: "知识库请求无效"
+
+knowledge.base.document_not_found:
+  en: "Knowledge base or document not found"
+  zh-CN: "知识库或文档不存在"
+
+knowledge.base.document_conflict:
+  en: "The document is being indexed or its state changed; refresh and try again"
+  zh-CN: "文档正在索引或状态已改变，请刷新后重试"
+
+knowledge.base.create.invalid:
+  en: "Invalid knowledge base name or index settings"
+  zh-CN: "知识库名称或索引配置无效"
+
+knowledge.base.create.failed:
+  en: "Could not create the knowledge base"
+  zh-CN: "知识库创建失败"
+
+knowledge.base.delete.failed:
+  en: "Could not delete the knowledge base"
+  zh-CN: "知识库删除失败"
+
+knowledge.base.agent_grants.invalid:
+  en: "Choose a defined internal agent"
+  zh-CN: "请选择已定义的内部智能体"
+
+knowledge.base.agent_grants.failed:
+  en: "Could not update knowledge base assignments"
+  zh-CN: "知识库关联操作失败"
+
+knowledge.base.library_agent_grants.invalid:
+  en: "Choose an internal agent on the platform"
+  zh-CN: "请选择平台内部智能体"
+
+knowledge.base.library_agent_grants.failed:
+  en: "Could not update knowledge base agent authorization"
+  zh-CN: "知识库智能体授权失败"
+
+knowledge.base.catalog.failed:
+  en: "Could not load knowledge bases"
+  zh-CN: "知识库列表加载失败"
+
+knowledge.base.settings.invalid:
+  en: "Invalid knowledge base name, description or index settings"
+  zh-CN: "知识库名称、说明或索引配置无效"
+
+knowledge.base.settings.failed:
+  en: "Could not configure the knowledge base; refresh and try again"
+  zh-CN: "知识库配置操作失败，请刷新后重试"
+
+knowledge.upload.file_unreadable:
+  en: "The file exceeds the upload limit or could not be read"
+  zh-CN: "文件超过上传限制或读取失败"
+
+knowledge.upload.request_key_invalid:
+  en: "The ingestion request identifier is invalid"
+  zh-CN: "入库请求标识无效"
+
+knowledge.upload.preference_invalid:
+  en: "The parse preference is invalid"
+  zh-CN: "解析方式无效"
+
+knowledge.upload.parse_plan_invalid:
+  en: "The parse plan is invalid"
+  zh-CN: "解析计划无效"
+
+knowledge.upload.form_invalid:
+  en: "The upload form is invalid"
+  zh-CN: "上传表单无效"
+
+knowledge.upload.file_required:
+  en: "A file is required"
+  zh-CN: "需要file"
+
+knowledge.preflight.form_invalid:
+  en: "The upload form is invalid"
+  zh-CN: "上传表单无效"
+
+knowledge.preflight.single_file:
+  en: "Only one file can be checked at a time"
+  zh-CN: "每次检查只允许一个文件"
+
+knowledge.preflight.file_unreadable:
+  en: "The file exceeds the upload limit or could not be read"
+  zh-CN: "文件超过上传限制或读取失败"
+
+knowledge.preflight.preference_invalid:
+  en: "The parse preference is invalid"
+  zh-CN: "解析方式无效"
+
+knowledge.preflight.file_required:
+  en: "A file is required"
+  zh-CN: "需要file"
+
+knowledge.preflight.timeout:
+  en: "File checking timed out or failed. No parsing task was submitted."
+  zh-CN: "文件检查超时或失败；尚未提交解析"
+
+knowledge.preflight.conflict:
+  en: "File checking is busy. Please retry."
+  zh-CN: "文档正在索引或状态已改变，请刷新后重试"
+
+knowledge.preflight.invalid:
+  en: "The file or parsing choice is invalid. No parsing task was submitted."
+  zh-CN: "文件或解析方式无效，尚未提交解析任务"
+
+knowledge.preflight.failed:
+  en: "File checking failed. No parsing task was submitted."
+  zh-CN: "文件检查失败，尚未提交解析任务"
+
+knowledge.quality.not_found:
+  en: "Knowledge base or evaluation not found"
+  zh-CN: "知识库或文档不存在"
+
+knowledge.quality.conflict:
+  en: "The data or configuration changed, or an optimization is already active. Refresh and retry."
+  zh-CN: "文档正在索引或状态已改变，请刷新后重试"
+
+knowledge.quality.invalid:
+  en: "Evaluation requires published documents with reusable parsed content, a valid question set and bounded options. Inspect the documents and retry."
+  zh-CN: "评测需要已发布且含可复用解析内容的文档、有效的问题集和合规的选项，请检查文档后重试"
+
+knowledge.quality.failed:
+  en: "Knowledge evaluation failed"
+  zh-CN: "知识库评测失败"
+
+knowledge.quality.session_title:
+  en: "Retrieval optimization · %{name}"
+  zh-CN: "检索优化 · %{name}"
+
+knowledge.quality.session_create_failed:
+  en: "Could not create the knowledge base session"
+  zh-CN: "知识库会话创建失败"
+
+knowledge.quality.request_invalid:
+  en: "The evaluation request is invalid or exceeds the 256 KiB limit"
+  zh-CN: "评测请求格式无效或超过256 KiB限制"
+
+knowledge.quality.diagnostic.generated_selftest:
+  en: "Contains generated questions: this is a source self-test, not human-labeled business recall."
+  zh-CN: "包含自动生成题，结果属于原文自测，不代表经人工标注的业务召回率"
+
+knowledge.quality.diagnostic.holdout_not_improved:
+  en: "Independent validation did not confirm improvement. The current index remains in use."
+  zh-CN: "独立验证题未确认改善，当前索引未替换"
+
+knowledge.quality.diagnostic.no_candidate_matched:
+  en: "No candidate matched the current training score. The current index remains in use."
+  zh-CN: "没有候选方案达到当前训练题表现，当前索引未替换"
+
+knowledge.quality.diagnostic.cancelled:
+  en: "Optimization stopped."
+  zh-CN: "优化已取消"
+
+knowledge.quality.diagnostic.time_budget:
+  en: "Time budget exhausted. No candidate was published."
+  zh-CN: "优化达到时间预算，未发布候选索引"
+
+knowledge.quality.diagnostic.model_operation_budget:
+  en: "Model operation budget exhausted. No candidate was published."
+  zh-CN: "优化达到模型调用预算，未发布候选索引"
+
+knowledge.quality.diagnostic.input_budget:
+  en: "Estimated input budget exhausted. No candidate was published."
+  zh-CN: "优化达到预估输入量预算，未发布候选索引"
+
+knowledge.quality.diagnostic.interrupted:
+  en: "The process was interrupted. The candidate did not replace the current index."
+  zh-CN: "优化进程已中断；当前索引未被候选替换"
+
+knowledge.quality.diagnostic.source_changed:
+  en: "Source, dataset or configuration changed. Refresh and retry."
+  zh-CN: "文档正在索引或状态已改变，请刷新后重试"
+
+knowledge.quality.diagnostic.insufficient_source:
+  en: "At least eight source excerpts or labeled training and validation questions are required."
+  zh-CN: "可评测原文不足8段，请补充资料或提供训练题与独立验证题"
+
+knowledge.quality.diagnostic.dataset_outdated:
+  en: "Source content changed. Update the human-labeled evaluation set."
+  zh-CN: "资料内容已变化，请更新人工标注的评测题集"
+
+knowledge.quality.diagnostic.embedding_space_mismatch:
+  en: "Documents use different embedding spaces. Align the model and rebuild before evaluating."
+  zh-CN: "当前文档的向量空间不一致，请统一模型后重建再评测"
+
+knowledge.quality.diagnostic.generated_questions_invalid:
+  en: "Generated questions were invalid. Candidate indexing did not start."
+  zh-CN: "自动生成的评测题格式无效；未开始候选索引"
+
+knowledge.quality.diagnostic.generated_evidence_unmatched:
+  en: "Generated evidence did not match a unique source passage. It was rejected."
+  zh-CN: "自动评测证据没有唯一对应原文；未使用生成内容作为标签"
+
+tron.rag.graph.invalid_request:
+  en: "Invalid graph query parameters"
+  zh-CN: "图谱查询参数无效"
+
+tron.rag.graph.scope_denied:
+  en: "Access to this corpus graph is denied"
+  zh-CN: "无权查询该语料图谱"
+
+tron.rag.graph.node_not_found:
+  en: "Node not found in the accessible scope"
+  zh-CN: "节点不存在或不在可访问范围内"
+
+tron.rag.graph.snapshot_changed:
+  en: "Authorization, publication or cursor has changed; search again"
+  zh-CN: "授权、发布版本或查询游标已变化，请重新检索"
+
+tron.rag.graph.channel_unavailable:
+  en: "Graph retrieval is unavailable; try again later"
+  zh-CN: "图谱检索通道暂不可用，请稍后重试"
+
+tron.rag.graph.disabled:
+  en: "Graph indexing is disabled for this corpus"
+  zh-CN: "该语料尚未启用图谱"
+
+tron.rag.graph.storage_failed:
+  en: "Could not read graph data"
+  zh-CN: "图谱读取失败"
+
+tron.rag.task_chunks_not_found:
+  en: "Task record not found"
+  zh-CN: "任务记录不存在"
+
+tron.rag.task_chunks_pagination_invalid:
+  en: "Invalid chunk pagination"
+  zh-CN: "分块分页参数无效"
+
+tron.rag.task_chunks_unavailable:
+  en: "View chunks from the latest completed task"
+  zh-CN: "请查看最新已完成任务的分块"
+
+tron.rag.task_chunks_storage_failed:
+  en: "Could not load chunks"
+  zh-CN: "分块读取失败"
+
+tron.rag.task_history_not_found:
+  en: "Task record not found"
+  zh-CN: "任务记录不存在"
+
+tron.rag.task_history_active:
+  en: "Cancel the active task before deleting its record"
+  zh-CN: "请先取消运行中的任务，再删除记录"
+
+tron.rag.task_history_storage_failed:
+  en: "Could not delete the task record"
+  zh-CN: "任务记录删除失败"
+
+rag.error.schema_incompatible:
+  en: "The legacy RAG data schema is incompatible; use a new database. Existing data was not deleted."
+  zh-CN: "旧 RAG 数据结构不兼容，请使用新数据库；现有数据未删除"
+
+rag.error.ingest_request_invalid:
+  en: "The RAG ingest request is invalid"
+  zh-CN: "RAG 入库请求无效"
+
+rag.error.ingest_scope_invalid:
+  en: "The RAG ingest target scope is invalid"
+  zh-CN: "RAG 入库目标范围无效"
+
+rag.error.embedding_failed:
+  en: "RAG embedding failed"
+  zh-CN: "RAG 向量化失败"
+
+rag.error.embedding_failure:
+  en: "RAG embedding failed: %{detail}"
+  zh-CN: "RAG 向量化失败：%{detail}"
+
+rag.error.search_request_invalid:
+  en: "The RAG search request is invalid"
+  zh-CN: "RAG 检索请求无效"
+
+rag.error.search_filter_invalid:
+  en: "The RAG search filter is invalid"
+  zh-CN: "RAG 检索过滤条件无效"
+
+rag.error.search_scope_invalid:
+  en: "The RAG search scope is invalid"
+  zh-CN: "RAG 检索范围无效"
+
+rag.error.search_route_unavailable:
+  en: "The RAG search route is unavailable"
+  zh-CN: "RAG 检索通道不可用"
+
+rag.error.debug_request_invalid:
+  en: "The RAG debug request is invalid"
+  zh-CN: "RAG 调试请求无效"
+
+rag.error.trace_payload_invalid:
+  en: "The RAG trace payload is invalid"
+  zh-CN: "RAG 追踪数据无效"
+
+rag.error.source_not_found:
+  en: "The RAG source was not found"
+  zh-CN: "未找到 RAG 语料来源"
+
+rag.error.storage_failed:
+  en: "RAG ingest storage failed"
+  zh-CN: "RAG 入库存储失败"
+
+rag.handler.graph_model_required:
+  en: "Choose an extraction model before enabling graph indexing"
+  zh-CN: "开启图谱索引需要选择抽取模型"
+
+rag.handler.document_not_found:
+  en: "The document was not found"
+  zh-CN: "文档不存在"
+
+rag.handler.task_state_changed:
+  en: "The task state changed; refresh the list"
+  zh-CN: "任务状态已改变，请刷新列表"
+
+rag.handler.task_running:
+  en: "The task is still running"
+  zh-CN: "任务仍在运行"
+
+resource.error.not_found:
+  en: "The resource was not found"
+  zh-CN: "资源不存在"
+
+resource.error.forbidden:
+  en: "You are not authorized to manage this resource"
+  zh-CN: "无权执行资源操作"
+
+resource.error.workspace_required:
+  en: "workspaceCode is required"
+  zh-CN: "必须提供工作空间编码"
+
+resource.error.invalid_workspace:
+  en: "The workspace is not active"
+  zh-CN: "工作空间不可用"
+
+resource.error.invalid_code:
+  en: "The resource business code is invalid"
+  zh-CN: "资源业务编码不正确"
+
+resource.error.invalid_input:
+  en: "The resource request is invalid"
+  zh-CN: "资源请求参数不正确"
+
+resource.error.invalid_variable_reference:
+  en: "The resource variable reference is invalid"
+  zh-CN: "资源变量引用不正确"
+
+resource.error.conflict:
+  en: "The resource state conflicts with this operation"
+  zh-CN: "资源状态发生冲突"
+
+resource.error.storage_failed:
+  en: "The resource storage operation failed"
+  zh-CN: "资源存储操作失败"
+
+resource.error.binary_missing:
+  en: "The resource binary object is unavailable"
+  zh-CN: "资源二进制内容不存在"
+
+resource.error.path_denied:
+  en: "The resource temporary-file path is not allowed"
+  zh-CN: "资源临时文件路径不合法"
+
+resource.error.storage_profile_not_found:
+  en: "The resource storage profile was not found"
+  zh-CN: "资源存储配置不存在"
+
+resource.error.storage_locator_invalid:
+  en: "The resource storage locator is invalid"
+  zh-CN: "资源存储位置不正确"
+
+resource.error.connection_verification_failed:
+  en: "The connection information did not pass connectivity verification"
+  zh-CN: "连接信息未通过连通性检测"
+
+resource.error.server_has_accounts:
+  en: "The server still has accounts and cannot be deleted"
+  zh-CN: "服务器仍关联账号，不能删除"
+
+resource.error.malformed_request:
+  en: "The request parameters or body are invalid"
+  zh-CN: "请求参数或请求体格式不正确"
+
+resource.error.internal:
+  en: "Resource service failed internally"
+  zh-CN: "资源服务内部错误"
+
+resource.error.invalid_field:
+  en: "Invalid resource field '%{field}': %{reason}"
+  zh-CN: "资源字段不正确：%{field}（%{reason}）"
+
+resource.error.request_field_invalid_with_field:
+  en: "Invalid resource field '%{field}': %{detail}"
+  zh-CN: "资源字段不正确：%{field}（%{detail}）"
+
+resource.error.request_field_invalid:
+  en: "Invalid resource request field: %{detail}"
+  zh-CN: "资源请求字段格式不正确：%{detail}"
+
+resource.error.reason.invalid_input:
+  en: "does not satisfy the resource validation rules"
+  zh-CN: "不符合资源校验规则"
+
+resource.error.reason.file_kind:
+  en: "must be a file resource kind"
+  zh-CN: "必须是文件类资源"
+
+resource.error.reason.not_blank:
+  en: "must not be blank"
+  zh-CN: "不能为空"
+
+resource.error.reason.invalid_code:
+  en: "must match the resource code format"
+  zh-CN: "必须符合资源编码格式"
+
+knowledge.base.parse_service_unconfigured:
+  en: "The document parsing service is not configured"
+  zh-CN: "文档解析服务未配置"
+
+knowledge.base.index_settings_invalid:
+  en: "The index settings are invalid"
+  zh-CN: "索引配置无效"
+
+knowledge.base.graph_model_required:
+  en: "Choose an extraction model before enabling graph indexing"
+  zh-CN: "开启图谱索引需要选择抽取模型"
+
+knowledge.base.name_invalid:
+  en: "The knowledge base name must be 1–120 characters"
+  zh-CN: "知识库名称需为1–120字符"
+
+knowledge.base.parse_choice_changed:
+  en: "The file or parse choice changed; check it again before uploading"
+  zh-CN: "文件或解析选择已改变，请重新检查后上传"
+
+knowledge.base.file_too_large:
+  en: "The file exceeds the 20 MiB limit"
+  zh-CN: "资料超过20 MiB上限"
+
+knowledge.base.format_unsupported:
+  en: "This format is not supported by MinerU"
+  zh-CN: "此格式不在MinerU支持范围内"
+
+knowledge.base.duplicate_file:
+  en: "This file already exists; edit the existing document settings to change how it is parsed"
+  zh-CN: "同一文件已存在；如需更换解析方式，请修改已有文档设置"
+
+knowledge.base.chunk_pagination_invalid:
+  en: "Invalid chunk pagination"
+  zh-CN: "分块分页参数无效"
+
+knowledge.base.settings_invalid:
+  en: "The knowledge base name or description is invalid"
+  zh-CN: "知识库名称或说明无效"
+
+knowledge.base.internal_agent_only:
+  en: "Only platform internal agents are supported"
+  zh-CN: "只支持平台内部智能体"
+
+knowledge.base.agent_required:
+  en: "Choose a defined internal agent"
+  zh-CN: "请选择已定义的内部智能体"
+
+knowledge.base.embedding_config_changed:
+  en: "The embedding model configuration differs from the published index; rebuild the index"
+  zh-CN: "Embedding模型配置与已发布索引不同，请重建索引"
+
+knowledge.base.quality_check_failed:
+  en: "Parsing quality validation failed and the index was not published: %{reason}. Check the original file and images"
+  zh-CN: "解析质量校验失败，索引未发布：%{reason}；请核对原件及图片"
+
+knowledge.base.ingest_manifest_changed:
+  en: "The chunking strategy implementation changed; submit the index task again"
+  zh-CN: "切片策略实现已改变，请重新提交索引任务"
+
+knowledge.base.parser_config_changed:
+  en: "The parsing node or configuration changed; ingest the document again"
+  zh-CN: "解析节点或配置已改变，请重新入库"
+
+knowledge.base.no_ingest_content:
+  en: "The document has no content that can be indexed"
+  zh-CN: "资料没有可入库内容"
+
+knowledge.base.split_checkpoint_missing:
+  en: "The ingestion chunk checkpoint is missing"
+  zh-CN: "入库切分检查点缺失"
+
+knowledge.base.vector_checkpoint_no_model:
+  en: "The vector checkpoint has no model identity, so it cannot resume safely"
+  zh-CN: "向量检查点缺少模型身份，不能安全续跑"
+
+knowledge.base.embedding_model_unconfigured:
+  en: "No embedding model is configured"
+  zh-CN: "Embedding模型未配置"
+
+knowledge.base.embedding_space_unconfigured:
+  en: "No embedding space is configured"
+  zh-CN: "Embedding空间未配置"
+
+knowledge.base.vector_checkpoint_image_mode_changed:
+  en: "The vector checkpoint image input mode changed, so it cannot resume safely"
+  zh-CN: "向量检查点的图片输入方式已改变，不能安全续跑"
+
+knowledge.base.vector_checkpoint_mismatch:
+  en: "The vector checkpoint does not match"
+  zh-CN: "向量检查点不匹配"
+
+knowledge.base.vector_checkpoint_invalid:
+  en: "The vector checkpoint has invalid dimensions or values; the index was not published"
+  zh-CN: "向量检查点维度或数值无效，整份索引未发布"
+
+knowledge.base.ingest_request_invalid:
+  en: "The ingestion request identifier is invalid"
+  zh-CN: "入库请求标识无效"
+
+knowledge.base.background_env_unavailable:
+  en: "The background index execution environment is unavailable"
+  zh-CN: "后台索引执行环境不可用"
+
+knowledge.base.parser_unavailable_cancel_retry:
+  en: "The original parser is unavailable; cancel and retry later"
+  zh-CN: "原解析器不可用，取消稍后重试"
+
+knowledge.base.chunk_strategy_unconfigured:
+  en: "The chunking strategy is not registered"
+  zh-CN: "切片策略未注册"
+
+knowledge.base.inconsistency:
+  en: "The existing parsing artifact already recorded a failure"
+  zh-CN: "现有解析产物已记录失败"
+
+knowledge.base.publication_attachment_limit:
+  en: "There are too many parsing attachments"
+  zh-CN: "解析附件超过上限"
+
+knowledge.base.attachment_ingestion_required:
+  en: "Finish parsing and ingesting the document first; evaluation does not submit parsing tasks again"
+  zh-CN: "请先完成资料解析和入库；评测不会重新提交解析任务"
+
+knowledge.base.parsing_cache_read_limit:
+  en: "The parsing cache for one document exceeds the read limit"
+  zh-CN: "单份解析缓存超过读取上限"
+
+knowledge.base.parsing_cache_too_large:
+  en: "The parsing cache exceeds the limit"
+  zh-CN: "解析缓存超过上限"
+
+knowledge.base.parse_service_unconfigured_no_fallback:
+  en: "The document parsing service is not configured; it does not fall back to plain-text parsing"
+  zh-CN: "文档解析服务未配置；不会自动降级为纯文本解析"
+
+knowledge.base.office_visuals_unconfigured:
+  en: "The Office file contains native charts but local visual conversion is not configured; an index without the charts was not published"
+  zh-CN: "Office含原生图表但本地视觉转换未配置；未发布缺失图表的索引"
+
+knowledge.base.excel_conversion_mismatch:
+  en: "The number of converted Excel pages does not match the sheet count and chart sources are ambiguous; the index was not published"
+  zh-CN: "Excel转换页与Sheet数量不匹配，图表来源不明确；未发布索引"
+
+knowledge.base.excel_conversion_sheet_missing:
+  en: "A converted Excel sheet is missing"
+  zh-CN: "Excel转换Sheet缺失"
+
+knowledge.base.parsing_attachment_name_invalid:
+  en: "The parsed image name is invalid"
+  zh-CN: "解析图片名称无效"
+
+knowledge.base.parsed_structured_too_large:
+  en: "The parsed structured artifact exceeds the 100 MiB limit"
+  zh-CN: "解析结构化资料超过100 MiB上限"
+
+knowledge.base.parsed_image_text_ref_missing:
+  en: "The parsed image text reference is missing"
+  zh-CN: "解析图片文本引用缺失"
+
+knowledge.base.parsed_image_ref_missing:
+  en: "The parsed image reference is missing"
+  zh-CN: "解析图片引用缺失"
+
+knowledge.base.image_only_context_disabled:
+  en: "Image context is not enabled; the answering model only received retrieved text and did not see the original images"
+  zh-CN: "图片上下文未启用；当前回答模型仅收到检索文本，未查看原图"
+
+knowledge.base.visual_evidence_image_limit:
+  en: "Some visual evidence exceeded the four-image-per-step limit and was not loaded"
+  zh-CN: "部分视觉证据超过单步4张图片上限，未载入"
+
+knowledge.base.visual_evidence_read_failed:
+  en: "Visual resource %{code} could not be read and was not loaded; retry later"
+  zh-CN: "视觉资源%{code}读取失败，未载入；可重试"
+
+knowledge.base.visual_evidence_too_large:
+  en: "Visual resource %{code} exceeds the size limit and was not loaded"
+  zh-CN: "视觉资源%{code}超过大小上限，未载入"
+
+knowledge.base.visual_evidence_total_limit:
+  en: "Visual evidence exceeds the per-step read size limit and was not loaded"
+  zh-CN: "视觉证据超过单步读取大小上限，未载入"
+
+knowledge.base.visual_evidence_format_unsupported:
+  en: "Visual resource %{code} has an unsupported format and was not loaded"
+  zh-CN: "视觉资源%{code}格式不支持，未载入"
+
+knowledge.base.image_too_large_for_description:
+  en: "The image is too large to describe"
+  zh-CN: "图片大小不受支持"
+
+knowledge.base.image_format_unsupported:
+  en: "The image format is not supported"
+  zh-CN: "图片格式不受支持"
+
+knowledge.base.image_description_timeout:
+  en: "Image description generation timed out; retry"
+  zh-CN: "图片描述生成超时，请重试"
+
+knowledge.base.image_description_cache_invalid:
+  en: "The image description cache is invalid; retry"
+  zh-CN: "图片描述缓存无效，请重试"
+
+knowledge.base.image_description_cache_source_mismatch:
+  en: "The image description cache source does not match"
+  zh-CN: "图片描述缓存来源不匹配"
+
+knowledge.base.image_description_output_too_long:
+  en: "The image description output is too long; retry"
+  zh-CN: "图片描述输出过长，请重试"
+
+knowledge.base.image_description_content_invalid:
+  en: "The image description returned invalid content; retry"
+  zh-CN: "图片描述返回内容无效，请重试"
+
+knowledge.base.image_description_format_invalid:
+  en: "The image description returned an invalid format; retry"
+  zh-CN: "图片描述返回格式无效，请重试"
+
+knowledge.base.image_description_limit_invalid:
+  en: "The image description limit configuration is invalid"
+  zh-CN: "图片描述限制配置无效"
+
+knowledge.base.image_description_count_limit:
+  en: "The number of images exceeds the description limit; adjust the limit or split the document"
+  zh-CN: "图片数量超过描述处理上限，请调整限制或拆分文档"
+
+knowledge.base.image_model_no_vector_support:
+  en: "The current embedding model does not support original images; resupplement the index"
+  zh-CN: "当前向量模型不支持原图，请重新补充索引"
+
+knowledge.base.image_vector_resource_invalid:
+  en: "Original-image vectors must bind a unique image resource"
+  zh-CN: "原图向量必须绑定唯一图片资源"
+
+knowledge.base.image_vector_input_too_large:
+  en: "The image vector input exceeds the size limit"
+  zh-CN: "图片向量输入超过大小上限"
+
+knowledge.base.image_vector_format_unsupported:
+  en: "The image vector input format is not supported"
+  zh-CN: "图片向量输入格式不受支持"
+
+knowledge.base.hidden_worksheets_unsupported:
+  en: "The current parse strategy does not fully handle hidden worksheets; unhide them and upload again"
+  zh-CN: "当前解析策略不完整处理隐藏工作表，请取消隐藏后重新上传"
+
+knowledge.base.parse_text_limit:
+  en: "The parsed text exceeds the 16 MiB limit"
+  zh-CN: "解析文本超过16 MiB上限"
+
+knowledge.base.word_body_missing:
+  en: "The Word file has no body structure"
+  zh-CN: "Word缺少正文结构"
+
+knowledge.base.excel_sheets_missing:
+  en: "The Excel file has no worksheet structure"
+  zh-CN: "Excel缺少工作表结构"
+
+knowledge.base.excel_sheet_name_missing:
+  en: "An Excel worksheet name is missing"
+  zh-CN: "Excel工作表名称缺失"
+
+knowledge.base.excel_sheet_mapping_mismatch:
+  en: "Excel worksheet locations do not match; the index was not published"
+  zh-CN: "Excel工作表定位不匹配，索引未发布"
+
+knowledge.base.excel_sheet_index_missing:
+  en: "An Excel worksheet index is missing"
+  zh-CN: "Excel工作表序号缺失"
+
+knowledge.base.excel_sheet_index_invalid:
+  en: "An Excel worksheet index is invalid"
+  zh-CN: "Excel工作表序号无效"
+
+knowledge.base.pdf_visual_copy_too_large:
+  en: "The original-page image copy exceeds 20 MiB, so the source was not replaced"
+  zh-CN: "原页图像副本超过20 MiB，未替换原件"
+
+knowledge.base.pdf_visual_only_reviewable:
+  en: "Only PDFs awaiting verification can be recognized again from original-page images"
+  zh-CN: "仅待核对的PDF可从原页图像重新识别"
+
+knowledge.base.local_parser_unconfigured:
+  en: "No local parser is configured"
+  zh-CN: "本地解析器未配置"
+
+knowledge.base.pdf_visual_requires_local_mineru:
+  en: "Re-recognition needs local MinerU and an OCR-capable parse quality; nothing is sent externally and no fallback is applied"
+  zh-CN: "重新识别需要本机MinerU及支持OCR的解析质量；不会外发或自动降级"
+
+knowledge.base.fidelity_risk_source_missing:
+  en: "The original risk source is missing, so verification cannot be skipped"
+  zh-CN: "缺少原始风险来源，不能跳过核验"
+
+knowledge.base.fidelity_resource_limit:
+  en: "Data-fidelity verification resources exceed the limit"
+  zh-CN: "数据保真核验资源超出上限"
+
+knowledge.base.ocr_override_unsupported:
+  en: "The parsing service does not support overriding the document OCR mode"
+  zh-CN: "解析服务不支持文档文字识别方式覆盖"
+
+knowledge.base.cancelled_not_confirmed:
+  en: "The original parsing task is still reconciling; cancellation is not confirmed yet"
+  zh-CN: "原解析任务仍在对账，取消尚未确认"
+
+knowledge.base.markdown_no_override:
+  en: "Markdown is read directly and needs no parse-quality override"
+  zh-CN: "Markdown使用直接读取，无需解析质量覆盖"
+
+knowledge.base.selected_quality_unavailable:
+  en: "The selected parse quality is unavailable"
+  zh-CN: "选定解析质量不可用"
+
+knowledge.base.ocr_not_needed:
+  en: "This file does not need OCR"
+  zh-CN: "此文件不需要文字识别"
+
+knowledge.base.index_interrupted:
+  en: "Indexing was interrupted; retry"
+  zh-CN: "索引已中断，请重试"
+
+knowledge.base.index_config_changed_rebuild:
+  en: "The index configuration changed; use a new supplementary index task"
+  zh-CN: "索引配置已改变，请使用新的补充索引任务"
+
+knowledge.base.index_cancelled_lease_lost:
+  en: "The index task was cancelled or its lease expired"
+  zh-CN: "索引任务已取消或租约失效"
+
+knowledge.base.checkpoint_limit_exceeded:
+  en: "The ingestion checkpoint exceeds the limit"
+  zh-CN: "入库检查点超过上限"
+
+knowledge.base.vector_checkpoint_count_mismatch:
+  en: "The vector checkpoint count does not match"
+  zh-CN: "向量检查点数量不匹配"
+
+knowledge.base.embedding_config_changed_unpublished:
+  en: "The embedding model configuration changed and the whole index was not published; rebuild"
+  zh-CN: "Embedding模型配置已改变，整份索引未发布；请重建"
+
+knowledge.base.document_no_pages:
+  en: "The document has no successfully parsed pages"
+  zh-CN: "文档没有成功解析的页面"
+
+knowledge.base.document_incomplete_pages:
+  en: "The document has pages that failed to parse; an incomplete index was not published"
+  zh-CN: "文档有未成功解析的页面，未发布不完整索引"
+
+knowledge.base.enqueue_failed:
+  en: "Could not create the ingestion task: %{error}"
+  zh-CN: "创建入库任务失败：%{error}"
+
+knowledge.quality.options_out_of_range:
+  en: "The evaluation target, recall or optimization count is out of range"
+  zh-CN: "评测目标、召回数量或优化次数超出范围"
+
+knowledge.quality.too_many_candidates:
+  en: "The candidate strategy count exceeds this round's optimization limit"
+  zh-CN: "候选策略数量超过本轮优化次数上限"
+
+knowledge.quality.budget_out_of_range:
+  en: "The optimization budget is out of range"
+  zh-CN: "优化预算超出范围"
+
+knowledge.quality.candidate_strategy_unregistered:
+  en: "The candidate chunking strategy is not registered"
+  zh-CN: "候选切片策略未注册"
+
+knowledge.quality.candidate_vector_model_unpinned:
+  en: "The candidate vector model is not pinned"
+  zh-CN: "候选向量模型未固定"
+
+knowledge.quality.candidate_vector_space_missing:
+  en: "The candidate vector space is missing"
+  zh-CN: "候选向量空间缺失"
+
+knowledge.quality.candidate_no_chunks:
+  en: "The candidate strategy produced no valid chunks"
+  zh-CN: "候选策略未产生有效切片"
+
+knowledge.quality.candidate_chunk_limit:
+  en: "The candidate index exceeds the 2000-chunk limit"
+  zh-CN: "候选索引超过2000片上限"
+
+knowledge.quality.candidate_path_invalid:
+  en: "The candidate index path is invalid"
+  zh-CN: "候选索引路径无效"
+
+knowledge.quality.temporary_path_invalid:
+  en: "The temporary index path is invalid"
+  zh-CN: "临时索引路径无效"
+
+knowledge.quality.candidate_model_changed:
+  en: "The candidate index vector model changed during evaluation"
+  zh-CN: "候选索引的实际向量模型发生变化"
+
+knowledge.quality.candidate_graph_unconfigured:
+  en: "The candidate graph is not configured"
+  zh-CN: "候选图谱未配置"
+
+knowledge.quality.candidate_vector_model_changed:
+  en: "The vector model configuration changed during evaluation"
+  zh-CN: "评测期间向量模型配置已变化"
+
+knowledge.quality.question_id_invalid:
+  en: "An evaluation question source id is invalid"
+  zh-CN: "评测题原文标识无效"
+
+knowledge.quality.question_source_unprovided:
+  en: "An evaluation question references a source that was not provided"
+  zh-CN: "评测题引用了未提供的原文"
+
+knowledge.quality.generated_duplicate_source:
+  en: "Generated questions reference the same source passage twice"
+  zh-CN: "自动评测题重复引用同一原文"
+
+knowledge.quality.generated_question_invalid:
+  en: "A generated evaluation question is invalid"
+  zh-CN: "自动评测问题无效"
+
+knowledge.quality.generated_evidence_length_invalid:
+  en: "Generated evaluation evidence has an invalid length"
+  zh-CN: "自动评测证据长度无效"
+
+knowledge.quality.generated_uncovered_sources:
+  en: "Generated evaluation questions do not cover every provided source excerpt"
+  zh-CN: "自动评测题未覆盖提供的原文片段"
+
+knowledge.quality.dataset_size_invalid:
+  en: "The evaluation set needs 8 to 64 questions"
+  zh-CN: "评测题集需要8至64道题"
+
+knowledge.quality.dataset_case_invalid:
+  en: "Evaluation questions need distinct questions, ids and valid source evidence"
+  zh-CN: "评测题需要不同的问题、标识和有效原文证据"
+
+knowledge.quality.question_outside_library:
+  en: "An evaluation question references a document outside this knowledge base"
+  zh-CN: "评测题引用了当前知识库以外的资料"
+
+knowledge.quality.question_block_missing:
+  en: "The evaluation source block does not exist"
+  zh-CN: "评测原文块不存在"
+
+knowledge.quality.evidence_range_invalid:
+  en: "The evaluation evidence range is invalid"
+  zh-CN: "评测证据范围无效"
+
+knowledge.quality.dataset_partitions_invalid:
+  en: "At least four training questions and four independent validation questions are required"
+  zh-CN: "至少需要4道训练题和4道独立验证题"
+
+knowledge.quality.dataset_overlap:
+  en: "Training and validation questions must not reuse overlapping source evidence"
+  zh-CN: "训练题与验证题不能重复使用重叠的原文证据"
+
+knowledge.quality.page_out_of_range:
+  en: "The evaluation source page is out of range"
+  zh-CN: "评测原文分页超出范围"
+
+knowledge.quality.source_too_large:
+  en: "This evaluation round's sources exceed the 4 MiB limit"
+  zh-CN: "本轮评测正文超过4 MiB上限"
+
+knowledge.quality.too_many_documents:
+  en: "One optimization round handles at most 16 documents; split the knowledge base or narrow the evaluation scope"
+  zh-CN: "一次优化最多处理16份资料，请分开建立知识库或缩小评测范围"
+
+knowledge.quality.no_published_source:
+  en: "Finish parsing and ingesting at least one document first"
+  zh-CN: "请先完成至少一份资料的解析和入库"
+
+knowledge.quality.unstable_source:
+  en: "The document is being processed or failed to rebuild; restore a stable published index first"
+  zh-CN: "资料正在处理或重建失败，请先恢复稳定的已发布索引"
+
+knowledge.quality.evidence_document_missing:
+  en: "Retrieval evidence has no document id"
+  zh-CN: "检索证据缺少资料标识"
+
+knowledge.quality.evidence_range_invalid_retrieval:
+  en: "Retrieval evidence has an invalid source range"
+  zh-CN: "检索证据来源范围无效"
+
+knowledge.quality.evidence_foreign_document:
+  en: "Retrieval evidence references another document"
+  zh-CN: "检索证据引用了其他资料"
+
+knowledge.quality.chunks_missing_source:
+  en: "Existing chunks have no unique source origin; rebuild the document before evaluating"
+  zh-CN: "现有切片缺少唯一原文来源，请先重建资料后评测"
+
+knowledge.quality.request_id_invalid:
+  en: "A valid optimization request id is required"
+  zh-CN: "需要有效的优化请求标识"
+
+knowledge.quality.chunk_strategy_failed:
+  en: "The chunking strategy failed: %{error}"
+  zh-CN: "切片策略失败：%{error}"
+
+knowledge.quality.retrieval_stage_failed:
+  en: "Evaluation retrieval stage %{stage} failed: %{detail}"
+  zh-CN: "评测检索阶段%{stage}失败：%{detail}"
+
+llm.vision.model_unavailable:
+  en: "The image description model is unavailable"
+  zh-CN: "图片描述模型不可用"
+
+llm.vision.protocol_unsupported:
+  en: "The image description model protocol is not supported"
+  zh-CN: "图片描述模型协议不受支持"
+
+llm.vision.model_changed:
+  en: "The image description model changed"
+  zh-CN: "图片描述模型发生变化"
+
+llm.vision.model_authorization_unavailable:
+  en: "The image description model authorization is unavailable"
+  zh-CN: "图片描述模型授权不可用"
+
+llm.vision.generation_failed:
+  en: "Image description generation failed; retry"
+  zh-CN: "图片描述生成失败，请重试"
+
+llm.vision.account_unavailable:
+  en: "The image description account is unavailable"
+  zh-CN: "图片描述账户不可用"
+
+llm.vision.config_invalid:
+  en: "The image description configuration is invalid"
+  zh-CN: "图片描述配置无效"
+
+llm.vision.account_authorization_required:
+  en: "Image descriptions need an account-bound model authorization"
+  zh-CN: "图片描述需要账户绑定的模型授权"
+
+llm.vision.image_unsupported:
+  en: "The image format or size is not supported"
+  zh-CN: "图片格式或大小不受支持"
+
+llm.vision.account_changed:
+  en: "The model account changed; retry"
+  zh-CN: "模型账户已改变，请重试"
+
+llm.vision.fixed_quality_model_required:
+  en: "Choose a fixed PersonAI high-quality vision model"
+  zh-CN: "请选择固定的 PersonAI 高质量视觉模型"
+
+llm.vision.default_model_unconfigured:
+  en: "No visual chat model is available for default image descriptions"
+  zh-CN: "默认图片说明没有可用的视觉对话模型"
+
+llm.embedding.batch_response_invalid:
+  en: "The embedding batch returned an invalid count, index or vector (expected %{dimension} dimensions): %{error}"
+  zh-CN: "Embedding批次返回的数量、索引或向量无效（要求%{dimension}维）: %{error}"
+
+resource.error.reason.one_of:
+  en: "must be one of %{allowed}"
+  zh-CN: "必须是 %{allowed} 之一"
+
+resource.error.reason.single_endpoint:
+  en: "SINGLE mode requires exactly one endpoint"
+  zh-CN: "SINGLE 模式必须且只能有一个端点"
+
+resource.error.reason.replication_endpoints:
+  en: "REPLICATION mode requires at least two endpoints"
+  zh-CN: "REPLICATION 模式至少需要两个端点"
+
+resource.error.reason.replication_roles:
+  en: "REPLICATION endpoints must include PRIMARY and REPLICA roles"
+  zh-CN: "REPLICATION 端点必须包含 PRIMARY 和 REPLICA 角色"
+
+resource.error.reason.roles_replication_only:
+  en: "roles are only allowed in REPLICATION mode"
+  zh-CN: "仅 REPLICATION 模式允许设置角色"
+
+resource.error.reason.postgres_session_mode:
+  en: "must use a supported PostgreSQL session and load-balance mode"
+  zh-CN: "必须使用受支持的 PostgreSQL 会话与负载均衡模式"
+
+resource.error.reason.standalone_endpoint:
+  en: "STANDALONE topology requires exactly one endpoint"
+  zh-CN: "STANDALONE 拓扑必须且只能有一个端点"
+
+resource.error.reason.non_negative:
+  en: "must be non-negative"
+  zh-CN: "必须为非负数"
+
+resource.error.reason.cluster_database_zero:
+  en: "must be zero for CLUSTER topology"
+  zh-CN: "CLUSTER 拓扑下必须为 0"
+
+resource.error.reason.identifier_format:
+  en: "must be non-blank, no longer than 128 characters, and contain no whitespace"
+  zh-CN: "不能为空、不超过 128 个字符且不能包含空白字符"
+
+resource.error.reason.required_sentinel:
+  en: "is required for SENTINEL topology"
+  zh-CN: "SENTINEL 拓扑下必填"
+
+resource.error.reason.only_sentinel:
+  en: "is only allowed for SENTINEL topology"
+  zh-CN: "仅 SENTINEL 拓扑允许"
+
+resource.error.reason.required_sasl:
+  en: "is required for SASL security protocols"
+  zh-CN: "SASL 安全协议下必填"
+
+resource.error.reason.only_sasl:
+  en: "is only allowed for SASL security protocols"
+  zh-CN: "仅 SASL 安全协议允许"
+
+resource.error.reason.unencrypted_client_key:
+  en: "encrypted client keys are not supported; provide an unencrypted PEM key"
+  zh-CN: "不支持加密的客户端私钥，请提供未加密的 PEM 私钥"
+
+resource.error.reason.required_ssl:
+  en: "is required for SSL security protocols"
+  zh-CN: "SSL 安全协议下必填"
+
+resource.error.reason.only_ssl:
+  en: "is only allowed for SSL security protocols"
+  zh-CN: "仅 SSL 安全协议允许"
+
+resource.error.reason.endpoint_count:
+  en: "must contain between 1 and 128 endpoints"
+  zh-CN: "必须包含 1 到 128 个端点"
+
+resource.error.reason.endpoint_port:
+  en: "must be between 1 and 65535 and endpoints must be unique"
+  zh-CN: "必须在 1 到 65535 之间，且端点不能重复"
+
+resource.error.reason.not_allowed_mode:
+  en: "is not allowed for this connection mode"
+  zh-CN: "当前连接模式不允许"
+
+resource.error.reason.required:
+  en: "is required"
+  zh-CN: "必填"
+
+resource.error.reason.tls_mode:
+  en: "must use a supported TLS mode"
+  zh-CN: "必须使用受支持的 TLS 模式"
+
+resource.error.reason.client_key_dependency:
+  en: "clientCertificate and clientKey must be provided together, and clientKeyPassword requires clientKey"
+  zh-CN: "clientCertificate 与 clientKey 必须同时提供，clientKeyPassword 依赖 clientKey"
+
+resource.error.reason.properties_limit:
+  en: "must contain no more than 128 entries"
+  zh-CN: "不能超过 128 项"
+
+resource.error.reason.length:
+  en: "must contain between %{minimum} and %{maximum} characters"
+  zh-CN: "长度必须在 %{minimum} 到 %{maximum} 个字符之间"
+
+llm.workspace_required:
+  en: "workspaceCode is required"
+  zh-CN: "必须提供 workspaceCode"
+
+llm.input_required:
+  en: "input is required"
+  zh-CN: "必须提供输入"
+
+llm.query_required:
+  en: "query is required"
+  zh-CN: "必须提供查询"
+
+llm.documents_required:
+  en: "documents are required"
+  zh-CN: "必须提供文档"
+
+llm.text_model_unavailable:
+  en: "No text model is available or configured as default"
+  zh-CN: "没有可用的文本模型或未配置默认文本模型"
+
+llm.embedding_model_unavailable:
+  en: "No embedding model is available or configured as default"
+  zh-CN: "没有可用的 Embedding 模型或未配置默认 Embedding 模型"
+
+llm.rerank_model_unavailable:
+  en: "No rerank model is available or configured as default"
+  zh-CN: "没有可用的重排模型或未配置默认重排模型"
+
+llm.model_resolution_failed:
+  en: "The model could not be resolved: %{detail}"
+  zh-CN: "模型解析失败：%{detail}"
+
+llm.provider_failed:
+  en: "The model provider call failed: %{detail}"
+  zh-CN: "模型服务调用失败：%{detail}"
+
+llm.invalid_provider_response:
+  en: "The model provider returned an invalid response: %{detail}"
+  zh-CN: "模型服务返回无效结果：%{detail}"
+
+llm.invalid_chunk_strategy:
+  en: "The chunking strategy is invalid: %{detail}"
+  zh-CN: "切片策略无效：%{detail}"
+
+knowledge.base.failure_detail:
+  en: "Document processing failed: %{detail}"
+  zh-CN: "文档处理失败：%{detail}"
+
+knowledge.image.title_of:
+  en: "Images in %{title}"
+  zh-CN: "%{title} 中的图片"
+
+rag.graph.source_reference_changed:
+  en: "The graph source references changed; the related graph display was withdrawn"
+  zh-CN: "图谱原文引用已改变，相关图谱展示已撤销"
+
+rag.graph.no_evidence_in_scope:
+  en: "No evidence matched inside the authorized published scope"
+  zh-CN: "当前授权及已发布范围内没有命中证据"
+
+rag.graph.scope_changed_stats_withdrawn:
+  en: "Source authorization or publication changed; graph statistics were withdrawn"
+  zh-CN: "来源授权或发布状态已改变，图谱统计已撤销"
+
+rag.index.vector_checkpoint_invalid:
+  en: "The vector checkpoint dimensions, values or count are invalid"
+  zh-CN: "向量检查点维度、数值或数量无效"
+
+rag.index.embedding_config_changed:
+  en: "The checkpoint embedding configuration changed; rebuild the index"
+  zh-CN: "检查点的Embedding模型配置已改变，请重建索引"
+
+rag.index.embedding_batch_limit_invalid:
+  en: "The embedding batch limit must be greater than zero"
+  zh-CN: "Embedding批次上限必须大于零"
+
+rag.index.provider_embedding_batch_limit_invalid:
+  en: "The provider embedding batch limit must be greater than zero"
+  zh-CN: "供应商Embedding批次上限必须大于零"
+
+rag.index.embedding_chunk_empty:
+  en: "The embedding chunk text must not be empty"
+  zh-CN: "Embedding分块正文不能为空"
+
+rag.index.chunk_over_token_limit:
+  en: "A chunk exceeds the embedding batch token limit; shrink chunks and rebuild"
+  zh-CN: "单个分块超过Embedding批次token上限，请缩小分块后重建"
+
+rag.index.cached_vector_model_missing:
+  en: "The cached vector has no model identity"
+  zh-CN: "缓存向量缺少模型身份"
+
+rag.index.embedding_model_mismatch:
+  en: "The embedding model does not match; the index was not published"
+  zh-CN: "Embedding模型不匹配，整份索引未发布"
+
+rag.index.embedding_model_changed:
+  en: "The actual embedding model changed; the index was not published"
+  zh-CN: "实际Embedding模型发生变化，整份索引未发布"
+
+rag.index.embedding_config_changed_unpublished:
+  en: "The embedding configuration changed; the index was not published"
+  zh-CN: "Embedding模型配置已改变，整份索引未发布"
+
+rag.graph.extraction_too_large:
+  en: "The graph extraction output exceeds the size limit"
+  zh-CN: "图谱抽取返回内容超过大小限制，请重试"
+
+rag.graph.nodes_missing:
+  en: "The extracted graph nodes are missing"
+  zh-CN: "图谱实体缺失"
+
+rag.graph.edges_missing:
+  en: "The extracted graph edges are missing"
+  zh-CN: "图谱关系缺失"
+
+rag.graph.node_ref_invalid:
+  en: "Graph entity refs are missing or duplicated"
+  zh-CN: "图谱实体 ref 缺失或重复"
+
+rag.graph.edge_ref_invalid:
+  en: "Graph edge from/to must reference a ref declared in this extraction"
+  zh-CN: "图谱关系 from/to 必须引用当前 nodes 中已声明的 ref"
+
+rag.graph.evidence_too_large:
+  en: "Expanded graph evidence exceeds the size limit"
+  zh-CN: "图谱证据展开后超过大小限制"
+
+rag.graph.storage_unconfigured:
+  en: "The real graph store is not configured"
+  zh-CN: "真实图谱存储未配置"
+
+rag.graph.node_vector_model_mismatch:
+  en: "The graph node vector batch model identity does not match"
+  zh-CN: "图谱节点向量批次的模型身份不匹配"
+
+rag.graph.candidate_missing:
+  en: "The candidate graph does not exist"
+  zh-CN: "候选图谱不存在"
+
+rag.graph.candidate_source_mismatch:
+  en: "The candidate graph source or configuration does not match"
+  zh-CN: "候选图谱的来源或配置不匹配"
+
+rag.graph.candidate_vector_space_changed:
+  en: "The candidate graph node vector space changed"
+  zh-CN: "候选图谱节点向量空间已改变"
+
+rag.graph.candidate_extraction_missing:
+  en: "The candidate graph extraction is missing"
+  zh-CN: "候选图谱抽取缺失"
+
+rag.graph.candidate_projection_mismatch:
+  en: "The candidate graph projection does not match the tested sources"
+  zh-CN: "候选图谱投影与已测试原文不匹配"
+
+rag.graph.node_vector_model_unconfigured:
+  en: "The graph node vector model is not configured"
+  zh-CN: "图谱节点向量模型未配置"
+
+rag.graph.node_vector_space_missing:
+  en: "The graph node vector space identity is missing"
+  zh-CN: "图谱节点向量空间身份缺失"
+
+rag.graph.node_vector_model_changed:
+  en: "The graph node vector model configuration changed; rebuild the index"
+  zh-CN: "图谱节点向量模型配置已改变，请重建索引"
+
+rag.graph.extraction_checkpoint_missing:
+  en: "The graph extraction checkpoint is missing"
+  zh-CN: "图谱抽取检查点缺失"
+
+rag.graph.vector_manifest_invalid:
+  en: "The graph node vector checkpoint manifest is invalid"
+  zh-CN: "图谱节点向量检查点清单无效"
+
+rag.graph.vector_batch_invalid:
+  en: "The graph node vector batch dimensions or values are invalid"
+  zh-CN: "图谱节点向量批次维度或数值无效"
+
+rag.graph.vector_batch_too_large:
+  en: "The graph node vector batch is too large"
+  zh-CN: "图谱节点向量批次过大"
+
+rag.graph.vector_batch_count_invalid:
+  en: "The graph node vector batches are discontinuous or the count is invalid"
+  zh-CN: "图谱节点向量批次不连续或数量无效"
+
+rag.graph.vector_batch_dimension_invalid:
+  en: "The graph node vector batch dimensions or byte count are invalid"
+  zh-CN: "图谱节点向量批次维度或字节数无效"
+
+rag.graph.vector_batch_encoding_invalid:
+  en: "The graph node vector batch encoding is invalid"
+  zh-CN: "图谱节点向量批次编码无效"
+
+rag.graph.vector_batch_byte_count_invalid:
+  en: "The graph node vector batch byte count is invalid"
+  zh-CN: "图谱节点向量批次字节数无效"
+
+rag.graph.vector_batch_non_finite:
+  en: "The graph node vector batch contains non-finite values"
+  zh-CN: "图谱节点向量批次包含非有限数值"
+
+rag.graph.vector_checkpoint_mismatch:
+  en: "The graph node vector checkpoint model space or count does not match"
+  zh-CN: "图谱节点向量检查点的模型空间或数量不匹配"
+
+rag.graph.vector_checkpoint_incomplete:
+  en: "The graph node vector checkpoint is incomplete"
+  zh-CN: "图谱节点向量检查点不完整"
+
+rag.graph.evidence_format_invalid:
+  en: "evidence must be a start/end source passage range object or a verbatim quote"
+  zh-CN: "evidence 必须是 start/end 原文片段编号对象或逐字引文"
+
+rag.graph.evidence_start_invalid:
+  en: "The source passage start index is invalid"
+  zh-CN: "原文片段 start 编号无效"
+
+rag.graph.evidence_end_invalid:
+  en: "The source passage end index is invalid"
+  zh-CN: "原文片段 end 编号无效"
+
+rag.graph.evidence_start_out_of_bounds:
+  en: "The source passage start index is out of bounds"
+  zh-CN: "原文片段 start 越界"
+
+rag.graph.evidence_end_out_of_bounds:
+  en: "The source passage end index is out of bounds"
+  zh-CN: "原文片段 end 越界"
+
+rag.graph.relation_budget_reached:
+  en: "The source-relation budget was reached; some hits keep their original passages and the source graph remains available"
+  zh-CN: "来源关联达到预算；部分命中保留原始片段，可继续查看来源图谱"
+
+rag.bundle.scope_changed:
+  en: "The source group authorization or publication version changed; the whole group's evidence was removed"
+  zh-CN: "来源组的授权或发布版本已改变，相关整组证据已移除"
+
+rag.ingest.task_missing:
+  en: "The ingest task does not exist"
+  zh-CN: "入库任务不存在"
+
+rag.ingest.task_superseded:
+  en: "The ingest task was cancelled, replaced by a new task, or changed state"
+  zh-CN: "入库任务已取消、被新任务替代或状态已改变"
+
+rag.ingest.corpus_missing:
+  en: "The corpus does not exist"
+  zh-CN: "语料库不存在"
+
+rag.ingest.config_changed:
+  en: "The index configuration changed; submit the task again"
+  zh-CN: "索引配置已改变，请重新提交任务"
+
+rag.ingest.checkpoint_missing:
+  en: "The task index checkpoint is missing"
+  zh-CN: "任务索引检查点缺失"
+
+rag.index.no_ingest_text:
+  en: "There is no text to ingest"
+  zh-CN: "没有可入库正文"
+
+rag.index.input_count_mismatch:
+  en: "The number of index inputs does not match the chunks"
+  zh-CN: "索引输入数量与分块不一致"
+
+rag.index.graph_model_unconfigured:
+  en: "Configure a graph extraction model first"
+  zh-CN: "请先配置图谱抽取模型"
+
+rag.index.structured_nodes_missing:
+  en: "The structured graph nodes are missing"
+  zh-CN: "结构化图谱实体缺失"
+
+rag.index.structured_edges_missing:
+  en: "The structured graph edges are missing"
+  zh-CN: "结构化图谱关系缺失"
+
+rag.index.structured_evidence_missing:
+  en: "Structured entities or relations have no source evidence"
+  zh-CN: "结构化实体或关系没有来源证据"
+
+rag.index.structured_endpoint_missing:
+  en: "A structured relation endpoint is missing"
+  zh-CN: "结构化关系端点缺失"
+
+rag.index.structured_endpoint_unknown:
+  en: "A structured relation endpoint does not exist"
+  zh-CN: "结构化关系端点不存在"
+
+rag.index.structured_entity_evidence_missing:
+  en: "Structured entity evidence is missing"
+  zh-CN: "结构化实体证据缺失"
+
+rag.index.structured_entity_unlocatable:
+  en: "A structured entity has no locatable source declaration"
+  zh-CN: "结构化实体没有可定位的原文声明"
+
+rag.search.min_similarity_invalid:
+  en: "minVectorSimilarity must be finite and between 0 and 1"
+  zh-CN: "向量相似度阈值必须在 0 到 1 之间"
+
+rag.search.min_rerank_score_invalid:
+  en: "minRerankScore must be a finite non-negative number"
+  zh-CN: "重排阈值必须是有限非负数"
+
+rag.search.query_model_space_mismatch:
+  en: "The query model configuration differs from the published vector space; rebuild the index"
+  zh-CN: "查询模型配置与已发布向量空间不同，请重建索引"
+
+rag.search.query_model_mismatch:
+  en: "The query model differs from the published index model"
+  zh-CN: "查询模型与已发布索引模型不一致"
+
+rag.search.query_dimension_mismatch:
+  en: "The query vector dimension differs from the published index"
+  zh-CN: "查询向量与已发布索引维度不一致"
+
+rag.search.query_embedding_changed:
+  en: "The embedding configuration changed during the query; retry or rebuild the index"
+  zh-CN: "查询过程中Embedding模型配置改变，请重试或重建索引"
+
+rag.search.rerank_invalid_fallback:
+  en: "The reranker returned invalid results; fallback recall filters were applied"
+  zh-CN: "重排返回无效结果，已按召回阈值降级筛选"
+
+rag.search.rerank_failed_fallback:
+  en: "Reranking failed (%{detail}); fallback recall filters were applied"
+  zh-CN: "重排失败（%{detail}），已按召回阈值降级筛选"
+
+rag.search.graph_scope_changed:
+  en: "The graph authorization or publication snapshot changed; related graph context was removed"
+  zh-CN: "图谱授权或发布快照已改变，相关图谱上下文已移除"
+
+rag.search.source_changed:
+  en: "Sources were deleted, changed or unpublished during retrieval; related evidence was removed"
+  zh-CN: "检索期间来源已删除、变更或撤销发布，相关证据已移除"
+
+rag.graph.relation_temporarily_unavailable:
+  en: "Source relation context is temporarily unavailable (%{detail}); original hits were kept"
+  zh-CN: "来源图文关联暂不可用（%{detail}），已保留原始命中"
+
+rag.graph.extraction_failed:
+  en: "Graph extraction still failed validation after the limit; not published: %{detail}"
+  zh-CN: "图谱抽取经过 {MAX_CALLS} 次校验仍失败，未发布：{last_error}"
+
+rag.graph.vector_checkpoint_restore_failed:
+  en: "Restoring the graph node vector checkpoint failed: %{detail}"
+  zh-CN: "图谱节点向量检查点恢复失败：%{detail}"
+
+rag.graph.stage_generation_failed:
+  en: "Staging the graph generation failed: %{detail}"
+  zh-CN: "图谱暂存任务失败：%{detail}"
+
+rag.index.embedding_batch_response_invalid:
+  en: "The embedding batch returned an invalid count, index or vector (expected %{dimension} dimensions): %{detail}"
+  zh-CN: "Embedding批次返回的数量、索引或向量无效（要求%{dimension}维）：%{detail}"
+
+knowledge.base.queue_invalid:
+  en: "The document queue request is invalid: %{detail}"
+  zh-CN: "文档队列请求无效：%{detail}"
+
+knowledge.quality.candidate_warning:
+  en: "Candidate %{number}: %{warning}"
+  zh-CN: "候选 %{number}：%{warning}"
+
+knowledge.quality.internal_failed:
+  en: "The knowledge quality operation failed: %{detail}"
+  zh-CN: "知识质量操作失败：%{detail}"

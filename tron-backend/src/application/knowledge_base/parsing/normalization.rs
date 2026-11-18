@@ -8,8 +8,8 @@ use super::super::{
 };
 use serde_json::Value;
 use std::collections::BTreeSet;
-fn invalid(e: impl std::fmt::Display) -> KnowledgeBaseError {
-    KnowledgeBaseError::Invalid(e.to_string())
+fn invalid(key: &'static str) -> KnowledgeBaseError {
+    KnowledgeBaseError::invalid(key)
 }
 fn block_text(value: &Value) -> String {
     match value {
@@ -70,33 +70,33 @@ pub(crate) fn normalize_middle(
     };
     let pages = middle["pages"]
         .as_array()
-        .ok_or_else(|| invalid("MinerU缺少页信息"))?;
+        .ok_or_else(|| invalid("knowledge.parsing.mineru_page_missing"))?;
     for page in pages {
         let page_index = page["page_idx"]
             .as_u64()
             .and_then(|p| u32::try_from(p).ok())
-            .ok_or_else(|| invalid("MinerU页码无效"))?;
+            .ok_or_else(|| invalid("knowledge.parsing.mineru_page_invalid"))?;
         for (block_position, block) in page["blocks"]
             .as_array()
-            .ok_or_else(|| invalid("MinerU缺少块信息"))?
+            .ok_or_else(|| invalid("knowledge.parsing.mineru_block_missing"))?
             .iter()
             .enumerate()
         {
             let kind = block["type"]
                 .as_str()
-                .ok_or_else(|| invalid("MinerU块类型无效"))?;
+                .ok_or_else(|| invalid("knowledge.parsing.mineru_block_type_invalid"))?;
             // Charts are visual blocks too. Their native body describes the figure;
             // keep its provenance separate from captions and original document text.
             let kind = if kind == "chart" { "image" } else { kind };
             let index = block["index"]
                 .as_u64()
-                .ok_or_else(|| invalid("MinerU缺少块标识"))?;
+                .ok_or_else(|| invalid("knowledge.parsing.mineru_block_id_missing"))?;
             let mut images = Vec::new();
             image_paths(block, &mut images);
             images.sort();
             images.dedup();
             if images.iter().any(|p| !assets.contains(p)) {
-                return Err(invalid("MinerU结构引用的图片附件缺失"));
+                return Err(invalid("knowledge.parsing.mineru_image_attachment_missing"));
             }
             let block_id = format!("page/{page_index}/blocks/{block_position}:{index}");
             let annotations = if matches!(kind, "image" | "table") {
@@ -143,7 +143,7 @@ pub(crate) fn normalize_middle(
             }
             text_bytes = text_bytes.saturating_add(text.len());
             if text_bytes > MAX_PARSED_TEXT_BYTES {
-                return Err(invalid("解析文本超过16 MiB上限"));
+                return Err(invalid("knowledge.base.parse_text_limit"));
             }
             let level = if matches!(kind, "paragraph_title" | "doc_title") {
                 Some(block["level"].as_u64().unwrap_or(1).clamp(1, 6) as u8)
@@ -176,7 +176,7 @@ pub(crate) fn normalize_middle(
         }
     }
     if sections.is_empty() {
-        return Err(invalid("MinerU未提取可检索内容"));
+        return Err(invalid("knowledge.parsing.mineru_no_content"));
     }
     Ok(ParsedDocument {
         format: middle["metadata"]["file_suffix"]
@@ -187,15 +187,21 @@ pub(crate) fn normalize_middle(
         warnings: if suspect_pages.is_empty() {
             vec![]
         } else {
-            vec![format!(
-                "上游解析文本包含不可见控制字符；原件和解析图片已保留（{} {:?}）",
-                if middle["metadata"]["file_suffix"] == "pdf" {
-                    "PDF页"
-                } else {
-                    "逻辑块"
-                },
-                suspect_pages
-            )]
+            vec![
+                crate::shared::i18n_message::MessageText::new(
+                    "knowledge.parsing.invisible_control_chars",
+                )
+                .arg(
+                    "location",
+                    if middle["metadata"]["file_suffix"] == "pdf" {
+                        "PDF page"
+                    } else {
+                        "logic block"
+                    },
+                )
+                .arg("pages", format!("{suspect_pages:?}"))
+                .encode(),
+            ]
         },
         image_analysis: (summary.image_count > 0).then_some(summary),
     })
@@ -207,19 +213,19 @@ fn block_bbox(block: &Value) -> Result<Option<[f64; 4]>, KnowledgeBaseError> {
     };
     let values = value
         .as_array()
-        .ok_or_else(|| invalid("解析区域坐标无效"))?;
+        .ok_or_else(|| invalid("knowledge.parsing.region_coordinates_invalid"))?;
     if values.len() != 4 {
-        return Err(invalid("解析区域坐标无效"));
+        return Err(invalid("knowledge.parsing.region_coordinates_invalid"));
     }
     let mut bbox = [0.0; 4];
     for (i, value) in values.iter().enumerate() {
         bbox[i] = value
             .as_f64()
             .filter(|n| n.is_finite() && (0.0..=1.0).contains(n))
-            .ok_or_else(|| invalid("解析区域坐标超出页边界"))?;
+            .ok_or_else(|| invalid("knowledge.parsing.region_coordinates_out_of_bounds"))?;
     }
     if bbox[0] >= bbox[2] || bbox[1] >= bbox[3] {
-        return Err(invalid("解析区域坐标为空或反向"));
+        return Err(invalid("knowledge.parsing.region_coordinates_empty"));
     }
     Ok(Some(bbox))
 }
@@ -232,10 +238,10 @@ fn image_annotations(
 ) -> Result<Vec<ImageAnnotation>, KnowledgeBaseError> {
     let children = block["content"]
         .as_array()
-        .ok_or_else(|| invalid("MinerU图片块结构无效"))?;
+        .ok_or_else(|| invalid("knowledge.parsing.mineru_image_block_invalid"))?;
     let page = page_index
         .checked_add(1)
-        .ok_or_else(|| invalid("MinerU页码溢出"))?;
+        .ok_or_else(|| invalid("knowledge.parsing.mineru_page_overflow"))?;
     let generated_contract = middle["metadata"]["file_suffix"] == "pdf"
         && middle["metadata"]["producer"]["name"] == "mineru"
         && middle["metadata"]["producer"]["version"] == "4.0.10"
@@ -257,7 +263,7 @@ fn image_annotations(
         let index = child["index"]
             .as_u64()
             .or_else(|| block["index"].as_u64())
-            .ok_or_else(|| invalid("MinerU图片文本缺少块标识"))?;
+            .ok_or_else(|| invalid("knowledge.parsing.mineru_image_text_no_block_id"))?;
         let mut paths = Vec::new();
         image_paths(child, &mut paths);
         paths.sort();

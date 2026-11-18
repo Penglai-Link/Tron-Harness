@@ -43,6 +43,15 @@ pub(crate) fn record_error(
     }
 }
 
+/// Tron-specific observability indexes on top of the framework-neutral
+/// telemetry tables. The store's clear() drops and recreates its tables, which
+/// implicitly removes these indexes; replay this batch to restore them.
+const HOST_INDEXES: &str = "CREATE INDEX IF NOT EXISTS ef_telemetry_traces_workspace_time ON ef_telemetry_traces(json_extract(attributes,'$.\"tron.workspace.code\"'),started_at DESC,trace_id DESC);
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_time ON ef_telemetry_spans(json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_workspace ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.workspace.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_session ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.session.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
+             CREATE INDEX IF NOT EXISTS ef_telemetry_page_roots_time ON ef_telemetry_traces(started_at DESC,trace_id) WHERE json_extract(attributes,'$.\"tron.trace.page\"')='true';";
+
 pub struct LocalTelemetry {
     pub(crate) store: Arc<dyn TelemetryStore>,
     query_database: eliteforge_agent_official_plugin_storage_local::SqliteDatabase,
@@ -107,13 +116,10 @@ impl LocalTelemetry {
                 .map_err(|_| ObservabilityError::Storage)?;
         // These indexes serve Tron-specific observability views. The reusable
         // telemetry store owns only host-neutral schema and indexes.
-        query_database.call(|connection| connection.execute_batch(
-            "CREATE INDEX IF NOT EXISTS ef_telemetry_traces_workspace_time ON ef_telemetry_traces(json_extract(attributes,'$.\"tron.workspace.code\"'),started_at DESC,trace_id DESC);
-             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_time ON ef_telemetry_spans(json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
-             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_workspace ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.workspace.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
-             CREATE INDEX IF NOT EXISTS ef_telemetry_agent_roots_session ON ef_telemetry_spans(json_extract(data,'$.attributes.\"tron.session.code\"'),json_extract(data,'$.startedAt') DESC,trace_id,span_id) WHERE json_extract(data,'$.name') IN ('tron.session.run','tron.assistant.execute');
-             CREATE INDEX IF NOT EXISTS ef_telemetry_page_roots_time ON ef_telemetry_traces(started_at DESC,trace_id) WHERE json_extract(attributes,'$.\"tron.trace.page\"')='true';"
-        )).await.map_err(|_| ObservabilityError::Storage)?;
+        query_database
+            .call(|connection| connection.execute_batch(HOST_INDEXES))
+            .await
+            .map_err(|_| ObservabilityError::Storage)?;
         Ok(Self {
             query_database,
             store,
@@ -129,6 +135,14 @@ impl LocalTelemetry {
             store: self.store.clone(),
             instance_id: self.runtime.instance_id.clone(),
         }))
+    }
+    /// Replay Tron-specific indexes after the store dropped and recreated the
+    /// host-neutral telemetry tables during a reset.
+    pub(crate) async fn recreate_host_indexes(&self) -> Result<(), ObservabilityError> {
+        self.query_database
+            .call(|connection| connection.execute_batch(HOST_INDEXES))
+            .await
+            .map_err(|_| ObservabilityError::Storage)
     }
     pub fn connection(&self) -> CollectorConnection {
         CollectorConnection {

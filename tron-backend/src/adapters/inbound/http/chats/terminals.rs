@@ -3,6 +3,7 @@ use crate::{
     app::AppState,
     application::agent::{TerminalSnapshot, terminal_owner},
     response::{ApiResponse, EmptyData},
+    shared::locale::SupportedLocale,
 };
 use axum::{
     Json,
@@ -11,6 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use tron_i18n::t;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadTerminalQuery {
@@ -54,15 +56,13 @@ fn owner(
         session_code,
     ))
 }
-fn unavailable(locale: &str) -> Response {
-    let message = if locale.starts_with("en") {
-        "This terminal is unavailable in the current conversation. It may have expired or the backend restarted."
-    } else {
-        "当前会话无法访问此终端，可能已被回收或后端已重启。"
-    };
+fn unavailable(locale: SupportedLocale) -> Response {
     (
         StatusCode::NOT_FOUND,
-        Json(ApiResponse::protocol_error("101028001", message)),
+        Json(ApiResponse::protocol_error(
+            "101028001",
+            t!("error.chat.terminal_unavailable", locale = locale),
+        )),
     )
         .into_response()
 }
@@ -72,10 +72,11 @@ pub async fn list(
     Path(session): Path<String>,
 ) -> Result<Json<ApiResponse<Vec<TerminalListItem>>>, Response> {
     let owner = owner(&state, &auth, &session)?;
+    let locale = SupportedLocale::from_raw(&auth.locale);
     let items = state
         .agent_terminal
         .list(&owner)
-        .map_err(|_| unavailable(&auth.locale))?;
+        .map_err(|_| unavailable(locale))?;
     Ok(Json(ApiResponse::protocol_success(
         items
             .into_iter()
@@ -96,15 +97,14 @@ pub async fn read(
     Path((session, id)): Path<(String, String)>,
     query: Result<Query<ReadTerminalQuery>, QueryRejection>,
 ) -> Result<Json<ApiResponse<ReadTerminalResponse>>, Response> {
+    let locale = SupportedLocale::from_raw(&auth.locale);
     let Query(query) = query.map_err(|_| {
-        let message = if auth.locale.starts_with("en") {
-            "The output cursor must be a non-negative integer."
-        } else {
-            "输出游标必须为非负整数。"
-        };
         (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::protocol_error("101028002", message)),
+            Json(ApiResponse::protocol_error(
+                "101028002",
+                t!("error.chat.terminal_cursor_invalid", locale = locale),
+            )),
         )
             .into_response()
     })?;
@@ -122,7 +122,7 @@ pub async fn read(
     } = state
         .agent_terminal
         .read(&owner, &id, query.cursor)
-        .map_err(|_| unavailable(&auth.locale))?;
+        .map_err(|_| unavailable(locale))?;
     Ok(Json(ApiResponse::protocol_success(ReadTerminalResponse {
         terminal_id,
         cwd,
@@ -140,10 +140,10 @@ pub async fn stop(
     Path((session, id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<EmptyData>>, Response> {
     let owner = owner(&state, &auth, &session)?;
-    let locale = auth.locale;
+    let locale = SupportedLocale::from_raw(&auth.locale);
     crate::app::telemetry::spawn_blocking_traced(move || state.agent_terminal.stop(&owner, &id))
         .await
-        .map_err(|_| unavailable(&locale))?
-        .map_err(|_| unavailable(&locale))?;
+        .map_err(|_| unavailable(locale))?
+        .map_err(|_| unavailable(locale))?;
     Ok(Json(ApiResponse::protocol_success(EmptyData {})))
 }

@@ -228,6 +228,7 @@ help:
 	@echo "Backend commands:"
 	@echo "  make be-install   Fetch backend dependencies"
 	@echo "  make be-check     Compile backend"
+	@echo "  make be-i18n-check Verify translation resources and referenced keys"
 	@echo "  make be-build-wsl 构建独立 Linux 后端二进制（需要 Node.js 和 Docker Linux 容器）"
 	@echo "                    运行基线：WSL2 Ubuntu 24.04+、Debian 13+；不包含前端和桌面安装包"
 	@echo "                    WSL_ARCH=x86_64（默认）、aarch64 或 all；异构构建需要 Docker 模拟支持"
@@ -345,6 +346,12 @@ agent-capability-check agent-harness-check: harness-capability-check
 .PHONY: be-check
 be-check:
 	$(CARGO) check --manifest-path "$(BACKEND_MANIFEST)"
+
+# Translations are compiled into the binaries, so a missing key is a
+# runtime-visible defect that `cargo check` cannot catch. CI runs this too.
+.PHONY: be-i18n-check
+be-i18n-check:
+	$(PYTHON) "$(BACKEND_DIR)/scripts/check-i18n.py"
 
 # Read UTF-8 scripts from files: Windows Make's environment export can corrupt
 # non-ASCII source. Docker receives the shell script on stdin; source is read-only

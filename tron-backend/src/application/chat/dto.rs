@@ -23,46 +23,6 @@ pub struct ChatSessionQuery {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ArchivedChatSessionQuery {
-    pub workspace_code: Option<String>,
-    pub current: Option<u32>,
-    pub size: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ArchivedChatSessionPage {
-    pub records: Vec<ChatSession>,
-    pub total: u64,
-    pub current: u32,
-    pub size: u32,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchDeleteArchivedSessionsCommand {
-    pub session_codes: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchDeleteArchivedSessionsResult {
-    pub succeeded: u32,
-    pub failed: u32,
-    pub items: Vec<BatchDeleteArchivedSessionItem>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchDeleteArchivedSessionItem {
-    pub session_code: String,
-    pub success: bool,
-    pub error_code: Option<String>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CreateChatSessionCommand {
     #[serde(default)]
     pub execution_mode: crate::domain::agent::ToolExecutionMode,

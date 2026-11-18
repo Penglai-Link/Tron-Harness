@@ -10,6 +10,12 @@ import { cn } from "@/lib/utils";
 import { ShortcutHint } from "@/shared/shortcuts/ShortcutHints";
 import { listNotifications, notificationQueryKey, updateNotifications } from "../api/notificationApi";
 import { areBrowserNotificationsEnabled, browserNotificationPreferenceChangedEvent } from "../model/browserNotifications";
+import {
+  itemIdFromNotificationId,
+  notificationIdForItem,
+  onSystemNotificationActivated,
+  showSystemNotification,
+} from "../model/systemNotifications";
 
 export function NotificationLauncher({ className }: { className?: string }) {
   const { t, i18n } = useTranslation("pages");
@@ -34,25 +40,22 @@ export function NotificationLauncher({ className }: { className?: string }) {
     if (!currentNotifications) return;
     const previousIds = previousNotificationIds.current;
     previousNotificationIds.current = new Set(currentNotifications.map((item) => item.id));
-    if (!previousIds || !areBrowserNotificationsEnabled() || document.visibilityState === "visible") return;
+    if (!previousIds || !areBrowserNotificationsEnabled()) return;
+    if (document.visibilityState === "visible" && document.hasFocus()) return;
 
     for (const item of currentNotifications) {
       if (previousIds.has(item.id) || item.readAt !== null || item.archivedAt !== null) continue;
-      try {
-        const browserNotification = new Notification(item.title, {
-          body: item.body,
-          tag: `tron-notification-${item.id}`,
-        });
-        browserNotification.onclick = () => {
-          window.focus();
-          navigate(`/notifications?notification=${encodeURIComponent(item.id)}`);
-          browserNotification.close();
-        };
-      } catch {
-        // Permission can change between polling and showing the browser notification.
-      }
+      void showSystemNotification(
+        { title: item.title, body: item.body, id: notificationIdForItem(item.id) },
+        { onActivate: () => navigate(`/notifications?notification=${encodeURIComponent(item.id)}`) },
+      );
     }
   }, [navigate, query.data]);
+
+  useEffect(() => onSystemNotificationActivated((notificationId) => {
+    const itemId = itemIdFromNotificationId(notificationId);
+    if (itemId) navigate(`/notifications?notification=${encodeURIComponent(itemId)}`);
+  }), [navigate]);
 
   useEffect(() => {
     const refresh = () => query.refetch();

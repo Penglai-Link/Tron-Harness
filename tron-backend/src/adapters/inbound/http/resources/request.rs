@@ -70,7 +70,7 @@ impl TryFrom<ResourceCreateRequest> for ResourceCreateCommand {
         if !value.kind.is_file_kind() {
             return Err(ResourceError::InvalidField {
                 field: "kind".to_string(),
-                reason: "must be a file resource kind".to_string(),
+                reason: localized_reason("resource.error.reason.file_kind"),
             });
         }
         Ok(Self {
@@ -110,7 +110,7 @@ impl TryFrom<ResourceUpdateRequest> for ResourceUpdateCommand {
         {
             return Err(ResourceError::InvalidField {
                 field: "name".to_string(),
-                reason: "must not be blank".to_string(),
+                reason: localized_reason("resource.error.reason.not_blank"),
             });
         }
         Ok(Self {
@@ -155,11 +155,19 @@ impl From<ResourceBinaryDownloadRequest> for ResourceBinaryDownloadCommand {
     }
 }
 
+/// Translate a structured validation reason with the request locale carried by
+/// the authenticated request scope.
+/// Locale-independent validation reason; the display layer renders it with the
+/// request locale.
+fn localized_reason(key: &'static str) -> String {
+    crate::shared::i18n_message::MessageText::new(key).encode()
+}
+
 fn validate_non_blank(value: &str, field: &str) -> Result<(), ResourceError> {
     if value.trim().is_empty() {
         return Err(ResourceError::InvalidField {
             field: field.to_string(),
-            reason: "must not be blank".to_string(),
+            reason: localized_reason("resource.error.reason.not_blank"),
         });
     }
     Ok(())
@@ -169,7 +177,7 @@ fn validate_code(value: &str, field: &str) -> Result<(), ResourceError> {
     validate_resource_code(value).map_err(|error| match error {
         ResourceError::InvalidCode => ResourceError::InvalidField {
             field: field.to_string(),
-            reason: "must match the resource code format".to_string(),
+            reason: localized_reason("resource.error.reason.invalid_code"),
         },
         error => error,
     })

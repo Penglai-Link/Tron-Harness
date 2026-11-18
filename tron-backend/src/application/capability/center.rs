@@ -142,12 +142,7 @@ pub async fn page(
             .is_some_and(|s| !matches!(s.as_str(), "official" | "third_party"))
     {
         return Err(ModelProviderError::InvalidSelection(
-            if locale.starts_with("zh") {
-                "能力中心分页或筛选参数无效"
-            } else {
-                "Invalid capability center query"
-            }
-            .into(),
+            tron_i18n::Message::new("tron.model_provider.capability_center_query_invalid"),
         ));
     }
     let local = installed(host, locale).await?;

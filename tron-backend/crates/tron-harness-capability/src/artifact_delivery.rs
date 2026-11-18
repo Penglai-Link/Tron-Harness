@@ -21,8 +21,8 @@ use async_trait::async_trait;
 use eliteforge_agent_core::{
     AgentError, CapabilityPackBuilder, ContextBlock, ContextContributor, ContextContributorPlugin,
     ContextInput, ContextSourceKind, ManagedDeveloperPrompts, Message, OutputEvent, RunContext,
-    Tool, ToolBinding, ToolDescriptor, ToolError, ToolLease, ToolOutput, ToolProvider,
-    ToolProviderPlugin,
+    Tool, ToolBinding, ToolCatalogEntry, ToolCategory, ToolDescriptor, ToolError, ToolLease,
+    ToolOutput, ToolProvider, ToolProviderPlugin,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -369,9 +369,7 @@ pub fn validate_file(
         .canonicalize()
         .map_err(|error| format!("cannot resolve {trimmed}: {error}"))?;
     if !resolved.starts_with(&canonical_root) {
-        return Err(format!(
-            "file path leaves the run workspace: {trimmed}"
-        ));
+        return Err(format!("file path leaves the run workspace: {trimmed}"));
     }
     let size = metadata.len();
     if size > max_bytes {
@@ -439,6 +437,24 @@ fn descriptor(max_files: usize) -> ToolDescriptor {
     )
 }
 
+/// Catalog category shown by the host tool settings page. Every leased tool
+/// must declare one; the catalog rejects uncategorized bindings.
+pub fn tool_category() -> ToolCategory {
+    ToolCategory::localized(
+        "tron.artifact-delivery.tool",
+        tron_i18n::t!(
+            "agent.toolCatalog.categories.artifact_delivery",
+            locale = "zh-CN"
+        )
+        .as_ref(),
+        tron_i18n::t!(
+            "agent.toolCatalog.categories.artifact_delivery",
+            locale = "en-US"
+        )
+        .as_ref(),
+    )
+}
+
 /// Tool provider registered by the pack.
 #[derive(Clone)]
 pub struct ArtifactToolProvider {
@@ -457,17 +473,31 @@ impl ToolProvider for ArtifactToolProvider {
         Some(vec![descriptor(self.config.max_files_per_call)])
     }
 
-    async fn lease(&self, run: &RunContext) -> Result<ToolLease, eliteforge_agent_core::AgentError> {
+    fn catalog_metadata(&self) -> Option<Vec<ToolCatalogEntry>> {
+        Some(vec![ToolCatalogEntry {
+            descriptor: descriptor(self.config.max_files_per_call),
+            domain_code: Some("artifacts".into()),
+            category: Some(tool_category()),
+        }])
+    }
+
+    async fn lease(
+        &self,
+        run: &RunContext,
+    ) -> Result<ToolLease, eliteforge_agent_core::AgentError> {
         if run.extensions.get::<ArtifactsRunOptions>().is_none() {
             return Ok(ToolLease::new(vec![]));
         }
-        Ok(ToolLease::new(vec![ToolBinding::new(
-            descriptor(self.config.max_files_per_call),
-            ArtifactPresentTool {
-                config: self.config.clone(),
-            },
-        )
-        .with_domain_code("artifacts")]))
+        Ok(ToolLease::new(vec![
+            ToolBinding::new(
+                descriptor(self.config.max_files_per_call),
+                ArtifactPresentTool {
+                    config: self.config.clone(),
+                },
+            )
+            .with_domain_code("artifacts")
+            .with_category(tool_category()),
+        ]))
     }
 }
 
@@ -477,11 +507,7 @@ struct ArtifactPresentTool {
 
 #[async_trait]
 impl Tool for ArtifactPresentTool {
-    async fn call(
-        &self,
-        arguments: Value,
-        run: &RunContext,
-    ) -> Result<ToolOutput, ToolError> {
+    async fn call(&self, arguments: Value, run: &RunContext) -> Result<ToolOutput, ToolError> {
         let options = run.extensions.get::<ArtifactsRunOptions>().ok_or_else(|| {
             ToolError::Failed("artifact delivery is not enabled for this run".into())
         })?;
@@ -523,10 +549,8 @@ impl Tool for ArtifactPresentTool {
             name: EVENT_NAME.into(),
             value: payload.clone(),
         });
-        let mut output = ToolOutput::text(format!(
-            "Delivered {} file(s) to the user.",
-            items.len()
-        ));
+        let mut output =
+            ToolOutput::text(format!("Delivered {} file(s) to the user.", items.len()));
         output.structured = Some(payload);
         Ok(output)
     }
@@ -553,16 +577,8 @@ impl ContextContributor for ArtifactGuidance {
         GUIDANCE_KEY
     }
 
-    async fn contribute(
-        &self,
-        input: &ContextInput<'_>,
-    ) -> Result<ContextBlock, AgentError> {
-        let messages = if input
-            .run
-            .extensions
-            .get::<ArtifactsRunOptions>()
-            .is_some()
-        {
+    async fn contribute(&self, input: &ContextInput<'_>) -> Result<ContextBlock, AgentError> {
+        let messages = if input.run.extensions.get::<ArtifactsRunOptions>().is_some() {
             let text = input
                 .run
                 .extensions

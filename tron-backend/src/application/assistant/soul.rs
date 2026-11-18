@@ -68,6 +68,7 @@ impl AssistantService {
         &self,
         code: &str,
         user: &str,
+        locale: &str,
     ) -> Result<(AssistantSoul, bool), AssistantError> {
         self.get(code)?;
         let mut repo = self.repo()?;
@@ -82,7 +83,7 @@ impl AssistantService {
                 assistant_code: code.into(),
                 purpose: AssistantSessionPurpose::Interactive,
                 correlation_key: "soul-awakening".into(),
-                title: "首次唤醒".into(),
+                title: tron_i18n::t!("assistant.awakening_title", locale = locale).into_owned(),
                 workspace_code: None,
                 created_at: now,
                 updated_at: now,
@@ -252,11 +253,8 @@ pub struct SoulEdit {
 }
 
 /// The initial wakeup is a real, visible user message, not a hidden prompt.
-pub fn awakening_message(locale: &str) -> &'static str {
-    match crate::shared::locale::SupportedLocale::from_raw(locale) {
-        crate::shared::locale::SupportedLocale::EnUs => "Wake up",
-        crate::shared::locale::SupportedLocale::ZhCn => "醒醒",
-    }
+pub fn awakening_message(locale: &str) -> String {
+    tron_i18n::t!("agent_runtime.assistant.awakening_message", locale = locale).into_owned()
 }
 
 pub fn runtime_input_kind(source: AssistantEventSource) -> String {

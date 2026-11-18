@@ -33,59 +33,38 @@ pub(super) struct SpeechError {
 impl IntoResponse for SpeechError {
     fn into_response(self) -> Response {
         let descriptor = self.error.descriptor();
-        let english = self.locale == SupportedLocale::EnUs;
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.speech.invalid_audio" => (
-                StatusCode::BAD_REQUEST,
-                "音频为空、格式不支持或超过 8 MB。",
-                "Audio is empty, unsupported, or exceeds 8 MB.",
-            ),
-            "tron.speech.unavailable" => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "语音识别自动路由没有可用模型，请检查路由配置。",
-                "No model is available for speech recognition. Check the automatic router.",
-            ),
-            "tron.speech.provider_failed" => (
-                StatusCode::BAD_GATEWAY,
-                "语音识别失败，请稍后重试或检查供应商配置。",
-                "Transcription failed. Try again or check the provider configuration.",
-            ),
-            "tron.speech.unsupported_selection" => (
-                StatusCode::BAD_REQUEST,
-                "Person-AI 转写接口不支持指定单个模型。请刷新模型目录，并选择全部可用的 Person-AI 语音识别模型，或改用支持指定模型的供应商。",
-                "Person-AI transcription cannot select an individual model. Refresh the catalog and allow all available Person-AI speech recognition models, or use a provider that supports model selection.",
-            ),
-            "tron.speech.cancelled" => (
-                StatusCode::CONFLICT,
-                "语音输入已取消。",
-                "Voice input was cancelled.",
-            ),
-            "tron.speech.request_conflict" => (
-                StatusCode::CONFLICT,
-                "该语音输入请求正在处理中。",
-                "This voice input request is already running.",
-            ),
+        let (status, message_key) = match descriptor.message_key {
+            "tron.speech.invalid_audio" => (StatusCode::BAD_REQUEST, "tron.speech.invalid_audio"),
+            "tron.speech.unavailable" => {
+                (StatusCode::SERVICE_UNAVAILABLE, "tron.speech.unavailable")
+            }
+            "tron.speech.provider_failed" => {
+                (StatusCode::BAD_GATEWAY, "tron.speech.provider_failed")
+            }
+            "tron.speech.unsupported_selection" => {
+                (StatusCode::BAD_REQUEST, "tron.speech.unsupported_selection")
+            }
+            "tron.speech.cancelled" => (StatusCode::CONFLICT, "tron.speech.cancelled"),
+            "tron.speech.request_conflict" => {
+                (StatusCode::CONFLICT, "tron.speech.request_conflict")
+            }
             "tron.speech.too_many_requests" => (
                 StatusCode::TOO_MANY_REQUESTS,
-                "语音输入请求过多，请稍后重试。",
-                "Too many voice input requests. Try again later.",
+                "tron.speech.too_many_requests",
             ),
-            "tron.speech.invalid_request_id" => (
-                StatusCode::BAD_REQUEST,
-                "语音输入请求编号无效。",
-                "Invalid voice input request ID.",
-            ),
+            "tron.speech.invalid_request_id" => {
+                (StatusCode::BAD_REQUEST, "tron.speech.invalid_request_id")
+            }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "无法读取语音路由配置。",
-                "Could not load speech router configuration.",
+                "tron.speech.storage_failed",
             ),
         };
         (
             status,
             Json(ApiResponse::protocol_error(
                 descriptor.code,
-                if english { en } else { zh },
+                tron_i18n::t!(message_key, locale = self.locale),
             )),
         )
             .into_response()

@@ -4,10 +4,7 @@ use std::{
     net::SocketAddr,
     sync::{Arc, OnceLock},
 };
-use tokio::{
-    net::TcpListener,
-    task::JoinHandle,
-};
+use tokio::{net::TcpListener, task::JoinHandle};
 
 use async_trait::async_trait;
 use eliteforge_agent_remote_protocol::{ProductIdentity, RemoteSettings};
@@ -18,10 +15,8 @@ use eliteforge_agent_remote_server::{
 use tokio::sync::broadcast;
 
 use crate::{
-    app::AppState,
-    application::agent::AgentAguiStreamService,
-    application::profile::ProfileRegistryService,
-    config::AppConfig,
+    app::AppState, application::agent::AgentAguiStreamService,
+    application::profile::ProfileRegistryService, config::AppConfig,
 };
 use tron_remote_pack::{AguiEventSource, AguiLive, TronRemotePack};
 
@@ -37,10 +32,13 @@ impl RemoteProduct for TronRemoteProduct {
     }
 
     fn profile(&self) -> Option<ProfileSummary> {
-        self.profiles.current_context().ok().map(|context| ProfileSummary {
-            username: context.person_ai_username.clone(),
-            display_name: context.person_ai_username,
-        })
+        self.profiles
+            .current_context()
+            .ok()
+            .map(|context| ProfileSummary {
+                username: context.person_ai_username.clone(),
+                display_name: context.person_ai_username,
+            })
     }
 }
 
@@ -50,7 +48,11 @@ pub(crate) struct TronAguiSource {
 
 #[async_trait]
 impl AguiEventSource for TronAguiSource {
-    async fn replay(&self, session_id: &str, cursor: Option<u64>) -> Result<Vec<serde_json::Value>, String> {
+    async fn replay(
+        &self,
+        session_id: &str,
+        cursor: Option<u64>,
+    ) -> Result<Vec<serde_json::Value>, String> {
         let (events, _) = self
             .presentation
             .protocol_events_since(session_id, cursor)
@@ -78,7 +80,11 @@ impl AguiEventSource for TronAguiSource {
     }
 }
 
-pub(crate) async fn start(config: &AppConfig, profiles: ProfileRegistryService, presentation: AgentAguiStreamService) -> Result<Arc<RemoteAccessService>, String> {
+pub(crate) async fn start(
+    config: &AppConfig,
+    profiles: ProfileRegistryService,
+    presentation: AgentAguiStreamService,
+) -> Result<Arc<RemoteAccessService>, String> {
     let root = remote_data_root(config);
     let store = Arc::new(FileRemoteStore::new(root));
     let existing = store.load_settings().await?;
@@ -125,9 +131,14 @@ pub(crate) async fn start(config: &AppConfig, profiles: ProfileRegistryService, 
         format!("http://127.0.0.1:{}", config.port),
         Some(Arc::new(TronAguiSource { presentation })),
     ));
-    RemoteAccessService::start(product, store, pack, config.remote_access.listen_port(config.port))
-        .await
-        .map_err(|error| error.to_string())
+    RemoteAccessService::start(
+        product,
+        store,
+        pack,
+        config.remote_access.listen_port(config.port),
+    )
+    .await
+    .map_err(|error| error.to_string())
 }
 
 impl AppState {
@@ -135,7 +146,12 @@ impl AppState {
         if self.remote_service.get().is_some() {
             return Ok(());
         }
-        let service = start(&self.config, self.profiles.clone(), self.agent_presentation.clone()).await?;
+        let service = start(
+            &self.config,
+            self.profiles.clone(),
+            self.agent_presentation.clone(),
+        )
+        .await?;
         let _ = self.remote_service.set(service);
         Ok(())
     }
@@ -170,10 +186,13 @@ fn remote_data_root(config: &AppConfig) -> std::path::PathBuf {
         return parent.join("remote-access");
     }
     std::env::var("HOME")
-        .map(|home| std::path::PathBuf::from(home).join(".tron").join("remote-access"))
+        .map(|home| {
+            std::path::PathBuf::from(home)
+                .join(".tron")
+                .join("remote-access")
+        })
         .unwrap_or_else(|_| std::path::PathBuf::from(".tron/remote-access"))
 }
-
 
 struct RemoteListenerSlot {
     task: Option<JoinHandle<()>>,
@@ -348,5 +367,7 @@ pub(crate) async fn refresh_lan_endpoint(state: &AppState) {
 /// invalidate the ticket the other one just returned.
 pub(crate) async fn lock_remote_settings() -> tokio::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| tokio::sync::Mutex::new(())).lock().await
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await
 }

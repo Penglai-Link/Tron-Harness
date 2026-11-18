@@ -5,8 +5,11 @@ use super::{
 };
 use serde_json::Value;
 
-fn invalid(message: impl std::fmt::Display) -> KnowledgeBaseError {
-    KnowledgeBaseError::Invalid(message.to_string())
+fn invalid(key: &'static str) -> KnowledgeBaseError {
+    KnowledgeBaseError::invalid(key)
+}
+fn invalid_detail(error: impl std::fmt::Display) -> KnowledgeBaseError {
+    KnowledgeBaseError::from_detail(error)
 }
 fn canonical(value: &str) -> String {
     value
@@ -34,7 +37,7 @@ pub(super) fn apply(
     for section in &mut parsed.sections {
         size = size.saturating_add(section.text.len());
         if size > MAX_PARSED_TEXT_BYTES {
-            return Err(invalid("解析文本超过16 MiB上限"));
+            return Err(invalid("knowledge.base.parse_text_limit"));
         }
         section.location.char_start = offset;
         offset += section.text.chars().count();
@@ -45,9 +48,11 @@ pub(super) fn apply(
 }
 fn word(parsed: &mut ParsedDocument, bytes: &[u8]) -> Result<(), KnowledgeBaseError> {
     let xml = validate_office(bytes, Some("word/document.xml"))
-        .map_err(invalid)?
-        .ok_or_else(|| invalid("Word缺少正文结构"))?;
-    let xml = std::str::from_utf8(&xml).map_err(invalid)?;
+        .map_err(invalid_detail)?
+        .ok_or(KnowledgeBaseError::invalid(
+            "knowledge.base.word_body_missing",
+        ))?;
+    let xml = std::str::from_utf8(&xml).map_err(invalid_detail)?;
     let doc = roxmltree::Document::parse_with_options(
         xml,
         roxmltree::ParsingOptions {
@@ -55,7 +60,7 @@ fn word(parsed: &mut ParsedDocument, bytes: &[u8]) -> Result<(), KnowledgeBaseEr
             ..Default::default()
         },
     )
-    .map_err(invalid)?;
+    .map_err(invalid_detail)?;
     let ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     let paragraphs: Vec<_> = doc
         .descendants()
@@ -125,9 +130,11 @@ fn excel(
     middle: &Value,
 ) -> Result<(), KnowledgeBaseError> {
     let xml = validate_office(bytes, Some("xl/workbook.xml"))
-        .map_err(invalid)?
-        .ok_or_else(|| invalid("Excel缺少工作表结构"))?;
-    let xml = std::str::from_utf8(&xml).map_err(invalid)?;
+        .map_err(invalid_detail)?
+        .ok_or(KnowledgeBaseError::invalid(
+            "knowledge.base.excel_sheets_missing",
+        ))?;
+    let xml = std::str::from_utf8(&xml).map_err(invalid_detail)?;
     let workbook = roxmltree::Document::parse_with_options(
         xml,
         roxmltree::ParsingOptions {
@@ -135,7 +142,7 @@ fn excel(
             ..Default::default()
         },
     )
-    .map_err(invalid)?;
+    .map_err(invalid_detail)?;
     let ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     let sheets: Vec<_> = workbook
         .descendants()
@@ -145,36 +152,40 @@ fn excel(
         .iter()
         .any(|n| n.attribute("state").is_some_and(|s| s != "visible"))
     {
-        return Err(invalid(
-            "当前解析策略不完整处理隐藏工作表，请取消隐藏后重新上传",
-        ));
+        return Err(invalid("knowledge.base.hidden_worksheets_unsupported"));
     }
     let names: Vec<_> = sheets
         .iter()
         .map(|n| {
             n.attribute("name")
                 .map(str::to_owned)
-                .ok_or_else(|| invalid("Excel工作表名称缺失"))
+                .ok_or(KnowledgeBaseError::invalid(
+                    "knowledge.base.excel_sheet_name_missing",
+                ))
         })
         .collect::<Result<_, _>>()?;
     if middle["pages"].as_array().map_or(0, Vec::len) != names.len() {
-        return Err(invalid("Excel工作表定位不匹配，索引未发布"));
+        return Err(invalid("knowledge.base.excel_sheet_mapping_mismatch"));
     }
     for section in &mut parsed.sections {
         section.location.page = None;
         let index = section
             .location
             .logical_page
-            .ok_or_else(|| invalid("Excel工作表序号缺失"))? as usize;
+            .ok_or(KnowledgeBaseError::invalid(
+                "knowledge.base.excel_sheet_index_missing",
+            ))? as usize;
         section.location.sheet = Some(
             names
                 .get(index)
-                .ok_or_else(|| invalid("Excel工作表序号无效"))?
+                .ok_or(KnowledgeBaseError::invalid(
+                    "knowledge.base.excel_sheet_index_invalid",
+                ))?
                 .clone(),
         );
     }
     // Cell-level companions retain exact original addresses independently of vendor table clustering.
-    let cells = parse_xlsx(bytes).map_err(invalid)?;
+    let cells = parse_xlsx(bytes).map_err(invalid_detail)?;
     parsed.sections.extend(cells.sections);
     parsed.warnings.extend(cells.warnings);
     parsed.warnings.sort();

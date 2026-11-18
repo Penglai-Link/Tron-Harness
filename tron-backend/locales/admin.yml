@@ -1,0 +1,227 @@
+# Administration surfaces: model provider configuration, connection and
+# automatic routing settings.
+#
+# Format: rust-i18n `_version: 2`; one flat dotted key per message with both
+# supported locales. Keys prefixed `tron.` are stable display-layer keys that
+# match the `message_key` of application/domain error descriptors.
+_version: 2
+
+# --- Configured model providers (ConfiguredProviderError.message_key) ---
+model_provider.not_found:
+  en: "Provider not found."
+  zh-CN: "未找到供应商。"
+
+model_provider.already_exists:
+  en: "Provider ID already exists."
+  zh-CN: "供应商标识已存在。"
+
+model_provider.invalid_id:
+  en: "Use 1–80 lowercase letters, numbers, dots, underscores or hyphens for the provider ID."
+  zh-CN: "供应商标识需为1至80位小写字母、数字、点、下划线或连字符。"
+
+model_provider.invalid_name:
+  en: "Enter a provider name of at most 200 characters."
+  zh-CN: "请填写不超过200个字符的供应商名称。"
+
+model_provider.invalid_url:
+  en: "Enter an HTTP(S) API base URL without credentials, query parameters or fragments."
+  zh-CN: "请输入不含凭据、查询参数或片段的HTTP(S) API基础地址。"
+
+model_provider.invalid_headers:
+  en: "Request headers are invalid or contain reserved authentication or connection headers. Enter credentials in the API key field."
+  zh-CN: "请求头无效或含保留的认证、连接请求头；请在API密钥字段填写凭据。"
+
+model_provider.invalid_models:
+  en: "Add 1–500 models with unique IDs, names and valid token limits. Supported model inputs are text and images."
+  zh-CN: "请添加1至500个模型，使用唯一模型ID、名称及有效Token上限；当前支持的模型输入为文本和图像。"
+
+model_provider.invalid_model_ownership:
+  en: "A model does not belong to this provider."
+  zh-CN: "模型不属于当前供应商。"
+
+model_provider.conflict:
+  en: "The provider changed. Reload before saving."
+  zh-CN: "供应商配置已变化，请重新加载后保存。"
+
+model_provider.storage_failed:
+  en: "Could not save provider configuration."
+  zh-CN: "供应商配置存储失败。"
+
+# --- Provider presets ---
+tron.model_provider.preset_not_found:
+  en: "Provider preset was not found"
+  zh-CN: "供应商预设不存在"
+
+# --- Automatic routers ---
+tron.automatic_router.invalid_sources:
+  en: "Invalid automatic router sources."
+  zh-CN: "自动路由器的数据来源无效。"
+
+tron.automatic_router.storage_failed:
+  en: "Could not load or save automatic router settings."
+  zh-CN: "无法读取或保存自动路由器配置。"
+
+# --- Provider authorization handlers ---
+admin.model_providers.auth_account_mismatch:
+  en: "Authorize with the current profile's PersonAI account; add another account from the profile page"
+  zh-CN: "请使用当前 Profile 对应的 PersonAI 账号重新授权；其他账号请从 Profile 页面添加"
+
+admin.model_providers.not_found:
+  en: "model provider was not found"
+  zh-CN: "未找到模型供应商"
+
+admin.model_providers.default_workspace_init_failed:
+  en: "failed to initialize default workspace: %{detail}"
+  zh-CN: "初始化默认工作空间失败：%{detail}"
+
+admin.model_providers.profile_register_failed:
+  en: "failed to register PersonAI profile: %{detail}"
+  zh-CN: "注册 PersonAI 档案失败：%{detail}"
+
+# --- ModelProviderError descriptors (application/model_provider, rendered by
+# the admin provider, profile and PersonAI HTTP error mappers) ---
+tron.model_provider.authorization_session_not_found:
+  en: "The authorization session was not found; restart authorization."
+  zh-CN: "未找到授权会话，请重新发起授权。"
+
+tron.model_provider.authorization_pending:
+  en: "Authorization is still pending; finish it in the opened page."
+  zh-CN: "授权仍在进行中，请在弹出的页面完成授权。"
+
+tron.model_provider.authorization_ended:
+  en: "Authorization ended with status %{status}; restart authorization."
+  zh-CN: "授权已结束（状态：%{status}），请重新发起授权。"
+
+tron.model_provider.authorization_account_mismatch:
+  en: "Authorize with the current profile's PersonAI account; add another account from the profile page."
+  zh-CN: "请使用当前 Profile 对应的 PersonAI 账号授权；其他账号请从 Profile 页面添加。"
+
+tron.model_provider.invalid_server_base_url:
+  en: "Enter a valid HTTP(S) server address."
+  zh-CN: "请填写有效的 HTTP(S) 服务器地址。"
+
+tron.model_provider.invalid_encryption_key:
+  en: "The encryption key is invalid; check the variableCrypto configuration."
+  zh-CN: "加密密钥无效，请检查 variableCrypto 配置。"
+
+tron.model_provider.connection_not_ready:
+  en: "The PersonAI connection is not ready; authorize this device first."
+  zh-CN: "PersonAI 连接尚未就绪，请先完成设备授权。"
+
+tron.model_provider.model_unavailable:
+  en: "PersonAI model `%{model_code}` is no longer available; sync the model catalog."
+  zh-CN: "PersonAI 模型 `%{model_code}` 已不可用，请同步模型目录。"
+
+tron.model_provider.invalid_selection:
+  en: "The model selection is invalid; refresh the model catalog and retry."
+  zh-CN: "模型选择无效，请刷新模型目录后重试。"
+
+tron.model_provider.authentication_required:
+  en: "PersonAI authorization is required."
+  zh-CN: "请先完成 PersonAI 授权。"
+
+tron.model_provider.unauthorized:
+  en: "The PersonAI access token was rejected; authorize this device again."
+  zh-CN: "PersonAI 访问令牌被拒绝，请重新授权该设备。"
+
+tron.model_provider.device_unbound:
+  en: "This device was unbound from PersonAI; log in again."
+  zh-CN: "该设备已从 PersonAI 解绑，请重新登录。"
+
+tron.model_provider.remote_failed:
+  en: "PersonAI request failed: %{detail}"
+  zh-CN: "PersonAI 请求失败：%{detail}"
+
+tron.model_provider.remote_selection_rejected:
+  en: "PersonAI rejected the request: %{detail}"
+  zh-CN: "PersonAI 拒绝了该请求：%{detail}"
+
+tron.model_provider.storage_failed:
+  en: "Model provider storage operation failed."
+  zh-CN: "模型供应商存储操作失败。"
+
+tron.model_provider.text_generation_no_candidates:
+  en: "Text generation auto route has no available Middle/Low-quality PersonAI models; sync the model catalog."
+  zh-CN: "文本生成自动路由没有可用的 PersonAI 中、低质量模型，请同步模型目录。"
+
+tron.model_provider.text_embedding_no_candidates:
+  en: "No text embedding route candidates: PersonAI must declare text_embedding tags and 1024 dimensions. Check the platform tags, sync the model catalog, then retry indexing."
+  zh-CN: "向量自动路由没有可用候选：PersonAI 模型列表须声明 text_embedding 标签和 1024 维向量，请检查平台标签并同步模型目录后重试索引。"
+
+tron.model_provider.multimodal_embedding_no_candidates:
+  en: "No multimodal embedding route candidates: PersonAI must declare multimodal_embedding tags and 1024 dimensions. Check the platform tags, sync the model catalog, then retry indexing."
+  zh-CN: "多模态向量自动路由没有可用候选：PersonAI 模型列表须声明 multimodal_embedding 标签和 1024 维向量，请检查平台标签并同步模型目录后重试索引。"
+
+tron.model_provider.high_quality_chat_required:
+  en: "Tron only supports High-quality PersonAI chat models; select a High-quality model or Chat Auto."
+  zh-CN: "Tron 仅支持 PersonAI 高质量对话模型，请选择高质量模型或对话自动路由。"
+
+tron.model_provider.ambiguous_selection:
+  en: "The model selection `%{model_code}` is ambiguous; specify the upstream vendor and quality."
+  zh-CN: "模型选择 `%{model_code}` 不唯一，请指定上游厂商和质量等级。"
+
+tron.model_provider.invalid_route_sources:
+  en: "The automatic route sources are invalid."
+  zh-CN: "自动路由的数据来源无效。"
+
+tron.model_provider.auto_route_context_window:
+  en: "Auto model routing requires a valid context window."
+  zh-CN: "自动模型路由需要有效的上下文窗口。"
+
+tron.model_provider.chat_auto_requires_router:
+  en: "Tron Auto must be resolved by the chat session router."
+  zh-CN: "Tron Auto 必须由对话会话路由器解析。"
+
+tron.model_provider.fixed_selection_requires_model_code:
+  en: "A fixed PersonAI selection requires modelCode."
+  zh-CN: "PersonAI 固定模型选择必须提供 modelCode。"
+
+tron.model_provider.chat_route_shape:
+  en: "A PersonAI chat route must be ChatAuto without modelCode."
+  zh-CN: "PersonAI 对话路由必须为 ChatAuto，且不能同时指定 modelCode。"
+
+tron.model_provider.capability_center_query_invalid:
+  en: "The capability center page or filter parameters are invalid."
+  zh-CN: "能力中心分页或筛选参数无效。"
+
+tron.model_provider.transcription_pool_locked:
+  en: "PersonAI transcription cannot restrict its active speech model pool."
+  zh-CN: "PersonAI 语音转写无法限定其当前语音模型池。"
+
+tron.model_provider.invalid_skin_id:
+  en: "The market skin ID is invalid."
+  zh-CN: "市场皮肤标识无效。"
+
+# --- Platform variable administration ---
+admin.variables.key_duplicate:
+  en: "The platform variable key already exists."
+  zh-CN: "平台变量键已存在。"
+
+# --- Platform workspace administration (WorkspaceError descriptors) ---
+admin.workspaces.not_found:
+  en: "Workspace was not found."
+  zh-CN: "未找到工作空间。"
+
+admin.workspaces.code_invalid:
+  en: "workspaceCode may contain uppercase letters, digits, underscores and hyphens only."
+  zh-CN: "workspaceCode 仅支持大写字母、数字、下划线和连字符。"
+
+admin.workspaces.code_duplicate:
+  en: "workspaceCode already exists."
+  zh-CN: "workspaceCode 已存在。"
+
+admin.workspaces.name_required:
+  en: "Workspace name is required."
+  zh-CN: "必须填写工作空间名称。"
+
+admin.workspaces.hierarchy_invalid:
+  en: "The workspace hierarchy operation is invalid."
+  zh-CN: "工作空间层级操作无效。"
+
+admin.workspaces.archived_invalid:
+  en: "Archived workspaces cannot be modified in this operation."
+  zh-CN: "已归档工作空间不能进行该操作。"
+
+admin.workspaces.storage_failed:
+  en: "Workspace storage operation failed."
+  zh-CN: "工作空间存储操作失败。"

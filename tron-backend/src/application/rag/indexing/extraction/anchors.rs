@@ -40,24 +40,36 @@ impl<'a> Anchors<'a> {
     }
 
     fn resolve(&self, value: &Value) -> Result<&'a str, String> {
-        let object = value
-            .as_object()
-            .filter(|o| o.len() == 2)
-            .ok_or("evidence 必须是 start/end 原文片段编号对象或逐字引文")?;
+        let object = value.as_object().filter(|o| o.len() == 2).ok_or(
+            crate::shared::i18n_message::MessageText::new("rag.graph.evidence_format_invalid")
+                .encode(),
+        )?;
         let start = object
             .get("start")
             .and_then(Value::as_u64)
             .and_then(|n| usize::try_from(n).ok())
             .filter(|n| *n > 0)
-            .ok_or("原文片段 start 编号无效")?;
+            .ok_or(
+                crate::shared::i18n_message::MessageText::new("rag.graph.evidence_start_invalid")
+                    .encode(),
+            )?;
         let end = object
             .get("end")
             .and_then(Value::as_u64)
             .and_then(|n| usize::try_from(n).ok())
             .filter(|n| *n >= start)
-            .ok_or("原文片段 end 编号无效")?;
-        let first = self.ranges.get(start - 1).ok_or("原文片段 start 越界")?;
-        let last = self.ranges.get(end - 1).ok_or("原文片段 end 越界")?;
+            .ok_or(
+                crate::shared::i18n_message::MessageText::new("rag.graph.evidence_end_invalid")
+                    .encode(),
+            )?;
+        let first = self.ranges.get(start - 1).ok_or(
+            crate::shared::i18n_message::MessageText::new("rag.graph.evidence_start_out_of_bounds")
+                .encode(),
+        )?;
+        let last = self.ranges.get(end - 1).ok_or(
+            crate::shared::i18n_message::MessageText::new("rag.graph.evidence_end_out_of_bounds")
+                .encode(),
+        )?;
         Ok(&self.source[first.start..last.end])
     }
 
@@ -74,12 +86,20 @@ impl<'a> Anchors<'a> {
             // Bound before allocating a copied quote; never let a compact set of
             // references expand into an unbounded graph or model repair prompt.
             if bytes.saturating_add(quote.len()) > budget {
-                return Err("图谱证据展开后超过大小限制，请选择更精确的原文片段".into());
+                return Err(crate::shared::i18n_message::MessageText::new(
+                    "rag.graph.evidence_too_large",
+                )
+                .encode()
+                .into());
             }
             let encoded = Value::from(quote);
             bytes = bytes.saturating_add(encoded.to_string().len());
             if bytes > budget {
-                return Err("图谱证据展开后超过大小限制".into());
+                return Err(crate::shared::i18n_message::MessageText::new(
+                    "rag.graph.evidence_too_large",
+                )
+                .encode()
+                .into());
             }
             *evidence = encoded;
             Ok(())

@@ -223,7 +223,7 @@ impl HttpLlmRuntimeClient {
                 end += 1;
             }
             if end == start {
-                return failure("单个重排候选超过模型输入预算");
+                return failure("a single rerank candidate exceeds the model input budget");
             }
             batches.push((start, batch_request(start..end)));
             start = end;
@@ -249,7 +249,7 @@ impl HttpLlmRuntimeClient {
                         partial.provider_metrics = None;
                         partial.diagnostics_truncated = true;
                         return ObservedModelResult {
-                            result: Err(fw::AgentError::Run("重排操作超时".into())),
+                            result: Err(fw::AgentError::Run("rerank operation timed out".into())),
                             report: partial,
                         };
                     }

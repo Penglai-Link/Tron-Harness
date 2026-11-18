@@ -17,8 +17,8 @@ impl KnowledgeBaseService {
             .embedding_space_fingerprint(workspace, Some(model), dimension)
             .map_err(invalid_storage)?;
         if actual != expected {
-            return Err(KnowledgeBaseError::Invalid(
-                "Embedding模型配置已改变，整份索引未发布；请重建".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.embedding_config_changed_unpublished",
             ));
         }
         Ok(())
@@ -39,7 +39,9 @@ impl KnowledgeBaseService {
         self.resources
             .download_binary_storage(&record, &mut bytes)?;
         if bytes.len() > local_documents::MAX_EXPANDED_BYTES {
-            return Err(KnowledgeBaseError::Invalid("入库检查点超过上限".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.checkpoint_limit_exceeded",
+            ));
         }
         serde_json::from_slice(&bytes).map_err(invalid_storage)
     }
@@ -63,7 +65,9 @@ impl KnowledgeBaseService {
                 return Ok(saved);
             }
             if !saved.vectors.is_empty() || saved.completed_units > max_units {
-                return Err(KnowledgeBaseError::Invalid("向量检查点不匹配".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.vector_checkpoint_mismatch",
+                ));
             }
             let records = service.resources.download_binary_records(
                 &task.user_code,
@@ -76,17 +80,23 @@ impl KnowledgeBaseService {
                     .resources
                     .download_binary_storage(&record, &mut bytes)?;
                 if bytes.len() > local_documents::MAX_EXPANDED_BYTES {
-                    return Err(KnowledgeBaseError::Invalid("入库检查点超过上限".into()));
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.checkpoint_limit_exceeded",
+                    ));
                 }
                 let batch: Vec<Vec<f32>> =
                     serde_json::from_slice(&bytes).map_err(invalid_storage)?;
                 if batch.len() > saved.completed_units.saturating_sub(saved.vectors.len()) {
-                    return Err(KnowledgeBaseError::Invalid("向量检查点数量不匹配".into()));
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.vector_checkpoint_count_mismatch",
+                    ));
                 }
                 saved.vectors.extend(batch);
             }
             if saved.vectors.len() != saved.completed_units {
-                return Err(KnowledgeBaseError::Invalid("向量检查点数量不匹配".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.vector_checkpoint_count_mismatch",
+                ));
             }
             Ok(saved)
         })
@@ -118,7 +128,7 @@ impl RagIndexCheckpoint for VectorCheckpoint<'_> {
             || current.attempt != self.lease.attempt
             || current.lease_owner.as_deref() != Some(&self.lease.owner)
         {
-            return Err("索引任务已取消或租约失效".into());
+            return Err("knowledge.base.index_cancelled_lease_lost".into());
         }
         let settings = self
             .service
@@ -128,7 +138,7 @@ impl RagIndexCheckpoint for VectorCheckpoint<'_> {
         if serde_json::to_value(settings).map_err(|error| error.to_string())?
             != task.configuration["ragSettings"]
         {
-            return Err("索引配置已改变，请使用新的补充索引任务".into());
+            return Err("knowledge.base.index_config_changed_rebuild".into());
         }
         if self.model.is_empty() {
             return Ok(());

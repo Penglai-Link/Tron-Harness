@@ -6,13 +6,10 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    answer_user_input, archive_session, archived_session_detail, batch_delete_archived_sessions,
-    create_session, delete_archived_session, delete_session, download_archived_session_attachment,
-    download_artifact, download_session_attachment,
-    resolve_artifact, list_archived_sessions, list_messages,
-    list_session_groups,
-    list_user_input_requests, patch_session, restore_session, send_message, steer_message,
-    stream_message, upload_session_attachment,
+    answer_user_input, archive_session, create_session, delete_session, download_artifact,
+    download_session_attachment, list_messages, list_session_groups, list_user_input_requests,
+    patch_session, resolve_artifact, restore_session, send_message, steer_message, stream_message,
+    upload_session_attachment,
 };
 use super::run_control::{get_active_run, stop_run};
 use super::short_term_memory::{
@@ -48,13 +45,12 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}/stop", post(super::terminals::stop))
         .route("/api/v1/chats/sessions/applications", get(super::application_context::get_session_applications))
         .route("/api/v1/chats/session-groups", get(list_session_groups))
-        .route("/api/v1/admin/archived-sessions", get(list_archived_sessions))
-        .route("/api/v1/admin/archived-containers/query", post(super::archives::query).layer(axum::extract::DefaultBodyLimit::max(4096)))
-        .route("/api/v1/admin/archived-containers/{kind}/{code}/restore", post(super::archives::restore))
-        .route("/api/v1/admin/archived-sessions/batch-delete", post(batch_delete_archived_sessions))
-        .route("/api/v1/admin/archived-sessions/{session_code}/restore", post(restore_session))
-        .route("/api/v1/admin/archived-sessions/{session_code}", get(archived_session_detail).delete(delete_archived_session))
-        .route("/api/v1/admin/archived-sessions/{session_code}/attachments/{attachment_code}", get(download_archived_session_attachment))
+        .route("/api/v1/admin/chat-sessions", get(super::session_management::list))
+        .route("/api/v1/admin/chat-sessions/stop", post(super::session_management::stop).layer(axum::extract::DefaultBodyLimit::max(16384)))
+        .route("/api/v1/admin/chat-sessions/archive", post(super::session_management::archive).layer(axum::extract::DefaultBodyLimit::max(16384)))
+        .route("/api/v1/admin/chat-sessions/delete", post(super::session_management::delete).layer(axum::extract::DefaultBodyLimit::max(16384)))
+        .route("/api/v1/admin/chat-sessions/move", post(super::session_management::move_sessions).layer(axum::extract::DefaultBodyLimit::max(16384)))
+        .route("/api/v1/admin/chat-sessions/{session_code}/restore", post(restore_session))
         .route("/api/v1/chats/sessions", post(create_session))
         .route("/api/v1/chats/sessions/{session_code}/placement", axum::routing::put(super::location::move_session))
         .route("/api/v1/chats/sessions/{session_code}/working-directory", axum::routing::put(super::location::change_directory))

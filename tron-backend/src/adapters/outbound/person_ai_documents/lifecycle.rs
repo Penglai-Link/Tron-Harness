@@ -114,8 +114,8 @@ impl<'a> ParseSubmission<'a> {
         // One recovery per worker invocation. Repeated upstream failures stop
         // instead of creating an unlimited series of jobs.
         if self.replacements >= 1 {
-            return Err(KnowledgeBaseError::Invalid(
-                "解析任务重新提交后仍不可用，请稍后重试；未发布不完整索引".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.resubmit_unavailable",
             ));
         }
         self.replacements += 1;
@@ -134,8 +134,8 @@ pub(super) fn task_not_found(error: &ServerApiError) -> bool {
 fn request_retired(error: &ServerApiError) -> bool {
     matches!(error, ServerApiError::Business { code: 409, message }
         if matches!(message.as_str(),
-            "原任务已删除或正在删除，请使用新的 request_id" |
-            "原任务已清理，请使用新的 request_id"))
+            "integration.person_ai.task_deleted" |
+            "integration.person_ai.task_cleaned"))
 }
 pub(super) fn result_expired(task: &ParseTask) -> bool {
     task.is_settled()
@@ -161,24 +161,24 @@ pub(super) fn progress(task: &ParseTask) -> Result<TaskProgress, KnowledgeBaseEr
         return Ok(TaskProgress::Replace);
     }
     if task.billing_status == "balance_insufficient" {
-        return Err(KnowledgeBaseError::Storage(
-            "解析结果待结算：积分不足，请充值后重试原任务".into(),
+        return Err(KnowledgeBaseError::storage(
+            "integration.person_ai.insufficient_credits",
         ));
     }
     if task.status == "submission_unknown" {
-        return Err(KnowledgeBaseError::Storage(
-            "平台暂未确认解析提交，稍后继续查询原任务".into(),
+        return Err(KnowledgeBaseError::storage(
+            "integration.person_ai.submit_unconfirmed",
         ));
     }
     if task.is_settled() {
         if task.status == "completed" {
             return Ok(TaskProgress::Ready);
         }
-        return Err(KnowledgeBaseError::Invalid(format!(
-            "解析任务{}，未发布不完整的索引：{}",
-            task.status,
-            failure_reason(task)
-        )));
+        return Err(KnowledgeBaseError::invalid_message(
+            crate::shared::i18n_message::MessageText::new("integration.person_ai.incomplete_index")
+                .arg("task", task.status.clone())
+                .arg("detail", failure_reason(task)),
+        ));
     }
     Ok(TaskProgress::Wait)
 }
@@ -204,7 +204,7 @@ fn failure_reason(task: &ParseTask) -> String {
                 .filter_map(|segment| segment.get("error")?.as_str())
                 .find(|value| nonempty(value))
         })
-        .unwrap_or("请检查解析结果")
+        .unwrap_or("integration.person_ai.check_result")
         .chars()
         .take(512)
         .collect()
@@ -214,5 +214,7 @@ pub(super) fn result_manifest(task: &ParseTask) -> Result<&Value, KnowledgeBaseE
         .as_ref()
         .and_then(|gateway| gateway.get("result"))
         .filter(|result| result.is_object())
-        .ok_or_else(|| KnowledgeBaseError::Storage("平台已结算，但未返回解析产物清单".into()))
+        .ok_or_else(|| {
+            KnowledgeBaseError::storage("integration.person_ai.settled_without_artifacts")
+        })
 }

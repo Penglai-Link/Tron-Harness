@@ -279,11 +279,8 @@ async fn install(
         != request.expected_installed_version.as_ref()
     {
         return rejected(
-            if auth.locale.starts_with("zh") {
-                "本地版本已变化，请刷新后重新确认".into()
-            } else {
-                "Installed version changed; refresh and review again".into()
-            },
+            tron_i18n::t!("capabilities.center.version_changed", locale = &auth.locale)
+                .into_owned(),
             &auth.locale,
         );
     }
@@ -297,7 +294,12 @@ async fn install(
     };
     match state
         .agent_framework
-        .import_center_pack(bytes, detail.manifest, request.expected_installed_version)
+        .import_center_pack(
+            bytes,
+            detail.manifest,
+            request.expected_installed_version,
+            &auth.locale,
+        )
         .await
     {
         Ok(pack) => Json(ApiResponse::protocol_success(InstallResponse {
@@ -310,16 +312,14 @@ async fn install(
     }
 }
 fn rejected(error: String, locale: &str) -> Response {
-    let message = if locale.starts_with("zh") {
-        "能力包安装未完成"
-    } else {
-        "Capability installation did not complete"
-    };
     (
         StatusCode::CONFLICT,
         Json(ApiResponse::protocol_error(
             "101038003",
-            format!("{message}: {error}"),
+            format!(
+                "{}: {error}",
+                tron_i18n::t!("capabilities.center.install_incomplete", locale = locale)
+            ),
         )),
     )
         .into_response()
@@ -328,61 +328,34 @@ fn rejected(error: String, locale: &str) -> Response {
 fn invalid_request(locale: &str) -> PersonAiApiError {
     PersonAiApiError(
         crate::application::model_provider::ModelProviderError::InvalidSelection(
-            if locale.starts_with("zh") {
-                "能力中心请求参数无效"
-            } else {
-                "Invalid capability center request"
-            }
-            .into(),
+            tron_i18n::Message::new("capabilities.center.invalid_request"),
         ),
         locale.into(),
     )
 }
 
 fn block_message(block: center::InstallBlock, locale: &str) -> String {
-    let zh = locale.starts_with("zh");
     match block {
         center::InstallBlock::Manifest(detail) => format!(
             "{}: {detail}",
-            if zh {
-                "能力包清单或 Framework 版本不兼容"
-            } else {
-                "Invalid manifest or incompatible Framework version"
-            }
+            tron_i18n::t!("capabilities.center.manifest_incompatible", locale = locale)
         ),
-        center::InstallBlock::Identity => if zh {
-            "发布信息与包清单不一致"
-        } else {
-            "Release metadata does not match its manifest"
+        center::InstallBlock::Identity => {
+            tron_i18n::t!("capabilities.center.release_mismatch", locale = locale).into_owned()
         }
-        .into(),
         center::InstallBlock::Dependency(value) => format!(
             "{}: {value}",
-            if zh {
-                "请先安装兼容的依赖包"
-            } else {
-                "Install a compatible dependency first"
-            }
+            tron_i18n::t!("capabilities.center.dependency_required", locale = locale)
         ),
         center::InstallBlock::Platform(value) => format!(
             "{}: {value}",
-            if zh {
-                "能力包不支持当前运行平台"
-            } else {
-                "Package does not support this runtime platform"
-            }
+            tron_i18n::t!("capabilities.center.platform_unsupported", locale = locale)
         ),
-        center::InstallBlock::Builtin => if zh {
-            "内置能力包随 Tron 更新，不能单独替换"
-        } else {
-            "Built-in packs are updated with Tron"
+        center::InstallBlock::Builtin => {
+            tron_i18n::t!("capabilities.center.builtin", locale = locale).into_owned()
         }
-        .into(),
-        center::InstallBlock::NotNewer => if zh {
-            "已安装相同或更高版本"
-        } else {
-            "The same or a newer version is already installed"
+        center::InstallBlock::NotNewer => {
+            tron_i18n::t!("capabilities.center.not_newer", locale = locale).into_owned()
         }
-        .into(),
     }
 }

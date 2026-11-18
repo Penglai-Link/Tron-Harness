@@ -76,50 +76,34 @@ impl IntoResponse for AssistantApiError {
 }
 
 fn assistant_error_response(descriptor: ApplicationErrorDescriptor) -> Response {
-    let (status, zh, en) = match descriptor.message_key {
-        "tron.assistant.not_found" => (
-            StatusCode::NOT_FOUND,
-            "PersonAI 或关联记录不存在",
-            "PersonAI or related record was not found",
-        ),
-        "tron.assistant.request_invalid" => (
-            StatusCode::BAD_REQUEST,
-            "PersonAI 配置或请求无效",
-            "PersonAI configuration or request is invalid",
-        ),
-        "tron.assistant.state_changed" => (
-            StatusCode::CONFLICT,
-            "PersonAI 状态已变化，请刷新后重试",
-            "PersonAI state changed; refresh and retry",
-        ),
-        "tron.assistant.task_completed" => (
-            StatusCode::CONFLICT,
-            "已完成的任务不能取消",
-            "A completed task cannot be cancelled",
-        ),
+    let locale = crate::shared::auth_holder::AuthHolder::get()
+        .map(|context| context.locale.clone())
+        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_string());
+    let (status, message_key) = match descriptor.message_key {
+        "tron.assistant.not_found" => (StatusCode::NOT_FOUND, "tron.assistant.not_found"),
+        "tron.assistant.request_invalid" => {
+            (StatusCode::BAD_REQUEST, "tron.assistant.request_invalid")
+        }
+        "tron.assistant.state_changed" => (StatusCode::CONFLICT, "tron.assistant.state_changed"),
+        "tron.assistant.task_completed" => (StatusCode::CONFLICT, "tron.assistant.task_completed"),
         "tron.assistant.task_has_active_subtasks" => (
             StatusCode::CONFLICT,
-            "取消任务前请先处理未归档的子任务",
-            "Resolve unarchived subtasks before cancelling this task",
+            "tron.assistant.task_has_active_subtasks",
         ),
         "tron.assistant.storage_failed" => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "PersonAI 存储操作失败",
-            "PersonAI storage operation failed",
+            "tron.assistant.storage_failed",
         ),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "PersonAI 运行失败，请查看工作记录",
-            "PersonAI execution failed; inspect its work history",
+            "tron.assistant.runtime_failed",
         ),
     };
-    let english = crate::shared::auth_holder::AuthHolder::get()
-        .is_some_and(|c| c.locale.to_ascii_lowercase().starts_with("en"));
     (
         status,
         Json(ApiResponse::<EmptyData>::protocol_error(
             descriptor.code,
-            if english { en } else { zh },
+            tron_i18n::t!(message_key, locale = &locale),
         )),
     )
         .into_response()
@@ -380,7 +364,7 @@ async fn main_session(
     if soul.state != SoulState::Ready && soul.session_code.is_none() {
         soul = s
             .assistants
-            .begin_awakening(&code, &auth.user().user_code)?
+            .begin_awakening(&code, &auth.user().user_code, &auth.locale)?
             .0;
     }
     let d = if soul.user_code.as_deref() == Some(&auth.user().user_code)
@@ -414,7 +398,7 @@ async fn resolve_session(
     if soul.state != SoulState::Ready && soul.session_code.is_none() {
         soul = s
             .assistants
-            .begin_awakening(&code, &auth.user().user_code)?
+            .begin_awakening(&code, &auth.user().user_code, &auth.locale)?
             .0;
     }
     let d = if soul.user_code.as_deref() == Some(&auth.user().user_code)

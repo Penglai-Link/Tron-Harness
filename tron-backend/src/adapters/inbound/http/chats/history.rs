@@ -6,11 +6,12 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use eliteforge_agent_core as fw;
 use serde::{Deserialize, Serialize};
+use tron_i18n::t;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -90,13 +91,11 @@ pub(crate) fn public_history_block(
 }
 pub async fn read_history(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path(session): Path<String>,
-    headers: HeaderMap,
     request: Result<Json<ReadHistoryRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
-    let locale =
-        SupportedLocale::from_request(headers.get("accept-language").and_then(|h| h.to_str().ok()));
+    let locale = SupportedLocale::from_raw(&auth.locale);
     let Json(query) = match request {
         Ok(q) => q,
         Err(_) => return history_error(fw::StateError::Invalid("request".into()), locale),
@@ -151,34 +150,23 @@ pub async fn read_history(
 }
 fn history_error(error: fw::StateError, locale: SupportedLocale) -> Response {
     let descriptor = crate::application::chat::history_error::descriptor(&error);
-    let (status, zh, en) = match descriptor.message_key {
+    let (status, message) = match descriptor.message_key {
         "tron.chat.history_query_invalid" => (
             StatusCode::BAD_REQUEST,
-            "历史查询参数无效，每页支持 1 至 100 轮",
-            "Invalid history query; page size must be 1 to 100",
+            t!("tron.chat.history_query_invalid", locale = locale),
         ),
         "tron.chat.history_version_changed" => (
             StatusCode::CONFLICT,
-            "会话历史已更新，请重新加载",
-            "History changed; reload the newest page",
+            t!("tron.chat.history_version_changed", locale = locale),
         ),
-        "tron.chat.history_not_found" => (StatusCode::NOT_FOUND, "会话不存在", "Session not found"),
+        "tron.chat.history_not_found" => (
+            StatusCode::NOT_FOUND,
+            t!("tron.chat.history_not_found", locale = locale),
+        ),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "读取会话历史失败",
-            "Could not read session history",
+            t!("tron.chat.history_read_failed", locale = locale),
         ),
     };
-    (
-        status,
-        Json(ApiResponse::error(
-            descriptor.code,
-            if locale == SupportedLocale::EnUs {
-                en
-            } else {
-                zh
-            },
-        )),
-    )
-        .into_response()
+    (status, Json(ApiResponse::error(descriptor.code, message))).into_response()
 }

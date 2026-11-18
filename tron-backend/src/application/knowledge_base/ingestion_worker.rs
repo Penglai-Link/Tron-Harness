@@ -19,8 +19,11 @@ pub(crate) fn queue_error(error: IngestionQueueError) -> KnowledgeBaseError {
     match error {
         IngestionQueueError::NotFound => KnowledgeBaseError::NotFound,
         IngestionQueueError::Conflict => KnowledgeBaseError::Conflict,
-        IngestionQueueError::Invalid(s) => KnowledgeBaseError::Invalid(s),
-        IngestionQueueError::Storage(s) => KnowledgeBaseError::Storage(s),
+        IngestionQueueError::Invalid(s) => KnowledgeBaseError::invalid_message(
+            crate::shared::i18n_message::MessageText::new("knowledge.base.queue_invalid")
+                .arg("detail", s),
+        ),
+        IngestionQueueError::Storage(s) => KnowledgeBaseError::storage_detail(s),
     }
 }
 pub(crate) fn now_ms() -> i64 {
@@ -107,9 +110,13 @@ struct InlineAttempt {
 impl Drop for InlineAttempt {
     fn drop(&mut self) {
         if !self.finished {
-            let _ = self
-                .queue
-                .fail(&self.lease, now_ms(), "索引已中断，请重试", None);
+            let _ = self.queue.fail(
+                &self.lease,
+                now_ms(),
+                &crate::shared::i18n_message::MessageText::new("knowledge.base.index_interrupted")
+                    .encode(),
+                None,
+            );
         }
     }
 }
@@ -137,8 +144,8 @@ impl KnowledgeBaseService {
         let workspace = "PLATFORM";
         let plan = self.preflight_document(user, kb, name, bytes, preference)?;
         if confirmed.is_some_and(|confirmed| confirmed != &plan) {
-            return Err(KnowledgeBaseError::Invalid(
-                "文件或解析选择已改变，请重新检查后上传".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.parse_choice_changed",
             ));
         }
         let identity = hash(
@@ -148,7 +155,9 @@ impl KnowledgeBaseService {
         let scoped = key
             .map(|key| {
                 if key.is_empty() || key.len() > 128 || key.chars().any(char::is_control) {
-                    return Err(KnowledgeBaseError::Invalid("入库请求标识无效".into()));
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.ingest_request_invalid",
+                    ));
                 }
                 Ok(hash(
                     &serde_json::to_string(&(user, workspace, kb, key)).map_err(invalid_storage)?,
@@ -222,9 +231,10 @@ impl KnowledgeBaseService {
     pub fn start_ingestion_workers(&self) -> Result<(), KnowledgeBaseError> {
         self.active_ingestion_config()
             .validate()
-            .map_err(KnowledgeBaseError::Invalid)?;
-        let runtime = tokio::runtime::Handle::try_current()
-            .map_err(|_| KnowledgeBaseError::Invalid("后台索引执行环境不可用".into()))?;
+            .map_err(KnowledgeBaseError::from_detail)?;
+        let runtime = tokio::runtime::Handle::try_current().map_err(|_| {
+            KnowledgeBaseError::invalid("knowledge.base.background_env_unavailable")
+        })?;
         if self.workers.started.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
@@ -344,10 +354,9 @@ impl KnowledgeBaseService {
         if !task.cancellation_pending {
             return Ok(());
         }
-        let parser = self
-            .parser
-            .as_ref()
-            .ok_or_else(|| KnowledgeBaseError::Storage("原解析器不可用，取消稍后重试".into()))?;
+        let parser = self.parser.as_ref().ok_or_else(|| {
+            KnowledgeBaseError::storage("knowledge.base.parser_unavailable_cancel_retry")
+        })?;
         let job = parser.cancel_task(task).await?;
         self.queue
             .complete_cancellation(task, job)
@@ -415,7 +424,7 @@ impl KnowledgeBaseService {
             .ok()
             .map(|model| self.llm.embedding_accepts_images(workspace, model))
             .transpose()
-            .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?;
+            .map_err(|error| KnowledgeBaseError::from_detail(error))?;
         let parser = if reuse_parsed_only {
             None
         } else {
@@ -474,7 +483,9 @@ impl KnowledgeBaseService {
             .descriptors()
             .into_iter()
             .find(|s| s.id == chunk_config.mode.strategy_id())
-            .ok_or_else(|| KnowledgeBaseError::Invalid("切片策略未注册".into()))?;
+            .ok_or_else(|| {
+                KnowledgeBaseError::invalid("knowledge.base.chunk_strategy_unconfigured")
+            })?;
         let config = json!({"indexPipelineVersion":"source-graph-image-bindings-v2", "reuseParsedOnly":reuse_parsed_only, "embeddingImages":embedding_images, "chunkStrategy":strategy,"ragSettings":settings,"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parsePlan":doc.parse_plan, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": image_description});
         let identity = hash(&format!(
             "{}:{}:{config}",
@@ -663,7 +674,7 @@ impl KnowledgeBaseService {
             });
             if self
                 .queue
-                .fail(&owned, now_ms(), &error.to_string(), after)
+                .fail(&owned, now_ms(), &error.persisted(), after)
                 .is_ok()
                 && superseded
             {

@@ -13,9 +13,10 @@ use super::{
 pub(super) fn validate_mysql_attributes(attributes: &MysqlAttributes) -> Result<(), ResourceError> {
     let mode = attributes.connection_mode.as_str();
     if !matches!(mode, "SINGLE" | "FAILOVER" | "LOAD_BALANCE" | "REPLICATION") {
-        return Err(invalid(
+        return Err(invalid_with(
             "connectionMode",
-            "must be one of SINGLE, FAILOVER, LOAD_BALANCE, REPLICATION",
+            crate::shared::i18n_message::MessageText::new("resource.error.reason.one_of")
+                .arg("allowed", "SINGLE, FAILOVER, LOAD_BALANCE, REPLICATION"),
         ));
     }
     validate_endpoints(&attributes.endpoints, mode == "REPLICATION")?;
@@ -23,13 +24,13 @@ pub(super) fn validate_mysql_attributes(attributes: &MysqlAttributes) -> Result<
         "SINGLE" if attributes.endpoints.len() != 1 => {
             return Err(invalid(
                 "endpoints",
-                "SINGLE mode requires exactly one endpoint",
+                "resource.error.reason.single_endpoint",
             ));
         }
         "REPLICATION" if attributes.endpoints.len() < 2 => {
             return Err(invalid(
                 "endpoints",
-                "REPLICATION mode requires at least two endpoints",
+                "resource.error.reason.replication_endpoints",
             ));
         }
         "REPLICATION" => {
@@ -50,7 +51,7 @@ pub(super) fn validate_mysql_attributes(attributes: &MysqlAttributes) -> Result<
             {
                 return Err(invalid(
                     "endpoints[].role",
-                    "REPLICATION endpoints must include PRIMARY and REPLICA roles",
+                    "resource.error.reason.replication_roles",
                 ));
             }
         }
@@ -61,7 +62,7 @@ pub(super) fn validate_mysql_attributes(attributes: &MysqlAttributes) -> Result<
         {
             return Err(invalid(
                 "endpoints[].role",
-                "roles are only allowed in REPLICATION mode",
+                "resource.error.reason.roles_replication_only",
             ));
         }
         _ => {}
@@ -95,7 +96,7 @@ pub(super) fn validate_postgresql_attributes(
     {
         return Err(invalid(
             "targetSession/loadBalance",
-            "must use a supported PostgreSQL session and load-balance mode",
+            "resource.error.reason.postgres_session_mode",
         ));
     }
     validate_tls(
@@ -116,23 +117,27 @@ pub(super) fn validate_postgresql_attributes(
 pub(super) fn validate_redis_attributes(attributes: &RedisAttributes) -> Result<(), ResourceError> {
     let topology = attributes.topology.as_str();
     if !matches!(topology, "STANDALONE" | "SENTINEL" | "CLUSTER") {
-        return Err(invalid(
+        return Err(invalid_with(
             "topology",
-            "must be one of STANDALONE, SENTINEL, CLUSTER",
+            crate::shared::i18n_message::MessageText::new("resource.error.reason.one_of")
+                .arg("allowed", "STANDALONE, SENTINEL, CLUSTER"),
         ));
     }
     validate_endpoints(&attributes.endpoints, false)?;
     if topology == "STANDALONE" && attributes.endpoints.len() != 1 {
         return Err(invalid(
             "endpoints",
-            "STANDALONE topology requires exactly one endpoint",
+            "resource.error.reason.standalone_endpoint",
         ));
     }
     if attributes.database < 0 {
-        return Err(invalid("database", "must be non-negative"));
+        return Err(invalid("database", "resource.error.reason.non_negative"));
     }
     if topology == "CLUSTER" && attributes.database != 0 {
-        return Err(invalid("database", "must be zero for CLUSTER topology"));
+        return Err(invalid(
+            "database",
+            "resource.error.reason.cluster_database_zero",
+        ));
     }
     validate_optional_credentials(attributes.credentials.as_ref())?;
     validate_tls(
@@ -149,7 +154,7 @@ pub(super) fn validate_redis_attributes(attributes: &RedisAttributes) -> Result<
             {
                 return Err(invalid(
                     "sentinel.masterName",
-                    "must be non-blank, no longer than 128 characters, and contain no whitespace",
+                    "resource.error.reason.identifier_format",
                 ));
             }
             validate_optional_credentials(sentinel.credentials.as_ref())?;
@@ -160,10 +165,13 @@ pub(super) fn validate_redis_attributes(attributes: &RedisAttributes) -> Result<
             )?;
         }
         ("SENTINEL", None) => {
-            return Err(invalid("sentinel", "is required for SENTINEL topology"));
+            return Err(invalid(
+                "sentinel",
+                "resource.error.reason.required_sentinel",
+            ));
         }
         (_, Some(_)) => {
-            return Err(invalid("sentinel", "is only allowed for SENTINEL topology"));
+            return Err(invalid("sentinel", "resource.error.reason.only_sentinel"));
         }
         _ => {}
     }
@@ -177,9 +185,10 @@ pub(super) fn validate_kafka_attributes(attributes: &KafkaAttributes) -> Result<
         security_protocol,
         "PLAINTEXT" | "SSL" | "SASL_PLAINTEXT" | "SASL_SSL"
     ) {
-        return Err(invalid(
+        return Err(invalid_with(
             "securityProtocol",
-            "must be one of PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL",
+            crate::shared::i18n_message::MessageText::new("resource.error.reason.one_of")
+                .arg("allowed", "PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL"),
         ));
     }
     match (
@@ -191,22 +200,20 @@ pub(super) fn validate_kafka_attributes(attributes: &KafkaAttributes) -> Result<
                 sasl.mechanism.as_str(),
                 "PLAIN" | "SCRAM_SHA_256" | "SCRAM_SHA_512"
             ) {
-                return Err(invalid(
+                return Err(invalid_with(
                     "sasl.mechanism",
-                    "must be one of PLAIN, SCRAM_SHA_256, SCRAM_SHA_512",
+                    crate::shared::i18n_message::MessageText::new("resource.error.reason.one_of")
+                        .arg("allowed", "PLAIN, SCRAM_SHA_256, SCRAM_SHA_512"),
                 ));
             }
             validate_text(&sasl.username, "sasl.username", 1, 128)?;
             validate_secret_reference(&sasl.password)?;
         }
         (true, None) => {
-            return Err(invalid("sasl", "is required for SASL security protocols"));
+            return Err(invalid("sasl", "resource.error.reason.required_sasl"));
         }
         (false, Some(_)) => {
-            return Err(invalid(
-                "sasl",
-                "is only allowed for SASL security protocols",
-            ));
+            return Err(invalid("sasl", "resource.error.reason.only_sasl"));
         }
         _ => {}
     }
@@ -216,15 +223,15 @@ pub(super) fn validate_kafka_attributes(attributes: &KafkaAttributes) -> Result<
             if tls.client_key_password.is_some() {
                 return Err(invalid(
                     "tls.clientKeyPassword",
-                    "encrypted client keys are not supported; provide an unencrypted PEM key",
+                    "resource.error.reason.unencrypted_client_key",
                 ));
             }
         }
         (true, None) => {
-            return Err(invalid("tls", "is required for SSL security protocols"));
+            return Err(invalid("tls", "resource.error.reason.required_ssl"));
         }
         (false, Some(_)) => {
-            return Err(invalid("tls", "is only allowed for SSL security protocols"));
+            return Err(invalid("tls", "resource.error.reason.only_ssl"));
         }
         _ => {}
     }
@@ -236,10 +243,7 @@ fn validate_endpoints(
     roles_are_allowed: bool,
 ) -> Result<(), ResourceError> {
     if endpoints.is_empty() || endpoints.len() > 128 {
-        return Err(invalid(
-            "endpoints",
-            "must contain between 1 and 128 endpoints",
-        ));
+        return Err(invalid("endpoints", "resource.error.reason.endpoint_count"));
     }
     let mut unique = HashSet::new();
     for (index, endpoint) in endpoints.iter().enumerate() {
@@ -248,13 +252,13 @@ fn validate_endpoints(
         if endpoint.port == 0 || !unique.insert((endpoint.host.trim(), endpoint.port)) {
             return Err(invalid(
                 format!("endpoints[{index}].port"),
-                "must be between 1 and 65535 and endpoints must be unique",
+                "resource.error.reason.endpoint_port",
             ));
         }
         if !roles_are_allowed && endpoint.role.is_some() {
             return Err(invalid(
                 format!("endpoints[{index}].role"),
-                "is not allowed for this connection mode",
+                "resource.error.reason.not_allowed_mode",
             ));
         }
     }
@@ -268,7 +272,10 @@ fn validate_credentials(
     match credentials.username.as_deref() {
         Some(username) => validate_text(username, "credentials.username", 1, 128)?,
         None if username_required => {
-            return Err(invalid("credentials.username", "is required"));
+            return Err(invalid(
+                "credentials.username",
+                "resource.error.reason.required",
+            ));
         }
         None => {}
     }
@@ -304,7 +311,7 @@ fn validate_tls(
     enforce_client_key_dependencies: bool,
 ) -> Result<(), ResourceError> {
     if !allowed_modes.contains(&tls.mode.as_str()) {
-        return Err(invalid("tls.mode", "must use a supported TLS mode"));
+        return Err(invalid("tls.mode", "resource.error.reason.tls_mode"));
     }
     for key in [
         tls.ca_certificate.as_deref(),
@@ -322,7 +329,7 @@ fn validate_tls(
     {
         return Err(invalid(
             "tls",
-            "clientCertificate and clientKey must be provided together, and clientKeyPassword requires clientKey",
+            "resource.error.reason.client_key_dependency",
         ));
     }
     Ok(())
@@ -332,7 +339,7 @@ fn validate_properties(values: &BTreeMap<String, Value>) -> Result<(), ResourceE
     if values.len() > 128 {
         return Err(invalid(
             "properties",
-            "must contain no more than 128 entries",
+            "resource.error.reason.properties_limit",
         ));
     }
     for key in values.keys() {
@@ -349,17 +356,26 @@ fn validate_text(
 ) -> Result<(), ResourceError> {
     let value = value.trim();
     if value.len() < minimum || value.len() > maximum {
-        return Err(invalid(
+        return Err(invalid_with(
             field,
-            format!("must contain between {minimum} and {maximum} characters"),
+            crate::shared::i18n_message::MessageText::new("resource.error.reason.length")
+                .arg("minimum", minimum.to_string())
+                .arg("maximum", maximum.to_string()),
         ));
     }
     Ok(())
 }
 
-fn invalid(field: impl Into<String>, reason: impl Into<String>) -> ResourceError {
+fn invalid(field: impl Into<String>, key: &'static str) -> ResourceError {
+    invalid_with(field, crate::shared::i18n_message::MessageText::new(key))
+}
+
+fn invalid_with(
+    field: impl Into<String>,
+    message: crate::shared::i18n_message::MessageText,
+) -> ResourceError {
     ResourceError::InvalidField {
         field: field.into(),
-        reason: reason.into(),
+        reason: message.encode(),
     }
 }

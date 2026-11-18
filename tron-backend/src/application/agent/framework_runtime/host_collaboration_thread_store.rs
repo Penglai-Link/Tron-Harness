@@ -81,6 +81,66 @@ impl FrameworkHost {
             .await
             .map_err(failure)
     }
+    /// Running Threads whose originating chat session is one of `origins`.
+    /// Session management uses this to stop the Threads a session spawned.
+    pub(super) async fn running_thread_ids_for_origins(
+        &self,
+        origins: &[String],
+    ) -> Result<Vec<String>, fw::AgentError> {
+        if origins.is_empty() {
+            return Ok(vec![]);
+        }
+        let origins = serde_json::to_string(origins).map_err(failure)?;
+        self.shared_database()
+            .await?
+            .call_read(move |connection| {
+                let mut query = connection
+                    .prepare(
+                        "SELECT session_id FROM collaboration_threads \
+                 WHERE json_extract(record_json,'$.summary.status')='Running' \
+                   AND json_extract(record_json,'$.originSessionCode') \
+                       IN (SELECT value FROM json_each(?1)) ORDER BY session_id",
+                    )
+                    .map_err(state_error)?;
+                query
+                    .query_map([origins], |row| row.get(0))
+                    .map_err(state_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(state_error)
+            })
+            .await
+            .map_err(failure)
+    }
+    /// Distinct origins from `origins` that still have a running Thread.
+    pub(super) async fn running_thread_origins_for_sessions(
+        &self,
+        origins: &[String],
+    ) -> Result<Vec<String>, fw::AgentError> {
+        if origins.is_empty() {
+            return Ok(vec![]);
+        }
+        let origins = serde_json::to_string(origins).map_err(failure)?;
+        self.shared_database()
+            .await?
+            .call_read(move |connection| {
+                let mut query = connection
+                    .prepare(
+                        "SELECT DISTINCT json_extract(record_json,'$.originSessionCode') \
+                 FROM collaboration_threads \
+                 WHERE json_extract(record_json,'$.summary.status')='Running' \
+                   AND json_extract(record_json,'$.originSessionCode') \
+                       IN (SELECT value FROM json_each(?1))",
+                    )
+                    .map_err(state_error)?;
+                query
+                    .query_map([origins], |row| row.get(0))
+                    .map_err(state_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(state_error)
+            })
+            .await
+            .map_err(failure)
+    }
     pub(super) async fn thread_records_by_ids(
         &self,
         ids: &[String],

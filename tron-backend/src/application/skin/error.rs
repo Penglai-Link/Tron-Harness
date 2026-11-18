@@ -1,8 +1,12 @@
+use crate::shared::i18n_message::MessageText;
+
 #[derive(Debug)]
 pub enum SkinError {
     Invalid,
-    CssRejected(String),
-    Incompatible(String),
+    /// Locale-independent rejection reason for theme CSS.
+    CssRejected(MessageText),
+    /// Locale-independent incompatibility reason for theme manifests.
+    Incompatible(MessageText),
     NotFound,
     Conflict,
     Protected,

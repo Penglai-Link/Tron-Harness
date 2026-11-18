@@ -142,7 +142,7 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
                     .map_err(|error|match error {
                         crate::application::knowledge_base::ingestion::IngestionQueueError::Conflict=>KnowledgeBaseError::Conflict,
                         crate::application::knowledge_base::ingestion::IngestionQueueError::NotFound=>KnowledgeBaseError::NotFound,
-                        crate::application::knowledge_base::ingestion::IngestionQueueError::Invalid(reason)=>KnowledgeBaseError::Invalid(reason),
+                        crate::application::knowledge_base::ingestion::IngestionQueueError::Invalid(reason)=>KnowledgeBaseError::Invalid(reason.into()),
                         crate::application::knowledge_base::ingestion::IngestionQueueError::Storage(reason)=>storage(reason),
                     })?;
             }

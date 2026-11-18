@@ -1,0 +1,537 @@
+# Chat HTTP/SSE/Socket.IO user-facing text.
+#
+# Codes stay stable in the API contract; only this table decides the display
+# text. Descriptor keys (`tron.chat.*`, `tron.archives.*`) are the stable
+# `message_key` values produced by the application layer and are looked up by
+# the HTTP mappers, never by business logic. `error.chat.*` maps the stable
+# `CHAT_*`/`AGENT_*`/`VARIABLE_RUNTIME_*` codes used by chat inbound errors.
+#
+# Format: rust-i18n `_version: 2`, flat dotted keys, both locales required.
+_version: 2
+
+# --- HTTP/SSE error codes (stable code strings, localized display text) ---
+
+error.chat.attachment_too_large:
+  en: "The attachment exceeds the size limit. Upload a smaller file."
+  zh-CN: "附件超过大小限制，请缩小文件后重新上传。"
+
+error.chat.attachment_invalid:
+  en: "The attachment is invalid. Check its type and size."
+  zh-CN: "附件无效，请检查文件类型和大小。"
+
+error.chat.attachment_not_found:
+  en: "The attachment was not found. Upload it again."
+  zh-CN: "附件不存在或已被删除，请重新上传。"
+
+error.chat.message_required:
+  en: "Enter a message."
+  zh-CN: "请输入消息内容。"
+
+error.chat.session_not_found:
+  en: "The conversation was not found. Reopen the conversation."
+  zh-CN: "会话不存在或已被删除，请重新打开会话。"
+
+error.chat.session_must_be_archived:
+  en: "Archive the conversation before permanently deleting it."
+  zh-CN: "请先归档会话，再永久删除。"
+
+error.chat.session_archived:
+  en: "Restore the archived conversation before continuing."
+  zh-CN: "会话已归档，请恢复后再操作。"
+
+error.chat.session_run_active:
+  en: "Stop the active run or wait for it to finish before continuing."
+  zh-CN: "会话正在运行，请停止或等待结束后再操作。"
+
+error.chat.container_delete_rejected:
+  en: "Disk directories are shared with another work topic or chat, or are unsafe to delete. Remove shared references or check the paths and retry."
+  zh-CN: "磁盘目录仍被其他工作主题或会话使用，或路径不适合整目录删除。请解除共享引用或检查目录后重试。"
+
+error.chat.session_location_changed:
+  en: "The chat location just changed. Please retry."
+  zh-CN: "会话位置刚刚发生更改，请重试。"
+
+error.chat.session_title_required:
+  en: "Enter a conversation name."
+  zh-CN: "请输入会话名称。"
+
+error.chat.workspace_required:
+  en: "Select a workspace first."
+  zh-CN: "请先选择工作空间。"
+
+error.chat.workspace_forbidden:
+  en: "You do not have access to this workspace."
+  zh-CN: "你没有访问此工作空间的权限。"
+
+error.chat.workspace_invalid:
+  en: "The workspace is unavailable. Select an active workspace."
+  zh-CN: "工作空间不可用，请选择有效的工作空间。"
+
+error.chat.project_required:
+  en: "Select a work topic first."
+  zh-CN: "请先选择工作主题。"
+
+error.chat.project_name_conflict:
+  en: "An active work topic with this name already exists. Rename it before restoring this archived conversation."
+  zh-CN: "当前工作空间已有同名的未归档工作主题，请先重命名该工作主题，再恢复归档会话。"
+
+error.chat.project_invalid:
+  en: "The work topic is unavailable in this workspace. Select another work topic."
+  zh-CN: "工作主题不属于当前工作空间或已不可用，请重新选择。"
+
+error.chat.directory_fixed:
+  en: "Directory chats must use their own directory."
+  zh-CN: "目录会话的工作目录不可更改。"
+
+error.chat.directory_invalid:
+  en: "The directory is unavailable in this space. Select another directory."
+  zh-CN: "目录不属于当前空间或已不可用，请重新选择。"
+
+error.chat.user_input_already_answered:
+  en: "This request has already been answered. Refresh the conversation to view the result."
+  zh-CN: "此请求已回答，无需重复提交。请刷新会话查看结果。"
+
+error.chat.user_input_answer_invalid:
+  en: "The approval or answer is invalid. Refresh the conversation and check your input."
+  zh-CN: "审批或回答无效，请刷新会话并检查填写内容。"
+
+error.chat.user_input_pending:
+  en: "Answer the pending question or approval first."
+  zh-CN: "请先回答会话中等待处理的问题或审批。"
+
+error.chat.user_input_request_not_found:
+  en: "The pending request was not found or has expired. Refresh the conversation."
+  zh-CN: "待回答的请求不存在或已过期，请刷新会话。"
+
+error.chat.user_input_submit_failed:
+  en: "The approval or answer could not be submitted. The request may have changed or expired; refresh the conversation and try again."
+  zh-CN: "审批或回答提交失败，请求可能已变化或过期。请刷新会话后重试。"
+
+error.chat.storage_failed:
+  en: "Conversation data could not be saved. Refresh later and check its status before continuing."
+  zh-CN: "会话数据保存失败，请稍后刷新会话，确认状态后再操作。"
+
+error.chat.run_already_active:
+  en: "This conversation already has an active run. Wait for it to finish."
+  zh-CN: "会话已有正在执行的任务，请等待结束后重试。"
+
+error.chat.session_code_required:
+  en: "Conversation information is missing. Reopen the conversation."
+  zh-CN: "缺少会话信息，请重新打开会话。"
+
+error.chat.expected_run_code_required:
+  en: "Run information is missing. Refresh the conversation and try again."
+  zh-CN: "缺少运行信息，请刷新会话后重试。"
+
+error.chat.no_active_run:
+  en: "There is no active run. Refresh the conversation to view its current status."
+  zh-CN: "当前没有正在执行的任务，请刷新会话查看最新状态。"
+
+error.chat.run_mismatch:
+  en: "The active run has changed. Refresh the conversation and try again."
+  zh-CN: "当前运行已发生变化，请刷新会话后重试。"
+
+error.chat.runtime_unsupported:
+  en: "This agent cannot accept instructions during a run. Wait for it to finish."
+  zh-CN: "当前智能体不支持在运行中追加指令，请等待本次运行结束。"
+
+error.chat.run_starting:
+  en: "The run is starting. Try again shortly."
+  zh-CN: "任务正在启动，请稍后重试。"
+
+error.chat.run_finishing:
+  en: "The run is finishing. Refresh the conversation shortly."
+  zh-CN: "任务正在结束，请稍后刷新会话。"
+
+error.chat.registry_unavailable:
+  en: "The run status is temporarily unavailable. Try again later."
+  zh-CN: "暂时无法获取运行状态，请稍后重试。"
+
+error.chat.request_invalid:
+  en: "The request is invalid. Refresh the page and try again."
+  zh-CN: "请求格式无效，请刷新页面后重试。"
+
+error.chat.request_too_large:
+  en: "The request body is too large."
+  zh-CN: "请求内容过大。"
+
+error.chat.invalid_json:
+  en: "The request body is not valid JSON."
+  zh-CN: "请求内容不是有效的 JSON。"
+
+error.chat.model_required:
+  en: "Select a model or configure automatic routing first."
+  zh-CN: "请先选择模型或配置自动路由。"
+
+error.chat.run_stopped:
+  en: "This run has stopped."
+  zh-CN: "本次运行已停止。"
+
+error.chat.runtime_failed:
+  en: "The agent could not complete this run. Check the run logs before retrying."
+  zh-CN: "智能体执行失败，请检查运行日志后重试。"
+
+error.chat.secret_delivery_untrusted:
+  en: "This runtime is not trusted to receive secret variables. Check variable permissions."
+  zh-CN: "当前运行环境未获准接收敏感变量，请检查变量授权。"
+
+error.chat.variable_decrypt_failed:
+  en: "Runtime variables could not be decrypted. Check encryption settings."
+  zh-CN: "运行变量解密失败，请检查加密配置。"
+
+error.chat.encryption_not_configured:
+  en: "Variable encryption is not configured. Configure it first."
+  zh-CN: "尚未配置变量加密，请先完成加密配置。"
+
+error.chat.variable_load_failed:
+  en: "Runtime variables could not be loaded. Check their configuration and try again."
+  zh-CN: "无法读取运行变量，请检查变量配置后重试。"
+
+error.chat.model_failed:
+  en: "The model service failed. Check its configuration and availability before retrying."
+  zh-CN: "模型服务调用失败，请检查模型配置和服务状态后重试。"
+
+error.chat.tool_failed:
+  en: "A tool failed. Check the run details before retrying."
+  zh-CN: "工具执行失败，请检查运行详情后重试。"
+
+error.chat.empty_final_output:
+  en: "The model returned no usable reply. Retry or select another model."
+  zh-CN: "模型未返回有效回复，请重试或更换模型。"
+
+error.chat.max_steps_exceeded:
+  en: "This run reached its step limit. Send a new message to continue; approvals and answers do not reset the current run budget."
+  zh-CN: "本次运行已达到执行步数上限。请发送新消息继续任务；审批和回答不会重置本次运行的额度。"
+
+error.chat.max_tool_calls_exceeded:
+  en: "This run reached its tool-call limit. Send a new message to continue; approvals and answers do not reset the current run budget."
+  zh-CN: "本次运行已达到工具调用次数上限。请发送新消息继续任务；审批和回答不会重置本次运行的额度。"
+
+error.chat.stream_completion_unavailable:
+  en: "The run result could not be confirmed. Refresh the conversation before submitting again."
+  zh-CN: "尚未确认运行结果，请刷新会话查看最新状态，避免重复提交。"
+
+error.chat.stream_serialization_failed:
+  en: "The run result could not be delivered. Refresh the conversation to view saved results."
+  zh-CN: "运行结果传输失败，请刷新会话查看已保存的结果。"
+
+error.chat.product_completion_unavailable:
+  en: "The run result could not be confirmed. Refresh the conversation to view the latest state."
+  zh-CN: "暂时无法确认运行结果，请刷新会话查看最新状态。"
+
+error.chat.operation_failed:
+  en: "The operation failed. Refresh the conversation and check its status before retrying."
+  zh-CN: "操作失败，请刷新会话并确认状态后重试。"
+
+# --- Chat transport input validation ---
+
+error.chat.batch_delete_invalid_body:
+  en: "The request body is invalid. Check the session codes."
+  zh-CN: "请求内容无效，请检查会话编号。"
+
+error.chat.batch_delete_empty_code:
+  en: "sessionCodes must not contain empty values."
+  zh-CN: "sessionCodes 不能包含空值。"
+
+error.chat.batch_delete_code_count:
+  en: "sessionCodes must contain between 1 and %{max} unique values."
+  zh-CN: "sessionCodes 必须包含 1 至 %{max} 个不重复的值。"
+
+error.chat.session_delete_failed:
+  en: "The conversation could not be cleaned up. Retry this item."
+  zh-CN: "会话清理失败，请重试该项。"
+
+error.chat.delete_worker_failed:
+  en: "Deletion failed. Retry this item."
+  zh-CN: "删除执行失败，请重试该项。"
+
+error.chat.context_detail_not_found:
+  en: "Context detail is not available for this session."
+  zh-CN: "当前会话无法查看该上下文详情。"
+
+error.chat.context_detail_query_invalid:
+  en: "sessionCode and a supported blockCode are required."
+  zh-CN: "会话编号与有效的上下文块标识不能为空。"
+
+error.chat.snapshot_sequence_invalid:
+  en: "snapshotSequence must be a positive event sequence."
+  zh-CN: "快照序号必须为正整数。"
+
+error.chat.session_code_query_required:
+  en: "sessionCode is required."
+  zh-CN: "缺少会话编号。"
+
+error.chat.short_term_memory_request_invalid:
+  en: "The request is invalid. Check the parameters and try again."
+  zh-CN: "请求参数无效，请检查后重试。"
+
+error.chat.compaction_model_not_configured:
+  en: "No matching text model is available from model providers."
+  zh-CN: "模型服务中没有可用的文本模型。"
+
+error.chat.short_term_memory_compaction_conflict:
+  en: "The session is running; context compaction is unavailable."
+  zh-CN: "会话正在运行，暂时无法压缩上下文。"
+
+error.chat.short_term_memory_run_conflict:
+  en: "The session already has an active run."
+  zh-CN: "会话已有正在执行的任务。"
+
+error.chat.short_term_memory_compaction_input_too_large:
+  en: "The context to compact is too large."
+  zh-CN: "待压缩的上下文内容过长。"
+
+error.chat.short_term_memory_compaction_model_failed:
+  en: "The context compaction model failed."
+  zh-CN: "上下文压缩模型调用失败。"
+
+error.chat.short_term_memory_context_budget_exceeded:
+  en: "The short-term memory context exceeds its budget."
+  zh-CN: "短期记忆上下文超出预算。"
+
+error.chat.short_term_memory_todo_invalid:
+  en: "The todo update is invalid."
+  zh-CN: "待办事项更新无效。"
+
+error.chat.short_term_memory_goal_not_found:
+  en: "The session goal was not found."
+  zh-CN: "未找到会话目标。"
+
+error.chat.short_term_memory_goal_conflict:
+  en: "The session already has an active goal."
+  zh-CN: "会话已有进行中的目标。"
+
+error.chat.short_term_memory_goal_state_conflict:
+  en: "The session goal was modified concurrently. Refresh and try again."
+  zh-CN: "会话目标已被其他操作修改，请刷新后重试。"
+
+error.chat.short_term_memory_goal_invalid:
+  en: "The goal command is invalid."
+  zh-CN: "目标操作无效。"
+
+error.chat.short_term_memory_storage_failed:
+  en: "Short-term memory storage failed."
+  zh-CN: "短期记忆数据保存失败。"
+
+error.chat.terminal_unavailable:
+  en: "This terminal is unavailable in the current conversation. It may have expired or the backend restarted."
+  zh-CN: "当前会话无法访问此终端，可能已被回收或后端已重启。"
+
+error.chat.terminal_cursor_invalid:
+  en: "The output cursor must be a non-negative integer."
+  zh-CN: "输出游标必须为非负整数。"
+
+error.chat.a2ui_run_uncertain:
+  en: "Original run state is uncertain; refresh the session"
+  zh-CN: "原运行状态未确定，请刷新会话"
+
+error.chat.a2ui_action_not_started:
+  en: "UI action could not start; check the session configuration"
+  zh-CN: "界面操作未能启动，请检查会话配置"
+
+# --- Application-layer descriptor message keys (stable `message_key` values) ---
+
+tron.chat.history_query_invalid:
+  en: "Invalid history query; page size must be 1 to 100"
+  zh-CN: "历史查询参数无效，每页支持 1 至 100 轮"
+
+tron.chat.history_version_changed:
+  en: "History changed; reload the newest page"
+  zh-CN: "会话历史已更新，请重新加载"
+
+tron.chat.history_not_found:
+  en: "Session not found"
+  zh-CN: "会话不存在"
+
+tron.chat.history_turn_not_found:
+  en: "Session or turn not found"
+  zh-CN: "会话或历史轮次不存在"
+
+tron.chat.history_read_failed:
+  en: "Could not read session history"
+  zh-CN: "读取会话历史失败"
+
+tron.chat.history_delete_unsupported:
+  en: "External agent sessions do not support deleting turns"
+  zh-CN: "外部 Agent 会话不支持删除历史轮次"
+
+tron.chat.history_delete_busy:
+  en: "Finish the active run and pending interactions before deleting a turn"
+  zh-CN: "请先结束当前运行及待处理的用户交互，再删除历史轮次"
+
+tron.chat.history_delete_invalid:
+  en: "This history turn cannot be deleted; check the request"
+  zh-CN: "无法删除该历史轮次，请检查请求"
+
+tron.chat.history_delete_failed:
+  en: "Could not delete the history turn"
+  zh-CN: "删除历史轮次失败"
+
+tron.chat.context_assembly_not_found:
+  en: "Session or assembly report not found"
+  zh-CN: "会话或装配报告不存在"
+
+tron.chat.context_assembly_request_invalid:
+  en: "Invalid context assembly request"
+  zh-CN: "装配报告请求无效"
+
+tron.chat.context_assembly_read_failed:
+  en: "Could not read the context assembly report"
+  zh-CN: "装配报告读取失败"
+
+tron.chat.a2ui_conflict:
+  en: "Surface changed; refresh and retry"
+  zh-CN: "卡片状态已更新，请刷新后重试"
+
+tron.chat.a2ui_not_found:
+  en: "Surface no longer exists"
+  zh-CN: "卡片已失效"
+
+tron.chat.a2ui_invalid:
+  en: "Invalid UI action"
+  zh-CN: "界面操作参数无效"
+
+tron.chat.a2ui_unavailable:
+  en: "UI state service unavailable"
+  zh-CN: "界面状态服务暂不可用"
+
+tron.chat.sudo_input_invalid:
+  en: "Enter a valid sudo password (one line, up to 4096 bytes)."
+  zh-CN: "请输入有效的 sudo 密码（单行，最多 4096 字节）。"
+
+tron.chat.sudo_input_unavailable:
+  en: "This sudo input is unavailable, expired or already answered."
+  zh-CN: "此 sudo 输入请求不可用、已过期或已提交。"
+
+tron.chat.subagent_not_found:
+  en: "Subagent session not found"
+  zh-CN: "子代理会话不存在"
+
+tron.chat.subagent_read_failed:
+  en: "Could not read subagent sessions"
+  zh-CN: "读取子代理会话失败"
+
+tron.chat.requested_skill_forbidden:
+  en: "Selected skills are not granted to this Agent or have been disabled"
+  zh-CN: "所选技能未授权给当前 Agent，或已被禁用"
+
+tron.chat.annotations_invalid:
+  en: "Invalid annotations; at most 32 comments are allowed"
+  zh-CN: "评论无效，最多支持 32 条评论"
+
+tron.chat.requested_skills_invalid:
+  en: "Invalid skill selection; select at most 32 skills"
+  zh-CN: "技能选择无效，最多选择 32 个技能"
+
+tron.chat.goal_command_invalid:
+  en: "Enter an objective after /goal"
+  zh-CN: "请在 /goal 后输入目标"
+
+tron.chat.goal_command_conflict:
+  en: "The goal changed; please try again"
+  zh-CN: "目标已发生变化，请重试"
+
+tron.chat.goal_command_unavailable:
+  en: "This Agent cannot use /goal"
+  zh-CN: "当前 Agent 无法使用 /goal"
+
+tron.archives.invalid_query:
+  en: "Invalid archive type or pagination"
+  zh-CN: "归档类型或分页参数无效"
+
+tron.archives.not_found:
+  en: "Archive was not found or has already been restored"
+  zh-CN: "归档记录不存在或已恢复"
+
+tron.archives.workspace_inactive:
+  en: "Restore the workspace first"
+  zh-CN: "请先恢复所属工作空间"
+
+tron.archives.topic_name_conflict:
+  en: "An active work topic with this name already exists. Rename it before restoring the archived work topic."
+  zh-CN: "当前工作空间已有同名的未归档工作主题，请先重命名该工作主题，再恢复归档工作主题。"
+
+tron.archives.storage_failed:
+  en: "Could not read or update archives"
+  zh-CN: "无法读取或更新归档记录"
+
+# --- Socket.IO terminal session errors ---
+
+socket.terminal.ticket_invalid:
+  en: "The terminal connection ticket is invalid"
+  zh-CN: "终端连接票据无效"
+
+socket.terminal.ticket_expired:
+  en: "The terminal connection ticket has expired"
+  zh-CN: "终端连接票据已过期"
+
+socket.terminal.input_too_large:
+  en: "Terminal input is too long"
+  zh-CN: "终端输入过长"
+
+socket.terminal.start_failed:
+  en: "The terminal session could not start"
+  zh-CN: "终端会话无法启动"
+
+socket.terminal.resize_failed:
+  en: "The terminal window size could not be adjusted"
+  zh-CN: "终端窗口大小无法调整"
+
+socket.terminal.session_not_found:
+  en: "The terminal session does not exist"
+  zh-CN: "终端会话不存在"
+
+socket.terminal.write_failed:
+  en: "Terminal input could not be sent"
+  zh-CN: "终端输入无法发送"
+
+socket.terminal.unavailable:
+  en: "The terminal session is unavailable; reconnect the terminal"
+  zh-CN: "终端会话暂不可用，请重新连接终端"
+error.chat.session_management_invalid:
+  en: "The request is invalid."
+  zh-CN: "请求参数无效。"
+
+error.chat.session_management_target_workspace:
+  en: "Select a target workspace."
+  zh-CN: "请选择目标工作空间。"
+
+error.chat.session_management_codes_empty_value:
+  en: "sessionCodes must not contain empty values"
+  zh-CN: "sessionCodes 不能包含空值。"
+
+error.chat.session_management_codes_required:
+  en: "sessionCodes must contain at least one value"
+  zh-CN: "sessionCodes 至少需要一个值。"
+
+error.chat.session_management_codes_limit:
+  en: "sessionCodes must contain between 1 and %{max} unique values"
+  zh-CN: "sessionCodes 需包含 1 到 %{max} 个唯一值。"
+
+error.chat.session_management_status_invalid:
+  en: "status must be ACTIVE or ARCHIVED"
+  zh-CN: "status 必须是 ACTIVE 或 ARCHIVED。"
+
+error.chat.session_management_source_type_invalid:
+  en: "sourceType must be MANUAL, TASK or AUTOMATION"
+  zh-CN: "sourceType 必须是 MANUAL、TASK 或 AUTOMATION。"
+
+error.chat.session_management_codes_invalid:
+  en: "sessionCodes is invalid"
+  zh-CN: "sessionCodes 无效。"
+
+error.chat.session_management_not_found:
+  en: "One of the conversations was not found."
+  zh-CN: "会话不存在或已被删除。"
+
+error.chat.session_management_stop_timeout:
+  en: "Some conversations are still finishing. Wait a moment and retry."
+  zh-CN: "部分会话仍在结束中，请稍后重试。"
+
+error.chat.session_management_stop_failed:
+  en: "Stopping the conversations failed."
+  zh-CN: "停止会话失败。"
+
+error.chat.session_management_delete_codes_invalid:
+  en: "sessionCodes must not contain empty values"
+  zh-CN: "sessionCodes 不能包含空值。"

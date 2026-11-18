@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { SurfaceCard } from "@/shared";
 
 import {
@@ -12,6 +13,7 @@ import {
   setBrowserNotificationsEnabled,
   type BrowserNotificationPermission,
 } from "../model/browserNotifications";
+import { openSystemNotificationSettings, showSystemNotification } from "../model/systemNotifications";
 
 export function BrowserNotificationSettingsCard() {
   const { t } = useTranslation("pages");
@@ -20,6 +22,12 @@ export function BrowserNotificationSettingsCard() {
   const [enabled, setEnabled] = useState(() => areBrowserNotificationsEnabled());
   const [pending, setPending] = useState(false);
   const [requestFailed, setRequestFailed] = useState(false);
+  const [deliveryFailed, setDeliveryFailed] = useState(false);
+  const canOpenSettings = useMemo(() => {
+    const bridge = new DesktopBridge();
+    const platform = bridge.desktopPlatform();
+    return bridge.isElectron() && (platform === "darwin" || platform === "win32");
+  }, []);
 
   useEffect(() => {
     const refresh = () => {
@@ -39,6 +47,7 @@ export function BrowserNotificationSettingsCard() {
     if (pending || permission === "unsupported" || permission === "denied") return;
     setPending(true);
     setRequestFailed(false);
+    setDeliveryFailed(false);
     try {
       let nextPermission: NotificationPermission = permission;
       if (permission === "default") nextPermission = await Notification.requestPermission();
@@ -46,6 +55,7 @@ export function BrowserNotificationSettingsCard() {
       const nextEnabled = nextPermission === "granted" && !enabled;
       setBrowserNotificationsEnabled(nextEnabled);
       setEnabled(nextEnabled);
+      if (nextEnabled) await dispatchTestNotification();
     } catch {
       setRequestFailed(true);
     } finally {
@@ -53,40 +63,60 @@ export function BrowserNotificationSettingsCard() {
     }
   }
 
-  function sendTestNotification() {
+  async function dispatchTestNotification() {
+    const result = await showSystemNotification({
+      title: t("settingsGeneral.browserNotifications.test.title"),
+      body: t("settingsGeneral.browserNotifications.test.body"),
+      id: "tron-test-notification",
+    });
+    setDeliveryFailed(!result.shown);
+    if (result.shown) {
+      toast.success(t("settingsGeneral.browserNotifications.test.sent"));
+    } else {
+      toast.error(t("settingsGeneral.browserNotifications.test.failed"));
+    }
+  }
+
+  async function sendTestNotification() {
     if (!areBrowserNotificationsEnabled()) {
       setPermission(getBrowserNotificationPermission());
       setEnabled(false);
       toast.error(t("settingsGeneral.browserNotifications.test.requireEnabled"));
       return;
     }
+    if (pending) return;
+    setPending(true);
     try {
-      // Manual testing also works in the foreground, unlike automatic alerts.
-      const notification = new Notification(t("settingsGeneral.browserNotifications.test.title"), {
-        body: t("settingsGeneral.browserNotifications.test.body"),
-        tag: "tron-test-notification",
-      });
-      notification.onclick = () => { window.focus(); notification.close(); };
-      notification.onerror = () => toast.error(t("settingsGeneral.browserNotifications.test.failed"));
-    } catch {
-      toast.error(t("settingsGeneral.browserNotifications.test.failed"));
+      await dispatchTestNotification();
+    } finally {
+      setPending(false);
     }
   }
 
-  const statusKey = permission === "unsupported"
-    ? "unsupported"
-    : permission === "denied"
-      ? "denied"
-      : enabled
-        ? "enabled"
-        : permission === "granted"
-          ? "authorized"
-          : "disabled";
+  async function openSettings() {
+    const opened = await openSystemNotificationSettings();
+    if (!opened) toast.info(t("settingsGeneral.browserNotifications.settingsUnavailable"));
+  }
+
+  const statusKey = requestFailed
+    ? "requestFailed"
+    : deliveryFailed
+      ? "deliveryFailed"
+      : permission === "unsupported"
+        ? "unsupported"
+        : permission === "denied"
+          ? "denied"
+          : enabled
+            ? "enabled"
+            : permission === "granted"
+              ? "authorized"
+              : "disabled";
   const actionKey = permission === "default"
     ? "authorize"
     : permission === "granted"
       ? enabled ? "disable" : "enable"
       : null;
+  const statusText = t(`settingsGeneral.browserNotifications.status.${statusKey}`);
 
   return (
     <SurfaceCard className="space-y-4 xl:col-span-2">
@@ -94,9 +124,7 @@ export function BrowserNotificationSettingsCard() {
         <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">
           {t("settingsGeneral.browserNotifications.title")}
         </h2>
-        {(requestFailed || permission === "denied" || permission === "unsupported") && <p className="text-sm text-[var(--color-on-surface-variant)]">
-          {t(`settingsGeneral.browserNotifications.status.${requestFailed ? "requestFailed" : statusKey}`)}
-        </p>}
+        <p className="text-sm text-[var(--color-on-surface-variant)]">{statusText}</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         {actionKey ? (
@@ -109,10 +137,15 @@ export function BrowserNotificationSettingsCard() {
           variant="outline"
           disabled={pending || !enabled || permission !== "granted"}
           title={!enabled || permission !== "granted" ? t("settingsGeneral.browserNotifications.test.requireEnabled") : undefined}
-          onClick={sendTestNotification}
+          onClick={() => void sendTestNotification()}
         >
           {t("settingsGeneral.browserNotifications.actions.test")}
         </Button>
+        {canOpenSettings ? (
+          <Button type="button" variant="ghost" disabled={pending} onClick={() => void openSettings()}>
+            {t("settingsGeneral.browserNotifications.actions.settings")}
+          </Button>
+        ) : null}
       </div>
     </SurfaceCard>
   );

@@ -35,33 +35,32 @@ pub(super) fn routes() -> Router<AppState> {
 pub(super) struct QualityApiError(KnowledgeBaseError, String);
 impl IntoResponse for QualityApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, en) = match self.0 {
-            KnowledgeBaseError::NotFound => (
-                StatusCode::NOT_FOUND,
-                "Knowledge base or evaluation not found",
-            ),
-            KnowledgeBaseError::Forbidden => (
-                StatusCode::FORBIDDEN,
-                "Access to this knowledge base is denied",
-            ),
-            KnowledgeBaseError::Conflict => (
-                StatusCode::CONFLICT,
-                "The data or configuration changed, or an optimization is already active. Refresh and retry.",
-            ),
-            KnowledgeBaseError::Invalid(_) => (
-                StatusCode::BAD_REQUEST,
-                "Evaluation requires published documents with reusable parsed content, a valid question set and bounded options. Inspect the documents and retry.",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Knowledge evaluation failed",
-            ),
+        let status = match &self.0 {
+            KnowledgeBaseError::NotFound => StatusCode::NOT_FOUND,
+            KnowledgeBaseError::Forbidden => StatusCode::FORBIDDEN,
+            KnowledgeBaseError::Conflict => StatusCode::CONFLICT,
+            KnowledgeBaseError::Invalid(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        let message = if self.1.starts_with("en") {
-            en.into()
-        } else {
-            self.0.to_string()
+        let message: String = match &self.0 {
+            KnowledgeBaseError::NotFound => {
+                t!("knowledge.quality.not_found", locale = &self.1).into_owned()
+            }
+            KnowledgeBaseError::Forbidden => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1).into_owned()
+            }
+            KnowledgeBaseError::Conflict => {
+                t!("knowledge.quality.conflict", locale = &self.1).into_owned()
+            }
+            // Structured evaluation messages are rendered with the request locale.
+            KnowledgeBaseError::Invalid(_) | KnowledgeBaseError::Storage(_) => {
+                self.0.localized(&self.1)
+            }
+            KnowledgeBaseError::NotEmpty => {
+                t!("tron.knowledge_base.not_empty", locale = &self.1).into_owned()
+            }
         };
         (
             status,
@@ -129,9 +128,9 @@ async fn start(
             body.options.into(),
         )
         .await
-        .map_err(|e| QualityApiError(e, auth.locale))?;
+        .map_err(|e| QualityApiError(e, auth.locale.clone()))?;
     Ok(Json(ApiResponse::protocol_success(StartVo {
-        run: RunVo::from(data),
+        run: run_vo(data, &auth.locale),
     })))
 }
 async fn runs(
@@ -141,9 +140,12 @@ async fn runs(
 ) -> Result<Json<ApiResponse<RunsVo>>, QualityApiError> {
     let data = KnowledgeQualityService::new(kb)
         .runs(&auth.user().user_code, &id)
-        .map_err(|e| QualityApiError(e, auth.locale))?;
+        .map_err(|e| QualityApiError(e, auth.locale.clone()))?;
     Ok(Json(ApiResponse::protocol_success(RunsVo {
-        runs: data.into_iter().map(RunVo::from).collect(),
+        runs: data
+            .into_iter()
+            .map(|run| run_vo(run, &auth.locale))
+            .collect(),
     })))
 }
 async fn run(
@@ -153,9 +155,9 @@ async fn run(
 ) -> Result<Json<ApiResponse<RunGetVo>>, QualityApiError> {
     let data = KnowledgeQualityService::new(kb)
         .run(&auth.user().user_code, &id, &run)
-        .map_err(|e| QualityApiError(e, auth.locale))?;
+        .map_err(|e| QualityApiError(e, auth.locale.clone()))?;
     Ok(Json(ApiResponse::protocol_success(RunGetVo {
-        run: RunVo::from(data),
+        run: run_vo(data, &auth.locale),
     })))
 }
 async fn cancel(
@@ -166,9 +168,9 @@ async fn cancel(
 ) -> Result<Json<ApiResponse<CancelVo>>, QualityApiError> {
     let data = KnowledgeQualityService::new(kb)
         .cancel(&auth.user().user_code, &id, &run)
-        .map_err(|e| QualityApiError(e, auth.locale))?;
+        .map_err(|e| QualityApiError(e, auth.locale.clone()))?;
     Ok(Json(ApiResponse::protocol_success(CancelVo {
-        run: RunVo::from(data),
+        run: run_vo(data, &auth.locale),
     })))
 }
 async fn session(
@@ -181,17 +183,18 @@ async fn session(
         .knowledge_bases
         .detail(&auth.user().user_code, &id)
         .map_err(|e| QualityApiError(e, auth.locale.clone()))?;
-    let title = if auth.locale.starts_with("en") {
-        format!("Retrieval optimization · {}", kb.name)
-    } else {
-        format!("检索优化 · {}", kb.name)
-    };
+    use tron_i18n::t;
+    let title = t!(
+        "knowledge.quality.session_title",
+        locale = &auth.locale,
+        name = kb.name
+    );
     let s = state
         .chats
         .ensure_knowledge_quality_session(&auth.user().user_code, &id, &title)
         .map_err(|_| {
             QualityApiError(
-                KnowledgeBaseError::Storage("知识库会话创建失败".into()),
+                KnowledgeBaseError::storage("knowledge.quality.session_create_failed"),
                 auth.locale,
             )
         })?;

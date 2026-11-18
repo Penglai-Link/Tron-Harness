@@ -58,6 +58,8 @@ pub struct ChatService {
     knowledge_quality: Arc<OnceLock<crate::application::knowledge_base::KnowledgeBaseService>>,
     assistants: Arc<std::sync::OnceLock<crate::application::assistant::AssistantService>>,
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
+    /// Framework host for session management run control (threads, children).
+    framework_host: Option<crate::application::agent::FrameworkHost>,
     pub(super) prompt_service: Option<PromptService>,
     pub(super) llm_router: Option<LlmModelRouter>,
     pub(super) event_bus: EventBusHandle,
@@ -112,6 +114,7 @@ impl ChatService {
             knowledge_quality: Arc::new(OnceLock::new()),
             assistants: Arc::new(std::sync::OnceLock::new()),
             repository: Arc::new(Mutex::new(Box::new(repository))),
+            framework_host: None,
             prompt_service: None,
             llm_router: None,
             event_bus: EventBusHandle::disabled(),
@@ -133,6 +136,7 @@ impl ChatService {
             knowledge_quality: self.knowledge_quality.clone(),
             assistants: self.assistants.clone(),
             repository: self.repository.clone(),
+            framework_host: self.framework_host.clone(),
             prompt_service: self.prompt_service.clone(),
             llm_router: self.llm_router.clone(),
             event_bus: self.event_bus.clone(),
@@ -151,6 +155,15 @@ impl ChatService {
     pub fn with_active_runs(mut self, active_runs: ActiveRunRegistry) -> Self {
         self.active_runs = active_runs;
         self
+    }
+
+    pub fn with_framework_host(mut self, host: crate::application::agent::FrameworkHost) -> Self {
+        self.framework_host = Some(host);
+        self
+    }
+
+    pub(super) fn framework_host(&self) -> Option<&crate::application::agent::FrameworkHost> {
+        self.framework_host.as_ref()
     }
 
     pub fn with_resources(mut self, resources: ResourceService) -> Self {

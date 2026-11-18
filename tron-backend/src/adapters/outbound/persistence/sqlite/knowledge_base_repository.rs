@@ -273,7 +273,9 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
     }
 }
 fn storage(error: impl std::fmt::Display) -> KnowledgeBaseError {
-    KnowledgeBaseError::Storage(error.to_string())
+    // Legacy technical detail has no stable key; StoredMessage::Plain keeps it
+    // compatible until the producing layer supplies a structured message.
+    KnowledgeBaseError::Storage(error.to_string().into())
 }
 fn encode<T: Serialize>(v: &T) -> Result<String, KnowledgeBaseError> {
     serde_json::to_string(v).map_err(storage)

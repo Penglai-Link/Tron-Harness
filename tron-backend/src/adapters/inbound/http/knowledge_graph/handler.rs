@@ -29,15 +29,15 @@ pub async fn list_namespaces(
     Query(query): Query<KnowledgeGraphNamespaceQuery>,
 ) -> Response {
     if query.workspace_code.trim().is_empty() {
-        return knowledge_graph_request_invalid();
+        return knowledge_graph_request_invalid(&auth.locale);
     }
     if !workspace_is_active(&workspaces, &query.workspace_code) {
-        return knowledge_graph_scope_forbidden();
+        return knowledge_graph_scope_forbidden(&auth.locale);
     }
 
     match explorer.list_namespaces(query.workspace_code, auth.user().user_code.clone()) {
         Ok(namespaces) => Json(ApiResponse::success(namespaces)).into_response(),
-        Err(error) => knowledge_graph_error_response(error),
+        Err(error) => knowledge_graph_error_response(error, &auth.locale),
     }
 }
 
@@ -48,10 +48,10 @@ pub async fn snapshot(
     Query(query): Query<KnowledgeGraphSnapshotQuery>,
 ) -> Response {
     if query.namespace.trim().is_empty() || query.workspace_code.trim().is_empty() {
-        return knowledge_graph_request_invalid();
+        return knowledge_graph_request_invalid(&auth.locale);
     }
     if !workspace_is_active(&workspaces, &query.workspace_code) {
-        return knowledge_graph_scope_forbidden();
+        return knowledge_graph_scope_forbidden(&auth.locale);
     }
 
     match explorer.snapshot(
@@ -63,7 +63,7 @@ pub async fn snapshot(
             snapshot,
         )))
         .into_response(),
-        Err(error) => knowledge_graph_error_response(error),
+        Err(error) => knowledge_graph_error_response(error, &auth.locale),
     }
 }
 
@@ -75,10 +75,10 @@ pub async fn query(
 ) -> Response {
     let command = match request.into_command(auth.user().user_code.clone()) {
         Ok(command) => command,
-        Err(_) => return knowledge_graph_request_invalid(),
+        Err(_) => return knowledge_graph_request_invalid(&auth.locale),
     };
     if !workspace_is_active(&workspaces, &command.workspace_code) {
-        return knowledge_graph_scope_forbidden();
+        return knowledge_graph_scope_forbidden(&auth.locale);
     }
 
     match explorer.query(command) {
@@ -86,7 +86,7 @@ pub async fn query(
             snapshot,
         )))
         .into_response(),
-        Err(error) => knowledge_graph_error_response(error),
+        Err(error) => knowledge_graph_error_response(error, &auth.locale),
     }
 }
 
@@ -98,10 +98,10 @@ pub async fn expand(
 ) -> Response {
     let command = match request.into_command(auth.user().user_code.clone()) {
         Ok(command) => command,
-        Err(_) => return knowledge_graph_request_invalid(),
+        Err(_) => return knowledge_graph_request_invalid(&auth.locale),
     };
     if !workspace_is_active(&workspaces, &command.workspace_code) {
-        return knowledge_graph_scope_forbidden();
+        return knowledge_graph_scope_forbidden(&auth.locale);
     }
 
     match explorer.expand(command) {
@@ -109,7 +109,7 @@ pub async fn expand(
             snapshot,
         )))
         .into_response(),
-        Err(error) => knowledge_graph_error_response(error),
+        Err(error) => knowledge_graph_error_response(error, &auth.locale),
     }
 }
 

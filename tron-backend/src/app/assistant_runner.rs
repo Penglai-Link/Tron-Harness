@@ -7,6 +7,7 @@ use crate::{
     domain::{agent::AgentCollaborationOwner, assistant::*},
 };
 use std::sync::Arc;
+use tron_i18n::t;
 
 fn memory_execution_error(
     error: crate::domain::assistant_memory::AssistantMemoryError,
@@ -235,8 +236,18 @@ impl PlatformAssistantExecutor {
                     .assistant_task_reminder_is_current(code, version)
                     .map_err(|_| AssistantError::Storage)?
                 {
+                    // The event is persisted with its result summary and shown in the
+                    // PersonAI activity list; use the locale the run would use.
+                    let locale = crate::shared::locale::SupportedLocale::from_raw(
+                        event.payload["locale"].as_str().unwrap_or(""),
+                    )
+                    .as_str();
                     return Ok(AssistantExecutionOutcome {
-                        summary: "任务已调整，旧提醒已跳过".into(),
+                        summary: t!(
+                            "agent_runtime.assistant.stale_task_reminder_skipped",
+                            locale = locale
+                        )
+                        .into_owned(),
                         awaiting_input: false,
                     });
                 }

@@ -1,5 +1,6 @@
 //! Runtime bindings over durable Thread identities. Native sessions use shared storage.
 use super::*;
+use eliteforge_agent_framework::RunControl;
 use std::sync::RwLock;
 use tokio::sync::watch;
 #[path = "host_collaboration_thread_store.rs"]
@@ -27,6 +28,9 @@ struct ThreadState {
     completion: watch::Receiver<Option<Completion>>,
     origin_execution_id: fw::RunId,
     record: ThreadRecord,
+    /// Control token of the run currently owned by the background wait task.
+    /// Session management uses it to stop a live thread explicitly.
+    control: Option<RunControl>,
 }
 
 impl Runtime {
@@ -85,6 +89,7 @@ impl Runtime {
                 completion,
                 origin_execution_id: fw::RunId::nil(),
                 record,
+                control: None,
             }),
         });
         let thread = host
@@ -158,6 +163,9 @@ impl Runtime {
             }
         };
         let (sender, receiver) = watch::channel(None);
+        // Retain the run's control token before the handle moves into the
+        // background owner; session management cancels live threads through it.
+        let control = thread.agent.control(&handle).ok();
         let summary = {
             let mut state = thread.state.lock().unwrap();
             state.summary.status = fw::ThreadStatus::Running;
@@ -165,6 +173,7 @@ impl Runtime {
             state.completion = receiver;
             state.origin_execution_id =
                 parent.map_or_else(fw::RunId::nil, fw::RunContext::execution_id);
+            state.control = control;
             state.summary.clone()
         };
         let origin = parent.cloned();
@@ -238,11 +247,17 @@ impl Runtime {
                                 .as_ref()
                                 .is_some_and(|value| value["kind"] == "ask_caller")
                         }) {
-                            feedback_host.notify_native_run(&origin.run_id.to_string(), &format!(
-                                "独立线程 {} 正在等待调用方回答。用 thread_wait 获取交互，再用 thread_answer 回答。interactions={}",
-                                summary.session_id,
-                                serde_json::to_string(&result.interactions).unwrap_or_default(),
-                            ));
+                            feedback_host.notify_native_run(
+                                &origin.run_id.to_string(),
+                                &tron_i18n::t!(
+                                    "agent_runtime.collaboration.thread_awaiting_answer",
+                                    locale = thread.context.locale.as_str(),
+                                    thread_id = summary.session_id,
+                                    interactions = serde_json::to_string(&result.interactions)
+                                        .unwrap_or_default()
+                                ),
+                                thread.context.locale.as_str(),
+                            );
                         }
                     }
                 }
@@ -409,6 +424,7 @@ impl AgentCollaborationRuntime for Runtime {
                 completion,
                 origin_execution_id: parent.execution_id(),
                 record,
+                control: None,
             }),
         });
         host.0
@@ -642,5 +658,54 @@ impl AgentCollaborationRuntime for Runtime {
             )))
             .await;
         Ok(())
+    }
+}
+
+impl FrameworkHost {
+    /// Stop the live Threads a chat session spawned. Durable records for
+    /// threads no longer owned by this process are settled by background
+    /// recovery, so only in-process runs are addressed here.
+    pub async fn cancel_threads_for_sessions(
+        &self,
+        origin_session_codes: &[String],
+    ) -> Result<usize, fw::AgentError> {
+        if origin_session_codes.is_empty() {
+            return Ok(0);
+        }
+        let running = self
+            .running_thread_ids_for_origins(origin_session_codes)
+            .await?;
+        if running.is_empty() {
+            return Ok(0);
+        }
+        let threads = self.0.collaboration_threads.read().unwrap();
+        let mut cancelled = 0;
+        for id in running {
+            let Some(thread) = threads.get(&id) else {
+                continue;
+            };
+            let control = thread.state.lock().unwrap().control.clone();
+            let Some(control) = control else {
+                continue;
+            };
+            if let Err(error) = thread.agent.cancel(&control) {
+                tracing::warn!(thread_id = %id, %error, "thread cancellation rejected");
+                continue;
+            }
+            cancelled += 1;
+        }
+        Ok(cancelled)
+    }
+
+    /// Origins that still have at least one running Thread, restricted to the
+    /// requested origin set. Session management polls this while waiting for
+    /// stop requests to settle.
+    pub async fn running_thread_origins(&self, origin_session_codes: &[String]) -> Vec<String> {
+        if origin_session_codes.is_empty() {
+            return Vec::new();
+        }
+        self.running_thread_origins_for_sessions(origin_session_codes)
+            .await
+            .unwrap_or_default()
     }
 }

@@ -95,8 +95,8 @@ fn image_pdf(source: &[u8]) -> Result<(Vec<u8>, Vec<String>), KnowledgeBaseError
     let mut bytes = Vec::new();
     document.save_to(&mut bytes).map_err(invalid_storage)?;
     if bytes.len() > local_documents::MAX_RAW_BYTES {
-        return Err(KnowledgeBaseError::Invalid(
-            "原页图像副本超过20 MiB，未替换原件".into(),
+        return Err(KnowledgeBaseError::invalid(
+            "knowledge.base.pdf_visual_copy_too_large",
         ));
     }
     Ok((bytes, hashes))
@@ -126,19 +126,18 @@ impl KnowledgeBaseService {
         let mut doc = self.repository.document(kb, doc_id)?;
         if !doc.file_name.to_ascii_lowercase().ends_with(".pdf") || doc.status != "REVIEW_REQUIRED"
         {
-            return Err(KnowledgeBaseError::Invalid(
-                "仅待核对的PDF可从原页图像重新识别".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.pdf_visual_only_reviewable",
             ));
         }
-        let parser = self
-            .parser
-            .as_ref()
-            .ok_or_else(|| KnowledgeBaseError::Invalid("本地解析器未配置".into()))?;
+        let parser = self.parser.as_ref().ok_or_else(|| {
+            KnowledgeBaseError::invalid("knowledge.base.local_parser_unconfigured")
+        })?;
         if !parser.supports_local_visual_reparse()
             || doc.parsing_tier.unwrap_or(parser.default_tier()) == ParsingTier::Flash
         {
-            return Err(KnowledgeBaseError::Invalid(
-                "重新识别需要本机MinerU及支持OCR的解析质量；不会外发或自动降级".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.pdf_visual_requires_local_mineru",
             ));
         }
         let original = self.visual_source_bytes(
@@ -156,8 +155,8 @@ impl KnowledgeBaseService {
             .map(|a| a.fidelity_issues.clone())
             .unwrap_or_default();
         if findings.is_empty() {
-            return Err(KnowledgeBaseError::Invalid(
-                "缺少原始风险来源，不能跳过核验".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.fidelity_risk_source_missing",
             ));
         }
         let original_sha256 = digest(&original);
@@ -237,8 +236,8 @@ impl KnowledgeBaseService {
             },
         )?;
         if record.byte_size > limit as u64 {
-            return Err(KnowledgeBaseError::Invalid(
-                "数据保真核验资源超出上限".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.fidelity_resource_limit",
             ));
         }
         let mut bytes = Bounded(Vec::new(), limit);

@@ -8,10 +8,14 @@ import { SearchField } from "@/components/search-field/SearchField";
 import { TablePagination } from "@/components/table-pagination";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
+import { ApiError } from "@/shared/api/httpClient";
 import { useCapabilityCenter } from "../hooks/useCapabilityCenter";
 import { CapabilityCenterList } from "../components/CapabilityCenterList";
 import { CapabilityReleaseDialog } from "../components/CapabilityReleaseDialog";
 import type { CenterPack, CenterStatus } from "../api/capabilityCenterApi";
+
+/** Backend `uninstall_pack` code for a package still pinned by unfinished runs. */
+const DURABLE_PACK_IN_USE = "101031002";
 
 export function CapabilityPacksPage() {
   const { t } = useTranslation("pages");
@@ -29,6 +33,7 @@ export function CapabilityPacksPage() {
   } = useCapabilityCenter();
   const [selected, setSelected] = useState<CenterPack | null>(null);
   const [remove, setRemove] = useState<CenterPack | null>(null);
+  const [forceRemove, setForceRemove] = useState<CenterPack | null>(null);
   const [pendingImport, setPendingImport] = useState<File | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const busy = mutation.isPending;
@@ -286,7 +291,7 @@ export function CapabilityPacksPage() {
           onClose={() => setSelected(null)}
           onInstall={(releaseId, installedVersion) => {
             void execute({ kind: "install", releaseId, installedVersion }).then(
-              (ok) => {
+              ({ ok }) => {
                 if (ok) setSelected(null);
               }
             );
@@ -305,10 +310,42 @@ export function CapabilityPacksPage() {
         pendingText={text("working")}
         onCancel={() => setRemove(null)}
         onConfirm={() => {
-          if (remove)
-            void execute({ kind: "uninstall", pack: remove }).then((ok) => {
-              if (ok) setRemove(null);
-            });
+          const pack = remove;
+          if (!pack) return;
+          void execute({ kind: "uninstall", pack }).then(({ ok, error }) => {
+            if (ok) {
+              setRemove(null);
+              return;
+            }
+            // Unfinished durable runs still pin the package. Removing it needs
+            // an explicit second confirmation that drops those runs' versions.
+            if (
+              error instanceof ApiError &&
+              error.code === DURABLE_PACK_IN_USE
+            ) {
+              setRemove(null);
+              setForceRemove(pack);
+            }
+          });
+        }}
+      />
+      <ConfirmDialog
+        open={!!forceRemove}
+        title={text("forceUninstallTitle")}
+        description={`${forceRemove?.name ?? ""} — ${text("forceUninstallNotice")}`}
+        pending={busy}
+        cancelText={text("cancel")}
+        confirmText={text("forceUninstall")}
+        pendingText={text("working")}
+        onCancel={() => setForceRemove(null)}
+        onConfirm={() => {
+          const pack = forceRemove;
+          if (!pack) return;
+          void execute({ kind: "uninstall", pack, force: true }).then(
+            ({ ok }) => {
+              if (ok) setForceRemove(null);
+            }
+          );
         }}
       />
       <ConfirmDialog
@@ -324,10 +361,11 @@ export function CapabilityPacksPage() {
         pendingText={text("working")}
         onCancel={() => setPendingImport(null)}
         onConfirm={() => {
-          if (pendingImport)
-            void execute({ kind: "import", file: pendingImport }).then((ok) => {
-              if (ok) setPendingImport(null);
-            });
+          const file = pendingImport;
+          if (!file) return;
+          void execute({ kind: "import", file }).then(({ ok }) => {
+            if (ok) setPendingImport(null);
+          });
         }}
       />
     </div>

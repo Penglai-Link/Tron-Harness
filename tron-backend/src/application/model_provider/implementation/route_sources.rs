@@ -34,7 +34,7 @@ impl ModelProviderService {
     ) -> Result<(), ModelProviderError> {
         if !sources.valid() {
             return Err(ModelProviderError::InvalidSelection(
-                "invalid route sources".into(),
+                tron_i18n::Message::new("tron.model_provider.invalid_route_sources"),
             ));
         }
         let json = serde_json::to_string(&sources).map_err(|_| ModelProviderError::Storage)?;

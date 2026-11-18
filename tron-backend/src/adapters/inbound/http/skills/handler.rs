@@ -74,10 +74,11 @@ pub async fn get_registry_skill(
     match skills.get_registry_skill(&skill_name) {
         Ok(record) => {
             let mut vo = RegistrySkillDetailVo::from(record);
-            if !vo.available && auth.locale.starts_with("en") {
-                vo.disabled_reason = Some(format!(
-                    "Capability pack {} is disabled",
-                    vo.provider_pack_id.as_deref().unwrap_or("")
+            if !vo.available {
+                vo.disabled_reason = Some(tron_i18n::t!(
+                    "skills.pack.disabled_reason",
+                    locale = &auth.locale,
+                    pack = vo.provider_pack_id.as_deref().unwrap_or("")
                 ));
             }
             Json(ApiResponse::protocol_success(vo)).into_response()

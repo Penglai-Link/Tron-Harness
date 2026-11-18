@@ -223,12 +223,14 @@ pub enum ProviderRouteCode {
 }
 
 impl ProviderRouteCode {
+    /// English fallback label. HTTP display layers localize auto-route options
+    /// from [`Self`] and must not rely on this value for user-facing text.
     pub const fn display_name(self) -> &'static str {
         match self {
-            Self::ChatAuto => "对话自动路由",
-            Self::EmbeddingAuto => "向量自动路由",
-            Self::MultimodalEmbeddingAuto => "多模态向量自动路由",
-            Self::RerankAuto => "重排自动路由",
+            Self::ChatAuto => "Chat Auto",
+            Self::EmbeddingAuto => "Embedding Auto",
+            Self::MultimodalEmbeddingAuto => "Multimodal Embedding Auto",
+            Self::RerankAuto => "Rerank Auto",
         }
     }
     pub const fn storage_value(self) -> &'static str {

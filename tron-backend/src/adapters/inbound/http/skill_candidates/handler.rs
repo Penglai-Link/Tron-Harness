@@ -155,63 +155,49 @@ async fn index_if_installed(state: &AppState, candidate: &SkillCandidate) -> Ski
     }
 }
 fn error(error: AssistantMemoryError, locale: &str) -> Response {
-    let (status, code, key, en, zh) = match error {
+    let (status, code, message_key) = match error {
         AssistantMemoryError::NotFound => (
             StatusCode::NOT_FOUND,
             "101041001",
             "tron.assistant_memory.not_found",
-            "Record not found",
-            "记录不存在",
         ),
         AssistantMemoryError::Conflict => (
             StatusCode::CONFLICT,
             "101041002",
             "tron.assistant_memory.conflict",
-            "The artifact or installed skill changed; refresh and review again",
-            "制品或已安装技能已变更，请刷新后重新审核",
         ),
         AssistantMemoryError::ExecutionBusy => (
             StatusCode::CONFLICT,
             "101041007",
             "tron.assistant_memory.busy",
-            "Memory session is already running",
-            "记忆会话正在运行",
         ),
         AssistantMemoryError::Invalid(_) => (
             StatusCode::BAD_REQUEST,
             "101041003",
             "tron.assistant_memory.invalid",
-            "Invalid memory or Skill operation",
-            "记忆或技能操作无效",
         ),
         AssistantMemoryError::Dependency(_) => (
             StatusCode::CONFLICT,
             "101041004",
             "tron.assistant_memory.creator_required",
-            "Install and enable skill-creator first",
-            "请先安装并启用 skill-creator",
         ),
         AssistantMemoryError::Storage(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "101041005",
             "tron.assistant_memory.storage",
-            "Memory workflow storage failed",
-            "记忆工作流存储失败",
         ),
         AssistantMemoryError::Installation(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "101041006",
             "tron.assistant_memory.installation",
-            "Approved Skill installation failed",
-            "已批准技能安装失败",
         ),
     };
-    tracing::debug!(message_key = key, "PersonAI memory API error");
+    tracing::debug!(message_key = message_key, "PersonAI memory API error");
     (
         status,
         Json(ApiResponse::protocol_error(
             code,
-            if locale.starts_with("en") { en } else { zh },
+            tron_i18n::t!(message_key, locale = locale),
         )),
     )
         .into_response()

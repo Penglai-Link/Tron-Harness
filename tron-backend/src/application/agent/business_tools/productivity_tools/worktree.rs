@@ -1,4 +1,5 @@
 use super::*;
+use tron_i18n::t;
 async fn git(
     directory: &Path,
     args: &[&str],
@@ -17,13 +18,20 @@ async fn checked(
     directory: &Path,
     args: &[&str],
     control: Option<&dyn ToolExecutionControl>,
+    locale: &str,
 ) -> Result<String, ToolError> {
     let result = git(directory, args, control).await?;
     if result["exitCode"] != 0 {
         return Err(error(result["stderr"].as_str().unwrap_or("git failed")));
     }
     if result["truncated"] == true {
-        return Err(error("Git output exceeds limit; narrow the query"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.worktree.git_output_too_large",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     Ok(result["stdout"]
         .as_str()
@@ -34,11 +42,13 @@ async fn checked(
 async fn worktrees(
     directory: &Path,
     control: Option<&dyn ToolExecutionControl>,
+    locale: &str,
 ) -> Result<Value, ToolError> {
     let output = checked(
         directory,
         &["worktree", "list", "--porcelain", "-z"],
         control,
+        locale,
     )
     .await?;
     let mut items = Vec::new();
@@ -67,14 +77,21 @@ pub(super) async fn execute(
     control: Option<&dyn ToolExecutionControl>,
 ) -> Result<Value, ToolError> {
     let directory = cwd(input, context)?;
-    checked(&directory, &["rev-parse", "--show-toplevel"], control).await?;
+    let locale = context.locale.as_str();
+    checked(
+        &directory,
+        &["rev-parse", "--show-toplevel"],
+        control,
+        locale,
+    )
+    .await?;
     match name {
-        "worktree_list" => Ok(json!({"worktrees":worktrees(&directory, control).await?})),
+        "worktree_list" => Ok(json!({"worktrees":worktrees(&directory, control, locale).await?})),
         "worktree_select" => {
-            let selected = PathBuf::from(text(input, "path")?)
+            let selected = PathBuf::from(text(input, "path", locale)?)
                 .canonicalize()
                 .map_err(error)?;
-            let items = worktrees(&directory, control).await?;
+            let items = worktrees(&directory, control, locale).await?;
             let registered = items.as_array().is_some_and(|items| {
                 items.iter().any(|item| {
                     item["path"]
@@ -86,13 +103,17 @@ pub(super) async fn execute(
             });
             if !registered {
                 return Err(error(
-                    "path is not a registered worktree of the current repository",
+                    t!(
+                        "agent_runtime.tool.worktree.not_registered",
+                        locale = locale
+                    )
+                    .into_owned(),
                 ));
             }
             Ok(json!({"cwd":selected,"selected":true}))
         }
         "worktree_create" => {
-            let name = text(input, "name")?;
+            let name = text(input, "name", locale)?;
             if name.len() > 64
                 || name.starts_with('.')
                 || !name
@@ -100,17 +121,24 @@ pub(super) async fn execute(
                     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
             {
                 return Err(error(
-                    "worktree name must contain 1-64 letters, digits, underscores or hyphens",
+                    t!("agent_runtime.tool.worktree.invalid_name", locale = locale).into_owned(),
                 ));
             }
-            let branch = text(input, "branch")?;
+            let branch = text(input, "branch", locale)?;
             if branch.starts_with('-') {
-                return Err(error("invalid branch"));
+                return Err(error(
+                    t!(
+                        "agent_runtime.tool.worktree.invalid_branch",
+                        locale = locale
+                    )
+                    .into_owned(),
+                ));
             }
             checked(
                 &directory,
                 &["check-ref-format", "--branch", branch],
                 control,
+                locale,
             )
             .await?;
             let reference = input
@@ -126,24 +154,43 @@ pub(super) async fn execute(
                     &format!("{reference}^{{commit}}"),
                 ],
                 control,
+                locale,
             )
             .await?;
-            let items = worktrees(&directory, control).await?;
+            let items = worktrees(&directory, control, locale).await?;
             let root = PathBuf::from(
                 items
                     .as_array()
                     .and_then(|items| items.first())
                     .and_then(|item| item["path"].as_str())
-                    .ok_or_else(|| error("main worktree unavailable"))?,
+                    .ok_or_else(|| {
+                        error(
+                            t!(
+                                "agent_runtime.tool.worktree.main_worktree_missing",
+                                locale = locale
+                            )
+                            .into_owned(),
+                        )
+                    })?,
             );
             let parent = root
                 .parent()
-                .ok_or_else(|| error("repository parent unavailable"))?
+                .ok_or_else(|| {
+                    error(
+                        t!(
+                            "agent_runtime.tool.worktree.repository_parent_missing",
+                            locale = locale
+                        )
+                        .into_owned(),
+                    )
+                })?
                 .canonicalize()
                 .map_err(error)?;
             let base = parent.join(".tron-worktrees");
             if base.exists() && base.canonicalize().map_err(error)? != base {
-                return Err(error("managed worktree root must not be a symlink"));
+                return Err(error(
+                    t!("agent_runtime.tool.worktree.root_symlink", locale = locale).into_owned(),
+                ));
             }
             if let Some(control) = control {
                 control.check_active()?;
@@ -151,7 +198,13 @@ pub(super) async fn execute(
             std::fs::create_dir_all(&base).map_err(error)?;
             let destination = base.join(name);
             if destination.exists() {
-                return Err(error("worktree destination already exists"));
+                return Err(error(
+                    t!(
+                        "agent_runtime.tool.worktree.destination_exists",
+                        locale = locale
+                    )
+                    .into_owned(),
+                ));
             }
             checked(
                 &directory,
@@ -165,11 +218,14 @@ pub(super) async fn execute(
                     &commit,
                 ],
                 control,
+                locale,
             )
             .await?;
             // Creation is explicit and activates the new checkout for the next model boundary.
             Ok(json!({"cwd":destination,"branch":branch,"created":true,"selected":true}))
         }
-        _ => Err(error("unknown worktree tool")),
+        _ => Err(error(
+            t!("agent_runtime.tool.worktree.unknown_tool", locale = locale).into_owned(),
+        )),
     }
 }

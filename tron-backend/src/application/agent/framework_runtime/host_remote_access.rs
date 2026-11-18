@@ -31,7 +31,10 @@ impl RemoteAccessHost for TronRemoteAccessHost {
         let state = AppState::global().ok_or_else(|| "remote access is not ready".to_owned())?;
         match state.remote_service() {
             Some(service) => {
-                service.refresh_pairing().await.map_err(|error| error.to_string())?;
+                service
+                    .refresh_pairing()
+                    .await
+                    .map_err(|error| error.to_string())?;
                 Ok(service.status_json().await)
             }
             None => remote_access::agent_rotate_token(),
@@ -42,7 +45,10 @@ impl RemoteAccessHost for TronRemoteAccessHost {
         let state = AppState::global().ok_or_else(|| "remote access is not ready".to_owned())?;
         match state.remote_service() {
             Some(service) => {
-                service.set_enabled(enabled).await.map_err(|error| error.to_string())?;
+                service
+                    .set_enabled(enabled)
+                    .await
+                    .map_err(|error| error.to_string())?;
                 Ok(service.status_json().await)
             }
             None => remote_access::agent_set_enabled(enabled),

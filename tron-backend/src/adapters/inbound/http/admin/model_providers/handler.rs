@@ -16,6 +16,20 @@ use crate::{
     response::{ApiResponse, EmptyData},
 };
 
+/// Locale of the current request: explicit headers first, then the locale the
+/// profile middleware resolved for this request.
+fn request_locale_from(headers: Option<&axum::http::HeaderMap>) -> String {
+    match headers
+        .and_then(|headers| headers.get(axum::http::header::ACCEPT_LANGUAGE))
+        .and_then(|value| value.to_str().ok())
+    {
+        Some(value) => crate::shared::locale::resolve_request_locale(Some(value)),
+        None => crate::shared::auth_holder::AuthHolder::get()
+            .map(|context| context.locale.clone())
+            .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_string()),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreateAuthorizationRequest {
@@ -215,15 +229,19 @@ async fn poll_authorization(
                 } else {
                     if let Err(error) = state.workspaces.ensure_default_workspace(user_id, username)
                     {
-                        return model_provider_profile_error(format!(
-                            "failed to initialize default workspace: {error}"
+                        return model_provider_profile_error(tron_i18n::t!(
+                            "admin.model_providers.default_workspace_init_failed",
+                            locale = &request_locale_from(headers.as_ref()),
+                            detail = error
                         ));
                     }
                     let profile = match state.profiles.register_or_update(user_id, username) {
                         Ok(profile) => profile,
                         Err(error) => {
-                            return model_provider_profile_error(format!(
-                                "failed to register PersonAI profile: {error}"
+                            return model_provider_profile_error(tron_i18n::t!(
+                                "admin.model_providers.profile_register_failed",
+                                locale = &request_locale_from(headers.as_ref()),
+                                detail = error
                             ));
                         }
                     };
@@ -254,20 +272,18 @@ async fn poll_authorization(
             }
         }
         Err(ModelProviderError::AuthorizationAccountMismatch) => {
-            let locale = crate::shared::locale::resolve_request_locale(
-                headers
-                    .as_ref()
-                    .and_then(|headers| headers.get(axum::http::header::ACCEPT_LANGUAGE))
-                    .and_then(|value| value.to_str().ok()),
-            );
-            (StatusCode::CONFLICT, Json(ApiResponse::<EmptyData>::error(
-                "MODEL_PROVIDER_AUTH_ACCOUNT_MISMATCH",
-                if locale.starts_with("zh") {
-                    "请使用当前 Profile 对应的 PersonAI 账号重新授权；其他账号请从 Profile 页面添加"
-                } else {
-                    "Authorize with the current profile's PersonAI account; add another account from the profile page"
-                },
-            ))).into_response()
+            let locale = request_locale_from(headers.as_ref());
+            (
+                StatusCode::CONFLICT,
+                Json(ApiResponse::<EmptyData>::error(
+                    "MODEL_PROVIDER_AUTH_ACCOUNT_MISMATCH",
+                    tron_i18n::t!(
+                        "admin.model_providers.auth_account_mismatch",
+                        locale = &locale
+                    ),
+                )),
+            )
+                .into_response()
         }
         Err(error) => model_provider_error_response(error),
     }
@@ -314,11 +330,12 @@ pub async fn disconnect_provider(
 
 fn parse_provider_code(value: &str) -> Result<ModelProviderCode, Response> {
     ModelProviderCode::from_storage(value).ok_or_else(|| {
+        let locale = request_locale_from(None);
         (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<EmptyData>::error(
                 "MODEL_PROVIDER_NOT_FOUND",
-                "model provider was not found",
+                tron_i18n::t!("admin.model_providers.not_found", locale = &locale),
             )),
         )
             .into_response()
@@ -326,6 +343,7 @@ fn parse_provider_code(value: &str) -> Result<ModelProviderCode, Response> {
 }
 
 fn model_provider_error_response(error: ModelProviderError) -> Response {
+    let locale = request_locale_from(None);
     let (status, code) = match error {
         ModelProviderError::AuthorizationSessionNotFound => (
             StatusCode::NOT_FOUND,
@@ -370,7 +388,10 @@ fn model_provider_error_response(error: ModelProviderError) -> Response {
     };
     (
         status,
-        Json(ApiResponse::<EmptyData>::error(code, error.to_string())),
+        Json(ApiResponse::<EmptyData>::error(
+            code,
+            error.user_message_text(&locale),
+        )),
     )
         .into_response()
 }

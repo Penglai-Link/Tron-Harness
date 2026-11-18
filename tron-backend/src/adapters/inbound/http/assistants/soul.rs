@@ -128,9 +128,11 @@ async fn begin(
     auth: RequestAuthContext,
     request: Option<Json<BeginAwakeningRequest>>,
 ) -> Result<Json<ApiResponse<BeginAwakeningResponse>>, AssistantApiError> {
-    let (mut soul, play_entrance) = s
-        .assistants
-        .begin_awakening(&s.assistants.main()?.assistant_code, &auth.user().user_code)?;
+    let (mut soul, play_entrance) = s.assistants.begin_awakening(
+        &s.assistants.main()?.assistant_code,
+        &auth.user().user_code,
+        &auth.locale,
+    )?;
     if let Some(code) = &soul.session_code {
         let d = s
             .assistants

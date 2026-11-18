@@ -529,6 +529,18 @@ impl AppState {
                     tracing::error!("platform skill index synchronization failed: {error}");
                 }
             });
+            // 中断的运行不会提交终态检查点，因而不会释放能力包版本 pin；
+            // 启动后按运行状态对账，避免历史 pin 永久阻止卸载。
+            let pinned = agent_framework.clone();
+            runtime.spawn(async move {
+                match pinned.prune_durable_pins(None).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "released stale capability pack pins"),
+                    Err(error) => {
+                        tracing::warn!(%error, "capability pack pin reconciliation failed")
+                    }
+                }
+            });
             // SQLite 空闲页巡检：每 10 分钟最多回收 1024 页（≈4 MiB），回收会话 /
             // 任务 / 事件按保留策略删除后残留的 freelist（存量库转换已在打开时完成）
             runtime.spawn(async move {
@@ -647,6 +659,7 @@ impl AppState {
             id_provider,
         )
         .with_active_runs(active_runs.clone())
+        .with_framework_host(agent_framework.clone())
         .with_projects(projects.clone())
         .with_directories(directories.clone())
         .with_topics(topics.clone())

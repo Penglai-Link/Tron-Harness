@@ -4,34 +4,31 @@ use serde::Serialize;
 pub(super) struct PlatformCatalogApiError(KnowledgeBaseError, String);
 impl IntoResponse for PlatformCatalogApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.knowledge_base.not_found" => (
-                StatusCode::NOT_FOUND,
-                "知识库不存在",
-                "Knowledge base not found",
-            ),
-            "tron.knowledge_base.forbidden" => (
-                StatusCode::FORBIDDEN,
-                "无知识库权限",
-                "Access to this knowledge base is denied",
-            ),
-            "tron.knowledge_base.invalid" => (
-                StatusCode::BAD_REQUEST,
-                "知识库请求无效",
-                "Invalid knowledge base request",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "知识库列表加载失败",
-                "Could not load knowledge bases",
-            ),
+        let status = match descriptor.message_key {
+            "tron.knowledge_base.not_found" => StatusCode::NOT_FOUND,
+            "tron.knowledge_base.forbidden" => StatusCode::FORBIDDEN,
+            "tron.knowledge_base.invalid" => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match descriptor.message_key {
+            "tron.knowledge_base.not_found" => {
+                t!("tron.knowledge_base.not_found", locale = &self.1)
+            }
+            "tron.knowledge_base.forbidden" => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1)
+            }
+            "tron.knowledge_base.invalid" => {
+                t!("tron.knowledge_base.invalid", locale = &self.1)
+            }
+            _ => t!("knowledge.base.catalog.failed", locale = &self.1),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

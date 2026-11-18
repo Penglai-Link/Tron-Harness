@@ -83,8 +83,20 @@ export function WorkspaceManagementPage() {
     return () => controller.abort();
   }, [taskApiMode, t, toast]);
 
+  const selectedStatus = useMemo(
+    () => flatten(tree).find((record) => record.workspaceCode === selectedCode)?.status,
+    [tree, selectedCode],
+  );
+  const archived = mode === "edit" && selectedStatus === "Archived";
+
   useEffect(() => {
     if (!selectedCode || mode !== "edit") return;
+    if (selectedStatus === "Archived") {
+      setFlowCode("");
+      setBoundFlowCode("");
+      setFlowLoading(false);
+      return;
+    }
     const controller = new AbortController();
     setFlowLoading(true);
     setBoundFlowCode("");
@@ -93,7 +105,7 @@ export function WorkspaceManagementPage() {
       .catch((error: unknown) => { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : t("workspaceManagement.requestFailed")); })
       .finally(() => { if (!controller.signal.aborted) setFlowLoading(false); });
     return () => controller.abort();
-  }, [mode, selectedCode, t, taskApiMode, toast]);
+  }, [mode, selectedCode, selectedStatus, t, taskApiMode, toast]);
 
   const visibleTree = useMemo(() => filterTree(tree, search, status), [tree, search, status]);
   const workspaceOptions = useMemo(() => flatten(tree).filter((record) => record.status === "Active"), [tree]);
@@ -274,6 +286,7 @@ export function WorkspaceManagementPage() {
           {mode === "create" || detail ? (
             <>
               <div className="p-5 sm:p-6">
+              {archived ? <p className="mb-5 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">{t("workspaceManagement.archivedReadOnly")}</p> : null}
               {detail ? (
                 <>
                   <dl className="grid grid-cols-[minmax(0,1.4fr)_minmax(4rem,0.6fr)_minmax(5rem,0.8fr)] gap-4 text-sm">
@@ -286,38 +299,40 @@ export function WorkspaceManagementPage() {
               ) : null}
               <div className="grid gap-x-5 gap-y-4 xl:grid-cols-2">
                 <Field className="min-w-0" label={t("workspaceManagement.name")} required>
-                  <TextInput aria-label={t("workspaceManagement.name")} autoFocus={mode === "create"} value={name} onChange={(event) => setName(event.target.value)} />
+                  <TextInput aria-label={t("workspaceManagement.name")} autoFocus={mode === "create"} disabled={archived} value={name} onChange={(event) => setName(event.target.value)} />
                 </Field>
                 <Field className="min-w-0" label={t("workspaceManagement.parent")}>
-                  <SelectInput aria-label={t("workspaceManagement.parent")} value={parentCode} onValueChange={(value) => { if (value) setParentCode(value); }}>
+                  <SelectInput aria-label={t("workspaceManagement.parent")} disabled={archived} value={parentCode} onValueChange={(value) => { if (value) setParentCode(value); }}>
                     <SelectItem value={ROOT_PARENT}>{t("workspaceManagement.rootWorkspace")}</SelectItem>
                     {workspaceOptions.filter((item) => item.workspaceCode !== detail?.workspaceCode).map((item) => (
                       <SelectItem key={item.workspaceCode} value={item.workspaceCode}>{item.name} ({item.workspaceCode})</SelectItem>
                     ))}
                   </SelectInput>
                 </Field>
-                <Field className="min-w-0 xl:col-span-2" label={flowT("aria.flow", "Workflow")} required>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <SelectInput className="min-w-0 max-w-sm" aria-label={flowT("aria.flow", "Workflow")} value={flowCode} disabled={flowLoading || saving || flows.length === 0 || (mode === "edit" && !boundFlowCode)} onValueChange={(value) => { if (value) setFlowCode(value); }}>
-                      {flows.map((flow) => <SelectItem key={flow.flowCode} value={flow.flowCode}>{taskFlowDisplayName(flow, flowT)}</SelectItem>)}
-                    </SelectInput>
-                    {mode === "edit" && detail && flowCode !== boundFlowCode ? <Button variant="outline" disabled={saving || flowLoading || !boundFlowCode} onClick={() => setFlowConfirmOpen(true)}>{flowT("actions.switch", "Switch")}</Button> : null}
-                  </div>
-                </Field>
+                {archived ? null : (
+                  <Field className="min-w-0 xl:col-span-2" label={flowT("aria.flow", "Workflow")} required>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SelectInput className="min-w-0 max-w-sm" aria-label={flowT("aria.flow", "Workflow")} value={flowCode} disabled={flowLoading || saving || flows.length === 0 || (mode === "edit" && !boundFlowCode)} onValueChange={(value) => { if (value) setFlowCode(value); }}>
+                        {flows.map((flow) => <SelectItem key={flow.flowCode} value={flow.flowCode}>{taskFlowDisplayName(flow, flowT)}</SelectItem>)}
+                      </SelectInput>
+                      {mode === "edit" && detail && flowCode !== boundFlowCode ? <Button variant="outline" disabled={saving || flowLoading || !boundFlowCode} onClick={() => setFlowConfirmOpen(true)}>{flowT("actions.switch", "Switch")}</Button> : null}
+                    </div>
+                  </Field>
+                )}
                 <Field className="min-w-0 xl:col-span-2" label={t("workspaceManagement.descriptionField")}>
-                  <TextArea aria-label={t("workspaceManagement.descriptionField")} className="min-h-28 resize-y" value={description} onChange={(event) => setDescription(event.target.value)} />
+                  <TextArea aria-label={t("workspaceManagement.descriptionField")} className="min-h-28 resize-y" disabled={archived} value={description} onChange={(event) => setDescription(event.target.value)} />
                 </Field>
               </div>
 
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--color-outline-variant)] px-5 py-4 sm:px-6">
-                {mode === "edit" && detail && (detail.parentWorkspaceCode ?? ROOT_PARENT) !== parentCode ? <Button variant="outline" onClick={move} disabled={saving}>{t("workspaceManagement.move")}</Button> : null}
+                {mode === "edit" && detail && !archived && (detail.parentWorkspaceCode ?? ROOT_PARENT) !== parentCode ? <Button variant="outline" onClick={move} disabled={saving}>{t("workspaceManagement.move")}</Button> : null}
                 {mode === "edit" && detail ? (
                   <Button variant={detail.status === "Active" ? "destructive" : "outline"} onClick={changeStatus} disabled={saving}>
                     {detail.status === "Active" ? <>{t("workspaceManagement.archive")}</> : <>{t("workspaceManagement.restore")}</>}
                   </Button>
                 ) : null}
-                <Button onClick={save} disabled={saving || (mode === "create" && !flows.some((flow) => flow.flowCode === flowCode))}>{mode === "create" ? t("workspaceManagement.create") : t("workspaceManagement.save")}</Button>
+                <Button onClick={save} disabled={saving || archived || (mode === "create" && !flows.some((flow) => flow.flowCode === flowCode))}>{mode === "create" ? t("workspaceManagement.create") : t("workspaceManagement.save")}</Button>
               </div>
             </>
           ) : (

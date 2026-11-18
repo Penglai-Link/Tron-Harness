@@ -57,6 +57,8 @@ mod host_import;
 mod host_interactions;
 #[path = "host_navigation.rs"]
 pub(super) mod host_navigation;
+#[path = "host_pack_pins.rs"]
+mod host_pack_pins;
 #[path = "host_pages.rs"]
 pub(super) mod host_pages;
 #[path = "host_run.rs"]
@@ -177,7 +179,11 @@ impl FrameworkHost {
             .store
             .clear()
             .await
-            .map_err(|_| ObservabilityError::Storage)
+            .map_err(|_| ObservabilityError::Storage)?;
+        // The store recreates host-neutral tables; replay the Tron-specific
+        // indexes the drop implicitly removed so observability queries keep
+        // their original plans after a reset.
+        telemetry.recreate_host_indexes().await
     }
 
     pub async fn collector_connection(
@@ -391,22 +397,26 @@ impl FrameworkHost {
     pub async fn import_pack(
         &self,
         bytes: Vec<u8>,
+        locale: &str,
     ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
-        self.import_pack_checked(bytes, None).await
+        self.import_pack_checked(bytes, None, locale.to_owned())
+            .await
     }
     pub async fn import_center_pack(
         &self,
         bytes: Vec<u8>,
         manifest: serde_json::Value,
         expected_version: Option<String>,
+        locale: &str,
     ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
-        self.import_pack_checked(bytes, Some((manifest, expected_version)))
+        self.import_pack_checked(bytes, Some((manifest, expected_version)), locale.to_owned())
             .await
     }
     async fn import_pack_checked(
         &self,
         bytes: Vec<u8>,
         expected: Option<(serde_json::Value, Option<String>)>,
+        locale: String,
     ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
         let _guard = self.0.config_lock.lock().await;
         self.ensure_external_idle()?;
@@ -436,7 +446,7 @@ impl FrameworkHost {
             return Err("bundled capability package ids cannot be imported".into());
         }
         let bytes = self.validate_pack_import(bytes).await?;
-        self.check_pack_references(&package_id)?;
+        self.check_pack_references(&package_id).await?;
         self.invalidate_environment().await?;
         let manager =
             eliteforge_agent_capability_runtime::CapabilityPackManager::new(&self.0.pack_root)
@@ -454,7 +464,7 @@ impl FrameworkHost {
         self.invalidate_tool_metadata();
         let root = self.0.pack_root.clone();
         let pack = tokio::task::spawn_blocking(move || {
-            crate::application::agent::install_capability_pack(&root, &bytes)
+            crate::application::agent::install_capability_pack(&root, &bytes, &locale)
         })
         .await
         .map_err(|e| e.to_string())??;
@@ -533,8 +543,11 @@ impl FrameworkHost {
         }
         Ok(())
     }
-    fn check_pack_references(&self, id: &str) -> Result<(), String> {
+    async fn check_pack_references(&self, id: &str) -> Result<(), String> {
         self.ensure_external_idle()?;
+        // Interrupted runs never release their pins. Reconcile them first so a
+        // dead pin cannot block every later removal of the package.
+        self.prune_durable_pins(Some(id)).await?;
         let manager =
             eliteforge_agent_capability_runtime::CapabilityPackManager::new(&self.0.pack_root)
                 .map_err(|e| e.to_string())?;
@@ -550,7 +563,9 @@ impl FrameworkHost {
     }
     pub async fn set_pack_enabled(&self, id: &str, enabled: bool) -> Result<(), String> {
         let _guard = self.0.config_lock.lock().await;
-        self.check_pack_references(id)?;
+        // Enabling or disabling only changes the Agent selection; package files
+        // and durable pins stay untouched, so a pending run can still resume.
+        self.ensure_external_idle()?;
         let mut packs = self.0.capability_state.read().unwrap().clone();
         let extensions = self.0.extension_state.read().unwrap().clone();
         let was_changed = packs.get(id).copied().unwrap_or(Self::builtin_pack(id)) != enabled;
@@ -606,11 +621,19 @@ impl FrameworkHost {
         *self.0.capability_state.write().unwrap() = packs;
         Ok(())
     }
-    pub async fn uninstall_pack(&self, id: &str) -> Result<(), String> {
+    /// Remove every installed version of `id`. Without `force`, a resumable run
+    /// still pinned to the package blocks removal; `force` releases those pins
+    /// first so the package can always be removed on explicit request.
+    pub async fn uninstall_pack(&self, id: &str, force: bool) -> Result<(), String> {
         let _guard = self.0.config_lock.lock().await;
-        self.check_pack_references(id)?;
         if Self::builtin_pack(id) {
             return Err("bundled capability packs cannot be uninstalled".into());
+        }
+        if force {
+            self.ensure_external_idle()?;
+            self.release_pack_pins(id)?;
+        } else {
+            self.check_pack_references(id).await?;
         }
         let manager =
             eliteforge_agent_capability_runtime::CapabilityPackManager::new(&self.0.pack_root)
@@ -631,46 +654,45 @@ impl FrameworkHost {
         }
         let mut packs = self.0.capability_state.read().unwrap().clone();
         let extensions = self.0.extension_state.read().unwrap().clone();
-        packs.insert(id.into(), false);
+        packs.remove(id);
         if let Some(navigation) = self.0.navigation.get() {
-            navigation.set_pack_enabled(id, false)?;
+            if let Err(error) = navigation.set_pack_enabled(id, false) {
+                tracing::warn!(%error, pack = id, "capability navigation could not be disabled");
+            }
         }
         persist_capability_state(&self.0.state_path, &packs, &extensions)?;
         *self.0.capability_state.write().unwrap() = packs;
         if let Some(resources) = self.0.capability_resources.get() {
-            resources.transition(id, false, &[])?;
-        }
-        if let (Some(skills), Some(rag)) = (self.0.skill_registry.get(), self.0.rag.get()) {
-            let names = skills
-                .list_registry(crate::domain::skill::RegistrySkillListQuery { search: None })
-                .map_err(|e| e.to_string())?
-                .into_iter()
-                .filter(|s| s.provider_pack_id.as_deref() == Some(id))
-                .map(|s| s.skill_name)
-                .collect::<Vec<_>>();
-            let indexer =
-                crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone());
-            for name in names {
-                indexer
-                    .remove_skill_index(&name)
-                    .await
-                    .map_err(|e| e.to_string())?;
+            if let Err(error) = resources.transition(id, false, &[]) {
+                tracing::warn!(%error, pack = id, "capability resources could not be disabled");
             }
         }
         self.invalidate_environment().await?;
         self.invalidate_tool_metadata();
+        // Package files are the deliverable: a failed auxiliary cleanup (skill
+        // index, navigation, resource rows) must not keep the pack installed.
+        let mut failures = Vec::new();
         for version in versions {
-            manager
-                .remove(id, &version.manifest.version)
-                .map_err(|e| e.to_string())?;
+            if let Err(error) = manager.remove(id, &version.manifest.version) {
+                failures.push(error.to_string());
+            }
         }
         if let Some(resources) = self.0.capability_resources.get() {
-            resources.remove(id)?;
+            if let Err(error) = resources.remove(id) {
+                tracing::warn!(%error, pack = id, "capability resources could not be removed");
+            }
         }
         if let Some(navigation) = self.0.navigation.get() {
-            navigation.remove_pack(id)?;
+            if let Err(error) = navigation.remove_pack(id) {
+                tracing::warn!(%error, pack = id, "capability navigation could not be removed");
+            }
         }
         self.0.skills.write().unwrap().remove(id);
+        // Only purge leftovers once no installed version remains; a version that
+        // another runtime still holds must keep its files intact.
+        if failures.is_empty() {
+            self.purge_pack_artifacts(id);
+        }
         match self.reconcile_capability_resources() {
             Ok(report) => {
                 self.remove_retired_skill_indexes(&report.removed_skills)
@@ -680,18 +702,55 @@ impl FrameworkHost {
                 tracing::error!(%error, pack = id, "capability resources failed to reconcile after uninstall");
             }
         }
-        // The framework keeps a separate extraction of embedded package skills.
-        let safe = host_environment::pack_cache_component(id);
-        let cache = self
-            .0
-            .path
-            .with_extension("skills")
-            .join("capability-packs")
-            .join(safe);
-        if cache.exists() {
-            fs::remove_dir_all(cache).map_err(|e| e.to_string())?;
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(failures.join("; "))
         }
-        Ok(())
+    }
+
+    /// Delete files and caches the capability runtime leaves behind after a
+    /// version removal, so nothing of an uninstalled pack can be resurrected.
+    fn purge_pack_artifacts(&self, id: &str) {
+        let root = &self.0.pack_root;
+        for path in [root.join("packs").join(id), root.join("data").join(id)] {
+            if path.exists() {
+                if let Err(error) = fs::remove_dir_all(&path) {
+                    tracing::warn!(path = %path.display(), %error, "capability pack files remain");
+                }
+            }
+        }
+        let locks = root.join("locks");
+        if let Ok(entries) = fs::read_dir(&locks) {
+            let prefix = format!("{id}@");
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.starts_with(&prefix) && name.ends_with(".lock") {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+        // The framework keeps separate extractions of embedded package skills.
+        let component = host_environment::pack_cache_component(id);
+        let caches = [
+            self.0
+                .path
+                .with_extension("skills")
+                .join("capability-packs")
+                .join(&component),
+            self.0
+                .path
+                .with_extension("skills-catalog")
+                .join(&component),
+        ];
+        for path in caches {
+            if path.exists() {
+                if let Err(error) = fs::remove_dir_all(&path) {
+                    tracing::warn!(path = %path.display(), %error, "capability skill cache remains");
+                }
+            }
+        }
     }
 
     pub fn tool_policy_smart(&self) -> bool {

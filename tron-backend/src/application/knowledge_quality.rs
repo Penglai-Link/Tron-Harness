@@ -6,7 +6,7 @@ mod publication;
 mod runtime;
 mod snapshot;
 use crate::application::knowledge_base::{KnowledgeBaseError, KnowledgeBaseService};
-use dataset::invalid;
+use dataset::{invalid, invalid_error, invalid_with};
 use eliteforge_agent_core::*;
 
 pub(crate) use runtime::QualityJobs;
@@ -67,17 +67,17 @@ impl QualityOptimizationOptions {
             || !(1..=6).contains(&self.max_trials)
             || !(8..=64).contains(&self.max_cases)
         {
-            return Err(KnowledgeBaseError::Invalid(
-                "评测目标、召回数量或优化次数超出范围".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.quality.options_out_of_range",
             ));
         }
         if self.candidates.len() > self.max_trials {
-            return Err(KnowledgeBaseError::Invalid(
-                "候选策略数量超过本轮优化次数上限".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.quality.too_many_candidates",
             ));
         }
         for config in &self.candidates {
-            config.validate().map_err(invalid)?;
+            config.validate()?;
         }
         self.budget.validate()
     }

@@ -16,6 +16,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tron_i18n::t;
 
 const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 65536;
@@ -79,7 +80,7 @@ impl Tool for ProductivityTool {
             )
             .map_err(error)?
         };
-        finish(self.name, result)
+        finish(self.name, result, context.locale.as_str())
     }
     fn exec_async<'a>(
         &'a self,
@@ -96,37 +97,66 @@ impl Tool for ProductivityTool {
             let result =
                 worktree::execute(self.name, &request.input, context, Some(control)).await?;
             control.check_active()?;
-            finish(self.name, result)
+            finish(self.name, result, context.locale.as_str())
         }))
     }
 }
 fn validate(name: &str, input: &Value, context: &AgentRunContext) -> Result<(), ToolError> {
+    let locale = context.locale.as_str();
     if input.to_string().len() > 4 * 1024 * 1024 {
-        return Err(error("tool input exceeds 4 MiB"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.productivity.input_too_large",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     let definition = crate::application::agent::BusinessToolCatalog::tool(
         &name.replacen('_', ".", 1),
         &context.locale,
     )
-    .ok_or_else(|| error("tool definition unavailable"))?;
+    .ok_or_else(|| {
+        error(
+            t!(
+                "agent_runtime.tool.productivity.definition_unavailable",
+                locale = locale
+            )
+            .into_owned(),
+        )
+    })?;
     let validator = jsonschema::validator_for(&definition.input_schema).map_err(error)?;
     if let Err(failure) = validator.validate(&input) {
-        return Err(error(format!("invalid tool input: {failure}")));
+        return Err(error(t!(
+            "agent_runtime.tool.productivity.invalid_input",
+            locale = locale,
+            detail = failure
+        )));
     }
     if ["worktree_create", "worktree_select"].contains(&name)
         && context.execution_scope.applications.is_empty()
     {
         return Err(error(
-            "worktree selection requires a project-linked application",
+            t!(
+                "agent_runtime.tool.worktree.project_application_required",
+                locale = locale
+            )
+            .into_owned(),
         ));
     }
     Ok(())
 }
-fn finish(name: &str, result: Value) -> Result<ToolExecutionResult, ToolError> {
+fn finish(name: &str, result: Value, locale: &str) -> Result<ToolExecutionResult, ToolError> {
     if (name.starts_with("word_") || name.starts_with("excel_") || name == "worktree_list")
         && result.to_string().len() > MAX_OUTPUT_BYTES
     {
-        return Err(error("result exceeds 64 KiB; request a smaller range"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.productivity.result_too_large",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     json_observation(name, &result)
 }
@@ -134,40 +164,79 @@ fn finish(name: &str, result: Value) -> Result<ToolExecutionResult, ToolError> {
 fn error(message: impl ToString) -> ToolError {
     ToolError::ExecutionFailed(message.to_string())
 }
-fn text<'a>(input: &'a Value, key: &str) -> Result<&'a str, ToolError> {
+fn text<'a>(input: &'a Value, key: &str, locale: &str) -> Result<&'a str, ToolError> {
     input
         .get(key)
         .and_then(Value::as_str)
         .filter(|v| !v.trim().is_empty())
-        .ok_or_else(|| error(format!("{key} is required")))
+        .ok_or_else(|| {
+            error(t!(
+                "agent_runtime.tool.productivity.parameter_required",
+                locale = locale,
+                parameter = key
+            ))
+        })
 }
 fn path(input: &Value, key: &str, context: &AgentRunContext) -> Result<PathBuf, ToolError> {
-    resolve_path(context, text(input, key)?)
+    resolve_path(context, text(input, key, context.locale.as_str())?)
 }
 fn cwd(input: &Value, context: &AgentRunContext) -> Result<PathBuf, ToolError> {
-    resolve_optional_directory(context, input.get("cwd").and_then(Value::as_str))?
-        .ok_or_else(|| error("working directory is required"))
+    resolve_optional_directory(context, input.get("cwd").and_then(Value::as_str))?.ok_or_else(
+        || {
+            error(
+                t!(
+                    "agent_runtime.tool.productivity.working_directory_required",
+                    locale = context.locale.as_str()
+                )
+                .into_owned(),
+            )
+        },
+    )
 }
-fn read_file(path: &Path) -> Result<Vec<u8>, ToolError> {
+fn read_file(path: &Path, locale: &str) -> Result<Vec<u8>, ToolError> {
     let file = std::fs::File::open(path).map_err(error)?;
     if file.metadata().map_err(error)?.len() > MAX_FILE_BYTES {
-        return Err(error("file exceeds 32 MiB limit"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.productivity.file_too_large",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     let mut bytes = Vec::new();
     file.take(MAX_FILE_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(error)?;
     if bytes.len() as u64 > MAX_FILE_BYTES {
-        return Err(error("file exceeds 32 MiB limit"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.productivity.file_too_large",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     Ok(bytes)
 }
-fn write_new(path: &Path, bytes: &[u8]) -> Result<(), ToolError> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| error("output parent is required"))?;
+fn write_new(path: &Path, bytes: &[u8], locale: &str) -> Result<(), ToolError> {
+    let parent = path.parent().ok_or_else(|| {
+        error(
+            t!(
+                "agent_runtime.tool.productivity.output_parent_required",
+                locale = locale
+            )
+            .into_owned(),
+        )
+    })?;
     if !parent.is_dir() {
-        return Err(error("output parent directory does not exist"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.productivity.output_parent_missing",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(error)?;
     std::io::Write::write_all(&mut temporary, bytes).map_err(error)?;

@@ -12,7 +12,6 @@ use crate::{
     app::AppState,
     domain::connector::{ConnectionError, ConnectionView},
     response::{ApiResponse, EmptyData},
-    shared::locale::SupportedLocale,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -258,96 +257,87 @@ async fn search(
 }
 
 pub(crate) fn error_response(error: ConnectionError, headers: &HeaderMap) -> Response {
+    use crate::shared::locale::SupportedLocale;
     use eliteforge_agent_connector::ConnectorError as Remote;
+    use tron_i18n::t;
     let locale = SupportedLocale::from_request(
         headers
             .get("accept-language")
             .and_then(|value| value.to_str().ok()),
     );
-    let (status, code, en, zh) = match error {
-        ConnectionError::InvalidInput => (
-            StatusCode::BAD_REQUEST,
-            "CONNECTOR_INPUT_INVALID",
-            "Check the connection details.",
-            "请检查连接信息。",
-        ),
-        ConnectionError::NotFound | ConnectionError::Remote(Remote::NotFound) => (
-            StatusCode::NOT_FOUND,
-            "CONNECTOR_NOT_FOUND",
-            "The connection or remote resource was not found.",
-            "未找到连接或远程资源。",
-        ),
-        ConnectionError::DuplicateName => (
-            StatusCode::CONFLICT,
-            "CONNECTOR_NAME_DUPLICATE",
-            "This connection name is already in use.",
-            "连接名称已存在。",
-        ),
+    let (status, code) = match &error {
+        ConnectionError::InvalidInput => (StatusCode::BAD_REQUEST, "CONNECTOR_INPUT_INVALID"),
+        ConnectionError::NotFound | ConnectionError::Remote(Remote::NotFound) => {
+            (StatusCode::NOT_FOUND, "CONNECTOR_NOT_FOUND")
+        }
+        ConnectionError::DuplicateName => (StatusCode::CONFLICT, "CONNECTOR_NAME_DUPLICATE"),
         ConnectionError::EncryptionUnavailable => (
             StatusCode::SERVICE_UNAVAILABLE,
             "CONNECTOR_ENCRYPTION_UNAVAILABLE",
-            "Credential encryption is unavailable.",
-            "凭据加密不可用。",
         ),
         ConnectionError::Remote(Remote::Authentication) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             "CONNECTOR_AUTHENTICATION_FAILED",
-            "The platform credential is invalid or expired.",
-            "平台凭据无效或已过期。",
         ),
-        ConnectionError::Remote(Remote::Forbidden) => (
-            StatusCode::FORBIDDEN,
-            "CONNECTOR_FORBIDDEN",
-            "The platform denied access.",
-            "平台拒绝了访问。",
-        ),
-        ConnectionError::Remote(Remote::Unsupported) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "CONNECTOR_UNSUPPORTED",
-            "The platform does not support this operation.",
-            "平台不支持此操作。",
-        ),
-        ConnectionError::Remote(Remote::RateLimited) => (
-            StatusCode::TOO_MANY_REQUESTS,
-            "CONNECTOR_RATE_LIMITED",
-            "The platform rate limit was reached.",
-            "已达到平台访问频率限制。",
-        ),
-        ConnectionError::Remote(Remote::IndeterminateWrite) => (
-            StatusCode::BAD_GATEWAY,
-            "CONNECTOR_WRITE_UNKNOWN",
-            "The write result is unknown; check the platform before retrying.",
-            "写入结果未知，请先到平台确认后再重试。",
-        ),
+        ConnectionError::Remote(Remote::Forbidden) => {
+            (StatusCode::FORBIDDEN, "CONNECTOR_FORBIDDEN")
+        }
+        ConnectionError::Remote(Remote::Unsupported) => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "CONNECTOR_UNSUPPORTED")
+        }
+        ConnectionError::Remote(Remote::RateLimited) => {
+            (StatusCode::TOO_MANY_REQUESTS, "CONNECTOR_RATE_LIMITED")
+        }
+        ConnectionError::Remote(Remote::IndeterminateWrite) => {
+            (StatusCode::BAD_GATEWAY, "CONNECTOR_WRITE_UNKNOWN")
+        }
         ConnectionError::Remote(Remote::Configuration | Remote::Rejected) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             "CONNECTOR_REQUEST_REJECTED",
-            "The platform rejected the request.",
-            "平台拒绝了请求。",
         ),
-        ConnectionError::Remote(Remote::Unavailable | Remote::InvalidResponse) => (
-            StatusCode::BAD_GATEWAY,
-            "CONNECTOR_UNAVAILABLE",
-            "The platform is unavailable or returned an invalid response.",
-            "平台不可用或返回了无效响应。",
-        ),
+        ConnectionError::Remote(Remote::Unavailable | Remote::InvalidResponse) => {
+            (StatusCode::BAD_GATEWAY, "CONNECTOR_UNAVAILABLE")
+        }
         ConnectionError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONNECTOR_STORAGE_FAILED",
-            "The connection could not be saved.",
-            "无法保存连接。",
         ),
     };
-    (
-        status,
-        Json(ApiResponse::protocol_error(
-            code,
-            if locale == SupportedLocale::EnUs {
-                en
-            } else {
-                zh
-            },
-        )),
-    )
-        .into_response()
+    let message = match &error {
+        ConnectionError::InvalidInput => t!("tron.connector.input_invalid", locale = locale),
+        ConnectionError::NotFound | ConnectionError::Remote(Remote::NotFound) => {
+            t!("tron.connector.not_found", locale = locale)
+        }
+        ConnectionError::DuplicateName => {
+            t!("tron.connector.name_duplicate", locale = locale)
+        }
+        ConnectionError::EncryptionUnavailable => {
+            t!("tron.connector.encryption_unavailable", locale = locale)
+        }
+        ConnectionError::Remote(Remote::Authentication) => {
+            t!("tron.connector.authentication_failed", locale = locale)
+        }
+        ConnectionError::Remote(Remote::Forbidden) => {
+            t!("tron.connector.forbidden", locale = locale)
+        }
+        ConnectionError::Remote(Remote::Unsupported) => {
+            t!("tron.connector.unsupported", locale = locale)
+        }
+        ConnectionError::Remote(Remote::RateLimited) => {
+            t!("tron.connector.rate_limited", locale = locale)
+        }
+        ConnectionError::Remote(Remote::IndeterminateWrite) => {
+            t!("tron.connector.write_unknown", locale = locale)
+        }
+        ConnectionError::Remote(Remote::Configuration | Remote::Rejected) => {
+            t!("tron.connector.request_rejected", locale = locale)
+        }
+        ConnectionError::Remote(Remote::Unavailable | Remote::InvalidResponse) => {
+            t!("tron.connector.unavailable", locale = locale)
+        }
+        ConnectionError::StorageFailure => {
+            t!("tron.connector.storage_failed", locale = locale)
+        }
+    };
+    (status, Json(ApiResponse::protocol_error(code, message))).into_response()
 }

@@ -16,13 +16,19 @@ if (applyUpdateArgIndex >= 0) {
     onReady: () => process.stdout.write(`${UPDATE_HELPER_READY}\n`)
   }).then((code) => process.exit(code));
 } else {
-const { app, BrowserWindow, WebContentsView, clipboard, dialog, ipcMain, Menu, nativeTheme, net, shell, Tray } = require("electron");
+const { app, BrowserWindow, WebContentsView, clipboard, dialog, ipcMain, Menu, nativeTheme, net, Notification, shell, Tray } = require("electron");
 const { startupPalette } = require("./startup-page.cjs");
 const { STARTUP_ARG, ICON_PATH } = require("./desktop-constants.cjs");
 const { createWindowsDesktop } = require("./windows-desktop.cjs");
 const { createLinuxDesktop } = require("./linux-desktop.cjs");
 const { resolveDesktopDataDir } = require("./helpers.cjs");
 const desktopDataDir = resolveDesktopDataDir({ isPackaged: app.isPackaged });
+
+// Windows toast notifications require a stable AppUserModelID matching the
+// installer's appId; without it notifications are silently dropped.
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.tron.desktop");
+}
 
 // Chromium must receive these paths before readiness and the single-instance lock.
 if (process.platform === "win32" && app.isPackaged) {
@@ -711,6 +717,82 @@ function normalizeRequest(payload) {
   return payload && typeof payload === "object" ? payload : {};
 }
 
+const MAX_NOTIFICATION_TEXT_LENGTH = 2000;
+const activeSystemNotifications = new Set();
+
+function sanitizeNotificationText(value) {
+  return typeof value === "string" ? value.trim().slice(0, MAX_NOTIFICATION_TEXT_LENGTH) : "";
+}
+
+function openSystemNotificationSettings() {
+  if (process.platform === "darwin") {
+    // The legacy pane identifier still selects the app-specific notification page on macOS 15+.
+    shell.openExternal("x-apple.systempreferences:com.apple.preference.notifications?id=com.tron.desktop").catch(() => {});
+    return true;
+  }
+  if (process.platform === "win32") {
+    shell.openExternal("ms-settings:notifications").catch(() => {});
+    return true;
+  }
+  return false;
+}
+
+function showSystemNotification(request) {
+  if (!Notification.isSupported()) {
+    return Promise.resolve({ shown: false, error: "notifications-unsupported" });
+  }
+
+  const title = sanitizeNotificationText(request.title);
+  if (!title) {
+    return Promise.resolve({ shown: false, error: "missing-notification-title" });
+  }
+
+  const id = sanitizeNotificationText(request.id) || `tron-notification-${crypto.randomUUID()}`;
+  const notification = new Notification({
+    id,
+    title,
+    body: sanitizeNotificationText(request.body),
+    silent: request.silent === true
+  });
+  activeSystemNotifications.add(notification);
+  while (activeSystemNotifications.size > 32) {
+    activeSystemNotifications.delete(activeSystemNotifications.values().next().value);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+
+    notification.once("show", () => finish({ shown: true }));
+    notification.once("failed", (_event, error) => {
+      activeSystemNotifications.delete(notification);
+      finish({ shown: false, error: sanitizeNotificationText(String(error || "notification-failed")) });
+    });
+    notification.once("close", () => activeSystemNotifications.delete(notification));
+    notification.on("click", () => {
+      const window = state.mainWindow;
+      if (!window || window.isDestroyed()) return;
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+      if (!window.webContents.isDestroyed()) {
+        window.webContents.send("tron-desktop:notification-activated", { id });
+      }
+    });
+
+    // Some Linux notification services do not report a show event; the request is
+    // still accepted, so treat the absence of a failure as a successful send.
+    timeout = setTimeout(() => finish({ shown: true }), 1500);
+    notification.show();
+  });
+}
+
 function nextPageId() {
   return `target-${Date.now()}`;
 }
@@ -1059,6 +1141,14 @@ function registerIpcHandlers() {
 
     if (command === "getAppVersion") {
       return app.getVersion();
+    }
+
+    if (command === "showSystemNotification") {
+      return showSystemNotification(request);
+    }
+
+    if (command === "openSystemNotificationSettings") {
+      return openSystemNotificationSettings();
     }
 
     if (command === "isReleaseNotesAcknowledged" || command === "acknowledgeReleaseNotes") {

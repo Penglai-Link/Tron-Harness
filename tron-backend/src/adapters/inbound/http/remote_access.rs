@@ -68,10 +68,7 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/remote/service/devices/revoke-all",
             axum::routing::post(service_revoke_all),
         )
-        .route(
-            "/api/v1/remote/service/enabled",
-            put(service_set_enabled),
-        )
+        .route("/api/v1/remote/service/enabled", put(service_set_enabled))
 }
 
 /// Mobile-facing identity endpoint. Mounted on both listeners; the dedicated
@@ -171,23 +168,17 @@ where
         if local {
             return Ok(Self);
         }
-        let english = resolve_request_locale(
+        let locale = resolve_request_locale(
             parts
                 .headers
                 .get(header::ACCEPT_LANGUAGE)
                 .and_then(|value| value.to_str().ok()),
-        )
-        .to_ascii_lowercase()
-        .starts_with("en");
+        );
         Err((
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<EmptyData>::error(
                 "REMOTE_ACCESS_LOCAL_ONLY",
-                if english {
-                    "This operation is only available on the Tron computer"
-                } else {
-                    "该操作只能在 Tron 所在电脑上执行"
-                },
+                tron_i18n::t!("tron.remote_access.local_only", locale = &locale),
             )),
         )
             .into_response())
@@ -207,12 +198,11 @@ async fn update_settings(
     let public_base_url = match request.public_base_url.as_deref() {
         Some(value) => match normalize_public_base_url(value) {
             Ok(value) => Some(value),
-            Err(message) => {
+            Err(()) => {
                 return remote_error(
                     StatusCode::BAD_REQUEST,
                     "REMOTE_ACCESS_INVALID_URL",
-                    "对外访问地址必须是 http:// 或 https:// 开头的有效地址",
-                    &message,
+                    "tron.remote_access.invalid_url",
                     None,
                 );
             }
@@ -239,8 +229,7 @@ async fn update_settings(
             return remote_error(
                 StatusCode::BAD_REQUEST,
                 "REMOTE_ACCESS_INVALID_PRODUCT_CODE",
-                "产品编码只能包含小写字母、数字、点、短横线和下划线",
-                "The product code may only contain lowercase letters, digits, dots, dashes and underscores",
+                "tron.remote_access.invalid_product_code",
                 None,
             );
         }
@@ -295,8 +284,7 @@ async fn update_settings(
         return remote_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "REMOTE_ACCESS_SERVICE_SYNC_FAILED",
-            "无法同步远程访问服务设置",
-            &error,
+            "tron.remote_access.service_sync_failed",
             None,
         );
     }
@@ -330,8 +318,7 @@ async fn session(State(state): State<AppState>, request: Request) -> Response {
         return remote_error(
             StatusCode::FORBIDDEN,
             "REMOTE_ACCESS_DISABLED",
-            "这台电脑未开启远程访问",
-            "Remote access is disabled on this computer",
+            "tron.remote_access.disabled",
             Some(&request),
         );
     }
@@ -339,8 +326,7 @@ async fn session(State(state): State<AppState>, request: Request) -> Response {
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_TOKEN_MISSING",
-            "远程访问令牌尚未生成，请在 Tron 设置中启用远程访问",
-            "No pairing token is configured; enable remote access in Tron settings",
+            "tron.remote_access.token_missing",
             Some(&request),
         );
     }
@@ -352,8 +338,7 @@ async fn session(State(state): State<AppState>, request: Request) -> Response {
         return remote_error(
             StatusCode::UNAUTHORIZED,
             "REMOTE_ACCESS_UNAUTHORIZED",
-            "配对令牌无效或已过期，请重新扫码配对",
-            "The pairing token is missing or invalid; pair this computer again",
+            "tron.remote_access.unauthorized",
             Some(&request),
         );
     }
@@ -489,8 +474,7 @@ async fn gate_remote_request(
         return remote_error(
             StatusCode::FORBIDDEN,
             "REMOTE_ACCESS_DISABLED",
-            "这台电脑未开启远程访问",
-            "Remote access is disabled on this computer",
+            "tron.remote_access.disabled",
             Some(&request),
         );
     }
@@ -498,8 +482,7 @@ async fn gate_remote_request(
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_TOKEN_MISSING",
-            "远程访问令牌尚未生成，请在 Tron 设置中启用远程访问",
-            "No pairing token is configured; enable remote access in Tron settings",
+            "tron.remote_access.token_missing",
             Some(&request),
         );
     }
@@ -507,8 +490,7 @@ async fn gate_remote_request(
         return remote_error(
             StatusCode::UPGRADE_REQUIRED,
             "INSECURE_TRANSPORT",
-            "远程访问必须使用 HTTPS。请在 FRP 或反向代理上终止 TLS，并转发 X-Forwarded-Proto: https；仅本机调试才可显式允许 HTTP。",
-            "Remote access requires HTTPS. Terminate TLS at FRP or a reverse proxy and forward X-Forwarded-Proto: https; only local debugging may explicitly allow HTTP.",
+            "tron.remote_access.insecure_transport",
             Some(&request),
         );
     }
@@ -522,8 +504,7 @@ async fn gate_remote_request(
             return remote_error(
                 StatusCode::UNAUTHORIZED,
                 "REMOTE_ACCESS_UNAUTHORIZED",
-                "配对令牌无效或已过期，请重新扫码配对",
-                "The pairing token is missing or invalid; pair this computer again",
+                "tron.remote_access.unauthorized",
                 Some(&request),
             );
         }
@@ -533,8 +514,7 @@ async fn gate_remote_request(
         return remote_error(
             StatusCode::UNAUTHORIZED,
             "REMOTE_ACCESS_JWT_REQUIRED",
-            "缺少访问令牌，请重新连接这台电脑",
-            "An access token is required; reconnect to this computer",
+            "tron.remote_access.jwt_required",
             Some(&request),
         );
     };
@@ -542,8 +522,7 @@ async fn gate_remote_request(
         return remote_error(
             StatusCode::UNAUTHORIZED,
             "REMOTE_ACCESS_JWT_INVALID",
-            "访问令牌已过期或无效，请重新连接这台电脑",
-            "The access token is expired or invalid; reconnect to this computer",
+            "tron.remote_access.jwt_invalid",
             Some(&request),
         );
     }
@@ -590,10 +569,7 @@ fn status_snapshot(state: &AppState) -> RemoteAccessStatusResponse {
     }
 }
 
-async fn sync_remote_service(
-    state: &AppState,
-    next: &RemoteAccessConfig,
-) -> Result<(), String> {
+async fn sync_remote_service(state: &AppState, next: &RemoteAccessConfig) -> Result<(), String> {
     let _guard = lock_remote_settings().await;
     if let Some(service) = state.remote_service() {
         let mut settings = service.current_settings().await;
@@ -646,12 +622,11 @@ fn persist_changes(
     state: &AppState,
     changes: Vec<crate::application::system_config::SystemConfigChange>,
 ) -> Result<(), Response> {
-    let document = state.system_config.get().map_err(|error| {
+    let document = state.system_config.get().map_err(|_| {
         remote_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "REMOTE_ACCESS_CONFIG_READ_FAILED",
-            "无法读取远程访问配置",
-            &format!("Could not read remote access settings: {error:?}"),
+            "tron.remote_access.config_read_failed",
             None,
         )
     })?;
@@ -659,12 +634,11 @@ fn persist_changes(
         .system_config
         .update(&document.revision, changes, false)
         .map(|_| ())
-        .map_err(|error| {
+        .map_err(|_| {
             remote_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "REMOTE_ACCESS_CONFIG_WRITE_FAILED",
-                "无法保存远程访问配置，请检查配置文件权限",
-                &format!("Could not save remote access settings: {error:?}"),
+                "tron.remote_access.config_write_failed",
                 None,
             )
         })
@@ -719,14 +693,14 @@ fn pairing_uri(
     url.to_string()
 }
 
-fn normalize_public_base_url(value: &str) -> Result<String, String> {
+fn normalize_public_base_url(value: &str) -> Result<String, ()> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return Ok(String::new());
     }
-    let mut url = Url::parse(trimmed).map_err(|_| "the address is not a valid URL".to_owned())?;
+    let mut url = Url::parse(trimmed).map_err(|_| ())?;
     if !matches!(url.scheme(), "http" | "https") {
-        return Err("the address must use http or https".to_owned());
+        return Err(());
     }
     url.set_query(None);
     url.set_fragment(None);
@@ -1149,12 +1123,13 @@ fn persist_agent_changes(
 async fn service_status(State(state): State<AppState>, _local: LocalOnly) -> Response {
     refresh_lan_endpoint(&state).await;
     match state.remote_service() {
-        Some(service) => no_store(Json(ApiResponse::success(service.status_json().await)).into_response()),
+        Some(service) => {
+            no_store(Json(ApiResponse::success(service.status_json().await)).into_response())
+        }
         None => remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
-            "远程访问服务尚未初始化",
-            "Remote access service is not initialized",
+            "tron.remote_access.service_unavailable",
             None,
         ),
     }
@@ -1169,26 +1144,27 @@ async fn service_pairing(State(state): State<AppState>, _local: LocalOnly) -> Re
                 return remote_error(
                     StatusCode::CONFLICT,
                     "REMOTE_ACCESS_NOT_LISTENING",
-                    "远程访问尚未监听，请确认端口未被占用后重试",
-                    "Remote access is not listening; check the port and try again",
+                    "tron.remote_access.not_listening",
                     None,
                 );
             }
-            no_store(Json(ApiResponse::success(serde_json::json!({
-                "pairingUri": status.pairing_uri,
-                "pairingTicketExpiresAt": status.pairing_ticket_expires_at,
-                "transport": status.transport,
-                "nodeKeyFingerprint": status.node_key_fingerprint,
-                "baseUrl": status.base_url,
-                "lanBaseUrl": status.lan_base_url,
-                "publicBaseUrl": status.public_base_url,
-            }))).into_response())
+            no_store(
+                Json(ApiResponse::success(serde_json::json!({
+                    "pairingUri": status.pairing_uri,
+                    "pairingTicketExpiresAt": status.pairing_ticket_expires_at,
+                    "transport": status.transport,
+                    "nodeKeyFingerprint": status.node_key_fingerprint,
+                    "baseUrl": status.base_url,
+                    "lanBaseUrl": status.lan_base_url,
+                    "publicBaseUrl": status.public_base_url,
+                })))
+                .into_response(),
+            )
         }
         None => remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
-            "远程访问服务尚未初始化",
-            "Remote access service is not initialized",
+            "tron.remote_access.service_unavailable",
             None,
         ),
     }
@@ -1200,8 +1176,7 @@ async fn service_refresh_pairing(State(state): State<AppState>, _local: LocalOnl
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
-            "远程访问服务尚未初始化",
-            "Remote access service is not initialized",
+            "tron.remote_access.service_unavailable",
             None,
         );
     };
@@ -1210,29 +1185,30 @@ async fn service_refresh_pairing(State(state): State<AppState>, _local: LocalOnl
         return remote_error(
             StatusCode::CONFLICT,
             "REMOTE_ACCESS_NOT_LISTENING",
-            "远程访问尚未监听，请确认端口未被占用后重试",
-            "Remote access is not listening; check the port and try again",
+            "tron.remote_access.not_listening",
             None,
         );
     }
     match service.refresh_pairing().await {
         Ok(pairing) => {
             let status = service.status().await;
-            no_store(Json(ApiResponse::success(serde_json::json!({
-                "pairingUri": pairing.uri,
-                "pairingTicketExpiresAt": pairing.expires_at_ms,
-                "transport": pairing.transport,
-                "nodeKeyFingerprint": status.node_key_fingerprint,
-                "baseUrl": status.base_url,
-                "lanBaseUrl": status.lan_base_url,
-                "publicBaseUrl": status.public_base_url,
-            }))).into_response())
+            no_store(
+                Json(ApiResponse::success(serde_json::json!({
+                    "pairingUri": pairing.uri,
+                    "pairingTicketExpiresAt": pairing.expires_at_ms,
+                    "transport": pairing.transport,
+                    "nodeKeyFingerprint": status.node_key_fingerprint,
+                    "baseUrl": status.base_url,
+                    "lanBaseUrl": status.lan_base_url,
+                    "publicBaseUrl": status.public_base_url,
+                })))
+                .into_response(),
+            )
         }
-        Err(error) => remote_error(
+        Err(_) => remote_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "REMOTE_ACCESS_PAIRING_FAILED",
-            "无法刷新配对二维码",
-            &error.to_string(),
+            "tron.remote_access.pairing_failed",
             None,
         ),
     }
@@ -1243,8 +1219,7 @@ async fn service_devices(State(state): State<AppState>, _local: LocalOnly) -> Re
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
-            "远程访问服务尚未初始化",
-            "Remote access service is not initialized",
+            "tron.remote_access.service_unavailable",
             None,
         );
     };
@@ -1260,18 +1235,16 @@ async fn service_revoke_device(
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
-            "远程访问服务尚未初始化",
-            "Remote access service is not initialized",
+            "tron.remote_access.service_unavailable",
             None,
         );
     };
     match service.revoke_device(&device_id).await {
         Ok(()) => no_store(Json(ApiResponse::success(service.status_json().await)).into_response()),
-        Err(error) => remote_error(
+        Err(_) => remote_error(
             StatusCode::NOT_FOUND,
             "REMOTE_ACCESS_DEVICE_NOT_FOUND",
-            "设备不存在或已移除",
-            &error.to_string(),
+            "tron.remote_access.device_not_found",
             None,
         ),
     }
@@ -1286,18 +1259,16 @@ async fn service_delete_device(
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
-            "远程访问服务尚未初始化",
-            "Remote access service is not initialized",
+            "tron.remote_access.service_unavailable",
             None,
         );
     };
     match service.remove_device(&device_id).await {
         Ok(()) => no_store(Json(ApiResponse::success(service.status_json().await)).into_response()),
-        Err(error) => remote_error(
+        Err(_) => remote_error(
             StatusCode::NOT_FOUND,
             "REMOTE_ACCESS_DEVICE_NOT_FOUND",
-            "设备不存在或已移除",
-            &error.to_string(),
+            "tron.remote_access.device_not_found",
             None,
         ),
     }
@@ -1308,18 +1279,16 @@ async fn service_revoke_all(State(state): State<AppState>, _local: LocalOnly) ->
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
-            "远程访问服务尚未初始化",
-            "Remote access service is not initialized",
+            "tron.remote_access.service_unavailable",
             None,
         );
     };
     match service.revoke_all().await {
         Ok(()) => no_store(Json(ApiResponse::success(service.status_json().await)).into_response()),
-        Err(error) => remote_error(
+        Err(_) => remote_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "REMOTE_ACCESS_REVOKE_FAILED",
-            "无法吊销设备",
-            &error.to_string(),
+            "tron.remote_access.revoke_failed",
             None,
         ),
     }
@@ -1339,8 +1308,7 @@ async fn service_set_enabled(
         return remote_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "REMOTE_ACCESS_SERVICE_UNAVAILABLE",
-            "远程访问服务尚未初始化",
-            "Remote access service is not initialized",
+            "tron.remote_access.service_unavailable",
             None,
         );
     };
@@ -1350,11 +1318,10 @@ async fn service_set_enabled(
             crate::application::remote_service::ensure_remote_listener(state).await;
             no_store(Json(ApiResponse::success(status)).into_response())
         }
-        Err(error) => remote_error(
+        Err(_) => remote_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "REMOTE_ACCESS_SET_ENABLED_FAILED",
-            "无法切换远程访问",
-            &error.to_string(),
+            "tron.remote_access.set_enabled_failed",
             None,
         ),
     }
@@ -1363,25 +1330,24 @@ async fn service_set_enabled(
 fn remote_error(
     status: StatusCode,
     code: &'static str,
-    zh_message: &str,
-    en_message: &str,
+    message_key: &'static str,
     request: Option<&Request>,
 ) -> Response {
-    let english = request.is_some_and(|request| {
-        resolve_request_locale(
+    let locale = match request {
+        Some(request) => resolve_request_locale(
             request
                 .headers()
                 .get(header::ACCEPT_LANGUAGE)
                 .and_then(|value| value.to_str().ok()),
-        )
-        .to_ascii_lowercase()
-        .starts_with("en")
-    });
+        ),
+        // Settings endpoints without a request keep the documented zh-CN default.
+        None => tron_i18n::DEFAULT_LOCALE.as_str().to_owned(),
+    };
     (
         status,
         Json(ApiResponse::<EmptyData>::error(
             code,
-            if english { en_message } else { zh_message },
+            tron_i18n::translate(&locale, message_key),
         )),
     )
         .into_response()

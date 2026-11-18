@@ -10,6 +10,10 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
+fn budget_message(key: &'static str) -> String {
+    crate::shared::i18n_message::MessageText::new(key).encode()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct QualityBudget {
@@ -32,7 +36,9 @@ impl QualityBudget {
             || !(1000..=2_000_000).contains(&self.max_input_tokens)
             || !(30..=3600).contains(&self.max_duration_seconds)
         {
-            return Err(KnowledgeBaseError::Invalid("优化预算超出范围".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.quality.budget_out_of_range",
+            ));
         }
         Ok(())
     }
@@ -66,10 +72,10 @@ impl BudgetState {
     }
     pub fn check(&self) -> Result<(), String> {
         if self.token.is_cancelled() {
-            return Err("优化已取消".into());
+            return Err(budget_message("knowledge.quality.diagnostic.cancelled"));
         }
         if self.started.elapsed() > Duration::from_secs(self.budget.max_duration_seconds) {
-            return Err("优化达到时间预算，未发布候选索引".into());
+            return Err(budget_message("knowledge.quality.diagnostic.time_budget"));
         }
         Ok(())
     }
@@ -86,16 +92,18 @@ impl BudgetState {
         let _guard = self
             .admission
             .lock()
-            .map_err(|_| "Optimization budget unavailable")?;
+            .map_err(|_| budget_message("knowledge.quality.internal_failed"))?;
         let operations = self.operations.load(Ordering::SeqCst);
         let input = self.input_tokens.load(Ordering::SeqCst);
         if operations >= self.budget.max_model_operations {
-            return Err("优化达到模型调用预算，未发布候选索引".into());
+            return Err(budget_message(
+                "knowledge.quality.diagnostic.model_operation_budget",
+            ));
         }
         let next = input
             .checked_add(tokens)
             .filter(|n| *n <= self.budget.max_input_tokens)
-            .ok_or("优化达到预估输入量预算，未发布候选索引")?;
+            .ok_or_else(|| budget_message("knowledge.quality.diagnostic.input_budget"))?;
         self.operations.store(operations + 1, Ordering::SeqCst);
         self.input_tokens.store(next, Ordering::SeqCst);
         Ok(())
@@ -156,7 +164,7 @@ impl RagEmbeddingRuntime for QualityRuntime {
                     .map(|input| input.estimated_tokens())
                     .sum(),
             )?;
-            tokio::select! {_ = self.budget.token.cancelled()=>Err("优化已取消".into()),result=self.inner.embed_content_batch(call)=>result}
+            tokio::select! {_ = self.budget.token.cancelled()=>Err("knowledge.quality.diagnostic.cancelled".into()),result=self.inner.embed_content_batch(call)=>result}
         })
     }
     fn embed_batch<'a>(
@@ -167,7 +175,7 @@ impl RagEmbeddingRuntime for QualityRuntime {
     > {
         Box::pin(async move {
             self.budget.admit(call.inputs.clone())?;
-            tokio::select! {_ = self.budget.token.cancelled()=>Err("优化已取消".into()),result=self.inner.embed_batch(call)=>result}
+            tokio::select! {_ = self.budget.token.cancelled()=>Err("knowledge.quality.diagnostic.cancelled".into()),result=self.inner.embed_batch(call)=>result}
         })
     }
     fn embed<'a>(
@@ -226,7 +234,7 @@ impl RagSearchRuntime for QualityRuntime {
                 return Ok(vector);
             }
             self.budget.admit([call.input.clone()])?;
-            let vector = tokio::select! {_ = self.budget.token.cancelled()=>return Err("优化已取消".into()),result=self.inner.embed_for_retrieval(call,dimensions,run)=>result?};
+            let vector = tokio::select! {_ = self.budget.token.cancelled()=>return Err("knowledge.quality.diagnostic.cancelled".into()),result=self.inner.embed_for_retrieval(call,dimensions,run)=>result?};
             self.budget
                 .query_vectors
                 .lock()
@@ -245,7 +253,7 @@ impl RagSearchRuntime for QualityRuntime {
             let mut texts = call.documents.clone();
             texts.push(call.query.clone());
             self.budget.admit(texts)?;
-            tokio::select! {_ = self.budget.token.cancelled()=>Err("优化已取消".into()),result=self.inner.rerank(call)=>result}
+            tokio::select! {_ = self.budget.token.cancelled()=>Err("knowledge.quality.diagnostic.cancelled".into()),result=self.inner.rerank(call)=>result}
         })
     }
 }
@@ -258,7 +266,7 @@ impl RagGraphRuntime for QualityRuntime {
     > {
         Box::pin(async move {
             self.budget.admit([call.prompt.clone()])?;
-            tokio::select! {_ = self.budget.token.cancelled()=>Err("优化已取消".into()),result=self.inner.extract_graph(call)=>result}
+            tokio::select! {_ = self.budget.token.cancelled()=>Err("knowledge.quality.diagnostic.cancelled".into()),result=self.inner.extract_graph(call)=>result}
         })
     }
 }

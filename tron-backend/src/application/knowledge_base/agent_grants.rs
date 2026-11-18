@@ -6,11 +6,9 @@ impl KnowledgeBaseService {
         let agents = self
             .agents
             .all_platform_internal_agents()
-            .map_err(|error| KnowledgeBaseError::Storage(format!("{error:?}")))?;
+            .map_err(|error| KnowledgeBaseError::storage_detail(format!("{error:?}")))?;
         if !agents.iter().any(|record| record.agent_code == agent) {
-            return Err(KnowledgeBaseError::Invalid(
-                "请选择已定义的内部智能体".into(),
-            ));
+            return Err(KnowledgeBaseError::invalid("knowledge.base.agent_required"));
         }
         Ok(())
     }

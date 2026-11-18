@@ -64,15 +64,13 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         platform_defined: true,
         built_in: true,
     }];
-    for (agent_code, name, description, group_name, avatar_id) in [
-        (
-            "explore-agent",
-            "探索智能体",
-            "只读探索任务使用的内置智能体。",
-            "探索",
-            "fox",
-        ),
-    ] {
+    for (agent_code, name, description, group_name, avatar_id) in [(
+        "explore-agent",
+        "探索智能体",
+        "只读探索任务使用的内置智能体。",
+        "探索",
+        "fox",
+    )] {
         definitions.push(InternalAgentDefinition {
             enabled: true,
             agent_code: agent_code.to_owned(),

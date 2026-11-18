@@ -367,9 +367,10 @@ pub(super) fn read_catalog_model(
         });
     let first = matches.next();
     if matches.next().is_some() {
-        return Err(ModelProviderError::InvalidSelection(format!(
-            "ambiguous model selection {model_code}; specify upstream vendor and quality when applicable"
-        )));
+        return Err(ModelProviderError::InvalidSelection(
+            tron_i18n::Message::new("tron.model_provider.ambiguous_selection")
+                .arg("model_code", model_code),
+        ));
     }
     Ok(first)
 }

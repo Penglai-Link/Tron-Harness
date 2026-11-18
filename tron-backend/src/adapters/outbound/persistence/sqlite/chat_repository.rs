@@ -13,7 +13,6 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-mod archives;
 mod container;
 
 pub struct SqliteChatRepository {
@@ -430,25 +429,6 @@ impl SqliteChatRepository {
     }
 }
 impl ChatRepository for SqliteChatRepository {
-    fn archived_containers(
-        &mut self,
-        kind: crate::application::chat::ArchivedContainerKind,
-        workspace_code: Option<&str>,
-        offset: u32,
-        limit: u32,
-    ) -> Result<
-        (Vec<crate::application::chat::ArchivedContainer>, u64),
-        crate::application::chat::ArchiveError,
-    > {
-        self.read_archived_containers(kind, workspace_code, offset, limit)
-    }
-    fn restore_archived_container(
-        &mut self,
-        kind: crate::application::chat::ArchivedContainerKind,
-        code: &str,
-    ) -> Result<(), crate::application::chat::ArchiveError> {
-        self.restore_container_registration(kind, code)
-    }
     fn validate_annotation_sources(
         &mut self,
         session: &str,
@@ -591,11 +571,14 @@ impl ChatRepository for SqliteChatRepository {
             Ok(result)
         })
     }
-    /// Archived listing pushes filtering, ordering, counting and paging into
-    /// SQL so each page costs one read instead of replaying every session.
-    fn list_archived_sessions(
+    /// Management listing keeps filtering, counting and paging in SQL so the
+    /// settings page scales across every workspace at once.
+    fn list_managed_sessions(
         &mut self,
         workspace_code: Option<&str>,
+        status: Option<ChatSessionStatus>,
+        source_type: Option<ChatSessionSourceType>,
+        search: Option<&str>,
         offset: u32,
         limit: u32,
     ) -> Result<(Vec<ChatSession>, u64), ChatError> {
@@ -603,9 +586,23 @@ impl ChatRepository for SqliteChatRepository {
             self.framework().await?;
             let db = self.host.shared_database().await.map_err(chat_error)?;
             let workspace = workspace_code.map(str::to_owned);
-            let filter = "WHERE s.status IN ('Archived','ARCHIVED') \
-                 AND (?1 IS NULL OR l.workspace_code=?1) \
-                 AND substr(coalesce(json_extract(l.business_json,'$.source_code'),''),1,12) <> '__assistant:'";
+            let search = search.map(str::to_owned);
+            let status = status.map(|status| match status {
+                ChatSessionStatus::Active => "ACTIVE".to_string(),
+                ChatSessionStatus::Archived => "ARCHIVED".to_string(),
+            });
+            let source = source_type.map(|source| match source {
+                ChatSessionSourceType::Manual => "MANUAL".to_string(),
+                ChatSessionSourceType::Task => "TASK".to_string(),
+                ChatSessionSourceType::Automation => "AUTOMATION".to_string(),
+                ChatSessionSourceType::Terminal => "TERMINAL".to_string(),
+            });
+            let filter = "WHERE (?1 IS NULL OR l.workspace_code=?1) \
+                AND (?2 IS NULL OR upper(json_extract(s.record,'$.status'))=?2) \
+                AND (?3 IS NULL OR upper(json_extract(l.business_json,'$.source_type'))=?3) \
+                AND (?4 IS NULL OR json_extract(s.record,'$.title') LIKE '%'||?4||'%' COLLATE NOCASE) \
+                AND substr(coalesce(json_extract(l.business_json,'$.source_code'),''),1,12) <> '__assistant:' \
+                AND substr(coalesce(json_extract(l.business_json,'$.source_code'),''),1,10) <> '__knowledge:'";
             let rows = db
                 .call_read(move |c| -> Result<(Vec<SessionProjection>, u64), ChatError> {
                     let total: u64 = c
@@ -614,18 +611,25 @@ impl ChatRepository for SqliteChatRepository {
                                 "SELECT count(*) FROM workspace_session_links l \
                                  JOIN ef_sessions s ON s.id=l.session_id {filter}"
                             ),
-                            params![workspace],
+                            params![workspace, status, source, search],
                             |r| r.get(0),
                         )
                         .map_err(|_| ChatError::StorageFailure)?;
                     let mut statement = c
                         .prepare(&format!("{SESSION_PROJECTION_SQL} {filter} \
                             ORDER BY json_extract(s.record,'$.updated_at_ms') DESC, l.session_id DESC \
-                            LIMIT ?2 OFFSET ?3"))
+                            LIMIT ?5 OFFSET ?6"))
                         .map_err(|_| ChatError::StorageFailure)?;
                     let rows = statement
                         .query_map(
-                            params![workspace, i64::from(limit), i64::from(offset)],
+                            params![
+                                workspace,
+                                status,
+                                source,
+                                search,
+                                i64::from(limit),
+                                i64::from(offset)
+                            ],
                             session_row,
                         )
                         .map_err(|_| ChatError::StorageFailure)?
@@ -635,13 +639,12 @@ impl ChatRepository for SqliteChatRepository {
                 })
                 .await
                 .map_err(|_| ChatError::StorageFailure)?;
-            let total = rows.1;
             let items = rows
                 .0
                 .into_iter()
                 .map(chat_session_from_row)
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok((items, total))
+            Ok((items, rows.1))
         })
     }
     fn get_session(&mut self, id: &str) -> Result<ChatSession, ChatError> {
@@ -813,6 +816,78 @@ impl ChatRepository for SqliteChatRepository {
     ) -> Result<ChatContainerSnapshot, ChatError> {
         blocking(self.read_container_snapshot(container))
     }
+    fn update_managed_session_location(
+        &mut self,
+        id: &str,
+        target_workspace: &str,
+        project_code: Option<&str>,
+        working_directory_code: Option<&str>,
+        reference_code: &str,
+    ) -> Result<(), ChatError> {
+        let id = id.to_owned();
+        let target_workspace = target_workspace.to_owned();
+        let project = project_code.map(str::to_owned);
+        let working = working_directory_code.map(str::to_owned);
+        let reference = reference_code.to_owned();
+        blocking(async {
+            let db = self.host.shared_database().await.map_err(chat_error)?;
+            db.call(move |connection| {
+                let result = (|| -> Result<(), ChatError> {
+                    let tx = super::framework_storage::business_transaction(connection, rusqlite::TransactionBehavior::Immediate)
+                        .map_err(|_| ChatError::StorageFailure)?;
+                    let (link_json, status): (String, String) = tx.query_row(
+                        "SELECT l.business_json,json_extract(s.record,'$.status') FROM workspace_session_links l JOIN ef_sessions s ON s.id=l.session_id WHERE l.session_id=?1",
+                        [&id], |row| Ok((row.get(0)?, row.get(1)?)),
+                    ).optional().map_err(|_| ChatError::StorageFailure)?.ok_or(ChatError::SessionNotFound)?;
+                    if !matches!(status.as_str(), "Active" | "ACTIVE") { return Err(ChatError::SessionArchived); }
+                    let mut link: Link = serde_json::from_str(&link_json).map_err(|_| ChatError::StorageFailure)?;
+                    // The target workspace must exist and stay active.
+                    let workspace_active: bool = tx.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM workspaces WHERE workspace_code=?1 AND status='active')",
+                        [&target_workspace], |row| row.get(0),
+                    ).map_err(|_| ChatError::StorageFailure)?;
+                    if !workspace_active { return Err(ChatError::WorkspaceForbidden); }
+                    if let Some(code) = project.as_deref() {
+                        let exists: bool = tx.query_row(
+                            "SELECT EXISTS(SELECT 1 FROM projects WHERE project_code=?1 AND workspace_code=?2 AND status='ACTIVE')",
+                            params![code, target_workspace], |row| row.get(0),
+                        ).map_err(|_| ChatError::StorageFailure)?;
+                        if !exists { return Err(ChatError::ProjectInvalid); }
+                    }
+                    if let Some(code) = working.as_deref() {
+                        let exists: bool = tx.query_row(
+                            "SELECT EXISTS(SELECT 1 FROM directories WHERE directory_code=?1 AND workspace_code=?2 AND archived=0)",
+                            params![code, target_workspace], |row| row.get(0),
+                        ).map_err(|_| ChatError::StorageFailure)?;
+                        if !exists { return Err(ChatError::DirectoryInvalid); }
+                    }
+                    if let (Some(project), Some(directory)) = (project.as_deref(), working.as_deref()) {
+                        tx.execute("INSERT INTO topic_memos(project_code,notes,revision) VALUES (?1,'',0) ON CONFLICT(project_code) DO NOTHING", [project]).map_err(|_| ChatError::StorageFailure)?;
+                        let inserted = tx.execute(
+                            "INSERT INTO topic_references(reference_code,project_code,kind,target_code,connection_code,label,url) SELECT ?1,?2,'Directory',directory_code,'',display_name,NULL FROM directories WHERE directory_code=?3 ON CONFLICT(project_code,kind,target_code,connection_code) DO NOTHING",
+                            params![reference, project, directory],
+                        ).map_err(|_| ChatError::StorageFailure)?;
+                        if inserted != 0 { tx.execute("UPDATE topic_memos SET revision=revision+1 WHERE project_code=?1", [project]).map_err(|_| ChatError::StorageFailure)?; }
+                    }
+                    if link.project_code != project || link.workspace_code != target_workspace {
+                        link.app_code = None;
+                    }
+                    link.workspace_code = target_workspace.clone();
+                    link.project_code = project;
+                    link.directory_code = None;
+                    link.working_directory_code = working;
+                    let value = serde_json::to_string(&link).map_err(|_| ChatError::StorageFailure)?;
+                    // Rewrite the link row so the workspace index follows the move.
+                    tx.execute(
+                        "UPDATE workspace_session_links SET workspace_code=?2, business_json=?3 WHERE session_id=?1",
+                        params![id, target_workspace, value],
+                    ).map_err(|_| ChatError::StorageFailure)?;
+                    tx.commit().map_err(|_| ChatError::StorageFailure)
+                })();
+                Ok::<_, rusqlite::Error>(result)
+            }).await.map_err(|_| ChatError::StorageFailure)?
+        })
+    }
     fn mutate_container(
         &mut self,
         container: &ChatContainer,
@@ -969,11 +1044,17 @@ impl ChatRepository for SqliteChatRepository {
     fn artifacts_by_session(
         &mut self,
         session_code: &str,
-    ) -> Result<std::collections::BTreeMap<String, Vec<crate::domain::chat::ArtifactRecord>>, ChatError> {
+    ) -> Result<
+        std::collections::BTreeMap<String, Vec<crate::domain::chat::ArtifactRecord>>,
+        ChatError,
+    > {
         blocking(async {
             let mut by_run = std::collections::BTreeMap::new();
             for event in self.events(session_code, "tron.artifacts").await? {
-                let Some(run_code) = event.payload.get("runCode").and_then(|value| value.as_str())
+                let Some(run_code) = event
+                    .payload
+                    .get("runCode")
+                    .and_then(|value| value.as_str())
                 else {
                     continue;
                 };
@@ -981,7 +1062,8 @@ impl ChatRepository for SqliteChatRepository {
                     continue;
                 };
                 let parsed: Vec<crate::domain::chat::ArtifactRecord> =
-                    serde_json::from_value(records.clone()).map_err(|_| ChatError::StorageFailure)?;
+                    serde_json::from_value(records.clone())
+                        .map_err(|_| ChatError::StorageFailure)?;
                 by_run
                     .entry(run_code.to_owned())
                     .or_insert_with(Vec::new)

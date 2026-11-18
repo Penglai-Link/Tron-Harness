@@ -8,9 +8,21 @@ use eliteforge_agent_core::{
 
 use crate::application::agent::framework_runtime::ContextLayoutContributorInfo;
 
+/// Stable translation keys for one host-owned context block.
+///
+/// The catalog never carries display text: `block_metadata` answers with keys so
+/// the HTTP layout/presentation layer translates them with the request locale.
+/// Plugin-contributed blocks keep their own localized metadata instead.
+#[derive(Clone, Copy)]
+pub(crate) struct ContextBlockTextKeys {
+    pub display_name: &'static str,
+    pub description: &'static str,
+}
+
 pub(crate) struct ContextBlockCatalogEntry {
     pub metadata: ContextBlockMetadata,
     pub provider_id: Option<String>,
+    pub i18n: Option<ContextBlockTextKeys>,
 }
 
 /// The catalog is shared by layout controls and live/historical assembly presentation.
@@ -20,24 +32,27 @@ pub(crate) fn context_block_catalog(
 ) -> BTreeMap<String, ContextBlockCatalogEntry> {
     let mut catalog = HOST_BLOCKS
         .iter()
-        .map(|(id, ..)| {
+        .map(|block| {
             (
-                (*id).to_owned(),
+                block.id.to_owned(),
                 ContextBlockCatalogEntry {
-                    metadata: configured_context_block_metadata(id, providers)
+                    metadata: configured_context_block_metadata(block.id, providers)
                         .expect("declared host context block"),
                     provider_id: None,
+                    i18n: Some(block.text),
                 },
             )
         })
         .collect::<BTreeMap<_, _>>();
     // Plugin metadata wins, just as plugin reducers win during assembly.
     for contributor in contributors {
+        let i18n = host_block_text_keys(&contributor.block_id);
         catalog.insert(
             contributor.block_id,
             ContextBlockCatalogEntry {
                 metadata: contributor.metadata,
                 provider_id: Some(contributor.provider_id),
+                i18n,
             },
         );
     }
@@ -52,6 +67,7 @@ pub(crate) fn context_block_catalog(
                 ContextBlockCatalogEntry {
                     metadata: entry.metadata.clone(),
                     provider_id: entry.provider_id.clone(),
+                    i18n: entry.i18n,
                 },
             );
         }
@@ -64,12 +80,21 @@ pub(crate) fn native_context_block_metadata(id: &str) -> Option<ContextBlockMeta
     configured_context_block_metadata(id, &ContextProvidersConfig::default())
 }
 
+/// Translation keys for a host-owned block, or `None` for plugin blocks.
+pub(crate) fn host_block_text_keys(id: &str) -> Option<ContextBlockTextKeys> {
+    HOST_BLOCKS
+        .iter()
+        .find(|block| block.id == id)
+        .map(|block| block.text)
+}
+
 fn configured_context_block_metadata(
     id: &str,
     providers: &ContextProvidersConfig,
 ) -> Option<ContextBlockMetadata> {
-    let (_, name, description, zh_name, zh_description, compression) =
-        HOST_BLOCKS.iter().find(|(block, ..)| *block == id)?;
+    let block = HOST_BLOCKS.iter().find(|block| block.id == id)?;
+    let text = block.text;
+    let compression = &block.compression;
     let mode = match id {
         "current_session_history" => ContextBlockUpdateMode::Append,
         "seed_prompt_prefix" | "agent.directory-guidance" | "assistant.guidance" => {
@@ -77,12 +102,21 @@ fn configured_context_block_metadata(
         }
         _ => ContextBlockUpdateMode::Replace,
     };
+    // The base text is the stable resource key, never translated here: the
+    // display layer resolves it with the request locale, and persisted layouts
+    // only ever store block ids.
     Some(
-        ContextBlockMetadata::new(*name, *description)
-            .with_locale("zh-CN", *zh_name, *zh_description)
+        ContextBlockMetadata::new(text.display_name, text.description)
             .with_update_mode(mode)
             .with_compression(compression.resolve(id, providers)),
     )
+}
+
+/// One host-owned context block: stable id, translation keys and reduction policy.
+struct HostBlock {
+    id: &'static str,
+    text: ContextBlockTextKeys,
+    compression: CompressionSource,
 }
 
 // Each native source declares its semantics with its other presentation metadata.
@@ -118,149 +152,149 @@ impl CompressionSource {
     }
 }
 
-const HOST_BLOCKS: &[(&str, &str, &str, &str, &str, CompressionSource)] = &[
-    (
-        "seed_prompt_prefix",
-        "System prompt",
-        "Base system and developer instructions, including the usage rules supplied by enabled capabilities.",
-        "系统提示词",
-        "基础系统提示、开发者指令，以及已启用能力提供的使用规则。",
-        CompressionSource::Keep,
-    ),
-    (
-        "conversation_history_summary",
-        "Conversation summary",
-        "A compressed summary of earlier conversation turns, retaining decisions, progress and information needed to continue.",
-        "对话历史摘要",
-        "较早对话的压缩摘要，保留决策、进展及继续任务所需的信息。",
-        CompressionSource::HistorySummary,
-    ),
-    (
-        "current_session_history",
-        "Conversation history",
-        "Recent user and assistant messages, model reasoning retained by the provider, tool calls and their results.",
-        "对话历史",
-        "近期用户与助手消息、供应商保留的推理内容，以及工具调用和执行结果。",
-        CompressionSource::History,
-    ),
-    (
-        "current_session_working_state",
-        "Working state",
-        "The current session's goal, plan, tasks, progress and other mutable state used to resume work.",
-        "工作状态",
-        "当前会话的目标、计划、任务、进度及恢复工作所需的动态状态。",
-        CompressionSource::Working,
-    ),
-    (
-        "runtime_identity",
-        "Runtime identity",
-        "The current agent or PersonAI's name, identity confirmation state, soul settings and interface language.",
-        "运行身份",
-        "当前智能体或 PersonAI 的名称、身份确认状态、灵魂设定及界面语言。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "assistant_onboarding",
-        "PersonAI onboarding",
-        "The PersonAI's initialization state, name confirmation and pending interaction; empty once initialization is complete.",
-        "PersonAI 唤醒配置",
-        "PersonAI 的初始化状态、名称确认情况及待处理交互；初始化完成后为空。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "tool_domains",
-        "Tool domains",
-        "The authorized tool-domain catalog and instructions for discovering the tools needed for a task. Full tool schemas are counted separately.",
-        "工具领域",
-        "已授权工具领域的目录，以及按任务发现工具的说明；完整工具参数定义单独统计。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "agent_directory",
-        "Agent directory",
-        "Authorized agents that can receive delegated tasks, with their codes, names and responsibilities.",
-        "智能体目录",
-        "可委派任务的已授权智能体，包括标识、名称和职责。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "page_context",
-        "Page context",
-        "The latest user input's page location snapshot: title, path, workspace and selected object. An input without a page snapshot clears this block.",
-        "页面上下文",
-        "最新一条用户消息发送时的页面位置快照，包括标题、路径、工作区和选中对象；该条消息没有页面快照时清空本块。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "application_context",
-        "Application execution context",
-        "Selected applications, working directories, Git branches, execution environment and loaded project instructions such as AGENTS.md.",
-        "应用执行上下文",
-        "选中的应用、工作目录、Git 分支、执行环境，以及已加载的 AGENTS.md 等项目指令。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "topic_memo",
-        "Topic notes and references",
-        "The current topic's notes and resource references, refreshed for each model request.",
-        "主题说明与引用",
-        "当前主题的说明和资源引用，在每次模型请求时刷新。",
-        CompressionSource::Keep,
-    ),
-    (
-        "long_term_memory",
-        "Long-term memory",
-        "Relevant enabled memories, with original sources and retrieval diagnostics.",
-        "长期记忆",
-        "按相关性召回的启用记忆，展示原始来源、实际用量和检索异常。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "knowledge_base",
-        "Knowledge-base information",
-        "Knowledge-base information and retrieved reference material available within the current agent's authorization scope.",
-        "知识库信息",
-        "当前智能体权限范围内可用的知识库信息，以及检索得到的参考资料。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "assistant_environment",
-        "PersonAI environment",
-        "The PersonAI's user and workspace, selected applications, working directory and execution scope.",
-        "PersonAI 运行环境",
-        "PersonAI 所属用户和工作区、选中的应用、工作目录及执行范围。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "assistant_wakeup",
-        "Current trigger",
-        "The event, notification or scheduled task that triggered this PersonAI run, and its related input.",
-        "本轮触发信息",
-        "触发本轮 PersonAI 运行的事件、通知或定时任务，以及相关输入。",
-        CompressionSource::DataPolicy,
-    ),
-    (
-        "agent.directory-guidance",
-        "Agent directory instructions",
-        "Rules for selecting authorized agents and delegating tasks through the agent directory.",
-        "智能体目录指令",
-        "通过智能体目录选择已授权智能体并委派任务的规则。",
-        CompressionSource::Keep,
-    ),
-    (
-        "assistant.guidance",
-        "PersonAI instructions",
-        "Instructions governing PersonAI initialization, background work, progress and notifications.",
-        "PersonAI 指令",
-        "管理 PersonAI 初始化、后台工作、进展汇报和通知的规则。",
-        CompressionSource::Keep,
-    ),
-    (
-        "protocol",
-        "Tool definitions",
-        "Names, descriptions and parameter schemas of the tools sent to the model. These protocol tokens are deducted before allocating context-block shares.",
-        "工具定义",
-        "实际发送给模型的工具名称、描述和参数结构。其协议开销先从输入窗口扣除，再按比例分配各上下文块预算。",
-        CompressionSource::Unspecified,
-    ),
+const HOST_BLOCKS: &[HostBlock] = &[
+    HostBlock {
+        id: "seed_prompt_prefix",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.seed_prompt_prefix.name",
+            description: "agent_runtime.context.block.seed_prompt_prefix.description",
+        },
+        compression: CompressionSource::Keep,
+    },
+    HostBlock {
+        id: "conversation_history_summary",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.conversation_history_summary.name",
+            description: "agent_runtime.context.block.conversation_history_summary.description",
+        },
+        compression: CompressionSource::HistorySummary,
+    },
+    HostBlock {
+        id: "current_session_history",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.current_session_history.name",
+            description: "agent_runtime.context.block.current_session_history.description",
+        },
+        compression: CompressionSource::History,
+    },
+    HostBlock {
+        id: "current_session_working_state",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.current_session_working_state.name",
+            description: "agent_runtime.context.block.current_session_working_state.description",
+        },
+        compression: CompressionSource::Working,
+    },
+    HostBlock {
+        id: "runtime_identity",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.runtime_identity.name",
+            description: "agent_runtime.context.block.runtime_identity.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "assistant_onboarding",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.assistant_onboarding.name",
+            description: "agent_runtime.context.block.assistant_onboarding.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "tool_domains",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.tool_domains.name",
+            description: "agent_runtime.context.block.tool_domains.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "agent_directory",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.agent_directory.name",
+            description: "agent_runtime.context.block.agent_directory.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "page_context",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.page_context.name",
+            description: "agent_runtime.context.block.page_context.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "application_context",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.application_context.name",
+            description: "agent_runtime.context.block.application_context.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "topic_memo",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.topic_memo.name",
+            description: "agent_runtime.context.block.topic_memo.description",
+        },
+        compression: CompressionSource::Keep,
+    },
+    HostBlock {
+        id: "long_term_memory",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.long_term_memory.name",
+            description: "agent_runtime.context.block.long_term_memory.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "knowledge_base",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.knowledge_base.name",
+            description: "agent_runtime.context.block.knowledge_base.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "assistant_environment",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.assistant_environment.name",
+            description: "agent_runtime.context.block.assistant_environment.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "assistant_wakeup",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.assistant_wakeup.name",
+            description: "agent_runtime.context.block.assistant_wakeup.description",
+        },
+        compression: CompressionSource::DataPolicy,
+    },
+    HostBlock {
+        id: "agent.directory-guidance",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.agent_directory_guidance.name",
+            description: "agent_runtime.context.block.agent_directory_guidance.description",
+        },
+        compression: CompressionSource::Keep,
+    },
+    HostBlock {
+        id: "assistant.guidance",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.assistant_guidance.name",
+            description: "agent_runtime.context.block.assistant_guidance.description",
+        },
+        compression: CompressionSource::Keep,
+    },
+    HostBlock {
+        id: "protocol",
+        text: ContextBlockTextKeys {
+            display_name: "agent_runtime.context.block.protocol.name",
+            description: "agent_runtime.context.block.protocol.description",
+        },
+        compression: CompressionSource::Unspecified,
+    },
 ];

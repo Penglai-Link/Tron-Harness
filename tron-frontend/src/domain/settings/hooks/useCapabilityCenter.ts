@@ -23,7 +23,8 @@ import {
 export type CenterAction =
   | { kind: "install"; releaseId: string; installedVersion: string | null }
   | { kind: "import"; file: File }
-  | { kind: "toggle" | "uninstall"; pack: CenterPack };
+  | { kind: "toggle"; pack: CenterPack }
+  | { kind: "uninstall"; pack: CenterPack; force?: boolean };
 
 export function useCapabilityCenter() {
   const { t, i18n } = useTranslation("pages");
@@ -84,7 +85,7 @@ export function useCapabilityCenter() {
         return installCenterRelease(action.releaseId, action.installedVersion);
       if (action.kind === "import") return importCapabilityPack(action.file);
       if (action.kind === "uninstall")
-        return uninstallCapabilityPack(action.pack.packId);
+        return uninstallCapabilityPack(action.pack.packId, action.force);
       return setCapabilityPackEnabled(action.pack.packId, !action.pack.enabled);
     },
     onSuccess: (_, action) => {
@@ -116,13 +117,13 @@ export function useCapabilityCenter() {
     },
   });
   const execute = async (action: CenterAction) => {
-    if (lock.current) return false;
+    if (lock.current) return { ok: false as const, error: null };
     lock.current = true;
     try {
       await mutation.mutateAsync(action);
-      return true;
-    } catch {
-      return false;
+      return { ok: true as const };
+    } catch (error) {
+      return { ok: false as const, error };
     } finally {
       lock.current = false;
     }

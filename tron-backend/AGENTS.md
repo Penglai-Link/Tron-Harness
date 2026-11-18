@@ -9,3 +9,11 @@
 - `chat_ask_user` 的答案在上一轮运行释放会话前保持待处理状态；续跑时把答案摘要持久化到对话记录。
 - 创建 PersonAI Rust SDK 客户端时设置 `X-Product-Code`，让普通请求和 SSE 请求继承同一产品标识。
 - `cargo fmt` 可能格式化无关文件；检查差异，只保留本次任务范围内的改动。
+
+## 国际化（rust-i18n）
+
+- 统一入口是 `crates/i18n`（包名 `tron-i18n`）：`tron_i18n::t!(key, locale = locale)`；业务 crate 不要直接依赖或调用 `rust_i18n::`。
+- 所有面向用户的文本必须使用稳定、语义化的 Key，禁止在业务代码内硬编码文案，包括 `locale.text("中文", "English")`、`if english { "..." } else { "..." }` 以及按 `SupportedLocale` 分支写死的字符串。
+- 翻译资源统一在 `locales/*.yml`；新增文案必须同时补齐 `zh-CN` 与 `en`，并在提交前运行 `make be-i18n-check`（CI 会执行同一检查）。
+- 会话/请求相关文案显式传入 locale：请求用 `Accept-Language` 解析出的值，Agent 运行用 `AgentRunContext.locale` 或运行扩展里的 `tron_i18n::Locale`。不要依赖进程级全局语言设置。
+- 风险识别、错误码、工具状态等基础能力返回结构化类型（如 `RiskReason`），展示层再翻译；语言判断不得进入领域逻辑。

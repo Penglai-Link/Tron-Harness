@@ -117,62 +117,44 @@ pub async fn delete(
     }
 }
 fn error_response(error: AgentManagementError, locale: &str) -> Response {
-    let zh = locale.starts_with("zh");
-    let (status, code, message) = match error {
+    let (status, code, message_key) = match error {
         AgentManagementError::InternalAgentCodeInvalid => (
             StatusCode::BAD_REQUEST,
             "SYSTEM_AGENT_CODE_INVALID",
-            if zh {
-                "标识须为 1–64 位小写字母、数字、连字符或下划线，并以字母开头"
-            } else {
-                "Use 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter"
-            },
+            "agents.system_agent.code_invalid",
         ),
         AgentManagementError::InternalAgentCodeConflict => (
             StatusCode::CONFLICT,
             "SYSTEM_AGENT_CODE_CONFLICT",
-            if zh {
-                "Agent 标识已被使用"
-            } else {
-                "Agent code is already in use"
-            },
+            "agents.system_agent.code_conflict",
         ),
         AgentManagementError::InternalAgentDefinitionInvalid => (
             StatusCode::BAD_REQUEST,
             "SYSTEM_AGENT_CONFIG_INVALID",
-            if zh {
-                "请检查名称、基础 Agent、模型 ID、思考强度和头像配置；Fast 模式仅支持 Codex"
-            } else {
-                "Check the name, base Agent, model ID, reasoning effort and avatar; Fast mode is only available for Codex"
-            },
+            "agents.system_agent.config_invalid",
         ),
         AgentManagementError::BuiltinAgentReadOnly => (
             StatusCode::BAD_REQUEST,
             "SYSTEM_AGENT_BASE_READ_ONLY",
-            if zh {
-                "扫描得到的基础 Agent 不可修改或删除，请新建独立配置"
-            } else {
-                "Scanned base Agents cannot be edited or deleted; create a separate configuration"
-            },
+            "agents.system_agent.base_read_only",
         ),
         AgentManagementError::SystemAgentNotFound => (
             StatusCode::NOT_FOUND,
             "SYSTEM_AGENT_NOT_FOUND",
-            if zh {
-                "系统 Agent 不存在"
-            } else {
-                "System Agent was not found"
-            },
+            "agents.system_agent.not_found",
         ),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "SYSTEM_AGENT_STORAGE_FAILED",
-            if zh {
-                "无法保存系统 Agent 配置"
-            } else {
-                "Could not save system Agent configuration"
-            },
+            "agents.system_agent.storage_failed",
         ),
     };
-    (status, Json(ApiResponse::<EmptyData>::error(code, message))).into_response()
+    (
+        status,
+        Json(ApiResponse::<EmptyData>::error(
+            code,
+            tron_i18n::t!(message_key, locale = locale),
+        )),
+    )
+        .into_response()
 }

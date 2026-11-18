@@ -1,0 +1,806 @@
+# Agent, assistant, task, skill, memory, model, navigation and account surfaces.
+#
+# Format: rust-i18n `_version: 2`; one flat dotted key per message with both
+# supported locales. Keys prefixed `tron.` are stable display-layer keys that
+# match the `message_key` of application/domain error descriptors; the rest are
+# keys owned by the inbound HTTP adapters. Never embed user-facing text in Rust
+# sources.
+_version: 2
+
+# --- Agent management descriptors (AgentManagementError.message_key) ---
+tron.agent.builtin_read_only:
+  en: "Built-in agent definitions are read-only"
+  zh-CN: "内置智能体定义为只读"
+
+tron.agent.platform_read_only:
+  en: "Platform agents can only be deleted in platform settings"
+  zh-CN: "平台智能体只能在平台设置中删除"
+
+tron.agent.group_invalid:
+  en: "Group names must contain 1–60 characters; select an existing group in this scope"
+  zh-CN: "分组名称为 1–60 个字符，且必须选择当前范围内已有的分组"
+
+tron.agent.tool_permission_invalid:
+  en: "Invalid tool permission configuration; check tool codes and duplicates"
+  zh-CN: "工具权限配置无效，请检查工具编码和重复项"
+
+tron.agent.loop_invalid:
+  en: "Invalid loop nodes, dependencies, branch conditions or concurrency"
+  zh-CN: "Loop 配置无效，请检查节点、依赖、分支和并行限制"
+
+tron.agent.loop_not_found:
+  en: "Loop not found"
+  zh-CN: "Loop 不存在"
+
+tron.agent.loop_conflict:
+  en: "Loop already exists or version changed; refresh and retry"
+  zh-CN: "Loop 已存在或版本已变化，请刷新后重试"
+
+tron.agent.loop_in_use:
+  en: "Loop is referenced by an agent and cannot be deleted"
+  zh-CN: "Loop 已被智能体引用，无法删除"
+
+tron.agent.code_invalid:
+  en: "Code must contain 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter"
+  zh-CN: "编码为 1–64 位，以小写字母开头，仅支持小写字母、数字、连字符和下划线"
+
+tron.agent.code_conflict:
+  en: "Agent code is already in use; choose another code"
+  zh-CN: "智能体编码已被使用，请更换编码"
+
+tron.agent.definition_invalid:
+  en: "Name must contain 1 to 100 characters; role prompt must not exceed 64 KB; select a built-in avatar"
+  zh-CN: "名称为 1–100 个字符，指令不超过 64 KB，头像必须从内置列表选择"
+
+tron.agent.internal_not_found:
+  en: "Internal agent not found"
+  zh-CN: "内部智能体不存在"
+
+tron.agent.workspace_invalid:
+  en: "Select an active workspace"
+  zh-CN: "请选择有效的工作空间"
+
+tron.agent.policy_invalid:
+  en: "Invalid agent policy or execution limits"
+  zh-CN: "智能体策略或运行限制无效"
+
+tron.agent.tool_unknown:
+  en: "Unknown tool"
+  zh-CN: "工具不存在"
+
+tron.agent.tool_unavailable:
+  en: "Selected tool is no longer available"
+  zh-CN: "工具已不可用，请重新选择"
+
+tron.agent.mcp_unavailable:
+  en: "Selected MCP server is no longer available"
+  zh-CN: "MCP 服务已不可用，请重新选择"
+
+tron.agent.storage_failed:
+  en: "Could not save agent configuration"
+  zh-CN: "智能体配置保存失败"
+
+# --- Agent invocation and run history ---
+agents.agent.prompt_required:
+  en: "prompt is required"
+  zh-CN: "请填写提示词"
+
+agents.agent.workspace_required:
+  en: "workspaceCode is required"
+  zh-CN: "必须提供工作空间编码"
+
+agents.agent.workspace_invalid:
+  en: "workspace must reference an active workspace"
+  zh-CN: "工作空间必须是已启用的工作空间"
+
+agents.agent.model_required:
+  en: "model config is required"
+  zh-CN: "请选择模型"
+
+agents.agent.history_storage_failed:
+  en: "agent run history storage failed"
+  zh-CN: "智能体运行历史存储失败"
+
+agents.agent.run_already_active:
+  en: "session already has an active agent run"
+  zh-CN: "会话已有正在运行的智能体任务"
+
+agents.agent.run_stopped:
+  en: "agent run was stopped"
+  zh-CN: "智能体运行已停止"
+
+agents.agent.runtime_secret_untrusted:
+  en: "Sensitive runtime variable delivery is not trusted"
+  zh-CN: "运行期敏感变量传递不受信任"
+
+agents.agent.max_steps_exceeded:
+  en: "agent run exceeded max steps"
+  zh-CN: "智能体运行超过最大步数"
+
+agents.agent.max_tool_calls_exceeded:
+  en: "agent run exceeded max tool calls"
+  zh-CN: "智能体运行超过最大工具调用次数"
+
+agents.agent.run_not_found:
+  en: "agent run was not found"
+  zh-CN: "智能体运行不存在"
+
+agents.agent.management_storage_failed:
+  en: "agent management storage operation failed"
+  zh-CN: "智能体管理存储操作失败"
+
+agents.agent.management_system_agent_not_found:
+  en: "system agent was not found"
+  zh-CN: "系统智能体不存在"
+
+agents.agent.management_system_agent_unavailable:
+  en: "system agent is unavailable on the current machine"
+  zh-CN: "系统智能体在当前机器上不可用"
+
+# --- AGUI presentation replay ---
+agents.agui.stream_key_required:
+  en: "stream key is required"
+  zh-CN: "流标识不能为空"
+
+agents.agui.replay_read_failed:
+  en: "agent presentation replay is unavailable"
+  zh-CN: "展示回放暂时无法读取"
+
+agents.agui.replay_write_failed:
+  en: "agent presentation replay could not be saved"
+  zh-CN: "展示回放未能保存"
+
+agents.agui.replay_incomplete:
+  en: "agent presentation replay is incomplete"
+  zh-CN: "展示回放不完整，执行结果会单独报告"
+
+# --- Agent catalog and policy handlers ---
+agents.tool.not_found:
+  en: "tool was not found in platform catalog"
+  zh-CN: "平台工具目录中不存在该工具"
+
+agents.runtime.not_found:
+  en: "runtime adapter capability was not found"
+  zh-CN: "未找到运行时适配器能力"
+
+agents.policy.tool_assignment_mode_invalid:
+  en: "invalid tool assignment mode"
+  zh-CN: "工具分配模式无效"
+
+agents.policy.mcp_access_mode_invalid:
+  en: "invalid MCP access mode"
+  zh-CN: "MCP 访问模式无效"
+
+agents.tool.pack_disabled:
+  en: "Capability pack %{pack} is disabled"
+  zh-CN: "能力包 %{pack} 已禁用"
+
+# --- System Agent profiles ---
+agents.system_agent.code_invalid:
+  en: "Use 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter"
+  zh-CN: "标识须为 1–64 位小写字母、数字、连字符或下划线，并以字母开头"
+
+agents.system_agent.code_conflict:
+  en: "Agent code is already in use"
+  zh-CN: "Agent 标识已被使用"
+
+agents.system_agent.config_invalid:
+  en: "Check the name, base Agent, model ID, reasoning effort and avatar; Fast mode is only available for Codex"
+  zh-CN: "请检查名称、基础 Agent、模型 ID、思考强度和头像配置；Fast 模式仅支持 Codex"
+
+agents.system_agent.base_read_only:
+  en: "Scanned base Agents cannot be edited or deleted; create a separate configuration"
+  zh-CN: "扫描得到的基础 Agent 不可修改或删除，请新建独立配置"
+
+agents.system_agent.not_found:
+  en: "System Agent was not found"
+  zh-CN: "系统 Agent 不存在"
+
+agents.system_agent.storage_failed:
+  en: "Could not save system Agent configuration"
+  zh-CN: "无法保存系统 Agent 配置"
+
+# --- Assistant (PersonAI) descriptors ---
+tron.assistant.not_found:
+  en: "PersonAI or related record was not found"
+  zh-CN: "PersonAI 或关联记录不存在"
+
+tron.assistant.request_invalid:
+  en: "PersonAI configuration or request is invalid"
+  zh-CN: "PersonAI 配置或请求无效"
+
+tron.assistant.state_changed:
+  en: "PersonAI state changed; refresh and retry"
+  zh-CN: "PersonAI 状态已变化，请刷新后重试"
+
+tron.assistant.task_completed:
+  en: "A completed task cannot be cancelled"
+  zh-CN: "已完成的任务不能取消"
+
+tron.assistant.task_has_active_subtasks:
+  en: "Resolve unarchived subtasks before cancelling this task"
+  zh-CN: "取消任务前请先处理未归档的子任务"
+
+tron.assistant.storage_failed:
+  en: "PersonAI storage operation failed"
+  zh-CN: "PersonAI 存储操作失败"
+
+tron.assistant.runtime_failed:
+  en: "PersonAI execution failed; inspect its work history"
+  zh-CN: "PersonAI 运行失败，请查看工作记录"
+
+# --- Task execution ---
+tron.task.not_found:
+  en: "Task was not found"
+  zh-CN: "任务不存在"
+
+tron.task.workspace_required:
+  en: "workspaceCode is required"
+  zh-CN: "必须提供工作空间编码"
+
+tron.task.workspace_invalid:
+  en: "Task workspace must reference an active workspace"
+  zh-CN: "任务工作空间必须是已启用的工作空间"
+
+tron.task.parent_invalid:
+  en: "Parent task must exist in the same active workspace"
+  zh-CN: "父任务必须位于同一已启用工作空间"
+
+tron.task.assignee_invalid:
+  en: "Task assignees must be effective users in the task workspace"
+  zh-CN: "任务负责人必须是工作空间中的有效用户"
+
+tron.task.app_invalid:
+  en: "Task apps must reference active apps in the task workspace"
+  zh-CN: "任务应用必须是工作空间中的已启用应用"
+
+tron.task.active_subtask_exists:
+  en: "Archive active subtasks before archiving the parent task"
+  zh-CN: "归档父任务前请先归档进行中的子任务"
+
+tron.task.archived_invalid:
+  en: "Restore archived task before modifying it"
+  zh-CN: "修改已归档任务前请先恢复任务"
+
+tron.task.status_flow_invalid:
+  en: "Task status is unavailable in the current task flow"
+  zh-CN: "任务状态不属于当前工作流"
+
+tron.task.flow_not_found:
+  en: "Task flow was not found"
+  zh-CN: "任务流不存在"
+
+tron.task.flow_code_conflict:
+  en: "Task flow code already exists"
+  zh-CN: "任务流编码已存在"
+
+tron.task.flow_in_use:
+  en: "Task flow is assigned to a workspace or task"
+  zh-CN: "任务流已分配给工作空间或任务"
+
+tron.task.flow_switch_requires_closed_tasks:
+  en: "Close every task before switching the task flow"
+  zh-CN: "切换任务流前必须关闭工作空间中的所有任务"
+
+tron.task.request_invalid:
+  en: "Task request is invalid"
+  zh-CN: "任务请求无效"
+
+tron.task.storage_failed:
+  en: "Task storage operation failed"
+  zh-CN: "任务存储操作失败"
+
+tron.task.prompt_render_failed:
+  en: "Task execution prompt could not be rendered"
+  zh-CN: "任务执行提示词无法渲染"
+
+tasks.session_title:
+  en: "Task: %{title}"
+  zh-CN: "任务：%{title}"
+
+tasks.execution_started:
+  en: "Task execution started."
+  zh-CN: "任务执行已开始。"
+
+# --- Skills ---
+tron.skill.searchqueryrequired:
+  en: "search query is required"
+  zh-CN: "搜索内容不能为空"
+
+tron.skill.sourcerefrequired:
+  en: "sourceRef is required"
+  zh-CN: "技能来源不能为空"
+
+tron.skill.skillnamerequired:
+  en: "skillName is required"
+  zh-CN: "技能名称不能为空"
+
+tron.skill.invalidagent:
+  en: "internal agent was not found"
+  zh-CN: "内部 Agent 不存在"
+
+tron.skill.unavailable:
+  en: "skill is unavailable"
+  zh-CN: "技能不可分配：所属能力包已禁用或资源不存在"
+
+tron.skill.notfound:
+  en: "skill was not found"
+  zh-CN: "技能不存在"
+
+tron.skill.duplicateskill:
+  en: "skill name conflicts with an installed skill"
+  zh-CN: "技能名称与已安装技能冲突"
+
+tron.skill.invalidregistrypath:
+  en: "invalid skill registry path"
+  zh-CN: "技能目录无效"
+
+tron.skill.storagefailure:
+  en: "skill storage operation failed"
+  zh-CN: "技能存储操作失败"
+
+tron.skill.commandfailed:
+  en: "skills command execution failed"
+  zh-CN: "技能安装命令执行失败"
+
+tron.skill.operation_failed:
+  en: "Skill operation failed"
+  zh-CN: "技能操作失败"
+
+skills.pack.disabled_reason:
+  en: "Capability pack %{pack} is disabled"
+  zh-CN: "所属能力包 %{pack} 已禁用"
+
+# --- Skill candidates (assistant memory workflow) ---
+tron.assistant_memory.not_found:
+  en: "Record not found"
+  zh-CN: "记录不存在"
+
+tron.assistant_memory.conflict:
+  en: "The artifact or installed skill changed; refresh and review again"
+  zh-CN: "制品或已安装技能已变更，请刷新后重新审核"
+
+tron.assistant_memory.busy:
+  en: "Memory session is already running"
+  zh-CN: "记忆会话正在运行"
+
+tron.assistant_memory.invalid:
+  en: "Invalid memory or Skill operation"
+  zh-CN: "记忆或技能操作无效"
+
+tron.assistant_memory.creator_required:
+  en: "Install and enable skill-creator first"
+  zh-CN: "请先安装并启用 skill-creator"
+
+tron.assistant_memory.storage:
+  en: "Memory workflow storage failed"
+  zh-CN: "记忆工作流存储失败"
+
+tron.assistant_memory.installation:
+  en: "Approved Skill installation failed"
+  zh-CN: "已批准技能安装失败"
+
+# --- Memory ---
+tron.memory.invalid:
+  en: "Invalid memory content, scope or pagination"
+  zh-CN: "记忆内容、范围或分页参数无效"
+
+tron.memory.not_found:
+  en: "Memory not found"
+  zh-CN: "记忆不存在"
+
+tron.memory.forbidden:
+  en: "Memory scope is not accessible"
+  zh-CN: "无权访问此记忆范围"
+
+tron.memory.conflict:
+  en: "Memory changed or contains conflicting content; refresh before editing"
+  zh-CN: "记忆已变更或存在不同内容，请刷新后重新编辑"
+
+tron.memory.index:
+  en: "Memory index is unavailable"
+  zh-CN: "记忆索引暂不可用"
+
+tron.memory.storage:
+  en: "Could not access memory storage"
+  zh-CN: "记忆存储失败"
+
+# --- Provider models and speech input ---
+models.handler.load_failed:
+  en: "Could not load provider models."
+  zh-CN: "无法加载供应商模型。"
+
+models.router.embedding_label:
+  en: "Embedding Automatic Routing"
+  zh-CN: "向量自动路由"
+
+models.router.rerank_label:
+  en: "Rerank Automatic Routing"
+  zh-CN: "重排自动路由"
+
+models.router.source_label:
+  en: "Automatic router"
+  zh-CN: "自动路由器"
+
+tron.speech.invalid_audio:
+  en: "Audio is empty, unsupported, or exceeds 8 MB."
+  zh-CN: "音频为空、格式不支持或超过 8 MB。"
+
+tron.speech.unavailable:
+  en: "No model is available for speech recognition. Check the automatic router."
+  zh-CN: "语音识别自动路由没有可用模型，请检查路由配置。"
+
+tron.speech.provider_failed:
+  en: "Transcription failed. Try again or check the provider configuration."
+  zh-CN: "语音识别失败，请稍后重试或检查供应商配置。"
+
+tron.speech.unsupported_selection:
+  en: "Person-AI transcription cannot select an individual model. Refresh the catalog and allow all available Person-AI speech recognition models, or use a provider that supports model selection."
+  zh-CN: "Person-AI 转写接口不支持指定单个模型。请刷新模型目录，并选择全部可用的 Person-AI 语音识别模型，或改用支持指定模型的供应商。"
+
+tron.speech.cancelled:
+  en: "Voice input was cancelled."
+  zh-CN: "语音输入已取消。"
+
+tron.speech.request_conflict:
+  en: "This voice input request is already running."
+  zh-CN: "该语音输入请求正在处理中。"
+
+tron.speech.too_many_requests:
+  en: "Too many voice input requests. Try again later."
+  zh-CN: "语音输入请求过多，请稍后重试。"
+
+tron.speech.invalid_request_id:
+  en: "Invalid voice input request ID."
+  zh-CN: "语音输入请求编号无效。"
+
+tron.speech.storage_failed:
+  en: "Could not load speech router configuration."
+  zh-CN: "无法读取语音路由配置。"
+
+# --- Navigation ---
+navigation.max_depth_exceeded:
+  en: "Cannot save menu arrangement: the resulting tree has %{depth} levels, exceeding the current limit of %{max_depth}. Move the group to a shallower level or increase navigation.maxDepth in settings."
+  zh-CN: "无法保存菜单编排：调整后共 %{depth} 层，超过当前上限 %{max_depth} 层。请将分组移到更浅的层级，或在设置中提高 navigation.maxDepth。"
+
+navigation.duplicate_items:
+  en: "menus already exist in this domain: %{codes}"
+  zh-CN: "领域中已存在这些菜单：%{codes}"
+
+navigation.not_found:
+  en: "navigation resource was not found"
+  zh-CN: "导航资源不存在"
+
+navigation.domain_forbidden:
+  en: "navigation domain is not accessible"
+  zh-CN: "无权访问该领域"
+
+navigation.management_forbidden:
+  en: "navigation management permission is required"
+  zh-CN: "没有菜单管理权限"
+
+navigation.duplicate_reference:
+  en: "navigation code or menu reference already exists"
+  zh-CN: "导航编码或菜单引用已存在"
+
+navigation.protected:
+  en: "navigation resource cannot be changed in its current state"
+  zh-CN: "导航资源当前状态不允许此操作"
+
+navigation.storage_failure:
+  en: "navigation storage operation failed"
+  zh-CN: "导航存储操作失败"
+
+navigation.request_invalid:
+  en: "navigation request is invalid"
+  zh-CN: "导航请求参数无效"
+
+# --- Observability ---
+tron.observability.invalid_log_query:
+  en: "Invalid log query: Trace ID must be 32 and Span ID 16 nonzero hexadecimal characters"
+  zh-CN: "日志查询参数无效：Trace ID 为 32 位、Span ID 为 16 位非零十六进制字符"
+
+tron.observability.invalid_query:
+  en: "Invalid query; Trace ID must contain 32 hexadecimal characters"
+  zh-CN: "查询参数无效，Trace ID 必须是 32 位十六进制字符"
+
+tron.observability.not_found:
+  en: "Trace not found"
+  zh-CN: "链路不存在"
+
+tron.observability.storage_failure:
+  en: "Could not read traces"
+  zh-CN: "读取链路失败"
+
+# --- Profile registry ---
+profiles.invalid_time_zone:
+  en: "Select a valid IANA time zone"
+  zh-CN: "请选择有效的 IANA 时区"
+
+profiles.auth_required:
+  en: "The active PersonAI profile is not authorized"
+  zh-CN: "当前 PersonAI 档案未授权"
+
+profiles.temporarily_unavailable:
+  en: "PersonAI is temporarily unavailable; please retry"
+  zh-CN: "PersonAI 服务暂时不可用，请重试"
+
+profiles.token_failed:
+  en: "Could not load the active PersonAI profile token"
+  zh-CN: "无法加载当前 PersonAI 档案令牌"
+
+profiles.not_found:
+  en: "PersonAI profile `%{profile_id}` was not found"
+  zh-CN: "PersonAI 档案 `%{profile_id}` 不存在"
+
+profiles.invalid_input:
+  en: "%{field} is required"
+  zh-CN: "缺少 %{field}"
+
+profiles.registry_failed:
+  en: "PersonAI profile registry operation failed"
+  zh-CN: "PersonAI 档案注册表操作失败"
+
+profiles.credentials_failed:
+  en: "failed to activate PersonAI profile credentials: %{detail}"
+  zh-CN: "无法激活 PersonAI 档案凭据：%{detail}"
+
+# --- PersonAI service descriptors ---
+tron.personAi.device_unbound:
+  en: "Device unbound; authorize again"
+  zh-CN: "设备已解绑，请重新授权"
+
+tron.personAi.auth_required:
+  en: "Person-AI authorization required"
+  zh-CN: "请先完成 Person-AI 授权"
+
+tron.personAi.invalid_request:
+  en: "Invalid request"
+  zh-CN: "请求参数无效"
+
+tron.personAi.storage_failed:
+  en: "Could not access account storage"
+  zh-CN: "账户数据读写失败"
+
+tron.personAi.request_failed:
+  en: "Person-AI request failed"
+  zh-CN: "Person-AI 请求失败"
+
+# --- Capability packs (settings surface) ---
+tron.capability.tool_policy_invalid:
+  en: "Provide a valid Smart setting."
+  zh-CN: "请提供有效的 Smart 开关状态"
+
+tron.capability.tool_policy_save_failed:
+  en: "Unable to save tool policy settings. Please retry."
+  zh-CN: "工具权限策略保存失败，请重试"
+
+tron.capability.pack_unavailable:
+  en: "This pack was withdrawn or does not exist. Refresh the capability center. Your installed pack is unchanged."
+  zh-CN: "此能力包已下架或不存在，请刷新能力中心。本地已安装内容不受影响。"
+
+tron.capability.release_unavailable:
+  en: "This release was withdrawn or does not exist. Choose another published release. Your installed pack is unchanged."
+  zh-CN: "此版本已下架或不存在，请选择其他已上架版本。本地已安装内容不受影响。"
+
+capabilities.pack_not_installed:
+  en: "capability pack is not installed"
+  zh-CN: "能力包未安装"
+
+capabilities.extension_point_not_found:
+  en: "extension point was not found"
+  zh-CN: "扩展点不存在"
+
+capabilities.package_too_large:
+  en: "package exceeds 128 MiB"
+  zh-CN: "能力包超过 128 MiB"
+
+capabilities.file_required:
+  en: "file field is required"
+  zh-CN: "缺少文件字段"
+
+capabilities.uninstall_bundled:
+  en: "Bundled capability packs cannot be uninstalled"
+  zh-CN: "随程序发布的能力包不能单独卸载"
+
+capabilities.uninstall_busy:
+  en: "Capability pack is in use by a running or durable session"
+  zh-CN: "能力包仍被运行或持久续跑引用，请结束运行后重试"
+
+capabilities.uninstall_incomplete:
+  en: "Capability pack cleanup is incomplete; retry the uninstall"
+  zh-CN: "能力包卸载未完成，资源已停用，请重试"
+
+capabilities.page_unavailable:
+  en: "Capability page is unavailable"
+  zh-CN: "能力包页面不可用"
+
+capabilities.center.version_changed:
+  en: "Installed version changed; refresh and review again"
+  zh-CN: "本地版本已变化，请刷新后重新确认"
+
+capabilities.center.install_incomplete:
+  en: "Capability installation did not complete"
+  zh-CN: "能力包安装未完成"
+
+capabilities.center.invalid_request:
+  en: "Invalid capability center request"
+  zh-CN: "能力中心请求参数无效"
+
+capabilities.center.manifest_incompatible:
+  en: "Invalid manifest or incompatible Framework version"
+  zh-CN: "能力包清单或 Framework 版本不兼容"
+
+capabilities.center.release_mismatch:
+  en: "Release metadata does not match its manifest"
+  zh-CN: "发布信息与包清单不一致"
+
+capabilities.center.dependency_required:
+  en: "Install a compatible dependency first"
+  zh-CN: "请先安装兼容的依赖包"
+
+capabilities.center.platform_unsupported:
+  en: "Package does not support this runtime platform"
+  zh-CN: "能力包不支持当前运行平台"
+
+capabilities.center.builtin:
+  en: "Built-in packs are updated with Tron"
+  zh-CN: "内置能力包随 Tron 更新，不能单独替换"
+
+capabilities.center.not_newer:
+  en: "The same or a newer version is already installed"
+  zh-CN: "已安装相同或更高版本"
+
+# --- Projects ---
+tron.projects.duplicate_name:
+  en: "An active work topic with this name already exists in this workspace. Choose another name."
+  zh-CN: "当前工作空间已有同名的未归档工作主题，请使用其他名称。"
+
+projects.not_found:
+  en: "project was not found"
+  zh-CN: "项目不存在"
+
+projects.code_invalid:
+  en: "projectCode is invalid"
+  zh-CN: "projectCode 无效"
+
+projects.name_required:
+  en: "project name is required"
+  zh-CN: "必须提供项目名称"
+
+projects.duplicate_app:
+  en: "project cannot include an app more than once"
+  zh-CN: "项目不能重复包含同一应用"
+
+projects.name_duplicate:
+  en: "project name already exists in the workspace"
+  zh-CN: "工作空间中已存在同名项目"
+
+projects.primary_app_invalid:
+  en: "primaryAppCode must be one of the selected apps"
+  zh-CN: "primaryAppCode 必须是所选应用之一"
+
+projects.app_invalid:
+  en: "project app must be active and in the current workspace"
+  zh-CN: "项目应用必须处于启用状态且属于当前工作空间"
+
+projects.workspace_invalid:
+  en: "project workspace must be active"
+  zh-CN: "项目工作空间必须处于启用状态"
+
+projects.archived:
+  en: "archived project cannot be used"
+  zh-CN: "已归档项目不能使用"
+
+projects.storage_failed:
+  en: "project storage operation failed"
+  zh-CN: "项目存储操作失败"
+
+# --- Workspace apps ---
+apps.not_found:
+  en: "app was not found"
+  zh-CN: "应用不存在"
+
+apps.code_invalid:
+  en: "appCode is invalid"
+  zh-CN: "appCode 无效"
+
+apps.workspace_required:
+  en: "workspaceCode is required"
+  zh-CN: "必须提供工作空间编码"
+
+apps.workspace_invalid:
+  en: "app workspace must reference an active workspace"
+  zh-CN: "应用工作空间必须是已启用的工作空间"
+
+apps.name_required:
+  en: "app name is required"
+  zh-CN: "必须提供应用名称"
+
+apps.local_directory_required:
+  en: "localDirectory is required"
+  zh-CN: "必须提供 localDirectory"
+
+apps.name_duplicate:
+  en: "app name already exists in the current workspace"
+  zh-CN: "当前工作空间已存在同名应用"
+
+apps.archived_invalid:
+  en: "restore archived app before modifying it"
+  zh-CN: "修改已归档应用前请先恢复应用"
+
+apps.in_use:
+  en: "Remove topic and task associations before permanently deleting this app"
+  zh-CN: "永久删除应用前请移除主题和任务关联"
+
+apps.storage_failed:
+  en: "app storage operation failed"
+  zh-CN: "应用存储操作失败"
+
+# --- Automations ---
+automations.not_found:
+  en: "automation was not found"
+  zh-CN: "自动化不存在"
+
+automations.workspace_required:
+  en: "workspaceCode is required"
+  zh-CN: "必须提供工作空间编码"
+
+automations.workspace_invalid:
+  en: "automation workspace must reference an active workspace"
+  zh-CN: "自动化工作空间必须是已启用的工作空间"
+
+automations.name_required:
+  en: "automation name is required"
+  zh-CN: "必须提供自动化名称"
+
+automations.prompt_required:
+  en: "automation prompt is required"
+  zh-CN: "必须提供自动化提示词"
+
+automations.cron_invalid:
+  en: "automation cron expression is invalid"
+  zh-CN: "自动化 cron 表达式无效"
+
+automations.status_invalid:
+  en: "automation status is invalid"
+  zh-CN: "自动化状态无效"
+
+automations.archived_invalid:
+  en: "restore archived automation before modifying it"
+  zh-CN: "修改已归档自动化前请先恢复自动化"
+
+automations.storage_failed:
+  en: "automation storage operation failed"
+  zh-CN: "自动化存储操作失败"
+
+# --- Provider auto-route labels (model select options) ---
+models.route.chat_auto:
+  en: "Chat Auto"
+  zh-CN: "对话自动路由"
+
+models.route.embedding_auto:
+  en: "Embedding Auto"
+  zh-CN: "向量自动路由"
+
+models.route.multimodal_embedding_auto:
+  en: "Multimodal Embedding Auto"
+  zh-CN: "多模态向量自动路由"
+
+models.route.rerank_auto:
+  en: "Rerank Auto"
+  zh-CN: "重排自动路由"
+
+# --- Agent message page-context label ---
+agent.page_context.snapshot_label:
+  en: "UI page at this message's submission (location data only)"
+  zh-CN: "本条消息发送时的页面（仅位置数据）"
+
+# --- Assistant soul awakening session ---
+assistant.awakening_title:
+  en: "First awakening"
+  zh-CN: "首次唤醒"
+
+capabilities.uninstall_referenced:
+  en: "Capability pack is still referenced by unfinished runs; force uninstall is available"
+  zh-CN: "能力包仍被未完成的运行引用，可以强制卸载"

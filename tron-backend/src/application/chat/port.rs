@@ -27,18 +27,6 @@ pub struct ChatContainerSnapshot {
 }
 
 pub trait ChatRepository: Send {
-    fn archived_containers(
-        &mut self,
-        kind: super::ArchivedContainerKind,
-        workspace_code: Option<&str>,
-        offset: u32,
-        limit: u32,
-    ) -> Result<(Vec<super::ArchivedContainer>, u64), super::ArchiveError>;
-    fn restore_archived_container(
-        &mut self,
-        kind: super::ArchivedContainerKind,
-        code: &str,
-    ) -> Result<(), super::ArchiveError>;
     fn validate_annotation_sources(
         &mut self,
         session: &str,
@@ -56,17 +44,20 @@ pub trait ChatRepository: Send {
         self.delete_session(session_code)
     }
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError>;
+    fn list_managed_sessions(
+        &mut self,
+        workspace_code: Option<&str>,
+        status: Option<crate::domain::chat::ChatSessionStatus>,
+        source_type: Option<crate::domain::chat::ChatSessionSourceType>,
+        search: Option<&str>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<(Vec<ChatSession>, u64), ChatError>;
     fn find_source_session(
         &mut self,
         user: &str,
         source: &str,
     ) -> Result<Option<ChatSession>, ChatError>;
-    fn list_archived_sessions(
-        &mut self,
-        workspace_code: Option<&str>,
-        offset: u32,
-        limit: u32,
-    ) -> Result<(Vec<ChatSession>, u64), ChatError>;
     fn get_session(&mut self, session_code: &str) -> Result<ChatSession, ChatError>;
     fn update_session_status(
         &mut self,
@@ -110,6 +101,16 @@ pub trait ChatRepository: Send {
         expected: &ChatContainerSnapshot,
         delete: bool,
     ) -> Result<(), ChatError>;
+    /// Move a session to a (possibly different) workspace and topic. The
+    /// working directory must already belong to the target workspace.
+    fn update_managed_session_location(
+        &mut self,
+        session_code: &str,
+        target_workspace_code: &str,
+        project_code: Option<&str>,
+        working_directory_code: Option<&str>,
+        reference_code: &str,
+    ) -> Result<(), ChatError>;
     fn update_session_run(
         &mut self,
         session_code: &str,
@@ -148,7 +149,10 @@ pub trait ChatRepository: Send {
     fn artifacts_by_session(
         &mut self,
         session_code: &str,
-    ) -> Result<std::collections::BTreeMap<String, Vec<crate::domain::chat::ArtifactRecord>>, ChatError>;
+    ) -> Result<
+        std::collections::BTreeMap<String, Vec<crate::domain::chat::ArtifactRecord>>,
+        ChatError,
+    >;
     fn list_messages(&mut self, session_code: &str) -> Result<Vec<ChatMessage>, ChatError>;
     fn list_user_input_requests(
         &mut self,

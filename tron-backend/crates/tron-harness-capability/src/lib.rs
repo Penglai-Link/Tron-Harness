@@ -246,12 +246,16 @@ pub mod artifact_delivery;
 pub mod tool_policy;
 pub mod tool_risk;
 pub use artifact_delivery::{
-    ArtifactDeliveryConfig, ArtifactGuidance, ArtifactSource, ArtifactToolProvider,
-    ArtifactFingerprint, ArtifactsRunOptions, PublicArtifactItem, RunArtifactCollector,
+    ArtifactDeliveryConfig, ArtifactFingerprint, ArtifactGuidance, ArtifactSource,
+    ArtifactToolProvider, ArtifactsRunOptions, PublicArtifactItem, RunArtifactCollector,
     StoredArtifactRecord, artifact_delivery_pack, validate_file,
 };
 pub use tool_policy::{
     ToolPermission, ToolPermissionSetting, ToolPermissionSource, TronPlanMode,
-    TronToolAutoApproval, TronToolPolicy, TronToolPolicyLocale,
+    TronToolAutoApproval, TronToolPolicy, TronToolPolicyLocale, permission_denied_message,
+    plan_mode_denied_message, run_locale,
 };
-pub use tool_risk::{ToolRisk, identify_tool_risk};
+pub use tool_risk::{
+    CommandRiskReason, RiskReason, ToolRisk, ToolRiskAssessment, assess_tool_risk,
+    command_assessment, identify_tool_risk,
+};

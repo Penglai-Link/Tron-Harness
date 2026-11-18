@@ -222,16 +222,22 @@ impl<R: RagSearchRepository + Clone + Send + Sync, E: RagSearchRuntime> RagServi
         let graph_context = match super::graph::evidence_graph_view(&result) {
             Ok(view) => view,
             Err(_) => {
-                result
-                    .warnings
-                    .push("图谱原文引用已改变，相关图谱展示已撤销".into());
+                result.warnings.push(
+                    crate::shared::i18n_message::MessageText::new(
+                        "rag.graph.source_reference_changed",
+                    )
+                    .encode()
+                    .into(),
+                );
                 vec![]
             }
         };
         if result.hits.is_empty() {
-            result
-                .warnings
-                .push("当前授权及已发布范围内没有命中证据".into());
+            result.warnings.push(
+                crate::shared::i18n_message::MessageText::new("rag.graph.no_evidence_in_scope")
+                    .encode()
+                    .into(),
+            );
         }
         let reranked = result
             .stages
@@ -329,6 +335,12 @@ pub(super) fn invalidate_graph_statistics(result: &mut RagEvidenceResult) {
     {
         stage.hit_count = 0;
         stage.status = "INVALIDATED".into();
-        stage.error = Some("来源授权或发布状态已改变，图谱统计已撤销".into());
+        stage.error = Some(
+            crate::shared::i18n_message::MessageText::new(
+                "rag.graph.scope_changed_stats_withdrawn",
+            )
+            .encode()
+            .into(),
+        );
     }
 }

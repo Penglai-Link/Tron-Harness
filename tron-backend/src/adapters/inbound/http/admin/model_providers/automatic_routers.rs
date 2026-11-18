@@ -54,15 +54,15 @@ pub(super) struct UpdateAutomaticRouterVo {
 
 pub(super) struct RouteError {
     storage: bool,
-    english: bool,
+    locale: String,
 }
 impl RouteError {
     fn new(storage: bool, headers: &HeaderMap) -> Self {
         Self {
             storage,
-            english: crate::shared::locale::SupportedLocale::from_request(
+            locale: crate::shared::locale::resolve_request_locale(
                 headers.get("accept-language").and_then(|h| h.to_str().ok()),
-            ) == crate::shared::locale::SupportedLocale::EnUs,
+            ),
         }
     }
 }
@@ -74,21 +74,23 @@ impl IntoResponse for RouteError {
             crate::application::model::AutomaticRoutingSettingsError::InvalidSources
         }
         .descriptor();
-        let (status, message) = match (self.storage, self.english) {
-            (true, true) => (
+        let (status, message_key) = if self.storage {
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Could not load or save automatic router settings.",
-            ),
-            (true, false) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "无法读取或保存自动路由器配置。",
-            ),
-            (false, true) => (StatusCode::BAD_REQUEST, "Invalid automatic router sources."),
-            (false, false) => (StatusCode::BAD_REQUEST, "自动路由器的数据来源无效。"),
+                "tron.automatic_router.storage_failed",
+            )
+        } else {
+            (
+                StatusCode::BAD_REQUEST,
+                "tron.automatic_router.invalid_sources",
+            )
         };
         (
             status,
-            Json(ApiResponse::protocol_error(descriptor.code, message)),
+            Json(ApiResponse::protocol_error(
+                descriptor.code,
+                tron_i18n::t!(message_key, locale = &self.locale),
+            )),
         )
             .into_response()
     }
