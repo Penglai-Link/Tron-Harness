@@ -25,6 +25,8 @@ const TRON_NAME: &str = "Tron";
 pub struct TronRemotePack {
     http_base: String,
     client: reqwest::Client,
+    /// Long-lived SSE responses must not inherit the unary request deadline.
+    stream_client: reqwest::Client,
     agui: Option<Arc<dyn AguiEventSource>>,
 }
 
@@ -46,6 +48,11 @@ impl TronRemotePack {
             http_base: http_base.into().trim_end_matches('/').to_string(),
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(60))
+                .build()
+                .unwrap_or_default(),
+            stream_client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .read_timeout(std::time::Duration::from_secs(900))
                 .build()
                 .unwrap_or_default(),
             agui,
@@ -179,7 +186,7 @@ impl TronRemotePack {
         assistant_code: Option<&str>,
     ) -> Result<Vec<Value>, RpcError> {
         let mut request = self
-            .client
+            .stream_client
             .post(format!("{}{}", self.http_base, path))
             .header("Accept-Language", "zh-CN")
             .json(&body);
@@ -467,7 +474,7 @@ impl SessionRpc for TronRemotePack {
             body["a2uiMetadata"] = metadata;
         }
         let mut request = self
-            .client
+            .stream_client
             .post(format!(
                 "{}/api/v1/chats/sessions/{}/messages/stream",
                 self.http_base, params.session_id
@@ -777,6 +784,25 @@ impl RpcMethod for TronMethod {
                     .await?;
                 Ok(Value::Array(events))
             }
+            "tron.chat.userInputRequests" => {
+                let session_code = params
+                    .get("sessionCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                if session_code.is_empty() {
+                    return Err(RpcError::invalid_params("sessionCode is required"));
+                }
+                self.pack
+                    .get_with_scope(
+                        &format!("/api/v1/chats/sessions/{session_code}/user-input-requests"),
+                        &[],
+                        Some(workspace.as_str()),
+                        Some(assistant_code.as_str()),
+                    )
+                    .await
+            }
             "tron.chat.a2uiState" => {
                 let session_code = params
                     .get("sessionCode")
@@ -867,6 +893,7 @@ impl RemotePack for TronRemotePack {
             "tron.chat.protocolEvents",
             "tron.chat.steer",
             "tron.chat.answerUserInput",
+            "tron.chat.userInputRequests",
             "tron.chat.a2uiState",
             "tron.chat.a2uiAction",
             "tron.navigation.menus",

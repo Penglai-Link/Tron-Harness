@@ -545,7 +545,13 @@ desktop-repackage: desktop-check
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_TREE,$(FRONTEND_DIR)/dist,$(ELECTRON_DIR)/resources/frontend)
 	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
-	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) run -s package)
+	@if [ "$$(uname -s)" = Darwin ] && [ ! -f "$(ELECTRON_DIR)/build/entitlements.mac.plist" ]; then \
+		cp "$(ELECTRON_DIR)/node_modules/app-builder-lib/templates/entitlements.mac.plist" "$(ELECTRON_DIR)/node_modules/.tron-entitlements.mac.plist"; \
+		/usr/libexec/PlistBuddy -c 'Add :com.apple.security.device.audio-input bool true' "$(ELECTRON_DIR)/node_modules/.tron-entitlements.mac.plist"; \
+		cd "$(ELECTRON_DIR)" && $(ELECTRON_NPM) run -s package -- --config.mac.entitlements=node_modules/.tron-entitlements.mac.plist; \
+	else \
+		cd "$(ELECTRON_DIR)" && $(ELECTRON_NPM) run -s package; \
+	fi
 
 .PHONY: desktop-dev
 desktop-dev: install
