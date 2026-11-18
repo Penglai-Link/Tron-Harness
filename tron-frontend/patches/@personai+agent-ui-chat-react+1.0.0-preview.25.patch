@@ -1,0 +1,18 @@
+diff --git a/node_modules/@personai/agent-ui-chat-react/dist/index.js b/node_modules/@personai/agent-ui-chat-react/dist/index.js
+index 1de5898..dc65f60 100644
+--- a/node_modules/@personai/agent-ui-chat-react/dist/index.js
++++ b/node_modules/@personai/agent-ui-chat-react/dist/index.js
+@@ -1289,6 +1289,13 @@ function Sn({ notices: e, labels: t }) {
+ 						fallback: t.failed ?? "Run failed",
+ 						code: e.kind === "runError" || e.kind === "runStopped" ? e.code : void 0
+ 					}) : null,
++					e.kind === "runError" && e.diagnostic && /^[a-f0-9]{32}$/.test(e.diagnostic.traceId) ? z("div", {
++						className: "ef-chat__run-notice-diagnostic",
++						children: [R("code", { children: `Trace ID: ${e.diagnostic.traceId}` }), typeof e.diagnostic.href === "string" && e.diagnostic.href.startsWith("/") && !e.diagnostic.href.startsWith("//") ? R("a", {
++							href: e.diagnostic.href,
++							children: /[\u3400-\u9fff]/.test(t.failed ?? "") ? "查看链路" : "View trace"
++						}) : null]
++					}) : null,
+ 					s ? /* @__PURE__ */ R("div", {
+ 						className: "ef-chat__run-notice-detail",
+ 						children: s

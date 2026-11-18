@@ -24,7 +24,7 @@
     "@tron/chat-core": "^0.1.1"
   },
   "peerDependencies": {
-    "@personai/agent-ui-chat-core": "1.0.0-preview.24"
+    "@personai/agent-ui-chat-core": "1.0.0-preview.25"
   },
   "publishConfig": {
     "access": "restricted"
