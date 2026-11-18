@@ -910,6 +910,98 @@ function forwardTargetEvent(event) {
   state.mainWindow.webContents.send("desktop-target-event", event);
 }
 
+function artifactIdentifier(value, field) {
+  if (typeof value !== "string" || !value.trim() || value.length > 512) {
+    throw new Error(`invalid artifact ${field}`);
+  }
+  return value.trim();
+}
+
+/**
+ * Download one delivered file through the authenticated content endpoint and
+ * persist it through the OS save dialog. The renderer supplies an access token
+ * because the main process has no session of its own; the sender and origin
+ * fence above still applies, and the backend re-authorizes every request.
+ */
+async function resolveArtifactPath(payload) {
+  const sessionCode = artifactIdentifier(payload.sessionCode, "session");
+  const runCode = artifactIdentifier(payload.runCode, "run");
+  const itemId = artifactIdentifier(payload.itemId, "item");
+  const token = artifactIdentifier(payload.token, "token");
+  const url = new URL(
+    `/api/v1/chats/sessions/${encodeURIComponent(sessionCode)}/artifacts/${encodeURIComponent(runCode)}/${encodeURIComponent(itemId)}/desktop-resolve`,
+    state.backendUrl,
+  );
+  const response = await net.fetch(url.toString(), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`artifact resolve unavailable (${response.status})`);
+  const body = await response.json();
+  const resolved = body && body.data && body.data.path;
+  if (typeof resolved !== "string" || !path.isAbsolute(resolved)) {
+    throw new Error("artifact resolve returned no local path");
+  }
+  return resolved;
+}
+
+async function handleArtifactOpen(command, payload) {
+  try {
+    const target = await resolveArtifactPath(payload);
+    if (command === "artifact:reveal") {
+      shell.showItemInFolder(target);
+      return { status: "revealed" };
+    }
+    const failure = await shell.openPath(target);
+    if (failure) return { status: "failed", message: failure };
+    return { status: "opened" };
+  } catch (error) {
+    return {
+      status: "failed",
+      message: error instanceof Error ? error.message : "artifact operation failed",
+    };
+  }
+}
+
+async function handleArtifactSave(payload, browserWindow) {
+  const sessionCode = artifactIdentifier(payload.sessionCode, "session");
+  const runCode = artifactIdentifier(payload.runCode, "run");
+  const itemId = artifactIdentifier(payload.itemId, "item");
+  const token = artifactIdentifier(payload.token, "token");
+  const suggestedName = typeof payload.suggestedName === "string" && payload.suggestedName.trim()
+    ? path.basename(payload.suggestedName.trim()).slice(0, 200)
+    : "artifact";
+  const url = new URL(
+    `/api/v1/chats/sessions/${encodeURIComponent(sessionCode)}/artifacts/${encodeURIComponent(runCode)}/${encodeURIComponent(itemId)}/content`,
+    state.backendUrl,
+  );
+  url.searchParams.set("disposition", "attachment");
+  const response = await net.fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok || !response.body) {
+    return { status: "failed", message: `artifact content unavailable (${response.status})` };
+  }
+  const tempDir = await fs.promises.mkdtemp(path.join(app.getPath("temp"), "tron-artifact-"));
+  const tempPath = path.join(tempDir, "download");
+  try {
+    const { Readable } = require("node:stream");
+    const { pipeline } = require("node:stream/promises");
+    await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(tempPath));
+    const options = { defaultPath: suggestedName };
+    const result = browserWindow
+      ? await dialog.showSaveDialog(browserWindow, options)
+      : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) {
+      return { status: "cancelled" };
+    }
+    await fs.promises.copyFile(tempPath, result.filePath);
+    return { status: "saved" };
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 function registerIpcHandlers() {
   ipcMain.handle("tron-desktop:invoke", async (_event, command, payload = {}) => {
     if (_event.sender !== state.mainWindow?.webContents || _event.senderFrame !== _event.sender.mainFrame
@@ -917,6 +1009,13 @@ function registerIpcHandlers() {
       throw new Error("untrusted-desktop-frame");
     }
     const request = normalizeRequest(payload);
+
+    if (command === "artifact:save") {
+      return handleArtifactSave(request, BrowserWindow.fromWebContents(_event.sender) || undefined);
+    }
+    if (command === "artifact:open" || command === "artifact:reveal") {
+      return handleArtifactOpen(command, request);
+    }
 
     if (typeof command === "string" && command.startsWith("fs:")) {
       const browserWindow = BrowserWindow.fromWebContents(_event.sender) || undefined;

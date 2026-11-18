@@ -1,0 +1,38 @@
+/* Intelligence slider accents. The base colours come from the component; these
+   animations are optional flourishes and stay off when motion is reduced. */
+@keyframes chat-intelligence-glow {
+  0%,
+  100% {
+    opacity: 0.14;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.34;
+    transform: translate(-50%, -50%) scale(1.14);
+  }
+}
+
+@keyframes chat-intelligence-twinkle {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+.chat-intelligence-glow-pulse {
+  animation: chat-intelligence-glow 2.8s ease-in-out infinite;
+}
+
+.chat-intelligence-sparks {
+  animation: chat-intelligence-twinkle 5.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-intelligence-glow-pulse,
+  .chat-intelligence-sparks {
+    animation: none;
+  }
+}

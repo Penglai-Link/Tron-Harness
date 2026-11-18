@@ -224,6 +224,7 @@ pub async fn action(
                     a2ui::MINIMAL_CATALOG_ID.into(),
                 ],
             }),
+            artifacts: None,
         }),
         a2ui_metadata: Some(
             json!({"action":receipt.input.message,"transport":receipt.input.metadata,"surfaceInstanceId":receipt.input.surface_instance_id}),

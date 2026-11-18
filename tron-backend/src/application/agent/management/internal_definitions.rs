@@ -72,13 +72,6 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             "探索",
             "fox",
         ),
-        (
-            "prd-agent",
-            "杨布斯",
-            "用于产品分析与设计任务的内置智能体。",
-            "设计",
-            "astronaut",
-        ),
     ] {
         definitions.push(InternalAgentDefinition {
             enabled: true,

@@ -1,4 +1,4 @@
-import { ShieldCheck, Zap } from "lucide-react";
+import { ClipboardList, ShieldCheck, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ToolExecutionMode } from "@tron/chat-core";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ export function ChatExecutionModeSelector({ value, disabled, onChange }: ChatExe
   const options = [
     { value: "CONTROLLED", icon: ShieldCheck, label: t("chat.management.composer.controlledExecution"), description: t("chat.management.composer.controlledExecutionHint") },
     { value: "AUTO_APPROVE", icon: Zap, label: t("chat.management.composer.autoApprove"), description: t("chat.management.composer.autoApproveHint") },
+    { value: "PLAN", icon: ClipboardList, label: t("chat.management.composer.planMode"), description: t("chat.management.composer.planModeHint") },
   ] as const;
   const selected = options.find((option) => option.value === value) ?? options[0];
   return (
@@ -43,7 +44,8 @@ export function ChatExecutionModeSelector({ value, disabled, onChange }: ChatExe
       </Tooltip>
       <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-72 max-w-[calc(100vw-2rem)]">
         <DropdownMenuRadioGroup value={value} onValueChange={(next) => {
-          if (next === "CONTROLLED" || next === "AUTO_APPROVE") onChange(next);
+          const option = options.find((item) => item.value === next);
+          if (option) onChange(option.value);
         }}>
           {options.map((option) => (
             <DropdownMenuRadioItem key={option.value} value={option.value} label={option.label} className="items-start gap-2.5 py-2 pl-2">

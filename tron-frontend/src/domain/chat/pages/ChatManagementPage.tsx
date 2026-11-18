@@ -68,10 +68,7 @@ import type {
   ModelSelection,
   ReasoningEffort,
 } from "@/domain/model/model";
-import {
-  formatReasoningEffort,
-  reasoningEffortOptions,
-} from "@/domain/model/constants/modelPageOptions";
+import { reasoningEffortOptions } from "@/domain/model/constants/modelPageOptions";
 import { getApiAccessToken, requestApi } from "@/shared/api/httpClient";
 import { chatApiEndpoints } from "@/domain/chat/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -80,6 +77,7 @@ import { AgentChatWindow, type AgentChatSubmitter } from "@/domain/chat/componen
 import { ChatWorkingDirectoryControl } from "@/domain/chat/components/ChatWorkingDirectoryControl";
 import { ChatDraftResources } from "../model/chatDraftResources";
 import { ChatExecutionModeSelector } from "../components/ChatExecutionModeSelector";
+import { ChatModelEffortSelector } from "../components/ChatModelEffortSelector";
 import { useChatExecutionMode } from "../hooks/useChatExecutionMode";
 import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
 import { ContextDetailPreview, contextDetailRawValue, type ContextDetailBlock } from "@/domain/chat/components/ContextDetailPreview";
@@ -151,7 +149,6 @@ function useStableCallback<TArgs extends unknown[], TResult>(
 }
 
 const chatSessionModelSelectionStorageKey = "tron.chat.session.model.selection";
-const modelDefaultReasoningEffortValue = "__model_default__";
 
 function sessionModelSelectionKey(sessionCode: string, agentCode: string) {
   return `${sessionCode}::${agentCode.trim().toLowerCase() || "main-agent"}`;
@@ -1150,54 +1147,6 @@ export function defaultChatModelOption<
     ?? enabled[0]
     ?? options[0];
 }
-
-function normalizedFuzzyValue(value: string) {
-  return value.trim().toLowerCase().replace(/[\s\-_/.:]+/g, "");
-}
-
-function fuzzySubsequenceMatch(query: string, target: string) {
-  if (!query) return true;
-  let queryIndex = 0;
-  for (const char of target) {
-    if (char === query[queryIndex]) queryIndex += 1;
-    if (queryIndex === query.length) return true;
-  }
-  return false;
-}
-
-function fuzzyTextMatch(query: string, target: string) {
-  const rawQuery = query.trim().toLowerCase();
-  if (!rawQuery) return true;
-  const rawTarget = target.toLowerCase();
-  if (rawTarget.includes(rawQuery)) return true;
-
-  const normalizedQuery = normalizedFuzzyValue(query);
-  if (!normalizedQuery) return true;
-  const normalizedTarget = normalizedFuzzyValue(target);
-  if (normalizedTarget.includes(normalizedQuery)) return true;
-  return fuzzySubsequenceMatch(normalizedQuery, normalizedTarget);
-}
-
-function fuzzyModelMatch(query: string, model: ChatModelOption) {
-  return fuzzyTextMatch(query, model.displayName)
-    || fuzzyTextMatch(query, model.modelName)
-    || fuzzyTextMatch(query, model.accessPlatform ?? "")
-    || fuzzyTextMatch(query, model.upstreamVendorName ?? model.vendor ?? "");
-}
-
-function isPersonAiAutoModel(model: ChatModelOption) {
-  return model.modelSelection?.kind === "Auto"
-    || (model.modelSelection?.kind === "ProviderRoute" && model.modelSelection.routeCode === "ChatAuto");
-}
-
-function formatModelMultiplier(value: number | null) {
-  if (value === null || !Number.isFinite(value)) return null;
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 }).format(value);
-}
-
-
-
-
 
 function iconButtonClass(active = false) {
   return cn(
@@ -2371,186 +2320,6 @@ function CopyValueButton({
   );
 }
 
-function ChatModelSelector({
-  emptyLabel,
-  loading,
-  models,
-  onSelect,
-  selectedModelCode,
-}: {
-  emptyLabel: string;
-  loading: boolean;
-  models: ChatModelOption[];
-  onSelect: (modelCode: string) => void;
-  selectedModelCode: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const { t } = useTranslation("pages");
-  const selectedModel = models.find((model) => model.optionCode === selectedModelCode) ?? null;
-  const modelDisplayName = (model: ChatModelOption) => (
-    isPersonAiAutoModel(model)
-      ? t("chat.management.modelSelector.autoName")
-      : model.displayName
-  );
-  const outputMultiplier = (model: ChatModelOption) => (
-    model.providerCode === "PersonAi" && !isPersonAiAutoModel(model)
-      ? formatModelMultiplier(model.outputCoefficient)
-      : null
-  );
-  const modelTitle = (model: ChatModelOption) => {
-    return [
-      modelDisplayName(model),
-      model.upstreamVendorName,
-    ].filter(Boolean).join("\n");
-  };
-  const filteredModels = useMemo(
-    () => models.filter((model) => model.enabled && fuzzyModelMatch(searchQuery, model)),
-    [models, searchQuery],
-  );
-  const autoModels = useMemo(
-    () => filteredModels.filter(isPersonAiAutoModel),
-    [filteredModels],
-  );
-  const groupedModels = useMemo(() => {
-    const groups = new Map<string, { label: string; models: ChatModelOption[] }>();
-    filteredModels
-      .filter((model) => !isPersonAiAutoModel(model))
-      .forEach((model) => {
-        const qualityType = model.qualityType ?? "High";
-        const vendor = model.upstreamVendorName ?? model.vendor ?? t("modelProviders.values.unknown");
-        const personAiGroup = model.providerCode === "PersonAi";
-        const key = personAiGroup
-          ? `${model.providerCode}:${qualityType}:${vendor}`
-          : model.accessPlatform ?? "platform";
-        const label = personAiGroup
-          ? t("chat.management.modelSelector.qualityGroup", {
-              quality: t(`chat.management.modelSelector.quality.${qualityType}`),
-              vendor,
-            })
-          : model.accessPlatform ?? t("chat.management.modelSelector.providerModels");
-        const group = groups.get(key) ?? { label, models: [] };
-        group.models.push(model);
-        groups.set(key, group);
-      });
-    return Array.from(groups.entries()).map(([key, group]) => ({
-      key,
-      label: group.label,
-      models: group.models.sort((left, right) => left.displayName.localeCompare(right.displayName)),
-    }));
-  }, [filteredModels, t]);
-  const disabled = loading || models.length === 0;
-  const selectedModelLabel = loading
-    ? t("chat.management.modelSelector.loading")
-    : selectedModel
-      ? modelDisplayName(selectedModel)
-      : emptyLabel;
-
-  useEffect(() => {
-    if (!open) {
-      setSearchQuery("");
-      return;
-    }
-    const frame = window.requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [open]);
-
-  return (
-    <div className="relative min-w-0">
-      <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger
-          aria-label={t("chat.management.modelSelector.selectAria")}
-          className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
-          disabled={disabled}
-          title={selectedModelLabel}
-        >
-
-          <span className="truncate">{selectedModelLabel}</span>
-          <ChevronDown aria-hidden="true" size={14} />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="max-h-72 min-w-[180px] max-w-[260px] overflow-y-auto overscroll-contain p-1.5"
-          side="top"
-          sideOffset={8}
-        >
-          <div className="sticky top-0 z-10 bg-popover pb-1.5">
-            <input
-              ref={searchInputRef}
-              aria-label={t("chat.management.modelSelector.searchAria")}
-              className="h-8 w-full rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 text-xs text-[var(--color-on-surface)] outline-none focus:border-[var(--color-focus-ring)]"
-              placeholder={t("chat.management.modelSelector.searchPlaceholder")}
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              onKeyDown={(event) => {
-                event.stopPropagation();
-                if (event.key !== "Enter") return;
-                const firstModel = filteredModels.find((model) => model.enabled);
-                if (!firstModel) return;
-                event.preventDefault();
-                onSelect(firstModel.optionCode);
-                setOpen(false);
-              }}
-            />
-          </div>
-          {filteredModels.length ? (
-            <DropdownMenuRadioGroup
-              value={selectedModelCode}
-              onValueChange={(modelCode) => { onSelect(modelCode); setOpen(false); }}
-            >
-              {autoModels.map((model) => (
-                <DropdownMenuRadioItem
-                  className="w-full items-center px-3 py-2"
-                  key={model.optionCode}
-                  title={modelTitle(model)}
-                  value={model.optionCode}
-                >
-                  <span className="min-w-0 truncate font-medium">
-                    {modelDisplayName(model)}
-                  </span>
-                </DropdownMenuRadioItem>
-              ))}
-              {groupedModels.map((group) => (
-                <div key={group.key} className="mb-1 last:mb-0">
-                  <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
-                    {group.label}
-                  </p>
-                  {group.models.map((model) => (
-                    <DropdownMenuRadioItem
-                      className="w-full items-center px-3 py-2"
-                      key={model.optionCode}
-                      title={modelTitle(model)}
-                      value={model.optionCode}
-                    >
-                      <span className="flex min-w-0 flex-1 items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate font-medium">
-                          {modelDisplayName(model)}
-                        </span>
-                        {outputMultiplier(model) ? (
-                          <span className="shrink-0 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
-                            {outputMultiplier(model)}×
-                          </span>
-                        ) : null}
-                      </span>
-                    </DropdownMenuRadioItem>
-                  ))}
-                </div>
-              ))}
-            </DropdownMenuRadioGroup>
-          ) : (
-            <p className="px-3 py-2 text-xs text-[var(--color-on-surface-variant)]">
-              {t("chat.management.modelSelector.noMatch", { query: searchQuery.trim() })}
-            </p>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}
-
 function ChatAgentSelector({
   locked,
   loading,
@@ -2913,19 +2682,6 @@ export function ChatManagementPage() {
       }));
   }, [selectedMainAgentModel?.supportedReasoningEfforts, t]);
   const selectedModelDefaultReasoningEffort = selectedMainAgentModel?.defaultReasoningEffort ?? null;
-  const selectedReasoningEffortDefaultLabel = selectedModelDefaultReasoningEffort
-    ? t(
-      `common:reasoningEffort.values.${selectedModelDefaultReasoningEffort}`,
-      formatReasoningEffort(selectedModelDefaultReasoningEffort),
-    )
-    : t("common:reasoningEffort.chatAutomatic", "Auto");
-  const selectedReasoningEffortLabel = selectedReasoningEffort
-    ? selectedReasoningEffortOptions.find((option) => option.value === selectedReasoningEffort)?.label
-      ?? formatReasoningEffort(selectedReasoningEffort)
-    : selectedReasoningEffortDefaultLabel;
-  const selectedReasoningEffortControlValue = selectedReasoningEffort
-    ?? selectedModelDefaultReasoningEffort
-    ?? modelDefaultReasoningEffortValue;
   const hasActiveSession = Boolean(activeSession);
   const sessionStarted = Boolean(activeSession?.lastRunCode);
   const agentSelectionLocked = Boolean(activeSession && sessionStarted);
@@ -2967,6 +2723,16 @@ export function ChatManagementPage() {
       sourceType: session.sourceType ?? undefined,
     };
   }
+
+  // `/plan` mirrors the composer command menu: it switches the plan mode of the
+  // current session (or the draft default) instead of sending a chat message.
+  const togglePlanMode = useStableCallback(() => {
+    const next = executionMode === "PLAN" ? "CONTROLLED" : "PLAN";
+    toast.info(next === "PLAN"
+      ? t("chat.management.composer.planModeEntered")
+      : t("chat.management.composer.planModeExited"));
+    void changeExecutionMode(next);
+  });
 
   const createRuntimeSendInput = useCallback(
     (session: RuntimeChatSession, content: string, attachments: ChatMessageAttachment[]) => (
@@ -3521,55 +3287,18 @@ export function ChatManagementPage() {
           disabled={(!activeSession && !isDraft) || activeSession?.status === "ARCHIVED" || creatingSession || savingExecutionMode}
           onChange={(mode) => { void changeExecutionMode(mode); }}
         />
-        <div
-          className={cn("min-w-0 max-w-full")}
-        >
-          <ChatModelSelector
-            emptyLabel={modelEmptyLabel}
-            loading={modelsLoading}
-            models={agentScopedModels}
-            selectedModelCode={selectedModelCode}
-            onSelect={handleModelSelect}
-          />
-        </div>
-        {selectedReasoningEffortOptions.length ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label={t("common:reasoningEffort.chatLabel", "Reasoning effort")}
-              className="inline-flex h-8 flex-none items-center gap-[12px] rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
-            >
-
-              <span className="min-w-0 truncate">{selectedReasoningEffortLabel}</span>
-              <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="top" sideOffset={8}>
-              {selectedModelDefaultReasoningEffort ? null : (
-                <DropdownMenuItem
-                  className="relative pr-8"
-                  onClick={() => setSelectedReasoningEffort(null)}
-                >
-                  {selectedReasoningEffortControlValue === modelDefaultReasoningEffortValue ? <Check aria-hidden="true" className="absolute right-2 size-4" /> : null}
-                  {selectedReasoningEffortDefaultLabel}
-                </DropdownMenuItem>
-              )}
-              {selectedReasoningEffortOptions.map((option) => {
-                const selected = selectedReasoningEffortControlValue === option.value;
-                return (
-                  <DropdownMenuItem
-                    className="relative pr-8"
-                    key={option.value}
-                    onClick={() => setSelectedReasoningEffort(
-                      option.value === selectedModelDefaultReasoningEffort ? null : option.value as ReasoningEffort,
-                    )}
-                  >
-                    {selected ? <Check aria-hidden="true" className="absolute right-2 size-4" /> : null}
-                    {option.label}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
+        <ChatModelEffortSelector
+          defaultEffort={selectedModelDefaultReasoningEffort}
+          disabled={modelsLoading || agentScopedModels.length === 0}
+          effort={selectedReasoningEffort}
+          effortOptions={selectedReasoningEffortOptions}
+          emptyLabel={modelEmptyLabel}
+          loading={modelsLoading}
+          models={agentScopedModels}
+          onSelectEffort={setSelectedReasoningEffort}
+          onSelectModel={handleModelSelect}
+          selectedModelCode={selectedModelCode}
+        />
     </fieldset>
   ), [
     compactingSessionCode,
@@ -3591,9 +3320,6 @@ export function ChatManagementPage() {
     selectedModelCode,
     selectedModelDefaultReasoningEffort,
     selectedReasoningEffort,
-    selectedReasoningEffortControlValue,
-    selectedReasoningEffortDefaultLabel,
-    selectedReasoningEffortLabel,
     selectedReasoningEffortOptions,
     t,
   ]);
@@ -3759,6 +3485,7 @@ export function ChatManagementPage() {
             autoFocusComposer={shouldAutoFocusChatComposer()}
             composerRef={composerRef}
             submitterRef={submitterRef}
+            onPlanCommand={togglePlanMode}
             config={{
               agentCode: effectiveAgentCode,
               disabledInput: creatingSession || savingExecutionMode || !selectedModel?.enabled,

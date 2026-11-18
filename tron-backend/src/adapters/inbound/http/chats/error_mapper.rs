@@ -29,6 +29,21 @@ pub fn chat_error_response(error: ChatError) -> Response {
         ChatError::AttachmentInvalid(message) => {
             (StatusCode::BAD_REQUEST, "CHAT_ATTACHMENT_INVALID", message)
         }
+        ChatError::ArtifactNotFound => (
+            StatusCode::NOT_FOUND,
+            "CHAT_ARTIFACT_NOT_FOUND",
+            "delivered file was not found".to_string(),
+        ),
+        ChatError::ArtifactChanged => (
+            StatusCode::CONFLICT,
+            "CHAT_ARTIFACT_CHANGED",
+            "delivered file changed after delivery".to_string(),
+        ),
+        ChatError::ArtifactUnavailable => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "CHAT_ARTIFACT_UNAVAILABLE",
+            "delivered file is unavailable".to_string(),
+        ),
         ChatError::AttachmentNotFound => (
             StatusCode::NOT_FOUND,
             "CHAT_ATTACHMENT_NOT_FOUND",

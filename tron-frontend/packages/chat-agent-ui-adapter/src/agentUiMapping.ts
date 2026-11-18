@@ -44,8 +44,9 @@ export function fromUiAttachment(value: Ui.ChatMessageAttachment): ChatMessageAt
   return { ...rest, resourceCode: resourceId };
 }
 export function toUiMessage(value: ChatMessage): Ui.ChatMessage {
-  const { messageCode, sessionCode, runCode, attachments, ...rest } = value;
+  const { messageCode, sessionCode, runCode, attachments, artifacts, ...rest } = value;
   return { ...rest, messageId: messageCode, sessionId: sessionCode, runId: runCode,
+    ...(artifacts ? { artifacts } : {}),
     attachments: attachments?.map(toUiAttachment) };
 }
 export function fromUiAnswer(value: Ui.ChatUserInputAnswer): ChatUserInputAnswer {
@@ -132,7 +133,14 @@ function isMappedInput(input: Ui.SendChatMessageInput): input is MappedInput {
 }
 export function fromUiInput(input: Ui.SendChatMessageInput): SendChatMessageInput {
   if (!isMappedInput(input)) throw new Error("Chat input is missing its Tron host context");
-  return { ...input.metadata.tron, content: input.content, annotations: input.annotations ?? [], requestedSkills: input.requestedSkills ?? [], clientCapabilities: input.clientCapabilities, a2uiMetadata: input.a2uiMetadata,
+  const desktop = typeof window !== "undefined"
+    && Boolean((window as { tronDesktop?: { invoke?: unknown } }).tronDesktop?.invoke);
+  const artifacts = {
+    actions: (desktop
+      ? ["preview", "open", "reveal", "save"]
+      : ["preview", "save"]) as ("preview" | "open" | "reveal" | "save")[],
+  };
+  return { ...input.metadata.tron, content: input.content, annotations: input.annotations ?? [], requestedSkills: input.requestedSkills ?? [], clientCapabilities: { ...(input.clientCapabilities ?? {}), artifacts }, a2uiMetadata: input.a2uiMetadata,
     attachments: input.attachments?.map(fromUiAttachment) };
 }
 

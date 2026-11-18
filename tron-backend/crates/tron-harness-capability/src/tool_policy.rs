@@ -80,6 +80,16 @@ fn is_command_execution(id: &str) -> bool {
     )
 }
 
+/// Tools that only touch the current interaction, the session's task list or the
+/// ephemeral interface surfaces. They are classified as commands but leave the
+/// workspace and persisted data untouched, so plan mode keeps them.
+fn is_interaction_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "chat_ask_user" | "ask_user" | "a2ui_request_input" | "a2ui_publish" | "todo_update"
+    )
+}
+
 /// Display language supplied by the trusted host for this run, never by tool arguments.
 /// Missing language follows Tron's backend fallback to Simplified Chinese.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -108,6 +118,13 @@ impl TronToolPolicyLocale {
         self.text(
             "该工具没有平台执行权限",
             "This tool has no platform permission",
+        )
+    }
+
+    pub fn plan_mode_denied_message(self) -> &'static str {
+        self.text(
+            "计划模式只允许只读操作：先给出计划，用户确认并退出计划模式后再执行改动",
+            "Plan mode allows read-only operations only. Present the plan first; exit plan mode before making changes",
         )
     }
 
@@ -143,6 +160,12 @@ pub struct TronToolPolicy(pub Arc<dyn ToolPermissionSource>);
 #[derive(Debug, Clone, Copy)]
 pub struct TronToolAutoApproval;
 
+/// Trusted run-local plan mode marker. The host sets it for runs whose session
+/// is in plan mode; mutating tools are denied so the Agent can only research
+/// and present a plan.
+#[derive(Debug, Clone, Copy)]
+pub struct TronPlanMode;
+
 #[async_trait]
 impl fw::ToolPolicy for TronToolPolicy {
     async fn admit_binding(
@@ -169,6 +192,18 @@ impl fw::ToolPolicy for TronToolPolicy {
             .setting(invocation.descriptor)
             .map_err(fw::AgentError::Run)?;
         let locale = TronToolPolicyLocale::from_run(invocation.run);
+        // Plan mode is a trusted run preference: read-only work stays available,
+        // state-changing tools are refused instead of requesting approval.
+        // Asking the user is classified as a command but changes nothing, so it
+        // stays available for clarifying and confirming the plan.
+        if invocation.run.extensions.get::<TronPlanMode>().is_some()
+            && !is_interaction_tool(&invocation.descriptor.call_name)
+            && self.0.operation(invocation.descriptor) == Some(true)
+        {
+            return Ok(fw::ToolPolicyDecision::Deny(
+                locale.plan_mode_denied_message().into(),
+            ));
+        }
         Ok(match setting.permission {
             ToolPermission::No => {
                 fw::ToolPolicyDecision::Deny(locale.permission_denied_message().into())

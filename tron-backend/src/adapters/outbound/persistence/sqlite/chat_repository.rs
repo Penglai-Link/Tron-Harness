@@ -935,6 +935,62 @@ impl ChatRepository for SqliteChatRepository {
             Ok(())
         })
     }
+    fn append_artifacts(
+        &mut self,
+        session_code: &str,
+        run_code: &str,
+        message_code: &str,
+        records: &[crate::domain::chat::ArtifactRecord],
+    ) -> Result<(), ChatError> {
+        blocking(async {
+            self.link(session_code).await?;
+            let mut event = fw::SessionEvent::new(
+                session_code,
+                "tron.artifacts",
+                json!({
+                    "runCode": run_code,
+                    "messageCode": message_code,
+                    "records": records,
+                }),
+            );
+            event.run_id = fw::RunId::parse_str(run_code).ok();
+            self.framework()
+                .await?
+                .sessions()
+                .map_err(|_| ChatError::StorageFailure)?
+                .store
+                .append_event(event)
+                .await
+                .map_err(chat_error)?;
+            Ok(())
+        })
+    }
+
+    fn artifacts_by_session(
+        &mut self,
+        session_code: &str,
+    ) -> Result<std::collections::BTreeMap<String, Vec<crate::domain::chat::ArtifactRecord>>, ChatError> {
+        blocking(async {
+            let mut by_run = std::collections::BTreeMap::new();
+            for event in self.events(session_code, "tron.artifacts").await? {
+                let Some(run_code) = event.payload.get("runCode").and_then(|value| value.as_str())
+                else {
+                    continue;
+                };
+                let Some(records) = event.payload.get("records") else {
+                    continue;
+                };
+                let parsed: Vec<crate::domain::chat::ArtifactRecord> =
+                    serde_json::from_value(records.clone()).map_err(|_| ChatError::StorageFailure)?;
+                by_run
+                    .entry(run_code.to_owned())
+                    .or_insert_with(Vec::new)
+                    .extend(parsed);
+            }
+            Ok(by_run)
+        })
+    }
+
     fn list_messages(&mut self, id: &str) -> Result<Vec<ChatMessage>, ChatError> {
         blocking(async {
             self.events(id, "tron.message")

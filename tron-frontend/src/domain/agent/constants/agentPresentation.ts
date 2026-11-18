@@ -8,13 +8,11 @@ import type {
 const internalAgentCatalogKeyByCode: Record<string, string> = {
   "main-agent": "mainAgent",
   "explore-agent": "explore",
-  "prd-agent": "product",
 };
 
 const defaultInternalAgentNameByCode: Record<string, string> = {
   "main-agent": "Main Agent",
   "explore-agent": "探索智能体",
-  "prd-agent": "杨布斯",
 };
 
 const internalAgentGroupCatalogKeyByName: Record<string, string> = {
@@ -50,7 +48,6 @@ export function translateInternalAgentDescription(t: TFunction, agent: Workspace
   const defaults: Record<string, string[]> = {
     "main-agent": ["Primary workspace internal agent with access to platform business tools.", "Primary platform internal agent used for workspace chat runtime policy."],
     "explore-agent": ["只读探索任务使用的内置智能体。"],
-    "prd-agent": ["用于产品分析与设计任务的内置智能体。"],
   };
   const key = defaults[agent.agentCode]?.includes(agent.description) ? internalAgentCatalogKeyByCode[agent.agentCode] : undefined;
   return key

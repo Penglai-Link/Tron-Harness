@@ -38,6 +38,18 @@ impl FrameworkHost {
         self.prepare_working_directory(&mut context)
             .map_err(AgentError::InvalidConfiguration)?;
         crate::application::agent::execution_context::sync_execution_context(&mut context);
+        // Artifact delivery is run-scoped: the collector lives in memory, the
+        // host inserts it as a trusted run extension, and only the settled run
+        // snapshot reaches persistence.
+        let artifact_config = tron_harness_capability::ArtifactDeliveryConfig::default();
+        let artifact_collector = Arc::new(tron_harness_capability::RunArtifactCollector::new(
+            artifact_config.max_files_per_run,
+        ));
+        let artifact_root = context
+            .execution_scope
+            .local_directory
+            .as_deref()
+            .map(PathBuf::from);
         collaboration::authorize_tools(self, &mut context);
         let onboarding =
             super::super::onboarding::active(&context, harness.framework_assistants().as_ref());
@@ -269,6 +281,11 @@ impl FrameworkHost {
                 .extensions
                 .insert(tron_harness_capability::TronToolAutoApproval);
         }
+        if context.tool_execution_mode == crate::domain::agent::ToolExecutionMode::Plan {
+            request
+                .extensions
+                .insert(tron_harness_capability::TronPlanMode);
+        }
         if let Some(prompts) = self.0.prompt_service.get() {
             let mut keys = vec![
                 "agent.goal-judge",
@@ -437,6 +454,19 @@ impl FrameworkHost {
         }
         .attach(&mut request)
         .map_err(map_error)?;
+        if self
+            .0
+            .tools_enabled
+            .load(std::sync::atomic::Ordering::Acquire)
+            && let Some(workspace_root) = artifact_root.clone()
+        {
+            request
+                .extensions
+                .insert(tron_harness_capability::ArtifactsRunOptions {
+                    workspace_root,
+                    collector: artifact_collector.clone(),
+                });
+        }
         if let Some(resources) = &self.0.resources {
             request
                 .extensions
@@ -604,6 +634,26 @@ impl FrameworkHost {
             sdk_execution: Some(host_snapshot::product_snapshot(
                 registration.snapshot(&result).map_err(map_error)?,
             )?),
+            artifact_records: artifact_collector
+                .snapshot()
+                .into_iter()
+                .map(|record| crate::domain::chat::ArtifactRecord {
+                    id: record.id,
+                    display: record.display,
+                    description: record.description,
+                    media_type: record.media_type,
+                    byte_size: record.byte_size.unwrap_or(record.fingerprint.size),
+                    source: crate::domain::chat::ArtifactLocation {
+                        kind: record.source.kind,
+                        root: record.source.root,
+                        relative_path: record.source.relative_path,
+                    },
+                    fingerprint: crate::domain::chat::ArtifactFingerprint {
+                        size: record.fingerprint.size,
+                        modified_at_ns: record.fingerprint.modified_at_ns,
+                    },
+                })
+                .collect(),
         })
     }
 }

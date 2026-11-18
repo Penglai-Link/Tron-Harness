@@ -636,7 +636,10 @@ impl FrameworkHost {
                     )))
                     .with_context_preparation(TronContext, 32)
                     .capability_pack(),
-            );
+            )
+            .capability_pack(tron_harness_capability::artifact_delivery_pack(
+                tron_harness_capability::ArtifactDeliveryConfig::default(),
+            ));
         {
             builder = builder.capability_pack(
                 eliteforge_agent_official_plugin_a2ui::A2uiPack::new()

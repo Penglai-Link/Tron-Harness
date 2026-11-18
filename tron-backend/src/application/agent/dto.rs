@@ -67,4 +67,6 @@ pub struct AgentInvocationResult {
     pub sdk_execution: Option<crate::domain::agent::AgentNativeExecutionSnapshot>,
     #[serde(skip)]
     pub observations: Vec<ToolObservation>,
+    #[serde(skip)]
+    pub artifact_records: Vec<crate::domain::chat::ArtifactRecord>,
 }

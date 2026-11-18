@@ -25,7 +25,7 @@ pub use run_control::{
     ActiveChatRunSnapshot, ChatActiveRunState, ChatRunControlError, GetActiveChatRunResult,
     StopChatRunCommand, StopChatRunResult,
 };
-pub use service::{ChatSendError, ChatService};
+pub use service::{ArtifactContent, ChatSendError, ChatService};
 pub use steer::ChatSteerError;
 
 pub(crate) mod a2ui_error;

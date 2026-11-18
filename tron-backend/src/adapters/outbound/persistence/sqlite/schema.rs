@@ -14,6 +14,10 @@ const BUSINESS_MIGRATIONS: &[(&str, &str)] = &[
         "0003_rename_dude_to_assistant",
         include_str!("../../../../../migrations/0003_rename_dude_to_assistant.sql"),
     ),
+    (
+        "0004_remove_prd_agent",
+        include_str!("../../../../../migrations/0004_remove_prd_agent.sql"),
+    ),
 ];
 
 pub(crate) fn initialize_business(connection: &Connection) -> rusqlite::Result<()> {

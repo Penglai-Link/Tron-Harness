@@ -45,6 +45,8 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
   onSessionChange?: (value: ChatSession | null) => void;
   onRunStateChange?: (value: ChatRuntimeRunState) => void;
   createSendInput?: (session: ChatSession, content: string, attachments: ChatMessageAttachment[]) => SendChatMessageInput | null;
+  /** Hosts that expose plan mode pass the toggle; others hide the `/plan` command. */
+  onPlanCommand?: () => void;
 }
 
 function ComposerControls({ children }: { children: React.ReactNode }) {
@@ -54,7 +56,7 @@ function ComposerControls({ children }: { children: React.ReactNode }) {
 
 /** Product context adapter only. Rendering, streaming, queues, stop and replay belong to Agent UI. */
 export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, config, knowledgeBaseId, agentIdentity, speechScope, initialSession, pendingAttachments,
-  onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, footerAddon, draft: controlledDraft, onDraftChange, composerRef: hostComposerRef, ...props }: AgentChatWindowProps) {
+  onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, footerAddon, draft: controlledDraft, onDraftChange, composerRef: hostComposerRef, onPlanCommand, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
   const tabVisible = useTabVisibility();
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -124,6 +126,13 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     ?? (initialSession?.sourceCode?.startsWith("__assistant:") ? initialSession.sourceCode.slice("__assistant:".length) : undefined);
   const inputSuggestions = useChatInputSuggestions(config.agentCode, activeSessionCode ?? initialSession?.sessionCode,
     suggestionAssistantCode ?? undefined, config.workspaceCode ?? activeSession?.workspaceCode, knowledgeBaseId);
+  // The server lists every internal command; only hosts that expose plan mode
+  // keep `/plan` in the menu, so other composers never send it as chat content.
+  const composerSuggestions = useMemo(() => {
+    const commands = inputSuggestions.inputSuggestions;
+    if (onPlanCommand || !commands?.some((item) => item.kind === "command" && item.name === "plan")) return inputSuggestions;
+    return { ...inputSuggestions, inputSuggestions: commands.filter((item) => !(item.kind === "command" && item.name === "plan")) };
+  }, [inputSuggestions, onPlanCommand]);
   const { t, i18n } = useTranslation("pages");
   const workRailLabels = useChatWorkRailLabels();
   const historyLabels = useChatHistoryLabels();
@@ -213,6 +222,14 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     });
   }, [refreshComposerMetrics]);
   const createInput = useCallback((value: Ui.ChatSession, content: string, files: Ui.ChatMessageAttachment[]) => {
+    // `/plan` is a host command, not chat content: toggle the mode and keep the
+    // message out of the transcript. The runtime clears the draft on success only,
+    // so an aborted send clears it here.
+    if (onPlanCommand && content.trim().toLowerCase() === "/plan") {
+      onPlanCommand();
+      changeDraft("");
+      return null;
+    }
     const hostSession = fromUiSession(value);
     const hostFiles = files.map(fromUiAttachment);
     const input = createSendInput ? createSendInput(hostSession, content, hostFiles) : {
@@ -221,7 +238,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
       agentCode: config.agentCode, clientCapabilities: { userInputRequests: true },
     };
     return input ? toUiInput(input) : null;
-  }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
+  }, [changeDraft, createSendInput, config.appCode, config.taskCode, config.agentCode, onPlanCommand]);
   return <>{turnDeletion.dialog}
     {activeSession && tabVisible && (!config.floating || !props.windowState || (props.windowState.open && !props.windowState.collapsed)) && <SudoPasswordDialog
       key={activeSession.sessionCode} sessionCode={activeSession.sessionCode}
@@ -235,7 +252,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
       scope={`${config.workspaceCode ?? ""}:${speechScope ?? initialSession?.sessionCode ?? activeSessionCode ?? "draft"}`} floating={Boolean(config.floating)} onTranscript={appendTranscript} /></>}
     confirmDeleteTurn={props.confirmDeleteTurn ?? turnDeletion.confirm}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
-    config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
+    config={{ ...config, ...composerSuggestions, defaultSessionId: config.defaultSessionCode,
       turnDeletionLabels: { action: t("chat.management.deleteTurn.action"), confirm: t("chat.management.deleteTurn.description"), failed: t("chat.management.toasts.chatDeleteFailedTitle") },
       resizeHint: t("chat.floating.resizeHint"),
       locale: config.locale ?? i18n.language,

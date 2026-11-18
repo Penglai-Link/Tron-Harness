@@ -330,6 +330,7 @@ impl PlatformAssistantExecutor {
                             .filter(|v| !v.is_null())
                             .cloned()
                             .and_then(|v| serde_json::from_value(v).ok()),
+                        artifacts: None,
                     }),
                     resume: vec![],
                 },

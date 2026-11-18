@@ -543,6 +543,11 @@ impl Runtime {
                 .extensions
                 .insert(tron_harness_capability::TronToolAutoApproval);
         }
+        if context.tool_execution_mode == crate::domain::agent::ToolExecutionMode::Plan {
+            request
+                .extensions
+                .insert(tron_harness_capability::TronPlanMode);
+        }
         request.extensions.insert(fw::CallerInteractionScope);
         // Capture the active caller tool span before SDK-owned tasks are started.
         let trace_parent = opentelemetry::Context::current();

@@ -30,6 +30,9 @@ pub struct ReadHistoryResponse {
     pub records: fw::HistoryRecords,
     pub pending_interactions: Vec<fw::HistoryInteraction>,
     pub active_runs: Vec<fw::HistoryRun>,
+    /// Public delivery projections keyed by run code. Additive: older clients
+    /// ignore the field, and private locations never appear here.
+    pub artifacts_by_run: std::collections::BTreeMap<String, crate::domain::chat::ChatArtifacts>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +61,7 @@ impl From<fw::SessionHistory> for ReadHistoryResponse {
             records: h.records,
             pending_interactions: h.pending_interactions,
             active_runs: h.active_runs,
+            artifacts_by_run: Default::default(),
         }
     }
 }
@@ -121,6 +125,16 @@ pub async fn read_history(
             &state.agent_framework, &session, &history.records.steps,
         ).await?;
         let mut response = ReadHistoryResponse::from(history);
+        response.artifacts_by_run = state
+            .chats
+            .artifacts_by_session(&session)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(run_code, records)| {
+                crate::domain::chat::ChatArtifacts::from_records(&records)
+                    .map(|artifacts| (run_code, artifacts))
+            })
+            .collect();
         response.compaction_details = details.into_iter().map(|(id, blocks)| (id,
             blocks.into_iter().map(|block| CompactionBlockResponse {
                 id: block.id, before_tokens: block.before_tokens,

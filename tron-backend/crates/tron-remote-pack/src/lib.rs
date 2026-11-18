@@ -176,6 +176,35 @@ impl TronRemotePack {
         unwrap_envelope(envelope)
     }
 
+    async fn put_with_scope(
+        &self,
+        path: &str,
+        body: Value,
+        workspace: Option<&str>,
+        assistant_code: Option<&str>,
+    ) -> Result<Value, RpcError> {
+        let mut request = self
+            .client
+            .put(format!("{}{}", self.http_base, path))
+            .header("Accept-Language", "zh-CN")
+            .json(&body);
+        if let Some(code) = workspace.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Workspace-Code", code);
+        }
+        if let Some(code) = assistant_code.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Assistant-Code", code);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| RpcError::internal(format!("tron request failed: {e}")))?;
+        let envelope: Value = response
+            .json()
+            .await
+            .map_err(|e| RpcError::internal(format!("tron response invalid: {e}")))?;
+        unwrap_envelope(envelope)
+    }
+
     async fn post_multipart_with_scope(
         &self,
         path: &str,
@@ -276,6 +305,20 @@ impl TronRemotePack {
         metadata
             .as_ref()?
             .get("assistantCode")?
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    }
+
+    /// The workspace a session lives in travels in the RPC metadata because the
+    /// generic session contract only carries a session id. Falling back to the
+    /// node's default workspace would make sessions in other workspaces
+    /// unreadable ("session not found") on remote clients.
+    fn metadata_workspace_code(metadata: &Option<Value>) -> Option<String> {
+        metadata
+            .as_ref()?
+            .get("workspaceCode")?
             .as_str()
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -399,6 +442,7 @@ impl TronRemotePack {
                 "assistantCode": item.get("agentCode").cloned().unwrap_or(Value::Null),
                 "projectCode": item.get("projectCode").cloned().unwrap_or(Value::Null),
                 "directoryCode": item.get("directoryCode").cloned().unwrap_or(Value::Null),
+                "workingDirectoryCode": item.get("workingDirectoryCode").cloned().unwrap_or(Value::Null),
             })),
         })
     }
@@ -457,7 +501,9 @@ impl SessionRpc for TronRemotePack {
     }
 
     async fn history(&self, _ctx: &RemotePrincipal, params: SessionHistoryParams) -> Result<SessionHistoryResult, RpcError> {
-        let workspace = self.default_workspace().await?;
+        let workspace = self
+            .workspace_for(Self::metadata_workspace_code(&params.metadata).as_deref())
+            .await?;
         let assistant = Self::metadata_assistant_code(&params.metadata);
         let data = self
             .get_with_assistant(
@@ -484,6 +530,20 @@ impl SessionRpc for TronRemotePack {
         if let Some(title) = params.title {
             body["title"] = json!(title);
         }
+        // A session started from a project/directory group must keep that
+        // context, otherwise it lands in "随聊" with no workspace of its own.
+        if let Some(metadata) = params.metadata.as_ref() {
+            for key in ["projectCode", "directoryCode", "workingDirectoryCode"] {
+                if let Some(value) = metadata
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    body[key] = json!(value);
+                }
+            }
+        }
         let data = self
             .post_with_workspace("/api/v1/chats/sessions", body, &workspace)
             .await?;
@@ -497,7 +557,9 @@ impl SessionRpc for TronRemotePack {
         params: SessionSendMessageParams,
         events: EventEmitter,
     ) -> Result<SendMessageResult, RpcError> {
-        let workspace = self.default_workspace().await?;
+        let workspace = self
+            .workspace_for(Self::metadata_workspace_code(&params.metadata).as_deref())
+            .await?;
         let assistant = Self::metadata_assistant_code(&params.metadata);
         let mut body = json!({
             "content": params.content,
@@ -506,6 +568,20 @@ impl SessionRpc for TronRemotePack {
         });
         if let Some(attachments) = params.attachments {
             body["attachments"] = attachments;
+        }
+        // The remote client sends the same explicit model selection the desktop
+        // client sends. Without it Tron skips its auto-model router and hands the
+        // agent a placeholder route with no context window, so the run fails
+        // before the first model call.
+        if let Some(selection) = params.model_selection {
+            body["modelSelection"] = selection;
+        }
+        if let Some(effort) = params
+            .reasoning_effort
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+        {
+            body["reasoningEffort"] = json!(effort);
         }
         if let Some(metadata) = params.metadata {
             body["a2uiMetadata"] = metadata;
@@ -577,8 +653,16 @@ impl SessionRpc for TronRemotePack {
             "expectedRunCode": params.run_id.unwrap_or_default(),
         });
         let assistant = Self::metadata_assistant_code(&params.metadata);
+        let workspace = self
+            .workspace_for(Self::metadata_workspace_code(&params.metadata).as_deref())
+            .await?;
         let _ = self
-            .post_with_assistant("/api/v1/chats/sessions/stop-run", body, assistant.as_deref())
+            .post_with_scope(
+                "/api/v1/chats/sessions/stop-run",
+                body,
+                Some(workspace.as_str()),
+                assistant.as_deref(),
+            )
             .await?;
         Ok(StopRunResult { cancelled: true })
     }
@@ -649,6 +733,17 @@ impl RpcMethod for TronMethod {
             .to_owned();
         match self.method.as_str() {
             "tron.workspaces.list" => self.pack.get("/api/v1/admin/workspaces/options", &[]).await,
+            // The same option list the desktop composer renders: each option
+            // carries the server-owned `modelSelection`, so the phone never
+            // invents a model code or quality tier.
+            "tron.models.selectOptions" => {
+                self.pack
+                    .get(
+                        "/api/v1/model-providers/select-options",
+                        &[("workspaceCode", workspace.as_str())],
+                    )
+                    .await
+            }
             "tron.assistants.list" => {
                 self.pack
                     .get("/api/v1/assistants", &[("workspaceCode", workspace.as_str())])
@@ -738,6 +833,27 @@ impl RpcMethod for TronMethod {
                         })
                         .collect(),
                 ))
+            }
+            "tron.chat.setWorkingDirectory" => {
+                let session_code = params
+                    .get("sessionCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let directory_code = params
+                    .get("directoryCode")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty());
+                self.pack
+                    .put_with_scope(
+                        &format!(
+                            "/api/v1/chats/sessions/{session_code}/working-directory"
+                        ),
+                        json!({ "directoryCode": directory_code }),
+                        Some(workspace.as_str()),
+                        Some(assistant_code.as_str()),
+                    )
+                    .await
             }
             "tron.chat.steer" => {
                 let session_code = params
@@ -980,6 +1096,7 @@ impl RemotePack for TronRemotePack {
     fn register(&self, registry: &mut RpcRegistry) {
         for method in [
             "tron.workspaces.list",
+            "tron.models.selectOptions",
             "tron.assistants.list",
             "tron.assistants.mainSession",
             "tron.assistants.createSession",
@@ -987,6 +1104,7 @@ impl RemotePack for TronRemotePack {
             "tron.directories.list",
             "tron.session.groups",
             "tron.chat.protocolEvents",
+            "tron.chat.setWorkingDirectory",
             "tron.chat.steer",
             "tron.chat.answerUserInput",
             "tron.chat.uploadAttachment",

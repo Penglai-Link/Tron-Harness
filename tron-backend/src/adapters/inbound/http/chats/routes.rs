@@ -8,7 +8,9 @@ use crate::app::AppState;
 use super::handler::{
     answer_user_input, archive_session, archived_session_detail, batch_delete_archived_sessions,
     create_session, delete_archived_session, delete_session, download_archived_session_attachment,
-    download_session_attachment, list_archived_sessions, list_messages, list_session_groups,
+    download_artifact, download_session_attachment,
+    resolve_artifact, list_archived_sessions, list_messages,
+    list_session_groups,
     list_user_input_requests, patch_session, restore_session, send_message, steer_message,
     stream_message, upload_session_attachment,
 };
@@ -33,6 +35,14 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/chats/sessions/{session_code}/a2ui/actions/stream",post(super::a2ui::action))
         .route("/api/v1/chats/sessions/{session_code}/history/turns/{root_run_id}", axum::routing::delete(super::history_deletion::delete_turn))
         .route("/api/v1/chats/sessions/{session_code}/history/query", post(super::history::read_history))
+        .route(
+            "/api/v1/chats/sessions/{session_code}/artifacts/{run_code}/{item_code}/content",
+            get(download_artifact),
+        )
+        .route(
+            "/api/v1/chats/sessions/{session_code}/artifacts/{run_code}/{item_code}/desktop-resolve",
+            post(resolve_artifact),
+        )
         .route("/api/v1/chats/sessions/{session_code}/terminals", get(super::terminals::list))
         .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}", get(super::terminals::read))
         .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}/stop", post(super::terminals::stop))

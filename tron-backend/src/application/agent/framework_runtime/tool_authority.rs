@@ -23,6 +23,19 @@ pub(super) fn has_product_implementation(
         .is_ok()
 }
 
+fn framework_artifact_binding(
+    extensions: &fw::Extensions,
+    descriptor: &fw::ToolDescriptor,
+) -> bool {
+    extensions
+        .get::<tron_harness_capability::ArtifactsRunOptions>()
+        .is_some()
+        && matches!(
+            (descriptor.id.as_str(), descriptor.call_name.as_str()),
+            ("artifacts.present", "artifacts_present")
+        )
+}
+
 fn framework_a2ui_binding(extensions: &fw::Extensions, descriptor: &fw::ToolDescriptor) -> bool {
     eliteforge_agent_official_plugin_a2ui::negotiated(extensions)
         && (eliteforge_agent_official_plugin_a2ui::is_a2ui_tool(descriptor)
@@ -46,12 +59,17 @@ pub(crate) fn map_authorized_descriptor(
             required_variable_keys: vec![],
         });
     }
-    if framework_a2ui_binding(extensions, descriptor) || native_skill_descriptor(descriptor) {
+    if framework_a2ui_binding(extensions, descriptor)
+        || framework_artifact_binding(extensions, descriptor)
+        || native_skill_descriptor(descriptor)
+    {
         return Ok(EffectiveTool {
             tool_name: descriptor.call_name.clone(),
             domain_code: Some(
                 if native_skill_descriptor(descriptor) {
                     "skill"
+                } else if framework_artifact_binding(extensions, descriptor) {
+                    "artifacts"
                 } else {
                     "a2ui"
                 }
@@ -233,6 +251,7 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         }
         if (!state.product_tool_authority.contains(name)
             && !framework_a2ui_binding(&run.extensions, &binding.descriptor)
+            && !framework_artifact_binding(&run.extensions, &binding.descriptor)
             && !(self.skills.is_some() && native_skill_descriptor(&binding.descriptor)))
             || overridden_native_skill(&host, &state, &binding.descriptor)
         {
@@ -240,6 +259,7 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         }
         if (self.skills.is_some() && native_skill_descriptor(&binding.descriptor))
             || framework_a2ui_binding(&run.extensions, &binding.descriptor)
+            || framework_artifact_binding(&run.extensions, &binding.descriptor)
         {
             return Ok(fw::ToolBindingAdmission::Allow);
         }
@@ -438,6 +458,7 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         if (!state
             .product_tool_authority
             .contains(&invocation.descriptor.call_name)
+            && !framework_artifact_binding(&invocation.run.extensions, invocation.descriptor)
             && !(framework_a2ui_binding(&invocation.run.extensions, invocation.descriptor)
                 && (!native_skill_descriptor(invocation.descriptor)
                     || invocation

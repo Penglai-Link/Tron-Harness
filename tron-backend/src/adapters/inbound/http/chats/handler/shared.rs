@@ -116,6 +116,9 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
     match error {
         ChatSendError::Chat(ChatError::AttachmentInvalid(_)) => "CHAT_ATTACHMENT_INVALID",
         ChatSendError::Chat(ChatError::AttachmentNotFound) => "CHAT_ATTACHMENT_NOT_FOUND",
+        ChatSendError::Chat(ChatError::ArtifactNotFound) => "CHAT_ARTIFACT_NOT_FOUND",
+        ChatSendError::Chat(ChatError::ArtifactChanged) => "CHAT_ARTIFACT_CHANGED",
+        ChatSendError::Chat(ChatError::ArtifactUnavailable) => "CHAT_ARTIFACT_UNAVAILABLE",
         ChatSendError::Chat(
             error @ (ChatError::AnnotationsInvalid
             | ChatError::RequestedSkillsInvalid

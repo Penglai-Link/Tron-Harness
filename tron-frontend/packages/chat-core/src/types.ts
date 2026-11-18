@@ -1,6 +1,6 @@
 import type { A2uiActionInput, A2uiActionMetadata, A2uiState, ChatAnnotation, ChatHistoryLabels, HistoryQuery, MessageProvenance, SessionHistory, ToolActionSummary } from "./transportTypes";
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
-export type ToolExecutionMode = "CONTROLLED" | "AUTO_APPROVE";
+export type ToolExecutionMode = "CONTROLLED" | "AUTO_APPROVE" | "PLAN";
 export type ChatSessionSourceType = "MANUAL" | "TASK" | "AUTOMATION" | "TERMINAL";
 export type ChatMessageRole = "USER" | "ASSISTANT";
 export type ChatMessageChannel = "MAIN_AGENT" | "TASK_AGENT";
@@ -87,6 +87,23 @@ export interface ChatMessage {
   totalTokens?: number | null;
   createdAt: string;
   requestedSkills?: string[];
+  artifacts?: ChatArtifacts;
+}
+
+export type ChatArtifactAction = "preview" | "open" | "reveal" | "save";
+
+export interface ChatArtifactItem {
+  id: string;
+  display: string;
+  description?: string;
+  mediaType?: string;
+  byteSize?: number;
+  actions?: ChatArtifactAction[];
+}
+
+export interface ChatArtifacts {
+  version: "v1";
+  items: ChatArtifactItem[];
 }
 
 export type ChatMessageAttachmentKind = "file" | "image" | "inspection";
@@ -291,6 +308,7 @@ export interface SendChatMessageInput {
   clientCapabilities?: {
     userInputRequests?: boolean;
     a2ui?: { version: "v0.9.1"; catalogIds: string[] };
+    artifacts?: { actions?: ChatArtifactAction[] };
   };
   requestedSkills?: string[];
 }

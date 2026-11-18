@@ -83,7 +83,7 @@ pub async fn suggestions(
     let commands = match state.skills.internal_agent_codes() {
         Ok(codes) => {
             if codes.contains(&agent) {
-                vec!["goal".into(), "compact".into()]
+                vec!["goal".into(), "plan".into(), "compact".into()]
             } else {
                 vec![]
             }

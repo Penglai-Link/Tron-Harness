@@ -24,6 +24,10 @@ pub struct AgentRunResult {
     /// The effective model after SDK recovery, kept internal for follow-up jobs.
     #[serde(skip)]
     pub effective_model: Option<super::AgentModelConfig>,
+    /// Private delivery records of this run. Persisted by the chat service in
+    /// a separate session event and never exposed by this DTO.
+    #[serde(skip)]
+    pub artifact_records: Vec<crate::domain::chat::ArtifactRecord>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

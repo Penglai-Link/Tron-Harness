@@ -4,6 +4,8 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+
+use super::ChatArtifacts;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +87,10 @@ pub struct ChatMessage {
     pub created_at: String,
     #[serde(default)]
     pub requested_skills: Vec<String>,
+    /// Public delivery projection. Never persisted inside `tron.message`;
+    /// filled from the private artifact record when the message is served.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifacts: Option<ChatArtifacts>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,6 +134,16 @@ pub struct ChatClientCapabilities {
     pub user_input_requests: bool,
     #[serde(default)]
     pub a2ui: Option<ChatA2uiCapabilities>,
+    /// Actions this client can actually render. Omitted means portable only.
+    #[serde(default)]
+    pub artifacts: Option<ChatArtifactCapabilities>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatArtifactCapabilities {
+    #[serde(default)]
+    pub actions: Vec<super::ArtifactAction>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -196,6 +212,9 @@ pub struct ChatUserInputRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatError {
+    ArtifactNotFound,
+    ArtifactChanged,
+    ArtifactUnavailable,
     AnnotationsInvalid,
     RequestedSkillsInvalid,
     RequestedSkillForbidden,
@@ -229,6 +248,9 @@ pub enum ChatError {
 impl Display for ChatError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ArtifactNotFound => f.write_str("delivered file was not found"),
+            Self::ArtifactChanged => f.write_str("delivered file changed after delivery"),
+            Self::ArtifactUnavailable => f.write_str("delivered file is unavailable"),
             Self::AttachmentInvalid(message) => write!(f, "chat attachment is invalid: {message}"),
             Self::AttachmentNotFound => f.write_str("chat attachment was not found"),
             Self::AnnotationsInvalid => f.write_str("invalid conversation annotations"),

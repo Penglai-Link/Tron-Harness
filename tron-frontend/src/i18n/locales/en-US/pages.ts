@@ -1930,6 +1930,8 @@ export const pages = {
       },
       modelSelector: {
         selectAria: "Select chat model",
+        triggerAria: "Model {{model}}, intelligence {{effort}}",
+        panelAria: "Model and intelligence",
         searchAria: "Search chat models",
         searchPlaceholder: "Search models...",
         loading: "Loading models...",
@@ -1937,6 +1939,13 @@ export const pages = {
         autoName: "Conversation Automatic Routing",
         providerModels: "Provider models",
         qualityGroup: "{{quality}} · {{vendor}}",
+        changeModel: "Change model",
+        hideModels: "Hide",
+        currentModel: "Current model",
+        resetEffort: "Reset intelligence level",
+        resetEffortAria: "Reset intelligence level",
+        sliderLow: "Faster",
+        sliderHigh: "Deeper",
         quality: {
           High: "Remote high quality",
           Middle: "Remote medium quality",
@@ -2016,6 +2025,7 @@ export const pages = {
         commandsAndSkills: "Commands and skills",
         goalSuggestion: "Set the execution objective for this chat",
         compactSuggestion: "Compact short-term memory for this chat",
+        planSuggestion: "Enter or leave plan mode",
         suggestionsFailed: "Could not load skill and command suggestions",
         uploadAttachment: "Upload attachment",
         executionMode: "Execution mode",
@@ -2024,6 +2034,10 @@ export const pages = {
         controlledExecutionHint: "Follow tool permissions and ask when approval is required.",
         autoApprove: "Auto-approve",
         autoApproveHint: "Automatically approve tools that require approval. Denied tools stay blocked.",
+        planMode: "Plan mode",
+        planModeHint: "Research read-only and present a plan; nothing changes before you approve it.",
+        planModeEntered: "Plan mode on",
+        planModeExited: "Plan mode off",
         executionModeSaveFailed: "Could not save execution mode",
         uploading: "Uploading…",
         removeAttachment: "Remove {{label}}",
@@ -3081,10 +3095,6 @@ export const pages = {
         explore: {
           name: "Explore Agent",
           description: "Built-in agent for read-only exploration.",
-        },
-        product: {
-          name: "Yang Bus",
-          description: "Built-in agent for product analysis and design.",
         },
       },
       description:

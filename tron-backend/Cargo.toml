@@ -58,7 +58,7 @@ base64 = "0.22"
 bcrypt = "0.17"
 flate2 = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "b7ef4e21d503bc781bf1714238a1564e7c815184" }
+crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "d29d8ad" }
 cron = "0.12"
 gmcrypto-core = { version = "1.0.0", features = ["sm4-aead"] }
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
@@ -109,13 +109,6 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
-
-# Framework currently pins the preceding SDK revision. Replace that exact package
-# so its public SDK types and Tron's types come from the same revision.
-# Cargo's [patch] cannot override a Git source with another rev of that source.
-# Remove this replacement when Framework pins the same SDK revision.
-[replace]
-"https://gitee.com/person-ai/person-ai-index-rust-sdk.git#crab-serverapi:0.4.0" = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "b7ef4e21d503bc781bf1714238a1564e7c815184" }
 
 [profile.release]
 # Reduce the distributed sidecar size while retaining panic unwinding for

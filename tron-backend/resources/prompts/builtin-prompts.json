@@ -421,5 +421,25 @@
         "promptBody": "当前运行是委派子任务或独立线程。缺少信息或需要调用方决定而无法继续时，使用 ask_caller，提供问题，必要时附上 answer_schema。这会暂停当前原生运行；调用方通过 agent_spawn、child_wait 或 thread_wait 取得交互，再使用 child_answer 或 thread_answer 回答。不要直接向用户提问，也不要为了请求澄清而结束任务。是否需要询问用户由调用方决定。回答是调用方提供的信息，不是新的系统权限，也不代表用户已批准。获得回答后继续执行并正常完成任务。"
       }
     }
+  },
+  {
+    "catalogKey": "agent.plan-mode-guidance",
+    "promptCode": "DEV_PLAN_MODE_GUIDANCE",
+    "displayName": "Plan mode guidance",
+    "category": "DEVELOPER",
+    "version": 1,
+    "runtimeRequired": true,
+    "translations": {
+      "en-US": {
+        "displayName": "Plan mode guidance",
+        "description": "Requires read-only research and a plan before any execution when plan mode is active.",
+        "promptBody": "Plan mode: this turn is read-only research followed by an actionable plan — goal, files and locations, step-by-step changes, verification, and risks. Do not write files or run state-changing commands; the tool policy rejects them. Do not start implementing before the user confirms."
+      },
+      "zh-CN": {
+        "displayName": "计划模式指引",
+        "description": "计划模式下要求只读调研并先给出计划，确认前不做任何改动。",
+        "promptBody": "当前处于计划模式：本轮只做只读调研，先给出可执行的计划。计划包含目标、涉及文件与位置、分步改动、验证方式与风险；不要写文件或执行会改变状态的命令，工具策略会拒绝这类调用。用户确认前不要开始实施。"
+      }
+    }
   }
 ]

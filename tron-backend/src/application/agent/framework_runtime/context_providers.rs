@@ -90,6 +90,24 @@ pub(super) async fn assemble(
             instructions.push(instruction.clone());
         }
     }
+    // Plan mode is a run-local host decision, so its guidance joins the seed
+    // instructions instead of the editable developer prompt catalog.
+    if !onboarding
+        && input
+            .run
+            .extensions
+            .get::<tron_harness_capability::TronPlanMode>()
+            .is_some()
+    {
+        if let Some(guidance) =
+            crate::domain::prompt::builtin_prompt_text("agent.plan-mode-guidance", &context.locale)
+        {
+            let message = fw::Message::system(guidance.trim());
+            if !instructions.contains(&message) {
+                instructions.push(message);
+            }
+        }
+    }
     let is_tool_domains = |message: &crate::domain::agent::AgentMessage| {
         message.parts.iter().any(|part| matches!(part, crate::domain::agent::AgentMessagePart::Context { kind, .. } if kind == "tool_domains"))
     };

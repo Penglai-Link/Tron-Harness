@@ -135,6 +135,20 @@ pub trait ChatRepository: Send {
         updated_at: &str,
     ) -> Result<(), ChatError>;
     fn create_message(&mut self, message: &ChatMessage) -> Result<(), ChatError>;
+    /// Persist private delivery records for one finished run. These records
+    /// never enter the public message DTO.
+    fn append_artifacts(
+        &mut self,
+        session_code: &str,
+        run_code: &str,
+        message_code: &str,
+        records: &[crate::domain::chat::ArtifactRecord],
+    ) -> Result<(), ChatError>;
+    /// Private delivery records of a session keyed by run code.
+    fn artifacts_by_session(
+        &mut self,
+        session_code: &str,
+    ) -> Result<std::collections::BTreeMap<String, Vec<crate::domain::chat::ArtifactRecord>>, ChatError>;
     fn list_messages(&mut self, session_code: &str) -> Result<Vec<ChatMessage>, ChatError>;
     fn list_user_input_requests(
         &mut self,

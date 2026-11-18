@@ -337,15 +337,48 @@ pub async fn download_session_attachment(
     response
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListMessagesQuery {
+    #[serde(default)]
+    pub artifacts_actions: Option<String>,
+}
+
+fn parse_artifact_actions(value: Option<&str>) -> Option<Vec<crate::domain::chat::ArtifactAction>> {
+    let value = value?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let mut actions = Vec::new();
+    for raw in value.split(',') {
+        let action = match raw.trim() {
+            "preview" => crate::domain::chat::ArtifactAction::Preview,
+            "open" => crate::domain::chat::ArtifactAction::Open,
+            "reveal" => crate::domain::chat::ArtifactAction::Reveal,
+            "save" => crate::domain::chat::ArtifactAction::Save,
+            _ => continue,
+        };
+        if !actions.contains(&action) {
+            actions.push(action);
+        }
+    }
+    if actions.is_empty() { None } else { Some(actions) }
+}
+
 pub async fn list_messages(
     State(state): State<AppState>,
     _auth: RequestAuthContext,
     Path(session_code): Path<String>,
+    Query(query): Query<ListMessagesQuery>,
 ) -> Response {
     if state.chats.get_session(&session_code).is_err() {
         return chat_error_response(ChatError::SessionNotFound);
     }
-    match state.chats.list_messages(&session_code) {
+    let actions = parse_artifact_actions(query.artifacts_actions.as_deref());
+    match state
+        .chats
+        .list_messages_with_actions(&session_code, actions.as_deref())
+    {
         Ok(messages) => Json(ApiResponse::success(messages)).into_response(),
         Err(error) => chat_error_response(error),
     }

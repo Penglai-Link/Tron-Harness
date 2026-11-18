@@ -149,6 +149,7 @@ impl SystemCliRuntime {
             native: None,
             sdk_execution: None,
             effective_model: None,
+            artifact_records: Vec::new(),
         })
     }
 }

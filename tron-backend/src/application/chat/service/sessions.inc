@@ -628,8 +628,47 @@ impl ChatService {
     }
 
     pub fn list_messages(&self, session_code: &str) -> Result<Vec<ChatMessage>, ChatError> {
+        self.list_messages_with_actions(session_code, None)
+    }
+
+    /// Public message list with delivery actions intersected with what the
+    /// requesting client can render. `None` means the portable set.
+    pub fn list_messages_with_actions(
+        &self,
+        session_code: &str,
+        actions: Option<&[crate::domain::chat::ArtifactAction]>,
+    ) -> Result<Vec<ChatMessage>, ChatError> {
         self.repository().get_session(session_code)?;
-        self.repository().list_messages(session_code)
+        let mut messages = self.repository().list_messages(session_code)?;
+        // Delivery records are stored privately per run; the public list is a
+        // projection and never reads paths from the persisted message.
+        let mut artifacts = self.repository().artifacts_by_session(session_code)?;
+        let effective = actions.unwrap_or(&crate::domain::chat::ArtifactAction::PORTABLE);
+        for message in &mut messages {
+            let Some(run_code) = message.run_code.as_deref() else {
+                continue;
+            };
+            if message.role != ChatMessageRole::Assistant {
+                continue;
+            }
+            if let Some(records) = artifacts.remove(run_code) {
+                message.artifacts =
+                    crate::domain::chat::ChatArtifacts::from_records_with_actions(&records, effective);
+            }
+        }
+        Ok(messages)
+    }
+
+    /// Private delivery records of one session, keyed by run code.
+    pub fn artifacts_by_session(
+        &self,
+        session_code: &str,
+    ) -> Result<
+        std::collections::BTreeMap<String, Vec<crate::domain::chat::ArtifactRecord>>,
+        ChatError,
+    > {
+        self.repository().get_session(session_code)?;
+        self.repository().artifacts_by_session(session_code)
     }
 
     pub fn list_user_input_requests(
@@ -670,7 +709,8 @@ impl ChatService {
             client_capabilities: Some(crate::domain::chat::ChatClientCapabilities {
                 user_input_requests: true,
             a2ui: None,
-            }),
+            artifacts: None,
+        }),
             resume: entries,
         })
     }

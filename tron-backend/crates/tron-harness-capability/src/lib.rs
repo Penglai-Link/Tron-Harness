@@ -242,10 +242,16 @@ impl Tool for ScopedTool {
     }
 }
 
+pub mod artifact_delivery;
 pub mod tool_policy;
 pub mod tool_risk;
+pub use artifact_delivery::{
+    ArtifactDeliveryConfig, ArtifactGuidance, ArtifactSource, ArtifactToolProvider,
+    ArtifactFingerprint, ArtifactsRunOptions, PublicArtifactItem, RunArtifactCollector,
+    StoredArtifactRecord, artifact_delivery_pack, validate_file,
+};
 pub use tool_policy::{
-    ToolPermission, ToolPermissionSetting, ToolPermissionSource, TronToolPolicy,
-    TronToolAutoApproval, TronToolPolicyLocale,
+    ToolPermission, ToolPermissionSetting, ToolPermissionSource, TronPlanMode,
+    TronToolAutoApproval, TronToolPolicy, TronToolPolicyLocale,
 };
 pub use tool_risk::{ToolRisk, identify_tool_risk};

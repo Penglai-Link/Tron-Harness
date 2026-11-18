@@ -9,6 +9,9 @@ pub enum ToolExecutionMode {
     #[default]
     Controlled,
     AutoApprove,
+    /// Read-only research run: the Agent inspects the workspace and presents a
+    /// plan. State-changing tools are denied until the user leaves this mode.
+    Plan,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

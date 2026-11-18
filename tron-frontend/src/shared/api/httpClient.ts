@@ -101,6 +101,9 @@ export function getApiAccessToken() {
 
 export function setApiAccessToken(token: string | null) {
   apiAccessToken = token && token.trim() ? token.trim() : null;
+  // Trusted desktop main processes have no session of their own; the renderer
+  // hands them the short-lived token for one artifact download only.
+  (globalThis as { __tronAccessToken?: string }).__tronAccessToken = apiAccessToken ?? undefined;
 }
 
 export function isApiError(error: unknown): error is ApiError {

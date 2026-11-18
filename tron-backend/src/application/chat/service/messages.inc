@@ -57,6 +57,13 @@ impl ChatService {
         agent: AgentInvocationService,
         sink: Option<ModelStreamSink>,
     ) -> Result<ChatSendResult, ChatSendError> {
+
+        let artifact_actions = command
+            .client_capabilities
+            .as_ref()
+            .and_then(|capabilities| capabilities.artifacts.as_ref())
+            .map(|capabilities| capabilities.actions.clone())
+            .unwrap_or_else(|| crate::domain::chat::ArtifactAction::PORTABLE.to_vec());
         eliteforge_agent_core::validate_annotations(&command.annotations).map_err(|_| ChatSendError::Chat(ChatError::AnnotationsInvalid))?;
         let annotations = command.annotations;
         let content = normalized_optional(command.content).unwrap_or_default();
@@ -248,7 +255,7 @@ impl ChatService {
         } else {
             (run.final_output.clone(), None)
         };
-        let assistant_message = self.create_message(
+        let mut assistant_message = self.create_message(
             session_code,
             Some(run.run_code.clone()),
             ChatMessageRole::Assistant,
@@ -258,6 +265,21 @@ impl ChatService {
             Vec::new(),
             run.token_usage,
         )?;
+        if !run.artifact_records.is_empty() {
+            self.repository()
+                .append_artifacts(
+                    session_code,
+                    &run.run_code,
+                    &assistant_message.message_code,
+                    &run.artifact_records,
+                )
+                .map_err(ChatSendError::Chat)?;
+            assistant_message.artifacts =
+                crate::domain::chat::ChatArtifacts::from_records_with_actions(
+                    &run.artifact_records,
+                    &artifact_actions,
+                );
+        }
         let mut result_messages = user_message.into_iter().collect::<Vec<_>>();
         result_messages.push(assistant_message.clone());
         let mut user_input_request = if let Some(raw) = user_input_request {
@@ -459,6 +481,7 @@ impl ChatService {
             output_tokens: token_usage.map(|usage| usage.output_tokens),
             total_tokens: token_usage.map(|usage| usage.total_tokens),
             created_at: current_timestamp(),
+            artifacts: None,
         };
         let mut repository = self.repository();
         repository

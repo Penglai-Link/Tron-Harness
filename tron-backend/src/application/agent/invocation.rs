@@ -437,6 +437,7 @@ impl AgentInvocationService {
                     latest_usage_audit: result.latest_usage_audit,
                     system_agent_session_id: result.system_agent_session_id,
                     observations: result.observations,
+                    artifact_records: result.artifact_records,
                 })
             }
             Err(invocation_error) => {

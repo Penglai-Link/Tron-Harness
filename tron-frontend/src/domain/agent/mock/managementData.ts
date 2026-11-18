@@ -230,7 +230,6 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
   },
   ...[
     { agentCode: "explore-agent", name: "探索智能体", rolePrompt: "只读探索项目和资料，提供准确、相关、可追溯的上下文。", groupName: "探索", avatarId: "fox" },
-    { agentCode: "prd-agent", name: "杨布斯", rolePrompt: "分析用户需求，制定清晰、可验证的产品方案。", groupName: "设计", avatarId: "astronaut" },
   ].map(({ agentCode, name, rolePrompt, groupName, avatarId }) => ({
     agentCode,
     name,

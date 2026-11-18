@@ -158,9 +158,12 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
       return payload.events ?? [];
     },
     loadMessages(sessionCode: string) {
+      const desktop = typeof window !== "undefined"
+        && Boolean((window as { tronDesktop?: { invoke?: unknown } }).tronDesktop?.invoke);
       return transport.requestJson<ChatMessage[]>({
         path: "/api/v1/chats/sessions/{sessionCode}/messages",
         pathParams: { sessionCode },
+        queryParams: desktop ? { artifactsActions: "preview,open,reveal,save" } : {},
       }).then((messages) => messages.map(normalizeChatMessage));
     },
     async deleteTurn(sessionCode, input, signal) {

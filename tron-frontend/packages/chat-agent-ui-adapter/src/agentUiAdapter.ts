@@ -11,7 +11,48 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
     onDelta: target?.onDelta,
     onAguiEvent: (event) => target?.onAguiEvent?.(toUiEvent(event, event.threadId ? nameForSession(event.threadId) : undefined)),
   });
+  const artifactContentUrl = (session: { sessionId: string }, input: { runId?: string | null; itemId: string; disposition: "inline" | "attachment" }) =>
+    `/api/v1/chats/sessions/${encodeURIComponent(session.sessionId)}/artifacts/${encodeURIComponent(input.runId ?? "")}/${encodeURIComponent(input.itemId)}/content?disposition=${input.disposition}`;
   return {
+    artifactContentUrl,
+    artifactAction: async (session, input) => {
+      const host = window as unknown as {
+        tronDesktop?: { invoke: (command: string, payload?: unknown) => Promise<unknown> };
+        __tronAccessToken?: string;
+      };
+      const token = host.__tronAccessToken;
+      if (host.tronDesktop?.invoke && token) {
+        const command = input.action === "open"
+          ? "artifact:open"
+          : input.action === "reveal" ? "artifact:reveal" : "artifact:save";
+        try {
+          const value = await host.tronDesktop.invoke(command, {
+            sessionCode: session.sessionId,
+            runCode: input.runId ?? "",
+            itemId: input.itemId,
+            token,
+            suggestedName: input.itemId,
+          }) as { status?: string; message?: string } | null;
+          if (value?.status === "saved" || value?.status === "opened" || value?.status === "revealed") {
+            return { status: "completed" as const };
+          }
+          if (value?.status === "cancelled") return { status: "cancelled" as const };
+          return { status: "failed" as const, message: value?.message ?? "Artifact action failed" };
+        } catch (error) {
+          return { status: "failed" as const, message: error instanceof Error ? error.message : "Artifact action failed" };
+        }
+      }
+      if (input.action !== "save") {
+        return { status: "failed" as const, message: "Artifact action is unavailable on this host" };
+      }
+      const anchor = document.createElement("a");
+      anchor.href = artifactContentUrl(session, { runId: input.runId, itemId: input.itemId, disposition: "attachment" });
+      anchor.download = "";
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      return { status: "completed" as const };
+    },
     capabilities: host.capabilities,
     createSession: async (input) => {
       if (!config.workspaceCode?.trim()) throw new Error("Workspace code is required before starting a session");

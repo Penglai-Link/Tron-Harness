@@ -9,7 +9,9 @@ const defaultModeStorageKey = "tron.chat.executionMode.default";
 
 function readDefaultMode(): ToolExecutionMode {
   try {
-    return localStorage.getItem(defaultModeStorageKey) === "AUTO_APPROVE" ? "AUTO_APPROVE" : "CONTROLLED";
+    const stored = localStorage.getItem(defaultModeStorageKey);
+    if (stored === "AUTO_APPROVE" || stored === "PLAN") return stored;
+    return "CONTROLLED";
   } catch {
     return "CONTROLLED";
   }
