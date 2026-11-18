@@ -31,4 +31,5 @@ jobs:
       - run: npm ci --prefix tron-frontend
       - run: make version-check
       - run: make fe-check
+      - run: make be-i18n-check
       - run: make be-check

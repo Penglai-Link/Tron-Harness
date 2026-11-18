@@ -252,6 +252,10 @@ pub use artifact_delivery::{
 };
 pub use tool_policy::{
     ToolPermission, ToolPermissionSetting, ToolPermissionSource, TronPlanMode,
-    TronToolAutoApproval, TronToolPolicy, TronToolPolicyLocale,
+    TronToolAutoApproval, TronToolPolicy, TronToolPolicyLocale, permission_denied_message,
+    plan_mode_denied_message, run_locale,
 };
-pub use tool_risk::{ToolRisk, identify_tool_risk};
+pub use tool_risk::{
+    CommandRiskReason, RiskReason, ToolRisk, ToolRiskAssessment, assess_tool_risk,
+    command_assessment, identify_tool_risk,
+};

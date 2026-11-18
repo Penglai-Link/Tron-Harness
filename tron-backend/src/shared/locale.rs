@@ -1,43 +1,16 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SupportedLocale {
-    EnUs,
-    ZhCn,
-}
+//! Request locale resolution.
+//!
+//! The locale type itself lives in the shared `tron-i18n` crate so every
+//! crate, every translation lookup and every persisted locale tag uses the
+//! same two supported values. `SupportedLocale` remains the historical name
+//! used across the backend; new code may use [`TronLocale`].
 
-impl SupportedLocale {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::EnUs => "en-US",
-            Self::ZhCn => "zh-CN",
-        }
-    }
+pub use tron_i18n::Locale as SupportedLocale;
+pub use tron_i18n::Locale as TronLocale;
 
-    pub fn from_request(value: Option<&str>) -> Self {
-        value.map(Self::from_raw).unwrap_or(Self::ZhCn)
-    }
-
-    pub fn from_raw(value: &str) -> Self {
-        for segment in value.split(',') {
-            let tag = segment
-                .split_once(';')
-                .map(|(head, _)| head)
-                .unwrap_or(segment)
-                .trim()
-                .to_ascii_lowercase();
-            if tag.is_empty() {
-                continue;
-            }
-            if tag == "zh-cn" || tag == "zh" || tag.starts_with("zh-") {
-                return Self::ZhCn;
-            }
-            if tag == "en-us" || tag == "en" || tag.starts_with("en-") {
-                return Self::EnUs;
-            }
-        }
-        Self::ZhCn
-    }
-}
-
+/// Resolve an `Accept-Language` header value to the locale tag sent to clients
+/// and stored with sessions. Unsupported or missing languages default to
+/// Simplified Chinese.
 pub fn resolve_request_locale(value: Option<&str>) -> String {
     SupportedLocale::from_request(value).as_str().to_string()
 }

@@ -1,9 +1,72 @@
 //! Product permissions are evaluated by the native Framework tool pipeline.
-use super::{ToolRisk, identify_tool_risk};
+//!
+//! Risk classification is structured and language independent
+//! ([`super::tool_risk::RiskReason`]); this module is the approval display
+//! layer that turns it into the run locale's text.
+use super::tool_risk::{RiskReason, ToolRisk, assess_tool_risk, command_assessment};
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tron_i18n::{Locale, t};
+
+/// Locale supplied by the trusted host for this run, never by tool arguments.
+///
+/// Kept as an alias so existing host code keeps using the historical name.
+pub use tron_i18n::Locale as TronToolPolicyLocale;
+
+/// Read the run locale. Missing language follows Tron's backend fallback to
+/// Simplified Chinese; session-facing code always receives it explicitly.
+pub fn run_locale(run: &fw::RunContext) -> Locale {
+    run.extensions
+        .get::<Locale>()
+        .map(|locale| *locale)
+        .unwrap_or_default()
+}
+
+pub fn permission_denied_message(locale: Locale) -> String {
+    t!("approval.permission_denied", locale = locale).into_owned()
+}
+
+pub fn plan_mode_denied_message(locale: Locale) -> String {
+    t!("approval.plan_mode_denied", locale = locale).into_owned()
+}
+
+fn risk_label(locale: Locale, risk: ToolRisk) -> String {
+    let key = match risk {
+        ToolRisk::Safe => "approval.risk_label.safe",
+        ToolRisk::Low => "approval.risk_label.low",
+        ToolRisk::Medium => "approval.risk_label.medium",
+        ToolRisk::High => "approval.risk_label.high",
+        ToolRisk::Critical => "approval.risk_label.critical",
+    };
+    t!(key, locale = locale).into_owned()
+}
+
+fn risk_reason_message(locale: Locale, reason: RiskReason) -> String {
+    t!(reason.message_key(), locale = locale).into_owned()
+}
+
+fn approval_prompt(
+    locale: Locale,
+    risk: Option<ToolRisk>,
+    reason: &str,
+    reason_code: &str,
+) -> fw::Content {
+    fw::Content(vec![
+        fw::ContentBlock::Text {
+            text: reason.into(),
+        },
+        fw::ContentBlock::Json {
+            value: serde_json::json!({
+                "kind": "toolApproval",
+                "risk": risk,
+                "riskLabel": risk.map(|risk| risk_label(locale, risk)),
+                "riskReasonCode": reason_code,
+            }),
+        },
+    ])
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolPermission {
@@ -90,67 +153,12 @@ fn is_interaction_tool(name: &str) -> bool {
     )
 }
 
-/// Display language supplied by the trusted host for this run, never by tool arguments.
-/// Missing language follows Tron's backend fallback to Simplified Chinese.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum TronToolPolicyLocale {
-    EnUs,
-    #[default]
-    ZhCn,
-}
+const REASON_CODE_MODEL_REVIEW: &str = "modelReview";
 
-impl TronToolPolicyLocale {
-    pub fn from_run(run: &fw::RunContext) -> Self {
-        run.extensions
-            .get::<Self>()
-            .map(|locale| *locale)
-            .unwrap_or_default()
-    }
-
-    fn text(self, zh: &'static str, en: &'static str) -> &'static str {
-        match self {
-            Self::ZhCn => zh,
-            Self::EnUs => en,
-        }
-    }
-
-    pub fn permission_denied_message(self) -> &'static str {
-        self.text(
-            "该工具没有平台执行权限",
-            "This tool has no platform permission",
-        )
-    }
-
-    pub fn plan_mode_denied_message(self) -> &'static str {
-        self.text(
-            "计划模式只允许只读操作：先给出计划，用户确认并退出计划模式后再执行改动",
-            "Plan mode allows read-only operations only. Present the plan first; exit plan mode before making changes",
-        )
-    }
-
-    fn risk_label(self, risk: ToolRisk) -> &'static str {
-        match risk {
-            ToolRisk::Safe => self.text("无风险", "Safe"),
-            ToolRisk::Low => self.text("低", "Low"),
-            ToolRisk::Medium => self.text("中", "Medium"),
-            ToolRisk::High => self.text("高", "High"),
-            ToolRisk::Critical => self.text("非常危险", "Critical"),
-        }
-    }
-
-    fn approval_prompt(self, risk: Option<ToolRisk>, reason: &str) -> fw::Content {
-        fw::Content(vec![
-            fw::ContentBlock::Text {
-                text: reason.into(),
-            },
-            fw::ContentBlock::Json {
-                value: serde_json::json!({
-                    "kind": "toolApproval",
-                    "risk": risk,
-                    "riskLabel": risk.map(|risk| self.risk_label(risk)),
-                }),
-            },
-        ])
+fn uncertain_assessment(locale: Locale) -> CommandRiskAssessment {
+    CommandRiskAssessment {
+        risk: None,
+        reason: t!("approval.command_uncertain", locale = locale).into_owned(),
     }
 }
 
@@ -191,7 +199,7 @@ impl fw::ToolPolicy for TronToolPolicy {
             .0
             .setting(invocation.descriptor)
             .map_err(fw::AgentError::Run)?;
-        let locale = TronToolPolicyLocale::from_run(invocation.run);
+        let locale = run_locale(invocation.run);
         // Plan mode is a trusted run preference: read-only work stays available,
         // state-changing tools are refused instead of requesting approval.
         // Asking the user is classified as a command but changes nothing, so it
@@ -201,12 +209,12 @@ impl fw::ToolPolicy for TronToolPolicy {
             && self.0.operation(invocation.descriptor) == Some(true)
         {
             return Ok(fw::ToolPolicyDecision::Deny(
-                locale.plan_mode_denied_message().into(),
+                plan_mode_denied_message(locale).into(),
             ));
         }
         Ok(match setting.permission {
             ToolPermission::No => {
-                fw::ToolPolicyDecision::Deny(locale.permission_denied_message().into())
+                fw::ToolPolicyDecision::Deny(permission_denied_message(locale).into())
             }
             ToolPermission::Run => fw::ToolPolicyDecision::Allow,
             ToolPermission::Ask
@@ -225,15 +233,6 @@ impl fw::ToolPolicy for TronToolPolicy {
                         .extensions
                         .get::<ToolPolicyConfig>()
                         .is_none_or(|config| config.smart);
-                    let uncertain = || {
-                        CommandRiskAssessment {
-                        risk: None,
-                        reason: locale.text(
-                            "无法确定该命令的执行风险，需要人工确认",
-                            "The command's effects could not be assessed; manual approval is required",
-                        ).into(),
-                    }
-                    };
                     let assessment = if smart {
                         match invocation
                             .run
@@ -247,27 +246,20 @@ impl fw::ToolPolicy for TronToolPolicy {
                                 {
                                     return Err(error);
                                 }
-                                Err(_) => uncertain(),
+                                Err(_) => uncertain_assessment(locale),
                             },
-                            None => uncertain(),
+                            None => uncertain_assessment(locale),
                         }
                     } else {
                         // Static rules may prove simple operations, but their conservative
                         // high/critical fallback is not evidence of destructive effects.
-                        let risk = identify_tool_risk(
-                            invocation.descriptor,
-                            &invocation.call.arguments,
-                            None,
-                        );
-                        if risk >= ToolRisk::High {
-                            uncertain()
+                        let evaluated = command_assessment(&invocation.call.arguments);
+                        if evaluated.risk >= ToolRisk::High {
+                            uncertain_assessment(locale)
                         } else {
-                            let (zh, en) = super::tool_risk::command_approval_reason(
-                                &invocation.call.arguments,
-                            );
                             CommandRiskAssessment {
-                                risk: Some(risk),
-                                reason: locale.text(zh, en).into(),
+                                risk: Some(evaluated.risk),
+                                reason: risk_reason_message(locale, evaluated.reason),
                             }
                         }
                     };
@@ -277,59 +269,32 @@ impl fw::ToolPolicy for TronToolPolicy {
                             .risk
                             .is_none_or(|risk| risk >= setting.confirm_level)
                         {
-                            fw::ToolPolicyDecision::RequireApproval(
-                                locale.approval_prompt(assessment.risk, &assessment.reason),
-                            )
+                            fw::ToolPolicyDecision::RequireApproval(approval_prompt(
+                                locale,
+                                assessment.risk,
+                                &assessment.reason,
+                                REASON_CODE_MODEL_REVIEW,
+                            ))
                         } else {
                             fw::ToolPolicyDecision::Allow
                         },
                     );
                 }
                 let operation = self.0.operation(invocation.descriptor);
-                let risk = identify_tool_risk(
+                let evaluated = assess_tool_risk(
                     invocation.descriptor,
                     &invocation.call.arguments,
                     operation,
                 );
-                let reason = if invocation.descriptor.id.starts_with("mcp/") {
-                    locale.text(
-                        "远端 MCP 工具的副作用无法由宿主验证",
-                        "The host cannot verify the side effects of this remote MCP tool",
-                    )
-                } else if invocation.descriptor.id == "personai.generate_image" {
-                    locale.text(
-                        "将提交远端图片生成任务，可能产生费用",
-                        "This submits a remote image generation task and may incur charges",
-                    )
-                } else if invocation.descriptor.id.starts_with("filesystem.") {
-                    locale.text(
-                        "本地文件读取或修改，风险按真实路径和操作判断",
-                        "Local file access risk is assessed from the actual paths and operations",
-                    )
-                } else if invocation.call.arguments.get("command").is_some()
-                    || invocation.descriptor.call_name.starts_with("terminal_")
-                {
-                    let (zh, en) =
-                        super::tool_risk::command_approval_reason(&invocation.call.arguments);
-                    locale.text(zh, en)
-                } else if operation == Some(true) {
-                    locale.text(
-                        "该工具会修改业务数据或运行状态",
-                        "This tool changes business data or runtime state",
-                    )
-                } else if operation == Some(false) {
-                    locale.text("该工具用于查询，参数中的可执行或批量操作会提高风险", "This tool performs queries; executable or batch operations in its arguments increase risk")
-                } else {
-                    locale.text(
-                        "未知原生工具的副作用无法由宿主验证",
-                        "The host cannot verify the side effects of this unknown native tool",
-                    )
-                };
-                if risk >= setting.confirm_level {
+                if evaluated.risk >= setting.confirm_level {
+                    let reason = risk_reason_message(locale, evaluated.reason);
                     // Framework persists the original call and resumes it exactly once.
-                    fw::ToolPolicyDecision::RequireApproval(
-                        locale.approval_prompt(Some(risk), reason),
-                    )
+                    fw::ToolPolicyDecision::RequireApproval(approval_prompt(
+                        locale,
+                        Some(evaluated.risk),
+                        &reason,
+                        evaluated.reason.code(),
+                    ))
                 } else {
                     fw::ToolPolicyDecision::Allow
                 }

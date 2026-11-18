@@ -27,15 +27,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         return Ok(());
     }
+    // Load the compiled-in translation table once before any localized text is
+    // produced. `rust-i18n` merges every `locales/*.yml` file at build time.
+    tron_i18n::init();
     // Native dialogs must run on the process main thread on macOS. A short-lived
     // helper process keeps the HTTP server responsive without a GUI event loop.
     if std::env::args().nth(1).as_deref() == Some("--pick-directory") {
-        let title = if std::env::args().nth(2).as_deref() == Some("en-US") {
-            "Choose a working directory"
-        } else {
-            "选择工作目录"
-        };
-        let selected = rfd::FileDialog::new().set_title(title).pick_folder();
+        let locale =
+            tron_i18n::Locale::from_raw(std::env::args().nth(2).as_deref().unwrap_or(""));
+        let title = tron_i18n::t!("common.native.pick_directory_title", locale = locale)
+            .into_owned();
+        let selected = rfd::FileDialog::new().set_title(&title).pick_folder();
         let path = selected
             .as_ref()
             .map(|path| {

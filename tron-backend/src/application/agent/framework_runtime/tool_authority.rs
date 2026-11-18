@@ -424,9 +424,10 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 })?
             {
                 return Ok(fw::ToolPolicyDecision::Deny(
-                    tron_harness_capability::TronToolPolicyLocale::from_run(invocation.run)
-                        .permission_denied_message()
-                        .into(),
+                    tron_harness_capability::permission_denied_message(
+                        tron_harness_capability::run_locale(invocation.run),
+                    )
+                    .into(),
                 ));
             }
         }

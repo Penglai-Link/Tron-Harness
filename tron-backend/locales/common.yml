@@ -1,0 +1,10 @@
+# Shared messages used across Tron surfaces.
+#
+# Format: rust-i18n `_version: 2`, one flat dotted key per message with every
+# supported locale. Keep keys stable and semantic; never embed user-facing
+# text in Rust sources.
+_version: 2
+
+common.native.pick_directory_title:
+  en: "Choose a working directory"
+  zh-CN: "选择工作目录"

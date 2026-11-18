@@ -1,0 +1,130 @@
+# Tool permission and approval text.
+#
+# Risk classification itself is language independent: tool_risk.rs returns a
+# structured RiskReason/RiskLevel and only the approval display layer reads
+# these keys with the run locale.
+_version: 2
+
+approval.permission_denied:
+  en: "This tool has no platform permission"
+  zh-CN: "该工具没有平台执行权限"
+
+approval.plan_mode_denied:
+  en: "Plan mode allows read-only operations only. Present the plan first; exit plan mode before making changes"
+  zh-CN: "计划模式只允许只读操作：先给出计划，用户确认并退出计划模式后再执行改动"
+
+approval.command_uncertain:
+  en: "The command's effects could not be assessed; manual approval is required"
+  zh-CN: "无法确定该命令的执行风险，需要人工确认"
+
+approval.risk_label.safe:
+  en: "Safe"
+  zh-CN: "无风险"
+
+approval.risk_label.low:
+  en: "Low"
+  zh-CN: "低"
+
+approval.risk_label.medium:
+  en: "Medium"
+  zh-CN: "中"
+
+approval.risk_label.high:
+  en: "High"
+  zh-CN: "高"
+
+approval.risk_label.critical:
+  en: "Critical"
+  zh-CN: "非常危险"
+
+tool.risk.remote_mcp:
+  en: "The host cannot verify the side effects of this remote MCP tool"
+  zh-CN: "远端 MCP 工具的副作用无法由宿主验证"
+
+tool.risk.image_generation:
+  en: "This submits a remote image generation task and may incur charges"
+  zh-CN: "将提交远端图片生成任务，可能产生费用"
+
+tool.risk.local_file_access:
+  en: "Local file access risk is assessed from the actual paths and operations"
+  zh-CN: "本地文件读取或修改，风险按真实路径和操作判断"
+
+tool.risk.persistent_terminal:
+  en: "A terminal session can run arbitrary commands and keeps process state"
+  zh-CN: "终端会话可执行任意命令并保留进程状态"
+
+tool.risk.business_mutation:
+  en: "This tool changes business data or runtime state"
+  zh-CN: "该工具会修改业务数据或运行状态"
+
+tool.risk.business_deletion:
+  en: "This tool deletes business data or runtime state"
+  zh-CN: "该工具会删除业务数据或运行状态"
+
+tool.risk.query_executable_arguments:
+  en: "This tool performs queries; executable or batch operations in its arguments increase risk"
+  zh-CN: "该工具用于查询，参数中的可执行或批量操作会提高风险"
+
+tool.risk.unknown_native_tool:
+  en: "The host cannot verify the side effects of this unknown native tool"
+  zh-CN: "未知原生工具的副作用无法由宿主验证"
+
+tool.risk.nested_tool_invocation:
+  en: "Nested tool invocations in the arguments increase the risk"
+  zh-CN: "参数中嵌套的工具调用会提高风险"
+
+tool.risk.remote_service_call:
+  en: "This calls a remote platform service and reads its response"
+  zh-CN: "会调用远端平台服务并读取返回内容"
+
+tool.risk.web_access:
+  en: "This accesses the external network and reads remote content"
+  zh-CN: "会访问外部网络并读取远端内容"
+
+tool.risk.remote_access:
+  en: "This changes remote access configuration, pairing state or access tokens"
+  zh-CN: "会修改远端访问配置、配对状态或访问令牌"
+
+tool.risk.command.environment_or_interactive_input:
+  en: "The call includes environment overrides, an interactive terminal, or standard input; its effects cannot be determined from the executable alone"
+  zh-CN: "调用包含环境变量、交互终端或标准输入，无法仅凭命令名确认执行影响"
+
+tool.risk.command.uninspectable:
+  en: "No statically inspectable command was provided; manual approval is required"
+  zh-CN: "调用未提供可静态检查的命令，需要人工确认"
+
+tool.risk.command.unparsable_arguments:
+  en: "The command arguments cannot be statically parsed"
+  zh-CN: "命令参数无法静态解析"
+
+tool.risk.command.shell_syntax:
+  en: "The command contains shell control, expansion, or syntax outside the static parser"
+  zh-CN: "命令包含 shell 控制、展开或无法静态解析的语法"
+
+tool.risk.command.protected_directory:
+  en: "The command runs in a protected directory and may modify data"
+  zh-CN: "命令在受保护目录中执行且可能修改数据"
+
+tool.risk.command.interpreter:
+  en: "The command uses an interpreter or dynamic executor and can run arbitrary scripts"
+  zh-CN: "命令通过解释器或动态执行程序运行，可执行任意脚本"
+
+tool.risk.command.file_deletion:
+  en: "The command deletes files or directories"
+  zh-CN: "命令会删除文件或目录"
+
+tool.risk.command.network:
+  en: "The command can access the network, transfer data, or run remote operations"
+  zh-CN: "命令会访问网络、传输数据或执行远端操作"
+
+tool.risk.command.stateful_input:
+  en: "Input is written to an already running command or terminal; its effects cannot be statically verified"
+  zh-CN: "输入会写入已在运行的命令或终端，无法静态验证其影响"
+
+tool.risk.command.process_control:
+  en: "This stops or controls a running command or terminal"
+  zh-CN: "会停止或控制运行中的命令或终端"
+
+tool.risk.command.rule_match:
+  en: "The executable and arguments match the execution risk rules and meet your configured approval threshold"
+  zh-CN: "命令的可执行程序与参数命中了当前执行风险规则，达到你配置的确认阈值"
