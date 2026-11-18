@@ -471,6 +471,13 @@ impl ChatService {
             return Err(ChatError::SessionArchived);
         }
         let resources = self.resources.as_ref().ok_or(ChatError::StorageFailure)?;
+        // PersonAI/assistant sessions have no workspace. Resource storage still
+        // needs a stable namespace so pasted files can be persisted and read.
+        let attachment_workspace = if session.workspace_code.trim().is_empty() {
+            "default".to_string()
+        } else {
+            session.workspace_code.clone()
+        };
         let id = self
             .id_provider
             .next_id()
@@ -503,7 +510,7 @@ impl ChatService {
             let record = resources
                 .store_chat_session_attachment(
                     ChatSessionAttachmentCreateCommand {
-                        workspace_code: session.workspace_code,
+                        workspace_code: attachment_workspace,
                         session_code: session.session_code,
                         attachment_code,
                         file_name: command.file_name,
@@ -535,9 +542,14 @@ impl ChatService {
     ) -> Result<(ChatSessionAttachmentRecord, Vec<u8>), ChatError> {
         let session = self.repository().get_session(session_code)?;
         let resources = self.resources.as_ref().ok_or(ChatError::StorageFailure)?;
+        let attachment_workspace = if session.workspace_code.trim().is_empty() {
+            "default".to_string()
+        } else {
+            session.workspace_code.clone()
+        };
         resources
             .read_chat_session_attachment(
-                &session.workspace_code,
+                &attachment_workspace,
                 &session.session_code,
                 attachment_code,
             )

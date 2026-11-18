@@ -8060,6 +8060,7 @@ name = "tron-remote-pack"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "eliteforge-agent-remote-protocol",
  "eliteforge-agent-remote-rpc",
  "futures-util",

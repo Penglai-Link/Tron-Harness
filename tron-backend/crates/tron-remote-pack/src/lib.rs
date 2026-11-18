@@ -13,6 +13,7 @@ use eliteforge_agent_remote_rpc::{
     SessionStopRunParams, SessionSummary, SessionUnwatchEventsParams, SessionWatchEventsParams,
     StopRunResult, Subscription,
 };
+use base64::Engine;
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -168,6 +169,42 @@ impl TronRemotePack {
             .send()
             .await
             .map_err(|e| RpcError::internal(format!("tron request failed: {e}")))?;
+        let envelope: Value = response
+            .json()
+            .await
+            .map_err(|e| RpcError::internal(format!("tron response invalid: {e}")))?;
+        unwrap_envelope(envelope)
+    }
+
+    async fn post_multipart_with_scope(
+        &self,
+        path: &str,
+        form: reqwest::multipart::Form,
+        workspace: Option<&str>,
+        assistant_code: Option<&str>,
+    ) -> Result<Value, RpcError> {
+        let mut request = self
+            .client
+            .post(format!("{}{}", self.http_base, path))
+            .header("Accept-Language", "zh-CN")
+            .multipart(form);
+        if let Some(code) = workspace.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Workspace-Code", code);
+        }
+        if let Some(code) = assistant_code.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.header("X-Assistant-Code", code);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| RpcError::internal(format!("tron request failed: {e}")))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let detail = response.text().await.unwrap_or_default();
+            return Err(RpcError::internal(format!(
+                "tron attachment upload returned {status}: {detail}"
+            )));
+        }
         let envelope: Value = response
             .json()
             .await
@@ -784,6 +821,65 @@ impl RpcMethod for TronMethod {
                     .await?;
                 Ok(Value::Array(events))
             }
+            "tron.chat.uploadAttachment" => {
+                let session_code = params
+                    .get("sessionCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                let file_name = params
+                    .get("fileName")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                let content_type = params
+                    .get("contentType")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or("application/octet-stream")
+                    .to_owned();
+                let data = params
+                    .get("dataBase64")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                if session_code.is_empty() || file_name.is_empty() || data.is_empty() {
+                    return Err(RpcError::invalid_params(
+                        "sessionCode, fileName and dataBase64 are required",
+                    ));
+                }
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .map_err(|_| RpcError::invalid_params("dataBase64 is invalid"))?;
+                let kind = params
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .unwrap_or("file")
+                    .to_owned();
+                let summary = params
+                    .get("summary")
+                    .and_then(Value::as_str)
+                    .unwrap_or(file_name.as_str())
+                    .to_owned();
+                let part = reqwest::multipart::Part::bytes(bytes)
+                    .file_name(file_name)
+                    .mime_str(&content_type)
+                    .map_err(|_| RpcError::invalid_params("contentType is invalid"))?;
+                let form = reqwest::multipart::Form::new()
+                    .text("kind", kind)
+                    .text("summary", summary)
+                    .text("metadata", "{}")
+                    .part("file", part);
+                self.pack
+                    .post_multipart_with_scope(
+                        &format!("/api/v1/chats/sessions/{session_code}/attachments"),
+                        form,
+                        Some(workspace.as_str()),
+                        Some(assistant_code.as_str()),
+                    )
+                    .await
+            }
             "tron.chat.userInputRequests" => {
                 let session_code = params
                     .get("sessionCode")
@@ -893,6 +989,7 @@ impl RemotePack for TronRemotePack {
             "tron.chat.protocolEvents",
             "tron.chat.steer",
             "tron.chat.answerUserInput",
+            "tron.chat.uploadAttachment",
             "tron.chat.userInputRequests",
             "tron.chat.a2uiState",
             "tron.chat.a2uiAction",
