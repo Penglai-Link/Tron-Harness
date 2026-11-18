@@ -9,6 +9,10 @@ use crate::{domain::rag::RagError, response::ApiResponse};
 pub fn rag_error_response(error: RagError, locale: &str) -> Response {
     use tron_i18n::t;
     if let RagError::EmbeddingFailure(detail) = &error {
+        // The detail is a locale-independent structured message produced by the
+        // indexing layer; legacy plain text is rendered unchanged.
+        let detail = crate::shared::i18n_message::StoredMessage::decode(detail.as_str())
+            .render(locale, None);
         return (
             StatusCode::BAD_GATEWAY,
             Json(ApiResponse::error(

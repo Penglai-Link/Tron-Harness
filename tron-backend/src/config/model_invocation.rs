@@ -9,12 +9,16 @@ pub struct ModelInvocationTimeouts {
 }
 
 impl ModelInvocationTimeouts {
+    /// Startup/diagnostic validation. These messages surface in backend logs and
+    /// as the detail of the localized `SYSTEM_CONFIG_INVALID` response; there is
+    /// no request locale while configuration loads, so they stay stable
+    /// technical diagnostics instead of user-facing prose.
     fn validate(&self, scope: &str) -> Result<(), String> {
         if self.call_timeout_seconds == 0
             || self.operation_timeout_seconds < self.call_timeout_seconds
         {
             return Err(format!(
-                "{scope}: callTimeoutSeconds必须大于零，operationTimeoutSeconds不能小于单次调用超时"
+                "invalid model invocation timeouts for {scope}: callTimeoutSeconds must be greater than zero and operationTimeoutSeconds must not be shorter than the per-call timeout"
             ));
         }
         Ok(())
@@ -91,7 +95,7 @@ impl Default for ModelInvocationConfig {
 impl ModelInvocationConfig {
     pub(super) fn validate(&self) -> Result<(), String> {
         if self.default_output_tokens == 0 {
-            return Err("defaultOutputTokens必须大于零".into());
+            return Err("defaultOutputTokens must be greater than zero".into());
         }
         for (scope, limits) in [
             ("text", &self.text),
@@ -103,10 +107,12 @@ impl ModelInvocationConfig {
             limits.validate(scope)?;
         }
         if self.embedding.max_batch_inputs == 0 || self.embedding.max_batch_tokens == 0 {
-            return Err("embedding: maxBatchInputs和maxBatchTokens必须大于零".into());
+            return Err(
+                "embedding maxBatchInputs and maxBatchTokens must be greater than zero".into(),
+            );
         }
         if self.agent_run_timeout_seconds == 0 {
-            return Err("agentRunTimeoutSeconds必须大于零".into());
+            return Err("agentRunTimeoutSeconds must be greater than zero".into());
         }
         if tokio::time::Instant::now()
             .checked_add(std::time::Duration::from_secs(
@@ -114,7 +120,7 @@ impl ModelInvocationConfig {
             ))
             .is_none()
         {
-            return Err("agentRunTimeoutSeconds超出支持范围".into());
+            return Err("agentRunTimeoutSeconds is out of the supported range".into());
         }
         Ok(())
     }

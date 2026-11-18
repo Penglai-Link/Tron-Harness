@@ -1,0 +1,401 @@
+_version: 2
+
+knowledge.office.excel_chart_relation_missing:
+  en: "An Excel chart relationship is missing"
+  zh-CN: "Excel图表关联缺失"
+
+knowledge.office.ole_external_unsupported:
+  en: "OLE objects, external content and data connections are not supported"
+  zh-CN: "OLE、外部内容及数据连接不支持"
+
+knowledge.office.visual_preview_generated:
+  en: "A local visual preview of the Office charts was generated; converted pages are not original page numbers, so trust the preview and the source file for layout"
+  zh-CN: "Office图表已生成本地视觉预览；转换页不等于原文页码，布局以预览及原件为准"
+
+knowledge.office.sheet_relation_missing:
+  en: "A sheet relationship is missing"
+  zh-CN: "Sheet关联缺失"
+
+knowledge.office.sheet_part_missing:
+  en: "A sheet part is missing"
+  zh-CN: "Sheet原件缺失"
+
+knowledge.office.sheet_name_missing:
+  en: "A sheet name is missing"
+  zh-CN: "Sheet名称缺失"
+
+knowledge.office.sheet_name_duplicate:
+  en: "Sheet names are duplicated"
+  zh-CN: "Sheet名称重复"
+
+knowledge.office.word_chart_relation_missing:
+  en: "A Word chart relationship is missing"
+  zh-CN: "Word图表关联缺失"
+
+knowledge.office.xml_too_large:
+  en: "The XML size exceeds the limit"
+  zh-CN: "XML大小超过限制"
+
+knowledge.office.docx_xlsx_only:
+  en: "Only docx/xlsx are supported"
+  zh-CN: "仅支持docx/xlsx"
+
+knowledge.office.embedded_xlsx_only:
+  en: "Only safe xlsx data embedded in charts is supported"
+  zh-CN: "仅支持图表内嵌的安全xlsx数据"
+
+knowledge.office.relation_id_missing:
+  en: "A relationship id is missing"
+  zh-CN: "关系标识缺失"
+
+knowledge.office.relation_target_missing:
+  en: "A relationship target is missing"
+  zh-CN: "关系目标缺失"
+
+knowledge.office.relation_target_out_of_bounds:
+  en: "A relationship target is out of bounds"
+  zh-CN: "关系目标越界"
+
+knowledge.office.package_too_large:
+  en: "The package size or nesting depth exceeds the limit"
+  zh-CN: "包大小或嵌套层数超过限制"
+
+knowledge.office.package_file_count_limit:
+  en: "The package file count exceeds the limit"
+  zh-CN: "包文件数量超过限制"
+
+knowledge.office.macro_package_unsupported:
+  en: "Packages with macros are not supported"
+  zh-CN: "含宏的包不支持"
+
+knowledge.office.chart_part_missing:
+  en: "A chart part is missing"
+  zh-CN: "图表原件缺失"
+
+knowledge.office.chart_source_too_long:
+  en: "The chart source is too long"
+  zh-CN: "图表来源过长"
+
+knowledge.office.chart_sheet_limit:
+  en: "Chart previews support at most 16 sheets"
+  zh-CN: "图表预览最多16个Sheet"
+
+knowledge.office.external_reference_unsupported:
+  en: "External references or active formulas are not supported"
+  zh-CN: "外部引用或主动公式不支持"
+
+knowledge.office.external_link_unsupported:
+  en: "External links are not supported; remove them from the source file first"
+  zh-CN: "外部链接不支持；请先在原文件移除"
+
+knowledge.office.unsafe_preview_unsupported:
+  en: "Macros, OLE objects and external data connections cannot be previewed safely"
+  zh-CN: "宏、OLE对象和外部数据连接不支持安全预览"
+
+knowledge.office.workbook_missing:
+  en: "The workbook is missing"
+  zh-CN: "工作簿缺失"
+
+knowledge.office.text_too_large:
+  en: "The text exceeds 16 MiB"
+  zh-CN: "文本超过16 MiB"
+
+knowledge.office.unpacked_too_large:
+  en: "The unpacked content exceeds 100 MiB"
+  zh-CN: "解压内容超过100 MiB"
+
+knowledge.office.unpacked_limit:
+  en: "The unpacked content exceeds the limit"
+  zh-CN: "解压内容超过限制"
+
+knowledge.office.relation_id_duplicate:
+  en: "A relationship id is duplicated"
+  zh-CN: "重复关系标识"
+
+knowledge.office.hidden_sheet_unsupported:
+  en: "Hidden sheets cannot be previewed completely; unhide them first"
+  zh-CN: "隐藏Sheet无法完整预览；请先取消隐藏"
+
+knowledge.office.relation_target_invalid:
+  en: "A relationship target is invalid"
+  zh-CN: "非法关系目标"
+
+knowledge.office.package_path_invalid:
+  en: "A package path is invalid or duplicated"
+  zh-CN: "非法或重复包路径"
+
+document.preflight.file_required:
+  en: "The file must be non-empty and at most 20 MiB"
+  zh-CN: "文件必须非空且不超过20 MiB"
+
+document.preflight.format_unsupported:
+  en: "This format is not supported by MinerU"
+  zh-CN: "此格式不在MinerU支持范围内"
+
+document.preflight.legacy_office_signature_invalid:
+  en: "The legacy Office file signature is invalid"
+  zh-CN: "旧版Office文件签名无效"
+
+document.preflight.image_mismatch:
+  en: "The image content does not match its format"
+  zh-CN: "图片内容与格式不匹配"
+
+document.preflight.archive_signature_invalid:
+  en: "The archive signature is invalid"
+  zh-CN: "压缩文档包签名无效"
+
+document.preflight.rtf_signature_invalid:
+  en: "The RTF signature is invalid"
+  zh-CN: "RTF签名无效"
+
+document.preflight.office_entry_limit:
+  en: "The Office package exceeds the 4096-entry limit"
+  zh-CN: "Office包条目超过4096上限"
+
+document.preflight.office_duplicate_entry:
+  en: "The Office package has duplicate entries"
+  zh-CN: "Office包有重复条目"
+
+document.preflight.office_unpacked_too_large:
+  en: "The unpacked Office content exceeds 100 MiB"
+  zh-CN: "Office解压内容超过100 MiB"
+
+document.preflight.office_package_too_large:
+  en: "The Office package is too large"
+  zh-CN: "Office包过大"
+
+document.preflight.office_structure_too_large:
+  en: "The Office structure XML exceeds 8 MiB"
+  zh-CN: "Office结构XML超过8 MiB"
+
+document.preflight.office_text_too_large:
+  en: "The document text exceeds the 2 MiB preflight limit"
+  zh-CN: "文档文字超过2 MiB预检上限"
+
+document.preflight.office_mismatch:
+  en: "The Office content does not match the file format"
+  zh-CN: "Office内容与文件格式不匹配"
+
+document.preflight.pdf_signature_invalid:
+  en: "The PDF signature is invalid"
+  zh-CN: "PDF签名无效"
+
+document.preflight.pdf_encrypted:
+  en: "Unlock the encrypted PDF first"
+  zh-CN: "请先解锁加密PDF"
+
+document.preflight.pdf_no_pages:
+  en: "The PDF has no pages"
+  zh-CN: "PDF没有页面"
+
+document.preflight.text_too_large:
+  en: "The text file exceeds the 2 MiB limit"
+  zh-CN: "文字文件超过2 MiB上限"
+
+document.preflight.utf16_invalid:
+  en: "The UTF-16 text file encoding is invalid"
+  zh-CN: "UTF-16文字文件编码无效"
+
+document.preflight.text_encoding:
+  en: "Text files must be UTF-8 or UTF-16 with a BOM"
+  zh-CN: "文字文件需为UTF-8或带BOM的UTF-16"
+
+document.preflight.text_binary:
+  en: "The text file contains binary content"
+  zh-CN: "文字文件包含二进制内容"
+
+document.preflight.decoded_text_too_large:
+  en: "The decoded text exceeds the 2 MiB limit"
+  zh-CN: "解码文字超过2 MiB上限"
+
+document.chunk.max_chars_range:
+  en: "maxChars must be between 200 and 8000 Unicode characters"
+  zh-CN: "maxChars 必须在 200 到 8000 个 Unicode 字符之间"
+
+document.chunk.overlap_limit:
+  en: "overlapChars must not exceed 25% of maxChars"
+  zh-CN: "overlapChars 不能超过 maxChars 的 25%"
+
+document.chunk.heading_depth_range:
+  en: "headingDepth must be between 1 and 6"
+  zh-CN: "headingDepth 必须在 1 到 6 之间"
+
+document.parse.too_large:
+  en: "The document exceeds the 20 MiB upload limit"
+  zh-CN: "文档超过 20 MiB 上传上限"
+
+document.parse.legacy_office_unsupported:
+  en: "Legacy .doc/.xls files are unsupported; save them as .docx/.xlsx first"
+  zh-CN: "不支持旧版 .doc/.xls，请先另存为 .docx/.xlsx"
+
+document.parse.format_unsupported:
+  en: "Supported local formats: .md, .docx, .xlsx and text PDFs (OCR is unsupported)"
+  zh-CN: "支持的本地格式：.md、.docx、.xlsx、文本型 .pdf（不支持 OCR）"
+
+document.parse.text_too_large:
+  en: "The document text is too large"
+  zh-CN: "文档文本过大"
+
+document.parse.no_extractable_text:
+  en: "The document contains no extractable text; scanned PDFs require OCR, which is unsupported"
+  zh-CN: "文档没有可提取文本；扫描版 PDF 需要 OCR，暂不支持"
+
+document.chunk.source_missing:
+  en: "The chunk source is missing"
+  zh-CN: "分块来源缺失"
+
+document.chunk.source_invalid:
+  en: "The chunk source is invalid"
+  zh-CN: "分块来源无效"
+
+document.chunk.source_block_invalid:
+  en: "The source block is invalid"
+  zh-CN: "来源块无效"
+
+document.chunk.source_block_absent:
+  en: "The source block is absent"
+  zh-CN: "来源块不存在"
+
+document.chunk.source_location_absent:
+  en: "The source block location is absent"
+  zh-CN: "来源块位置缺失"
+
+document.parse.normalized_too_large:
+  en: "The normalized document text exceeds 16 MiB"
+  zh-CN: "规范化后的文档文本超过 16 MiB"
+
+document.parse.invalid_detail:
+  en: "The document could not be parsed: %{detail}"
+  zh-CN: "文档解析失败：%{detail}"
+
+document.preflight.invalid_detail:
+  en: "The file could not be checked: %{detail}"
+  zh-CN: "文件预检失败：%{detail}"
+
+document.parse.pdf_page_limit:
+  en: "The PDF exceeds the 1000-page limit"
+  zh-CN: "PDF 超过 1000 页上限"
+
+knowledge.parsing.markdown_images_kept:
+  en: "Markdown image links are kept as-is; only existing resource references can be read by authorized agents, and external images are never downloaded automatically"
+  zh-CN: "Markdown图片链接原样保留；仅已有资源引用可供授权Agent读取，不自动下载外部图片"
+
+knowledge.parsing.segment_page_range_missing:
+  en: "Segment %{seq} did not provide the original page range; its segment page number was kept and no PDF page was inferred"
+  zh-CN: "解析分段%{seq}未提供原始页范围；保留分段页码，未推测PDF页码"
+
+knowledge.parsing.invisible_control_chars:
+  en: "The upstream parsed text contains invisible control characters; the source and parsed images were kept (%{location}: %{pages})"
+  zh-CN: "上游解析文本包含不可见控制字符；原件和解析图片已保留（%{location}：%{pages}）"
+
+knowledge.parsing.mineru_page_missing:
+  en: "MinerU did not return page information"
+  zh-CN: "MinerU缺少页信息"
+
+knowledge.parsing.mineru_page_invalid:
+  en: "The MinerU page number is invalid"
+  zh-CN: "MinerU页码无效"
+
+knowledge.parsing.mineru_block_missing:
+  en: "MinerU did not return block information"
+  zh-CN: "MinerU缺少块信息"
+
+knowledge.parsing.mineru_block_type_invalid:
+  en: "The MinerU block type is invalid"
+  zh-CN: "MinerU块类型无效"
+
+knowledge.parsing.mineru_block_id_missing:
+  en: "MinerU did not return a block id"
+  zh-CN: "MinerU缺少块标识"
+
+knowledge.parsing.mineru_image_attachment_missing:
+  en: "The image attachment referenced by the MinerU structure is missing"
+  zh-CN: "MinerU结构引用的图片附件缺失"
+
+knowledge.parsing.mineru_no_content:
+  en: "MinerU extracted no retrievable content"
+  zh-CN: "MinerU未提取可检索内容"
+
+knowledge.parsing.region_coordinates_invalid:
+  en: "The parsed region coordinates are invalid"
+  zh-CN: "解析区域坐标无效"
+
+knowledge.parsing.region_coordinates_out_of_bounds:
+  en: "The parsed region coordinates exceed the page bounds"
+  zh-CN: "解析区域坐标超出页边界"
+
+knowledge.parsing.region_coordinates_empty:
+  en: "The parsed region coordinates are empty or reversed"
+  zh-CN: "解析区域坐标为空或反向"
+
+knowledge.parsing.mineru_image_block_invalid:
+  en: "The MinerU image block structure is invalid"
+  zh-CN: "MinerU图片块结构无效"
+
+knowledge.parsing.mineru_page_overflow:
+  en: "The MinerU page number overflows"
+  zh-CN: "MinerU页码溢出"
+
+knowledge.parsing.mineru_image_text_no_block_id:
+  en: "The MinerU image text is missing its block id"
+  zh-CN: "MinerU图片文本缺少块标识"
+
+knowledge.office.word_body_missing:
+  en: "The Word body is missing"
+  zh-CN: "正文缺失"
+
+knowledge.office.drawing_relation_missing:
+  en: "A drawing relationship is missing"
+  zh-CN: "绘图关联缺失"
+
+knowledge.office.drawing_part_missing:
+  en: "A drawing part is missing"
+  zh-CN: "绘图原件缺失"
+
+knowledge.parsing.segment_structure_missing:
+  en: "The parsed structured segments are missing"
+  zh-CN: "解析结构化分段缺失"
+
+knowledge.parsing.segment_id_invalid:
+  en: "The parsed segment id is invalid"
+  zh-CN: "解析分段标识无效"
+
+knowledge.parsing.segment_id_duplicate:
+  en: "Parsed segment ids are duplicated"
+  zh-CN: "解析分段标识重复"
+
+knowledge.parsing.segment_order_incomplete:
+  en: "The parsed segment order is incomplete"
+  zh-CN: "解析分段顺序不完整"
+
+knowledge.parsing.segment_structure_unsupported:
+  en: "The parsed segment structure is not supported"
+  zh-CN: "解析分段结构不受支持"
+
+knowledge.parsing.segment_format_mismatch:
+  en: "Parsed segment formats are inconsistent"
+  zh-CN: "解析分段格式不一致"
+
+knowledge.parsing.original_page_mapping_invalid:
+  en: "The original page location mapping is invalid"
+  zh-CN: "原始页定位映射无效"
+
+knowledge.parsing.segment_page_missing:
+  en: "Parsed segment page information is missing"
+  zh-CN: "解析分段页信息缺失"
+
+knowledge.parsing.segment_page_invalid:
+  en: "The segment page location is invalid"
+  zh-CN: "分段页定位无效"
+
+knowledge.parsing.original_page_invalid:
+  en: "The original page location is invalid"
+  zh-CN: "原始页定位无效"
+
+knowledge.parsing.original_page_segment_mismatch:
+  en: "Original page locations do not match the segment structure"
+  zh-CN: "原始页定位与分段结构不一致"
+
+knowledge.parsing.image_source_block_missing:
+  en: "Some images lack an upstream source block mapping; the originals were kept and no related text was inferred"
+  zh-CN: "部分图片缺少上游来源块映射；原图保留，未推测关联正文"

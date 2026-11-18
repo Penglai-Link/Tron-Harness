@@ -15,8 +15,8 @@ pub(crate) fn has_structured_middle(value: &Value) -> bool {
                     .all(|item| item["data"]["schema"] == "docvortex.middle")
         })
 }
-fn invalid(message: &str) -> KnowledgeBaseError {
-    KnowledgeBaseError::Invalid(message.into())
+fn invalid(key: &'static str) -> KnowledgeBaseError {
+    KnowledgeBaseError::invalid(key)
 }
 
 /// Segment-local coordinates remain explicit when the platform did not return the
@@ -31,7 +31,7 @@ pub(crate) fn normalize_parse_middle(
     let segments = value
         .as_array()
         .filter(|items| !items.is_empty())
-        .ok_or_else(|| invalid("解析结构化分段缺失"))?;
+        .ok_or_else(|| invalid("knowledge.parsing.segment_structure_missing"))?;
     let mut result = ParsedDocument {
         format: String::new(),
         sections: vec![],
@@ -45,22 +45,22 @@ pub(crate) fn normalize_parse_middle(
         let seq = segment["seq"]
             .as_u64()
             .and_then(|n| u32::try_from(n).ok())
-            .ok_or_else(|| invalid("解析分段标识无效"))?;
+            .ok_or_else(|| invalid("knowledge.parsing.segment_id_invalid"))?;
         if !seen.insert(seq) {
-            return Err(invalid("解析分段标识重复"));
+            return Err(invalid("knowledge.parsing.segment_id_duplicate"));
         }
         if seq as usize != position {
-            return Err(invalid("解析分段顺序不完整"));
+            return Err(invalid("knowledge.parsing.segment_order_incomplete"));
         }
         if segment["data"]["schema"] != "docvortex.middle" {
-            return Err(invalid("解析分段结构不受支持"));
+            return Err(invalid("knowledge.parsing.segment_structure_unsupported"));
         }
         let mut parsed = normalize_middle(&segment["data"], assets)?;
         if result.format.is_empty() {
             result.format = parsed.format.clone();
         }
         if result.format != parsed.format {
-            return Err(invalid("解析分段格式不一致"));
+            return Err(invalid("knowledge.parsing.segment_format_mismatch"));
         }
         // Newer platform manifests can supply the actual zero-based original page start.
         let page_start = segment
@@ -73,25 +73,27 @@ pub(crate) fn normalize_parse_middle(
         if let Some(mapping) = segment.get("source_page_indices") {
             let mapping = mapping
                 .as_object()
-                .ok_or_else(|| invalid("原始页定位映射无效"))?;
+                .ok_or_else(|| invalid("knowledge.parsing.original_page_mapping_invalid"))?;
             let local_pages = segment["data"]["pages"]
                 .as_array()
-                .ok_or_else(|| invalid("解析分段页信息缺失"))?;
+                .ok_or_else(|| invalid("knowledge.parsing.segment_page_missing"))?;
             let mut seen_original = std::collections::BTreeSet::new();
             for (local, original) in mapping {
-                let local: u32 = local.parse().map_err(|_| invalid("分段页定位无效"))?;
+                let local: u32 = local
+                    .parse()
+                    .map_err(|_| invalid("knowledge.parsing.segment_page_invalid"))?;
                 let original = original
                     .as_u64()
                     .and_then(|v| u32::try_from(v).ok())
                     .filter(|v| *v < u32::MAX)
-                    .ok_or_else(|| invalid("原始页定位无效"))?;
+                    .ok_or_else(|| invalid("knowledge.parsing.original_page_invalid"))?;
                 if !local_pages
                     .iter()
                     .any(|page| page["page_idx"].as_u64() == Some(local as u64))
                     || !seen_original.insert(original)
                     || page_start.is_some_and(|start| start.checked_add(local) != Some(original))
                 {
-                    return Err(invalid("原始页定位与分段结构不一致"));
+                    return Err(invalid("knowledge.parsing.original_page_segment_mismatch"));
                 }
                 source_pages.insert(local, original);
             }
@@ -131,7 +133,7 @@ pub(crate) fn normalize_parse_middle(
             offset += 1;
             bytes = bytes.saturating_add(section.text.len());
             if bytes > MAX_PARSED_TEXT_BYTES {
-                return Err(invalid("解析文本超过16 MiB上限"));
+                return Err(invalid("knowledge.base.parse_text_limit"));
             }
         }
         result.sections.extend(parsed.sections);
@@ -140,9 +142,13 @@ pub(crate) fn normalize_parse_middle(
             && page_start.is_none()
             && source_pages.len() < segment["data"]["pages"].as_array().map_or(0, Vec::len)
         {
-            result.warnings.push(format!(
-                "解析分段{seq}未提供原始页范围；保留分段页码，未推测PDF页码"
-            ));
+            result.warnings.push(
+                crate::shared::i18n_message::MessageText::new(
+                    "knowledge.parsing.segment_page_range_missing",
+                )
+                .arg("seq", seq.to_string())
+                .encode(),
+            );
         }
         if let Some(summary) = parsed.image_analysis {
             let total = result
@@ -183,9 +189,13 @@ pub(crate) fn normalize_parse_middle(
         total.originals_only += 1;
     }
     if linked.len() < assets.len() {
-        result
-            .warnings
-            .push("部分图片缺少上游来源块映射；原图保留，未推测关联正文".into());
+        result.warnings.push(
+            crate::shared::i18n_message::MessageText::new(
+                "knowledge.parsing.image_source_block_missing",
+            )
+            .encode()
+            .into(),
+        );
     }
     Ok(result)
 }

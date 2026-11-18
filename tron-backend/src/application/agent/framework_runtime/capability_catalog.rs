@@ -138,7 +138,7 @@ pub fn query_installed_capability_packs(
     include_contents: bool,
     id: Option<&str>,
 ) -> Result<Vec<CapabilityPackInfo>, String> {
-    let mut packs = capability_pack_entries(include_contents, id);
+    let mut packs = capability_pack_entries(include_contents, id, locale);
     // Built-in pack labels are stable resource keys resolved with the request
     // locale; installed pack metadata belongs to its provider.
     for pack in packs.iter_mut() {
@@ -268,13 +268,14 @@ fn builtin_pack_text_keys(id: &str) -> Option<(&'static str, &'static str)> {
 pub fn install_capability_pack(
     root: &std::path::Path,
     bytes: &[u8],
+    locale: &str,
 ) -> Result<CapabilityPackInfo, String> {
     use eliteforge_agent_capability_runtime::{CapabilityPackManager, InstallPolicy};
     let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
     let installed = manager
         .install_bytes(bytes, InstallPolicy::Development)
         .map_err(|error| error.to_string())?;
-    let contents = installed_contents(&installed.path, &installed.manifest, "en-US")?;
+    let contents = installed_contents(&installed.path, &installed.manifest, locale)?;
     Ok(CapabilityPackInfo {
         cua_driver_sdk_version: installed_upstream_sdk_version(
             &installed.path,
@@ -285,8 +286,13 @@ pub fn install_capability_pack(
         id: installed.manifest.id,
         name: installed.manifest.name,
         version: installed.manifest.version.to_string(),
-        description: "Imported external capability package".into(),
-        provider: "External".into(),
+        description: tron_i18n::translate(
+            locale,
+            "agent_runtime.capability.imported_package_description",
+        )
+        .into_owned(),
+        provider: tron_i18n::translate(locale, "agent_runtime.capability.external_provider")
+            .into_owned(),
         updated_at: None,
         effective: false,
         kind: "capability".into(),
@@ -294,9 +300,13 @@ pub fn install_capability_pack(
 }
 
 pub fn capability_pack_catalog() -> Vec<CapabilityPackInfo> {
-    capability_pack_entries(true, None)
+    capability_pack_entries(true, None, tron_i18n::DEFAULT_LOCALE.as_str())
 }
-fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<CapabilityPackInfo> {
+fn capability_pack_entries(
+    include_contents: bool,
+    id: Option<&str>,
+    locale: &str,
+) -> Vec<CapabilityPackInfo> {
     [
         (
             "framework.external-agent",
@@ -383,7 +393,11 @@ fn capability_pack_entries(include_contents: bool, id: Option<&str>) -> Vec<Capa
     .filter(|entry| id.is_none_or(|id| entry.0 == id))
     .map(
         |(id, name, description, provider, version, updated_at)| CapabilityPackInfo {
-            contents: if include_contents { builtin_contents(id) } else { vec![] },
+            contents: if include_contents {
+                builtin_contents(id, locale)
+            } else {
+                vec![]
+            },
             id: id.into(),
             name: name.into(),
             version: version.into(),
@@ -411,7 +425,7 @@ pub fn capability_pack_catalog_with_state(
         .collect()
 }
 
-pub(super) fn pack_extension_implementations() -> Vec<ExtensionImplementationInfo> {
+pub(super) fn pack_extension_implementations(locale: &str) -> Vec<ExtensionImplementationInfo> {
     [
         (
             "model",
@@ -564,7 +578,11 @@ pub(super) fn pack_extension_implementations() -> Vec<ExtensionImplementationInf
                 extension_point: extension_point.into(),
                 extension_name: extension_name.into(),
                 implementation: implementation.into(),
-                description: description.to_owned(),
+                description: extension_description_key(extension_point, implementation)
+                    .map_or_else(
+                        || description.to_owned(),
+                        |key| tron_i18n::translate(locale, key).into_owned(),
+                    ),
                 provider_pack_id: provider_pack_id.into(),
                 provider: provider.into(),
                 effective: true,
@@ -583,16 +601,51 @@ pub(super) fn pack_extension_implementations() -> Vec<ExtensionImplementationInf
     .collect()
 }
 
-pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
-    pack_extension_implementations()
+/// Stable resource key for a built-in extension implementation description.
+fn extension_description_key(extension_point: &str, implementation: &str) -> Option<&'static str> {
+    Some(match (extension_point, implementation) {
+        ("model", "TronChatModel") => "capabilities.extension.model.connection.description",
+        ("tool", "ScopedLocalToolsPlugin") => {
+            "capabilities.extension.tools.local_scoped.description"
+        }
+        ("tool", "Tron HarnessTools") => "capabilities.extension.tools.harness.description",
+        ("tool-policy", "TronToolPolicy") => "capabilities.extension.tool_policy.description",
+        ("tool", "AgentToolsPlugin") => "capabilities.extension.tools.collaboration.description",
+        ("tool", "A2uiService") => "capabilities.extension.tools.a2ui.description",
+        ("skill", "EliteForge Agent Development Skills") => {
+            "capabilities.extension.skill.development.description"
+        }
+        ("skill", "A2UI Guidance") => "capabilities.extension.skill.a2ui.description",
+        ("context", "A2UI Guidance") => "capabilities.extension.context.a2ui.description",
+        ("tool", "PersonAiToolProvider") => "capabilities.extension.tools.personai.description",
+        ("tool", "WebToolsPlugin") => "capabilities.extension.tools.web.description",
+        ("tool", "MediaToolsPlugin") => "capabilities.extension.tools.media.description",
+        ("observe", "ToolAudit middleware") => "capabilities.extension.observe.audit.description",
+        ("context", "TronContext + bounded context preparation") => {
+            "capabilities.extension.context.harness.description"
+        }
+        ("external-agent", "HostExternalAgent") => {
+            "capabilities.extension.external_agent.host.description"
+        }
+        ("runtime", "Independent ExternalAgentLoop") => {
+            "capabilities.extension.external_agent.runtime.description"
+        }
+        ("storage", "LocalStoragePlugin") => "capabilities.extension.storage.local.description",
+        _ => return None,
+    })
+}
+
+pub fn extension_implementation_catalog(locale: &str) -> Vec<ExtensionImplementationInfo> {
+    pack_extension_implementations(locale)
 }
 
 pub fn extension_implementation_catalog_with_state(
     packs: &std::collections::BTreeMap<String, bool>,
     enabled: &std::collections::BTreeMap<String, bool>,
+    locale: &str,
 ) -> Vec<ExtensionImplementationInfo> {
     let extension_enabled = |point: &str| enabled.get(point).copied().unwrap_or(true);
-    extension_implementation_catalog()
+    extension_implementation_catalog(locale)
         .into_iter()
         .map(|mut implementation| {
             let pack_enabled = packs
@@ -627,8 +680,9 @@ pub fn installed_extension_implementations(
     root: &std::path::Path,
     packs: &std::collections::BTreeMap<String, bool>,
     enabled: &std::collections::BTreeMap<String, bool>,
+    locale: &str,
 ) -> Result<Vec<ExtensionImplementationInfo>, String> {
-    let mut items = extension_implementation_catalog_with_state(packs, enabled);
+    let mut items = extension_implementation_catalog_with_state(packs, enabled, locale);
     for (_, _, manifest) in latest_installed_manifests(root)? {
         for implementation in manifest.implementations {
             let enabled = packs.get(&manifest.id).copied().unwrap_or(false);
@@ -638,7 +692,11 @@ pub fn installed_extension_implementations(
                 implementation: implementation.id,
                 description: String::new(),
                 provider_pack_id: manifest.id.clone(),
-                provider: "External".into(),
+                provider: tron_i18n::translate(
+                    locale,
+                    "agent_runtime.capability.external_provider",
+                )
+                .into_owned(),
                 effective: enabled,
                 enabled,
                 configuration: ExtensionConfiguration::CapabilityPack,

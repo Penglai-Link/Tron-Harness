@@ -157,11 +157,10 @@ impl From<ResourceBinaryDownloadRequest> for ResourceBinaryDownloadCommand {
 
 /// Translate a structured validation reason with the request locale carried by
 /// the authenticated request scope.
+/// Locale-independent validation reason; the display layer renders it with the
+/// request locale.
 fn localized_reason(key: &'static str) -> String {
-    let locale = crate::shared::auth_holder::AuthHolder::get()
-        .map(|context| context.locale.clone())
-        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_owned());
-    tron_i18n::translate(&locale, key).into_owned()
+    crate::shared::i18n_message::MessageText::new(key).encode()
 }
 
 fn validate_non_blank(value: &str, field: &str) -> Result<(), ResourceError> {

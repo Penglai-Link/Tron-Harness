@@ -283,3 +283,47 @@ tron.mcp.storage_failed:
 tron.mcp.capability_pack_disabled:
   en: "Capability pack %{pack} is disabled"
   zh-CN: "能力包 %{pack} 已禁用"
+
+settings.mineru.concurrency_invalid:
+  en: "The knowledge base concurrency, lease or retry configuration is invalid"
+  zh-CN: "知识库并发、租约或重试配置无效"
+
+settings.mineru.embedding_group_invalid:
+  en: "The embedding shared hardware group configuration is invalid"
+  zh-CN: "Embedding共享硬件组配置无效"
+
+settings.mineru.node_id_invalid:
+  en: "MinerU node IDs must be unique and may only use letters, digits, underscores or hyphens"
+  zh-CN: "MinerU 节点 ID 必须唯一，只能使用字母、数字、下划线或连字符"
+
+settings.mineru.remote_transfer_not_allowed:
+  en: "Allow document transfer to this node before enabling the remote MinerU node"
+  zh-CN: "启用远程 MinerU 节点前，请允许向该节点传输文档"
+
+tron.skin.css_resource_must_be_css:
+  en: "%{path}: the CSS resource must be a .css file"
+  zh-CN: "%{path}：CSS 资源必须使用 .css 文件"
+
+tron.skin.css_resource_missing:
+  en: "%{path}: the CSS file is missing from the theme package"
+  zh-CN: "%{path}：主题包中缺少该 CSS 文件"
+
+tron.skin.css_resource_unreadable:
+  en: "%{path}: the CSS file is missing or is not UTF-8"
+  zh-CN: "%{path}：CSS 文件缺失或不是 UTF-8 编码"
+
+tron.skin.css_rejected:
+  en: "%{path}: the theme CSS was rejected: %{detail}"
+  zh-CN: "%{path}：主题 CSS 未通过校验：%{detail}"
+
+tron.skin.css_reference_outside_package:
+  en: "skin.json: resources.css must reference a file inside the theme package"
+  zh-CN: "skin.json：resources.css 必须引用主题包内的文件"
+
+tron.skin.incompatible_version:
+  en: "skin.json: unsupported theme format version %{version}; only version 3 is supported"
+  zh-CN: "skin.json：不支持的主题格式版本 %{version}，仅支持版本 3"
+
+settings.mineru.node_address_invalid:
+  en: "MinerU node %{node} address is invalid"
+  zh-CN: "MinerU 节点 %{node} 的地址无效"

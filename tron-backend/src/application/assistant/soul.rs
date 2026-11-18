@@ -68,6 +68,7 @@ impl AssistantService {
         &self,
         code: &str,
         user: &str,
+        locale: &str,
     ) -> Result<(AssistantSoul, bool), AssistantError> {
         self.get(code)?;
         let mut repo = self.repo()?;
@@ -82,7 +83,7 @@ impl AssistantService {
                 assistant_code: code.into(),
                 purpose: AssistantSessionPurpose::Interactive,
                 correlation_key: "soul-awakening".into(),
-                title: "首次唤醒".into(),
+                title: tron_i18n::t!("assistant.awakening_title", locale = locale).into_owned(),
                 workspace_code: None,
                 created_at: now,
                 updated_at: now,

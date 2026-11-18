@@ -39,12 +39,10 @@ impl IntoResponse for PersonAiApiError {
             ),
             _ => (StatusCode::BAD_GATEWAY, "tron.personAi.request_failed"),
         };
-        let message = if let ModelProviderError::Remote(detail)
-        | ModelProviderError::InvalidSelection(detail) = &self.0
-        {
-            detail.clone()
-        } else {
-            tron_i18n::t!(message_key, locale = &self.1).into_owned()
+        let message = match &self.0 {
+            ModelProviderError::Remote(detail) => detail.clone(),
+            ModelProviderError::InvalidSelection(message) => message.render(&self.1),
+            _ => tron_i18n::t!(message_key, locale = &self.1).into_owned(),
         };
         (
             status,

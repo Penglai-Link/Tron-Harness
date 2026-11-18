@@ -38,7 +38,7 @@ pub(crate) fn blocked(doc: &KnowledgeBaseDocument) -> bool {
             .is_some_and(|p| !p.fidelity_issues.is_empty())
 }
 
-pub(crate) fn failure_reason(doc: &KnowledgeBaseDocument) -> String {
+pub(crate) fn failure_reason(doc: &KnowledgeBaseDocument) -> Option<String> {
     doc.parsing_artifact
         .as_ref()
         .map(|artifact| {
@@ -50,5 +50,17 @@ pub(crate) fn failure_reason(doc: &KnowledgeBaseDocument) -> String {
                 .join("；")
         })
         .filter(|reason| !reason.is_empty())
-        .unwrap_or_else(|| "现有解析产物已记录失败".into())
+}
+
+/// Locale-independent structured reason for a blocked parsing artifact.
+pub(crate) fn failure_message(
+    doc: &KnowledgeBaseDocument,
+) -> crate::shared::i18n_message::MessageText {
+    use crate::shared::i18n_message::MessageText;
+    match failure_reason(doc) {
+        Some(reason) => {
+            MessageText::new("knowledge.base.quality_check_failed").arg("reason", reason)
+        }
+        None => MessageText::new("knowledge.base.inconsistency"),
+    }
 }

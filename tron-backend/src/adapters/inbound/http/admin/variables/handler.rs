@@ -26,17 +26,25 @@ struct RevealVariableValueDto {
 
 fn platform_variable_error_response(error: VariableError) -> Response {
     if matches!(error, VariableError::DuplicateKey) {
+        let locale = request_locale();
         return (
             StatusCode::CONFLICT,
             Json(ApiResponse::<EmptyData>::error(
                 "VARIABLE_KEY_DUPLICATE",
-                "platform variable key already exists",
+                tron_i18n::t!("admin.variables.key_duplicate", locale = &locale),
             )),
         )
             .into_response();
     }
 
     variable_error_response(error)
+}
+
+/// Locale already resolved for the current request by the profile middleware.
+fn request_locale() -> String {
+    crate::shared::auth_holder::AuthHolder::get()
+        .map(|context| context.locale.clone())
+        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_string())
 }
 
 pub async fn list_platform_variables(State(variables): State<VariableService>) -> Response {

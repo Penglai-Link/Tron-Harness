@@ -301,10 +301,13 @@ impl LlmRuntimeService {
         response
             .validate(inputs.len(), Some(command.dimensions))
             .map_err(|error| {
-                LlmRuntimeError::invalid_provider_response(format!(
-                    "Embedding批次返回的数量、索引或向量无效（要求{}维）: {error}",
-                    command.dimensions
-                ))
+                LlmRuntimeError::localized_invalid_provider_response_message(
+                    crate::shared::i18n_message::MessageText::new(
+                        "llm.embedding.batch_response_invalid",
+                    )
+                    .arg("dimension", command.dimensions.to_string())
+                    .arg("error", error.to_string()),
+                )
             })?;
         Ok(LlmEmbeddingBatchCallResult {
             model_code: config.model_code,
@@ -352,10 +355,13 @@ impl LlmRuntimeService {
         response
             .validate(inputs.len(), Some(command.dimensions))
             .map_err(|error| {
-                LlmRuntimeError::invalid_provider_response(format!(
-                    "Embedding批次返回的数量、索引或向量无效（要求{}维）: {error}",
-                    command.dimensions
-                ))
+                LlmRuntimeError::localized_invalid_provider_response_message(
+                    crate::shared::i18n_message::MessageText::new(
+                        "llm.embedding.batch_response_invalid",
+                    )
+                    .arg("dimension", command.dimensions.to_string())
+                    .arg("error", error.to_string()),
+                )
             })?;
         Ok(LlmEmbeddingBatchCallResult {
             model_code: config.model_code,

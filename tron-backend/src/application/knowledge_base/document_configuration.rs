@@ -41,13 +41,15 @@ impl KnowledgeBaseService {
                 .unwrap_or_default();
             if crate::application::document::preflight::DIRECT_READ_EXTENSIONS.contains(&extension)
             {
-                return Err(KnowledgeBaseError::Invalid(
-                    "Markdown使用直接读取，无需解析质量覆盖".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.markdown_no_override",
                 ));
             }
             let capabilities = self.parsing_capabilities(user).await?;
             if !capabilities.available_tiers.contains(&selected) {
-                return Err(KnowledgeBaseError::Invalid("选定解析质量不可用".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.selected_quality_unavailable",
+                ));
             }
         }
         if let Some(Some(mode)) = ocr {
@@ -60,11 +62,13 @@ impl KnowledgeBaseService {
             if !crate::application::document::preflight::PARSE_EXTENSIONS
                 .contains(&extension.as_str())
             {
-                return Err(KnowledgeBaseError::Invalid("此文件不需要文字识别".into()));
+                return Err(KnowledgeBaseError::invalid("knowledge.base.ocr_not_needed"));
             }
             self.parser
                 .as_ref()
-                .ok_or_else(|| KnowledgeBaseError::Invalid("文档解析服务未配置".into()))?
+                .ok_or_else(|| {
+                    KnowledgeBaseError::invalid("knowledge.base.parse_service_unconfigured")
+                })?
                 .with_ocr_mode(mode)?;
         }
         self.prepare_document_configuration(user, kb, doc, config, tier, ocr)
@@ -105,14 +109,16 @@ impl KnowledgeBaseService {
         self.owned(user, kb)?;
         if let Some(c) = &config {
             c.validate()
-                .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+                .map_err(|e| KnowledgeBaseError::from_detail(e))?;
             if !self
                 .chunk_strategies
                 .descriptors()
                 .iter()
                 .any(|d| d.id == c.mode.strategy_id())
             {
-                return Err(KnowledgeBaseError::Invalid("切片策略未注册".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.chunk_strategy_unconfigured",
+                ));
             }
         }
         let mut doc = self.repository.document(kb, doc)?;
@@ -153,12 +159,7 @@ impl KnowledgeBaseService {
             "UPLOADED"
         }
         .into();
-        doc.error = fidelity::blocked(&doc).then(|| {
-            format!(
-                "解析质量校验失败，索引未发布：{}；请核对原件及图片",
-                fidelity::failure_reason(&doc)
-            )
-        });
+        doc.error = fidelity::blocked(&doc).then(|| fidelity::failure_message(&doc).encode());
         Ok(doc)
     }
 }

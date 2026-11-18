@@ -440,20 +440,28 @@ impl<R: RagConfigRepository + Send + Sync> RagIndexCheckpoint for RecordCheckpoi
             .repository
             .record_task(&task.user_code, &task.id)
             .map_err(|error| error.to_string())?
-            .ok_or("入库任务不存在")?;
+            .ok_or(
+                crate::shared::i18n_message::MessageText::new("rag.ingest.task_missing").encode(),
+            )?;
         if current.state != "RUNNING"
             || !self
                 .repository
                 .record_task_is_latest(&current)
                 .map_err(|e| e.to_string())?
         {
-            return Err("入库任务已取消、被新任务替代或状态已改变".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.ingest.task_superseded",
+            )
+            .encode()
+            .into());
         }
         let corpus = self
             .repository
             .get_corpus(&task.corpus_id)
             .map_err(|e| e.to_string())?
-            .ok_or("语料库不存在")?;
+            .ok_or(
+                crate::shared::i18n_message::MessageText::new("rag.ingest.corpus_missing").encode(),
+            )?;
         let settings = super::RagSettings::from_capabilities(&corpus.capabilities)
             .map_err(|e| e.to_string())?;
         if current
@@ -461,7 +469,11 @@ impl<R: RagConfigRepository + Send + Sync> RagIndexCheckpoint for RecordCheckpoi
             .as_ref()
             .is_none_or(|saved| saved.settings != settings)
         {
-            return Err("索引配置已改变，请重新提交任务".into());
+            return Err(
+                crate::shared::i18n_message::MessageText::new("rag.ingest.config_changed")
+                    .encode()
+                    .into(),
+            );
         }
         Ok(())
     }
@@ -472,7 +484,9 @@ impl<R: RagConfigRepository + Send + Sync> RagIndexCheckpoint for RecordCheckpoi
     fn save_batch(&self, result: &RagEmbeddingBatchResult) -> Result<(), String> {
         let mut task = self.task.lock().map_err(|error| error.to_string())?;
         let mut next = task.clone();
-        let checkpoint = next.checkpoint.as_mut().ok_or("任务索引检查点缺失")?;
+        let checkpoint = next.checkpoint.as_mut().ok_or(
+            crate::shared::i18n_message::MessageText::new("rag.ingest.checkpoint_missing").encode(),
+        )?;
         checkpoint.vectors.model_code = Some(result.model_code.clone());
         checkpoint.vectors.provider_model = result.provider_model.clone();
         checkpoint

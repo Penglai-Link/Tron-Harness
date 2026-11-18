@@ -165,7 +165,7 @@ pub fn split_document_with_strategies(
         .map(|section| section.text.len())
         .sum();
     if size > MAX_PARSED_TEXT_BYTES {
-        return Err(failed("normalized document text exceeds 16 MiB"));
+        return Err(failed("document.parse.normalized_too_large"));
     }
     let input = chunk_document_input(document, id, title, config.heading_depth);
     let options = ChunkingOptions {
@@ -180,7 +180,7 @@ pub fn split_document_with_strategies(
     };
     let plan = strategies
         .split(config.mode.strategy_id(), &input, &options)
-        .map_err(failed)?;
+        .map_err(failed_detail)?;
     located_plan(document, plan)
 }
 
@@ -201,11 +201,11 @@ fn located_plan(
                 .collect::<Vec<_>>();
             let first_index = *indexes
                 .first()
-                .ok_or_else(|| failed("chunk source is missing"))?;
+                .ok_or_else(|| failed("document.chunk.source_missing"))?;
             let first = document
                 .sections
                 .get(first_index)
-                .ok_or_else(|| failed("chunk source is invalid"))?;
+                .ok_or_else(|| failed("document.chunk.source_invalid"))?;
             let last = &document.sections[*indexes.last().unwrap()];
             let mut location = first.location.clone();
             location.char_start += chunk.spans.first().map_or(0, |span| span.start);
@@ -289,15 +289,15 @@ fn span_location_from(
         .block_id
         .strip_prefix("block-")
         .and_then(|id| id.parse::<usize>().ok())
-        .ok_or_else(|| failed("invalid source block"))?;
+        .ok_or_else(|| failed("document.chunk.source_block_invalid"))?;
     let section = document
         .sections
         .get(index)
-        .ok_or_else(|| failed("source block is absent"))?;
+        .ok_or_else(|| failed("document.chunk.source_block_absent"))?;
     let mut location = locations
         .get(index)
         .cloned()
-        .ok_or_else(|| failed("source block location is absent"))?;
+        .ok_or_else(|| failed("document.chunk.source_location_absent"))?;
     location["charStart"] = (section.location.char_start + span.start).into();
     location["charEnd"] = (section.location.char_start + span.end).into();
     Ok(location)

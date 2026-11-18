@@ -32,13 +32,13 @@ impl KnowledgeQualityService {
             .filter(|doc| doc.active_source_code.is_some())
             .collect::<Vec<_>>();
         if documents.is_empty() {
-            return Err(KnowledgeBaseError::Invalid(
-                "请先完成至少一份资料的解析和入库".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.quality.no_published_source",
             ));
         }
         if documents.len() > 16 {
-            return Err(KnowledgeBaseError::Invalid(
-                "一次优化最多处理16份资料，请分开建立知识库或缩小评测范围".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.quality.too_many_documents",
             ));
         }
         let corpus = self
@@ -52,8 +52,8 @@ impl KnowledgeQualityService {
         let mut total = 0;
         for document in documents {
             if document.status != "READY" {
-                return Err(KnowledgeBaseError::Invalid(
-                    "资料正在处理或重建失败，请先恢复稳定的已发布索引".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.quality.unstable_source",
                 ));
             }
             let parsed = self.host.existing_parsed_document(user, &document)?;
@@ -67,8 +67,8 @@ impl KnowledgeQualityService {
                 .map(|section| section.text.len())
                 .sum::<usize>();
             if total > 4 * 1024 * 1024 {
-                return Err(KnowledgeBaseError::Invalid(
-                    "本轮评测正文超过4 MiB上限".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.quality.source_too_large",
                 ));
             }
             let input = chunk_document_input(&parsed, &document.id, &document.file_name, 6);
@@ -91,7 +91,7 @@ impl KnowledgeQualityService {
             .collect::<Vec<_>>();
         let fingerprint = crate::application::knowledge_base::hash(
             &serde_json::to_string(&identity)
-                .map_err(|error| KnowledgeBaseError::Storage(error.to_string()))?,
+                .map_err(|error| KnowledgeBaseError::storage_detail(error.to_string()))?,
         );
         Ok(QualitySnapshot {
             library,
@@ -109,7 +109,9 @@ impl KnowledgeQualityService {
         limit: usize,
     ) -> Result<(String, Vec<QualitySourceExcerpt>), KnowledgeBaseError> {
         if limit == 0 || limit > 24 || offset > 10000 {
-            return Err(KnowledgeBaseError::Invalid("评测原文分页超出范围".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.quality.page_out_of_range",
+            ));
         }
         let snapshot = self.snapshot(user, kb).await?;
         let excerpts = excerpts(&snapshot, (offset + limit).min(10024))

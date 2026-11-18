@@ -181,12 +181,25 @@ async fn list_capability_packs(
     }
 }
 
-async fn list_extension_implementations(State(state): State<AppState>) -> Response {
+async fn list_extension_implementations(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let locale = crate::shared::locale::resolve_request_locale(
+        headers
+            .get(axum::http::header::ACCEPT_LANGUAGE)
+            .and_then(|value| value.to_str().ok()),
+    );
+    list_extension_implementations_for(state, &locale).await
+}
+
+async fn list_extension_implementations_for(state: AppState, locale: &str) -> Response {
     let (packs, extensions) = state.agent_framework.capability_state();
     match installed_extension_implementations(
         state.agent_framework.pack_root(),
         &packs,
         &extensions,
+        locale,
     ) {
         Ok(records) => Json(ApiResponse::success(records)).into_response(),
         Err(error) => failure(
@@ -296,7 +309,7 @@ async fn set_extension_enabled(
         .set_extension_enabled(&point, request.enabled)
         .await
     {
-        Ok(()) => list_extension_implementations(State(state)).await,
+        Ok(()) => list_extension_implementations_for(state, &auth.locale).await,
         Err(error) => failure(StatusCode::CONFLICT, "CAPABILITY_RECONFIGURE_FAILED", error),
     }
 }
@@ -347,7 +360,11 @@ async fn import_pack(
             tron_i18n::t!("capabilities.file_required", locale = &auth.locale).into_owned(),
         );
     };
-    match state.agent_framework.import_pack(bytes.to_vec()).await {
+    match state
+        .agent_framework
+        .import_pack(bytes.to_vec(), &auth.locale)
+        .await
+    {
         Ok(pack) => Json(ApiResponse::protocol_success(pack)).into_response(),
         Err(error) => failure(StatusCode::CONFLICT, "CAPABILITY_IMPORT_REJECTED", error),
     }

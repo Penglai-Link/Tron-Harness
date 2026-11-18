@@ -30,38 +30,27 @@ fn graph_stage_error(error: String) -> KnowledgeBaseError {
         _ => false,
     };
     if transient {
-        KnowledgeBaseError::Storage(error)
+        KnowledgeBaseError::storage_detail(error)
     } else {
-        KnowledgeBaseError::Invalid(error)
+        KnowledgeBaseError::from_detail(error)
     }
 }
 
+/// Classify an index-preparation failure without matching localized text:
+/// structured messages keep their stable key, legacy/technical detail is
+/// treated as a storage failure so the durable worker may retry it.
 fn index_preparation_error(error: String) -> KnowledgeBaseError {
     if error.starts_with("SDK_MODEL_ERROR:") {
         // A timeout after dispatch is indeterminate, not permission to repeat a
         // potentially billed call. Only typed transient failures auto-retry.
         return graph_stage_error(error);
     }
-    if error.contains("取消") || error.contains("租约") {
-        KnowledgeBaseError::Conflict
-    } else if [
-        "维度",
-        "模型配置",
-        "索引配置",
-        "模型或",
-        "模型发生",
-        "检查点",
-        "没有",
-        "请先配置",
-        "没有有效原文",
-        "图谱抽取返回格式",
-    ]
-    .iter()
-    .any(|word| error.contains(word))
-    {
-        KnowledgeBaseError::Invalid(error)
-    } else {
-        KnowledgeBaseError::Storage(error)
+    match crate::shared::i18n_message::MessageText::decode(&error) {
+        Some(message) if message.key() == "knowledge.base.index_cancelled_lease_lost" => {
+            KnowledgeBaseError::Conflict
+        }
+        Some(message) => KnowledgeBaseError::invalid_message(message),
+        None => KnowledgeBaseError::storage_detail(error),
     }
 }
 
@@ -99,8 +88,8 @@ impl AppRagService {
                 .iter()
                 .any(|s| s == &expected)
             {
-                return Err(KnowledgeBaseError::Invalid(
-                    "切片策略实现已改变，请重新提交索引任务".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.ingest_manifest_changed",
                 ));
             }
         }
@@ -140,8 +129,8 @@ impl AppRagService {
                     .map(|p| p.profile_identity())
                     != Some(task.configuration["parser"].clone())
             {
-                return Err(KnowledgeBaseError::Invalid(
-                    "解析节点或配置已改变，请重新入库".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.parser_config_changed",
                 ));
             }
             let checkpoint = Arc::new(RemoteCheckpoint {
@@ -162,7 +151,9 @@ impl AppRagService {
                 .chunks(&task.user_code, &task.workspace_code, &kb, &doc, true)
                 .await?;
             if chunks.is_empty() {
-                return Err(KnowledgeBaseError::Invalid("资料没有可入库内容".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.no_ingest_content",
+                ));
             }
             task = host.queue.get(&task.id).map_err(queue_error)?;
             task.stage = IngestionStage::Chunking;
@@ -195,9 +186,9 @@ impl AppRagService {
         }
         let mut stored: StoredChunks = host.read_checkpoint(
             &task,
-            task.chunks_resource_code
-                .as_deref()
-                .ok_or_else(|| KnowledgeBaseError::Invalid("入库切分检查点缺失".into()))?,
+            task.chunks_resource_code.as_deref().ok_or_else(|| {
+                KnowledgeBaseError::invalid("knowledge.base.split_checkpoint_missing")
+            })?,
         )?;
         let settings: RagSettings =
             serde_json::from_value(task.configuration["ragSettings"].clone())
@@ -209,8 +200,8 @@ impl AppRagService {
             && (task.embedding_model_code().is_none() || task.embedding_fingerprint().is_none())
         {
             if task.embedding_resource_code.is_some() {
-                return Err(KnowledgeBaseError::Invalid(
-                    "向量检查点缺少模型身份，不能安全续跑".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.vector_checkpoint_no_model",
                 ));
             }
             let requested = task
@@ -219,7 +210,7 @@ impl AppRagService {
             let model = host
                 .llm
                 .resolve_embedding_index_model_code(&task.workspace_code, requested)
-                .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?;
+                .map_err(|error| KnowledgeBaseError::invalid_message(error.localized_detail()))?;
             let fingerprint = host
                 .llm
                 .embedding_space_fingerprint(
@@ -227,7 +218,7 @@ impl AppRagService {
                     Some(&model),
                     settings.embedding_dimension,
                 )
-                .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?;
+                .map_err(|error| KnowledgeBaseError::invalid_message(error.localized_detail()))?;
             task.embedding_identity = Some(IngestionEmbeddingIdentity {
                 model_code: model,
                 fingerprint,
@@ -245,21 +236,25 @@ impl AppRagService {
                 KnowledgeBaseError::Invalid(
                     task.configuration["embeddingError"]
                         .as_str()
-                        .unwrap_or("Embedding模型未配置")
+                        .unwrap_or("knowledge.base.embedding_model_unconfigured")
                         .into(),
                 )
             })?;
         let expected = pinned_fingerprint
             .as_deref()
             .or_else(|| (!settings.vector && !settings.graph).then_some(""))
-            .ok_or_else(|| KnowledgeBaseError::Invalid("Embedding空间未配置".into()))?;
+            .ok_or_else(|| {
+                KnowledgeBaseError::invalid("knowledge.base.embedding_space_unconfigured")
+            })?;
         let image_vectors = if settings.vector {
             match task.configuration["embeddingImages"].as_bool() {
                 Some(known) => known,
                 None => host
                     .llm
                     .embedding_accepts_images(&task.workspace_code, model)
-                    .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?,
+                    .map_err(|error| {
+                        KnowledgeBaseError::invalid_message(error.localized_detail())
+                    })?,
             }
         } else {
             false
@@ -271,8 +266,8 @@ impl AppRagService {
                 .any(|chunk| chunk.location.block_kind.as_deref() == Some("image_vector"))
         {
             if task.embedding_resource_code.is_some() {
-                return Err(KnowledgeBaseError::Invalid(
-                    "向量检查点的图片输入方式已改变，不能安全续跑".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.vector_checkpoint_image_mode_changed",
                 ));
             }
             stored
@@ -293,15 +288,17 @@ impl AppRagService {
         }
         let mut embedded = host.restore_embeddings(&task, stored.chunks.len()).await?;
         if embedded.vectors.len() > stored.chunks.len() {
-            return Err(KnowledgeBaseError::Invalid("向量检查点不匹配".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.vector_checkpoint_mismatch",
+            ));
         }
         if embedded
             .vectors
             .iter()
             .any(|v| v.len() != settings.embedding_dimension || v.iter().any(|n| !n.is_finite()))
         {
-            return Err(KnowledgeBaseError::Invalid(
-                "向量检查点维度或数值无效，整份索引未发布".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.vector_checkpoint_invalid",
             ));
         }
         task.total_units = stored.chunks.len();
@@ -377,7 +374,7 @@ impl AppRagService {
             &graph_context,
             &index_settings,
         )
-        .map_err(KnowledgeBaseError::Invalid)?;
+        .map_err(KnowledgeBaseError::from_detail)?;
         let prepared = self
             .prepare_index_with_content(
                 &task.workspace_code,
@@ -409,7 +406,7 @@ impl AppRagService {
             .map_err(graph_stage_error)?;
         graph_checkpoint
             .stage("PUBLISHING")
-            .map_err(KnowledgeBaseError::Invalid)?;
+            .map_err(KnowledgeBaseError::from_detail)?;
         task = checkpoint.task.lock().map_err(invalid_storage)?.clone();
         embedded.provider_model = prepared.vectors.provider_model;
         let units = prepared.units;

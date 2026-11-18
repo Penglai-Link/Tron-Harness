@@ -27,10 +27,9 @@ impl KnowledgeBaseService {
         doc: &KnowledgeBaseDocument,
     ) -> Result<ParsedDocument, KnowledgeBaseError> {
         if super::fidelity::blocked(doc) {
-            return Err(KnowledgeBaseError::Invalid(format!(
-                "解析质量校验失败，索引未发布：{}；请核对原件及图片",
-                super::fidelity::failure_reason(doc)
-            )));
+            return Err(KnowledgeBaseError::invalid_message(
+                super::fidelity::failure_message(doc),
+            ));
         }
         let (_, original) = self.resources.download_binary_to_file(
             user,
@@ -52,10 +51,10 @@ impl KnowledgeBaseService {
             || doc.file_name.to_ascii_lowercase().ends_with(".md")
         {
             return parse_local_document(&doc.file_name, &bytes)
-                .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()));
+                .map_err(|error| KnowledgeBaseError::from_detail(error));
         }
         let artifact = doc.parsing_artifact.as_ref().ok_or_else(|| {
-            KnowledgeBaseError::Invalid("请先完成资料解析和入库；评测不会重新提交解析任务".into())
+            KnowledgeBaseError::invalid("knowledge.base.attachment_ingestion_required")
         })?;
         let (_, record) = self.resources.download_binary_to_file(
             user,
@@ -65,8 +64,8 @@ impl KnowledgeBaseService {
             },
         )?;
         if record.byte_size > super::local_documents::MAX_EXPANDED_BYTES as u64 {
-            return Err(KnowledgeBaseError::Invalid(
-                "单份解析缓存超过读取上限".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.parsing_cache_read_limit",
             ));
         }
         let mut data = Vec::new();
@@ -136,10 +135,9 @@ impl KnowledgeBaseService {
         bytes: &[u8],
     ) -> Result<(ParsedDocument, KnowledgeBaseDocument), KnowledgeBaseError> {
         if super::fidelity::blocked(doc) {
-            let reason = super::fidelity::failure_reason(doc);
-            return Err(KnowledgeBaseError::Invalid(format!(
-                "解析质量校验失败，索引未发布：{reason}；请核对原件及图片"
-            )));
+            return Err(KnowledgeBaseError::invalid_message(
+                super::fidelity::failure_message(doc),
+            ));
         }
         if doc
             .parse_plan
@@ -148,18 +146,20 @@ impl KnowledgeBaseService {
             || doc.file_name.to_ascii_lowercase().ends_with(".md")
         {
             let mut parsed = parse_local_document(&doc.file_name, bytes)
-                .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+                .map_err(|e| KnowledgeBaseError::from_detail(e))?;
             // Keep Markdown references intact; remote or filesystem links are never fetched.
             if std::str::from_utf8(bytes).unwrap_or("").contains("![") {
                 parsed.warnings.push(
-                    "Markdown图片链接原样保留；仅已有资源引用可供授权Agent读取，不自动下载外部图片"
-                        .into(),
+                    crate::shared::i18n_message::MessageText::new(
+                        "knowledge.parsing.markdown_images_kept",
+                    )
+                    .encode(),
                 );
             }
             return Ok((parsed, doc.clone()));
         }
         let parser = self.document_parser(doc)?.ok_or_else(|| {
-            KnowledgeBaseError::Invalid("文档解析服务未配置；不会自动降级为纯文本解析".into())
+            KnowledgeBaseError::invalid("knowledge.base.parse_service_unconfigured_no_fallback")
         })?;
         let snapshot = parser.snapshot();
         let parser = snapshot.as_ref().unwrap_or(&parser);
@@ -232,7 +232,9 @@ impl KnowledgeBaseService {
             let mut data = Vec::new();
             self.resources.download_binary_storage(&record, &mut data)?;
             if data.len() > super::local_documents::MAX_EXPANDED_BYTES {
-                return Err(KnowledgeBaseError::Invalid("解析缓存超过上限".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.parsing_cache_too_large",
+                ));
             }
             let parsed: StoredParse = serde_json::from_slice(&data).map_err(invalid_storage)?;
             let mut document = if super::parsing::has_structured_middle(&parsed.middle) {
@@ -266,9 +268,7 @@ impl KnowledgeBaseService {
         let mut rendered_pdf_resource = None;
         if let Some(plan) = chart_plan.filter(|p| p.has_charts()) {
             let renderer = self.office_renderer.as_ref().ok_or_else(|| {
-                KnowledgeBaseError::Invalid(
-                    "Office含原生图表但本地视觉转换未配置；未发布缺失图表的索引".into(),
-                )
+                KnowledgeBaseError::invalid("knowledge.base.office_visuals_unconfigured")
             })?;
             let pdf = renderer.render_pdf(&doc.file_name, bytes).await?;
             let pages = tokio::task::spawn_blocking({
@@ -279,8 +279,8 @@ impl KnowledgeBaseService {
             .map_err(invalid_storage)?
             .map_err(invalid_storage)?;
             if plan.format == "xlsx" && pages.len() != plan.sheets.len() {
-                return Err(KnowledgeBaseError::Invalid(
-                    "Excel转换页与Sheet数量不匹配，图表来源不明确；未发布索引".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.excel_conversion_mismatch",
                 ));
             }
             rendered_pdf_resource = Some(self.derived_resource(
@@ -295,7 +295,11 @@ impl KnowledgeBaseService {
                 let key = if plan.format == "xlsx" {
                     plan.sheets
                         .get(page.page as usize - 1)
-                        .ok_or_else(|| KnowledgeBaseError::Invalid("Excel转换Sheet缺失".into()))?
+                        .ok_or_else(|| {
+                            KnowledgeBaseError::invalid(
+                                "knowledge.base.excel_conversion_sheet_missing",
+                            )
+                        })?
                         .as_str()
                 } else {
                     "document"
@@ -343,7 +347,9 @@ impl KnowledgeBaseService {
             let name = std::path::Path::new(&asset.path)
                 .file_name()
                 .and_then(|s| s.to_str())
-                .ok_or_else(|| KnowledgeBaseError::Invalid("解析图片名称无效".into()))?;
+                .ok_or_else(|| {
+                    KnowledgeBaseError::invalid("knowledge.base.parsing_attachment_name_invalid")
+                })?;
             let code = self.derived_resource(
                 user,
                 workspace,
@@ -379,8 +385,8 @@ impl KnowledgeBaseService {
         };
         let data = serde_json::to_vec(&stored).map_err(invalid_storage)?;
         if data.len() > super::local_documents::MAX_EXPANDED_BYTES {
-            return Err(KnowledgeBaseError::Invalid(
-                "解析结构化资料超过100 MiB上限".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.parsed_structured_too_large",
             ));
         }
         let resource_code = self.derived_resource(
@@ -448,7 +454,11 @@ fn map_image_resources(
                 annotation.resource_code = Some(
                     resources
                         .get(path)
-                        .ok_or_else(|| KnowledgeBaseError::Invalid("解析图片文本引用缺失".into()))?
+                        .ok_or_else(|| {
+                            KnowledgeBaseError::invalid(
+                                "knowledge.base.parsed_image_text_ref_missing",
+                            )
+                        })?
                         .clone(),
                 );
             }
@@ -456,7 +466,9 @@ fn map_image_resources(
         for path in &mut section.location.image_resource_codes {
             *path = resources
                 .get(path)
-                .ok_or_else(|| KnowledgeBaseError::Invalid("解析图片引用缺失".into()))?
+                .ok_or_else(|| {
+                    KnowledgeBaseError::invalid("knowledge.base.parsed_image_ref_missing")
+                })?
                 .clone();
         }
         for (path, code) in resources {

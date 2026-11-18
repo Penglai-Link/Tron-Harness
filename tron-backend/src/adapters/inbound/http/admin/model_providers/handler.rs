@@ -343,6 +343,7 @@ fn parse_provider_code(value: &str) -> Result<ModelProviderCode, Response> {
 }
 
 fn model_provider_error_response(error: ModelProviderError) -> Response {
+    let locale = request_locale_from(None);
     let (status, code) = match error {
         ModelProviderError::AuthorizationSessionNotFound => (
             StatusCode::NOT_FOUND,
@@ -387,7 +388,10 @@ fn model_provider_error_response(error: ModelProviderError) -> Response {
     };
     (
         status,
-        Json(ApiResponse::<EmptyData>::error(code, error.to_string())),
+        Json(ApiResponse::<EmptyData>::error(
+            code,
+            error.user_message_text(&locale),
+        )),
     )
         .into_response()
 }

@@ -92,7 +92,11 @@ def parse_locale_file(path: Path, errors: Error) -> dict[str, dict[str, str]]:
             if not value.strip():
                 errors.add(f"{where}: empty translation for `{key}`/{locale}")
                 continue
-            messages.setdefault(key, {})[locale] = value
+            entries = messages.setdefault(key, {})
+            if locale in entries:
+                errors.add(f"{where}: duplicate `{locale}` entry for `{key}`")
+                continue
+            entries[locale] = value
             continue
         if match := KEY_LINE.match(line):
             key = match.group(1)
@@ -273,6 +277,9 @@ def declared_catalog_keys(root: Path, errors: Error) -> set[str]:
     keys: set[str] = set()
     i18n_key = re.compile(r'[A-Za-z_]*i18n_key:\s*"((?:[^"\\]|\\.)*)"')
     schema_key = re.compile(r'schema\(\s*"((?:[^"\\]|\\.)*)"')
+    message_key = re.compile(
+        r'(?:MessageText|Message)::new\(\s*"((?:[^"\\]|\\.)*)"'
+    )
     description_key = re.compile(
         r'x-i18n-description-key"\s*:\s*"((?:[^"\\]|\\.)*)"'
     )
@@ -281,7 +288,7 @@ def declared_catalog_keys(root: Path, errors: Error) -> set[str]:
     for path in rust_sources(root):
         relative = path.relative_to(root)
         source = strip_comments(path.read_text(encoding="utf-8", errors="replace"))
-        for pattern in (i18n_key, schema_key, description_key):
+        for pattern in (i18n_key, schema_key, description_key, message_key):
             for match in pattern.finditer(source):
                 key = unescape(match.group(1))
                 if TRANSLATION_KEY.match(key):

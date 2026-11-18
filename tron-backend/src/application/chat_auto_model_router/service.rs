@@ -119,7 +119,9 @@ impl ChatAutoModelRouter {
             .iter()
             .find(|candidate| route_candidate(candidate).model == selected)
             .cloned()
-            .ok_or_else(|| "对话自动路由 selected an unauthorized model".to_string())?;
+            .ok_or_else(|| {
+                "chat auto route selected a model outside the authorized candidate set".to_string()
+            })?;
         self.providers
             .save_chat_auto_route_selection(
                 workspace_code,

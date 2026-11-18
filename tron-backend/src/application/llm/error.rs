@@ -31,26 +31,85 @@ impl LlmRuntimeError {
     pub fn invalid_chunk_strategy(message: impl Into<String>) -> Self {
         Self::InvalidChunkStrategy(message.into())
     }
+    fn encoded(key: &'static str) -> String {
+        crate::shared::i18n_message::MessageText::new(key).encode()
+    }
+    /// Locale-independent user-facing model-resolution failure.
+    pub fn localized_model_resolution(key: &'static str) -> Self {
+        Self::ModelResolutionFailed(Self::encoded(key))
+    }
+    /// Locale-independent user-facing provider failure.
+    pub fn localized_provider_failed(key: &'static str) -> Self {
+        Self::ProviderFailed(Self::encoded(key))
+    }
+    /// Locale-independent user-facing invalid-response failure.
+    pub fn localized_invalid_provider_response(key: &'static str) -> Self {
+        Self::InvalidProviderResponse(Self::encoded(key))
+    }
+    /// Locale-independent user-facing chunk-strategy failure.
+    pub fn localized_invalid_chunk_strategy(key: &'static str) -> Self {
+        Self::InvalidChunkStrategy(Self::encoded(key))
+    }
+    /// Locale-independent user-facing invalid response with arguments.
+    pub fn localized_invalid_provider_response_message(
+        message: crate::shared::i18n_message::MessageText,
+    ) -> Self {
+        Self::InvalidProviderResponse(message.encode())
+    }
+    fn payload(&self) -> Option<&str> {
+        match self {
+            Self::ModelResolutionFailed(message)
+            | Self::ProviderFailed(message)
+            | Self::InvalidProviderResponse(message)
+            | Self::InvalidChunkStrategy(message) => Some(message),
+            _ => None,
+        }
+    }
+    fn fixed_key(&self) -> &'static str {
+        match self {
+            Self::WorkspaceRequired => "llm.workspace_required",
+            Self::InputRequired => "llm.input_required",
+            Self::QueryRequired => "llm.query_required",
+            Self::DocumentsRequired => "llm.documents_required",
+            Self::TextModelUnavailable => "llm.text_model_unavailable",
+            Self::EmbeddingModelUnavailable => "llm.embedding_model_unavailable",
+            Self::RerankModelUnavailable => "llm.rerank_model_unavailable",
+            Self::ModelResolutionFailed(_) => "llm.model_resolution_failed",
+            Self::ProviderFailed(_) => "llm.provider_failed",
+            Self::InvalidProviderResponse(_) => "llm.invalid_provider_response",
+            Self::InvalidChunkStrategy(_) => "llm.invalid_chunk_strategy",
+        }
+    }
+    /// Display-layer conversion: structured payloads stay key + arguments;
+    /// technical provider detail is wrapped into the matching message.
+    pub fn localized_detail(&self) -> crate::shared::i18n_message::MessageText {
+        use crate::shared::i18n_message::MessageText;
+        if let Some(payload) = self.payload() {
+            if let Some(message) = MessageText::decode(payload) {
+                return message;
+            }
+            return MessageText::new(match self {
+                Self::ModelResolutionFailed(_) => "llm.model_resolution_failed",
+                Self::ProviderFailed(_) => "llm.provider_failed",
+                Self::InvalidProviderResponse(_) => "llm.invalid_provider_response",
+                Self::InvalidChunkStrategy(_) => "llm.invalid_chunk_strategy",
+                _ => unreachable!(),
+            })
+            .arg("detail", payload);
+        }
+        MessageText::new(self.fixed_key())
+    }
 }
 
 impl fmt::Display for LlmRuntimeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::WorkspaceRequired => formatter.write_str("workspaceCode is required"),
-            Self::InputRequired => formatter.write_str("input is required"),
-            Self::QueryRequired => formatter.write_str("query is required"),
-            Self::DocumentsRequired => formatter.write_str("documents is required"),
-            Self::TextModelUnavailable => formatter
-                .write_str("text model is unavailable, or no default text model is configured"),
-            Self::EmbeddingModelUnavailable => formatter.write_str(
-                "embedding model is unavailable, or no default embedding model is configured",
-            ),
-            Self::RerankModelUnavailable => formatter
-                .write_str("rerank model is unavailable, or no default rerank model is configured"),
-            Self::ModelResolutionFailed(message)
-            | Self::ProviderFailed(message)
-            | Self::InvalidProviderResponse(message)
-            | Self::InvalidChunkStrategy(message) => formatter.write_str(message),
+        // Diagnostics only; user-facing output renders `localized_detail(locale)`.
+        match self.payload() {
+            Some(message) => match crate::shared::i18n_message::MessageText::decode(message) {
+                Some(decoded) => formatter.write_str(decoded.key()),
+                None => formatter.write_str(message),
+            },
+            None => formatter.write_str(self.fixed_key()),
         }
     }
 }

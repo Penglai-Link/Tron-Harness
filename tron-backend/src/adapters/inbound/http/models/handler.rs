@@ -6,7 +6,9 @@ use crate::{
             ConfiguredProviderError, ModelProtocol, ModelSelectOption, ModelType,
             ModelViewSourceKind,
         },
-        model_provider::{ModelProviderCode, ModelSelection, ProviderCatalogModelStatus},
+        model_provider::{
+            ModelProviderCode, ModelSelection, ProviderCatalogModelStatus, ProviderRouteCode,
+        },
     },
     response::ApiResponse,
     shared::locale::SupportedLocale,
@@ -132,7 +134,12 @@ pub async fn list_select_options(
                 (_, Some(route)) => format!("PERSON_AI:ROUTE:{}", route.storage_value()),
                 _ => String::new(),
             },
-            display_name: record.display_name,
+            display_name: record
+                .selection
+                .route_code
+                .map_or(record.display_name, |route| {
+                    provider_route_label(route, locale.as_str())
+                }),
             model_name: record
                 .selection
                 .model_code
@@ -215,4 +222,15 @@ pub async fn list_select_options(
             .map(ProviderModelOptionVo::from)
             .collect(),
     )))
+}
+
+/// Localized label for a PersonAI automatic route option.
+fn provider_route_label(route: ProviderRouteCode, locale: &str) -> String {
+    let key = match route {
+        ProviderRouteCode::ChatAuto => "models.route.chat_auto",
+        ProviderRouteCode::EmbeddingAuto => "models.route.embedding_auto",
+        ProviderRouteCode::MultimodalEmbeddingAuto => "models.route.multimodal_embedding_auto",
+        ProviderRouteCode::RerankAuto => "models.route.rerank_auto",
+    };
+    tron_i18n::t!(key, locale = locale).into_owned()
 }

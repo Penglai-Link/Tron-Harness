@@ -259,7 +259,7 @@ fn provider_activation_error_response(
             tron_i18n::t!(
                 "profiles.credentials_failed",
                 locale = locale,
-                detail = error
+                detail = error.user_message_text(locale)
             ),
         )),
     )

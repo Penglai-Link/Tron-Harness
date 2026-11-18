@@ -1,0 +1,214 @@
+# System surfaces: variables, system configuration, knowledge graph explorer,
+# prompt administration and capability extension descriptions.
+#
+# Format: rust-i18n `_version: 2`; one flat dotted key per message with both
+# supported locales. Keys prefixed `tron.` are stable display-layer keys that
+# match the `message_key`/descriptor of application/domain error values; the
+# rest are keys owned by inbound HTTP adapters. Never embed user-facing text in
+# Rust sources.
+_version: 2
+
+# --- Variables (VariableError descriptors) ---
+variables.not_found:
+  en: "Variable was not found."
+  zh-CN: "未找到变量。"
+
+variables.workspace_required:
+  en: "workspaceCode is required."
+  zh-CN: "必须提供 workspaceCode。"
+
+variables.workspace_invalid:
+  en: "The variable workspace must reference an active workspace."
+  zh-CN: "变量所属工作区必须为有效工作区。"
+
+variables.key_invalid:
+  en: "Variable keys may contain letters, digits, underscores, hyphens and dots only."
+  zh-CN: "变量键仅支持字母、数字、下划线、连字符和点。"
+
+variables.value_required:
+  en: "A variable value is required."
+  zh-CN: "必须填写变量值。"
+
+variables.key_duplicate:
+  en: "The variable key already exists in this workspace."
+  zh-CN: "当前工作区已存在同名变量键。"
+
+variables.inherited_mutation_denied:
+  en: "Override the inherited variable locally before changing it."
+  zh-CN: "请先在工作区内覆盖继承变量，再进行修改。"
+
+variables.encryption_not_configured:
+  en: "Sensitive value encryption is not configured."
+  zh-CN: "尚未配置敏感值加密。"
+
+variables.encrypt_failed:
+  en: "The sensitive value could not be encrypted."
+  zh-CN: "敏感值加密失败。"
+
+variables.decrypt_failed:
+  en: "The sensitive value could not be decrypted."
+  zh-CN: "敏感值解密失败。"
+
+variables.sensitive_upgrade_value_required:
+  en: "Changing the type to sensitive requires a replacement value."
+  zh-CN: "改为敏感类型时必须提供新值。"
+
+variables.sensitive_downgrade_value_required:
+  en: "Changing the type from sensitive requires a replacement value."
+  zh-CN: "取消敏感类型时必须提供新值。"
+
+variables.sensitive_override_required:
+  en: "Inherited sensitive variables must be overridden with a sensitive value first."
+  zh-CN: "覆盖继承的敏感变量前，请先提供敏感值。"
+
+variables.storage_failed:
+  en: "Variable storage operation failed."
+  zh-CN: "变量存储操作失败。"
+
+# --- Knowledge graph explorer (GraphError descriptors) ---
+knowledge_graph.request_invalid:
+  en: "Knowledge graph request is invalid."
+  zh-CN: "知识图谱请求参数无效。"
+
+knowledge_graph.scope_forbidden:
+  en: "The knowledge graph scope is not accessible."
+  zh-CN: "无权访问该知识图谱范围。"
+
+knowledge_graph.not_found:
+  en: "Knowledge graph resource was not found."
+  zh-CN: "未找到知识图谱资源。"
+
+knowledge_graph.storage_failed:
+  en: "Knowledge graph storage failed."
+  zh-CN: "知识图谱存储失败。"
+
+# --- System configuration (SystemConfigError descriptors) ---
+system_config.read_failed:
+  en: "Configuration file could not be read."
+  zh-CN: "无法读取配置文件。"
+
+system_config.invalid:
+  en: "Backend configuration is invalid: %{detail}"
+  zh-CN: "后端配置无效：%{detail}"
+
+system_config.field_invalid:
+  en: "Configuration field `%{path}` is not editable."
+  zh-CN: "配置字段 `%{path}` 不可编辑。"
+
+system_config.revision_conflict:
+  en: "Configuration changed since it was loaded; refresh and retry."
+  zh-CN: "配置已发生变化，请刷新后重试。"
+
+system_config.migration_confirmation_required:
+  en: "Migration-related configuration changes require confirmation."
+  zh-CN: "迁移相关的配置变更需要确认。"
+
+system_config.write_failed:
+  en: "Configuration file could not be updated atomically."
+  zh-CN: "配置文件的原子更新失败。"
+
+system_config.crypto_reload_failed:
+  en: "The encryption key could not be reloaded; restart the backend and retry."
+  zh-CN: "加密密钥重新加载失败，请重启后端后重试。"
+
+# --- Platform prompt administration (PromptError descriptors) ---
+prompts.not_found:
+  en: "Prompt was not found."
+  zh-CN: "未找到提示词。"
+
+prompts.input_invalid:
+  en: "Prompt input is invalid."
+  zh-CN: "提示词输入无效。"
+
+prompts.input_invalid_detail:
+  en: "Prompt input is invalid: %{detail}"
+  zh-CN: "提示词输入无效：%{detail}"
+
+prompts.display_name_duplicate:
+  en: "The display name already exists."
+  zh-CN: "显示名称已存在。"
+
+prompts.builtin_mutation_denied:
+  en: "Built-in prompts cannot be deleted."
+  zh-CN: "内置提示词不可删除。"
+
+prompts.runtime_required:
+  en: "Prompts required by the runtime cannot be disabled."
+  zh-CN: "运行时必需的提示词不可停用。"
+
+prompts.version_conflict:
+  en: "Prompt version conflict; refresh and retry."
+  zh-CN: "提示词版本冲突，请刷新后重试。"
+
+prompts.storage_failed:
+  en: "Prompt storage operation failed."
+  zh-CN: "提示词存储操作失败。"
+
+# --- Capability extension implementation descriptions (settings surface) ---
+capabilities.extension.model.connection.description:
+  en: "Connects Tron model routing and token estimation to the Framework model extension."
+  zh-CN: "将 Tron 的模型路由与 Token 估算接入框架模型扩展。"
+
+capabilities.extension.tools.local_scoped.description:
+  en: "Provides workspace-scoped filesystem, command and shared PTY capabilities."
+  zh-CN: "提供限定工作区范围内的文件系统、命令和共享 PTY 能力。"
+
+capabilities.extension.tools.harness.description:
+  en: "Tron-specific business tools with run-scope authorization and platform risk approval."
+  zh-CN: "Tron 专属业务工具，提供运行范围授权和平台风险审批。"
+
+capabilities.extension.tool_policy.description:
+  en: "Platform tool permissions and risk approval."
+  zh-CN: "平台工具权限与风险审批。"
+
+capabilities.extension.tools.collaboration.description:
+  en: "Child-agent and independent thread tools."
+  zh-CN: "子智能体与独立线程工具。"
+
+capabilities.extension.tools.a2ui.description:
+  en: "Publish, expand and manage interactive surfaces."
+  zh-CN: "发布、展开和管理交互界面。"
+
+capabilities.extension.skill.development.description:
+  en: "Embedded Framework integration, Agent UI integration and UI theme guidance."
+  zh-CN: "内置框架集成、Agent UI 集成与界面主题指南。"
+
+capabilities.extension.skill.a2ui.description:
+  en: "A2UI interface instructions and reference resources."
+  zh-CN: "A2UI 界面编写说明与参考资料。"
+
+capabilities.extension.context.a2ui.description:
+  en: "Negotiated A2UI catalog and usage guidance."
+  zh-CN: "协商后的 A2UI 目录与使用指南。"
+
+capabilities.extension.tools.personai.description:
+  en: "Account-bound remote tools."
+  zh-CN: "绑定账户的远程工具。"
+
+capabilities.extension.tools.web.description:
+  en: "Public webpage fetching."
+  zh-CN: "公开网页抓取。"
+
+capabilities.extension.tools.media.description:
+  en: "Scoped image and PDF readers."
+  zh-CN: "限定范围的图像与 PDF 读取工具。"
+
+capabilities.extension.observe.audit.description:
+  en: "Records tool-call audit events for runtime observation."
+  zh-CN: "记录工具调用审计事件，用于运行时观测。"
+
+capabilities.extension.context.harness.description:
+  en: "Prepares Tron conversation context within a bounded token budget."
+  zh-CN: "在限定 Token 预算内准备 Tron 会话上下文。"
+
+capabilities.extension.external_agent.host.description:
+  en: "Host adapter for external Agent execution and session bridging."
+  zh-CN: "外部智能体执行与会话桥接的宿主适配器。"
+
+capabilities.extension.external_agent.runtime.description:
+  en: "Independent external execution with native session ownership and observation events."
+  zh-CN: "具备原生会话所有权与观测事件的独立外部执行。"
+
+capabilities.extension.storage.local.description:
+  en: "Local-first storage: SQLite for structured records and the filesystem for artifacts."
+  zh-CN: "本地优先存储：结构化记录使用 SQLite，制品使用文件系统。"

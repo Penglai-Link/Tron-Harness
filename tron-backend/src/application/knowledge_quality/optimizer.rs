@@ -29,10 +29,10 @@ impl KnowledgeQualityService {
                 .iter()
                 .any(|d| d.id == c.mode.strategy_id())
         }) {
-            return Err(invalid("候选切片策略未注册"));
+            return Err(invalid("knowledge.quality.candidate_strategy_unregistered"));
         }
         if request_id.is_empty() || request_id.len() > 120 {
-            return Err(invalid("需要有效的优化请求标识"));
+            return Err(invalid("knowledge.quality.request_id_invalid"));
         }
         let snapshot = self.snapshot(user, kb).await?;
         let now = chrono::Utc::now().timestamp_millis();
@@ -72,7 +72,7 @@ impl KnowledgeQualityService {
             .quality_jobs
             .jobs
             .lock()
-            .map_err(invalid)?
+            .map_err(invalid_error)?
             .insert(run.id.clone(), token.clone());
         let service = self.clone();
         let owner = user.to_owned();
@@ -86,8 +86,13 @@ impl KnowledgeQualityService {
             .await;
             let error = match result {
                 Ok(Ok(())) => None,
-                Ok(Err(error)) => Some(error.to_string()),
-                Err(_) => Some("优化达到时间预算，未发布候选索引".into()),
+                Ok(Err(error)) => Some(error.persisted()),
+                Err(_) => Some(
+                    crate::shared::i18n_message::MessageText::new(
+                        "knowledge.quality.diagnostic.time_budget",
+                    )
+                    .encode(),
+                ),
             };
             if let Some(error) = error {
                 if let Err(cleanup) = service
@@ -108,10 +113,9 @@ impl KnowledgeQualityService {
                         .is_ok_and(|stored| stored.status == "CANCEL_REQUESTED")
                 {
                     "CANCELLED"
-                } else if error.contains("预算") {
+                } else if budget_exhausted(&error) {
                     "BUDGET_LIMIT"
-                } else if matches!(error.as_str(), "文档正在索引或状态已改变，请刷新后重试")
-                {
+                } else if persisted_key(&error) == Some("knowledge.base.document_conflict") {
                     "STALE"
                 } else {
                     "FAILED"
@@ -151,7 +155,14 @@ impl KnowledgeQualityService {
     ) -> Result<QualityOptimizationRun, KnowledgeBaseError> {
         self.host.owned(user, kb)?;
         let run = self.host.repository.cancel_quality_run(user, kb, id)?;
-        if let Some(token) = self.host.quality_jobs.jobs.lock().map_err(invalid)?.get(id) {
+        if let Some(token) = self
+            .host
+            .quality_jobs
+            .jobs
+            .lock()
+            .map_err(invalid_error)?
+            .get(id)
+        {
             token.cancel();
         }
         Ok(run)
@@ -163,7 +174,7 @@ impl KnowledgeQualityService {
         run: &mut QualityOptimizationRun,
         budget: &Arc<BudgetState>,
     ) -> Result<(), KnowledgeBaseError> {
-        budget.check().map_err(invalid)?;
+        budget.check().map_err(invalid_error)?;
         run.status = "RUNNING".into();
         self.host.repository.save_quality_run(run)?;
         let dataset = self
@@ -177,7 +188,7 @@ impl KnowledgeQualityService {
             .any(|case| case.provenance == EvaluationProvenance::Generated)
         {
             run.warnings
-                .push("包含自动生成题，结果属于原文自测，不代表经人工标注的业务召回率".into());
+                .push("knowledge.quality.diagnostic.generated_selftest".into());
         }
         run.stage = "BASELINE".into();
         update_usage(run, budget);
@@ -212,7 +223,7 @@ impl KnowledgeQualityService {
             run.options.top_k,
         )
         .await
-        .map_err(invalid)?;
+        .map_err(invalid_error)?;
         let (holdout, missing) = evaluate_retrieval(
             &baseline,
             &dataset.cases,
@@ -220,7 +231,7 @@ impl KnowledgeQualityService {
             run.options.top_k,
         )
         .await
-        .map_err(invalid)?;
+        .map_err(invalid_error)?;
         self.validate_snapshot(user, snapshot)?;
         run.baseline_training = Some(training.clone());
         run.baseline_holdout = Some(holdout.clone());
@@ -252,7 +263,7 @@ impl KnowledgeQualityService {
             RetrievalEvaluationMetrics,
         )> = None;
         for (number, config) in candidates.into_iter().enumerate() {
-            budget.check().map_err(invalid)?;
+            budget.check().map_err(invalid_error)?;
             self.validate_snapshot(user, snapshot)?;
             run.stage = format!("TRIAL_{}", number + 1);
             update_usage(run, budget);
@@ -264,13 +275,15 @@ impl KnowledgeQualityService {
                 .descriptors()
                 .into_iter()
                 .find(|descriptor| descriptor.id == config.mode.strategy_id())
-                .ok_or_else(|| invalid("候选切片策略未注册"))?;
+                .ok_or_else(|| invalid("knowledge.quality.candidate_strategy_unregistered"))?;
             let candidate = match self
                 .build_candidate(user, run, snapshot, &config, number, budget, &mut reuse)
                 .await
             {
                 Ok(candidate) => candidate,
-                Err(error) if error.to_string().starts_with("切片策略失败：") => {
+                Err(error)
+                    if error.message_key() == Some("knowledge.quality.chunk_strategy_failed") =>
+                {
                     run.trials.push(QualityTrial {
                         strategy: descriptor,
                         chunk_config: config,
@@ -284,12 +297,7 @@ impl KnowledgeQualityService {
                 }
                 Err(error) => return Err(error),
             };
-            run.warnings.extend(
-                candidate
-                    .warnings
-                    .iter()
-                    .map(|warning| format!("Candidate {}: {warning}", number + 1)),
-            );
+            run.warnings.extend(candidate.warnings.iter().cloned());
             let runner = ExperimentRunner {
                 service: candidate.rag.clone(),
                 host: None,
@@ -307,7 +315,7 @@ impl KnowledgeQualityService {
                 run.options.top_k,
             )
             .await
-            .map_err(invalid)?;
+            .map_err(invalid_error)?;
             let index = run.trials.len();
             let count = candidate.chunk_count;
             run.trials.push(QualityTrial {
@@ -357,14 +365,14 @@ impl KnowledgeQualityService {
                 run.options.top_k,
             )
             .await
-            .map_err(invalid)?;
+            .map_err(invalid_error)?;
             run.trials[index].holdout = Some(validation.clone());
             run.missing = scores
                 .into_iter()
                 .filter(|score| !score.missing.is_empty())
                 .collect();
             if can_publish(&holdout, &validation, run.options.minimum_improvement) {
-                budget.check().map_err(invalid)?;
+                budget.check().map_err(invalid_error)?;
                 self.validate_snapshot(user, snapshot)?;
                 run.status = "PUBLISHING".into();
                 run.stage = "PUBLISHING".into();
@@ -376,10 +384,10 @@ impl KnowledgeQualityService {
                 return Ok(());
             }
             run.warnings
-                .push("独立验证题未确认改善，当前索引未替换".into());
+                .push("knowledge.quality.diagnostic.holdout_not_improved".into());
         } else {
             run.warnings
-                .push("没有候选方案达到当前训练题表现，当前索引未替换".into());
+                .push("knowledge.quality.diagnostic.no_candidate_matched".into());
         }
         run.status = "COMPLETED".into();
         run.stage = "COMPLETED".into();
@@ -387,6 +395,36 @@ impl KnowledgeQualityService {
         self.host.repository.save_quality_run(run)?;
         Ok(())
     }
+}
+
+/// Stable key of a persisted locale-independent message.
+fn persisted_key(text: &str) -> Option<&'static str> {
+    // Decoded keys are compared only, so a short-lived owned key is not needed:
+    // match against the known vocabulary instead.
+    let message = crate::shared::i18n_message::MessageText::decode(text)?;
+    Some(match message.key() {
+        "knowledge.base.document_conflict" => "knowledge.base.document_conflict",
+        "knowledge.quality.diagnostic.cancelled" => "knowledge.quality.diagnostic.cancelled",
+        "knowledge.quality.diagnostic.time_budget" => "knowledge.quality.diagnostic.time_budget",
+        "knowledge.quality.diagnostic.model_operation_budget" => {
+            "knowledge.quality.diagnostic.model_operation_budget"
+        }
+        "knowledge.quality.diagnostic.input_budget" => "knowledge.quality.diagnostic.input_budget",
+        "knowledge.quality.chunk_strategy_failed" => "knowledge.quality.chunk_strategy_failed",
+        _ => return None,
+    })
+}
+
+fn budget_exhausted(text: &str) -> bool {
+    let Some(message) = crate::shared::i18n_message::MessageText::decode(text) else {
+        return false;
+    };
+    matches!(
+        message.key(),
+        "knowledge.quality.diagnostic.time_budget"
+            | "knowledge.quality.diagnostic.model_operation_budget"
+            | "knowledge.quality.diagnostic.input_budget"
+    )
 }
 
 fn update_usage(run: &mut QualityOptimizationRun, budget: &BudgetState) {

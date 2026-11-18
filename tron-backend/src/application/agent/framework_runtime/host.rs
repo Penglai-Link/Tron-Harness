@@ -391,22 +391,26 @@ impl FrameworkHost {
     pub async fn import_pack(
         &self,
         bytes: Vec<u8>,
+        locale: &str,
     ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
-        self.import_pack_checked(bytes, None).await
+        self.import_pack_checked(bytes, None, locale.to_owned())
+            .await
     }
     pub async fn import_center_pack(
         &self,
         bytes: Vec<u8>,
         manifest: serde_json::Value,
         expected_version: Option<String>,
+        locale: &str,
     ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
-        self.import_pack_checked(bytes, Some((manifest, expected_version)))
+        self.import_pack_checked(bytes, Some((manifest, expected_version)), locale.to_owned())
             .await
     }
     async fn import_pack_checked(
         &self,
         bytes: Vec<u8>,
         expected: Option<(serde_json::Value, Option<String>)>,
+        locale: String,
     ) -> Result<crate::application::agent::CapabilityPackInfo, String> {
         let _guard = self.0.config_lock.lock().await;
         self.ensure_external_idle()?;
@@ -454,7 +458,7 @@ impl FrameworkHost {
         self.invalidate_tool_metadata();
         let root = self.0.pack_root.clone();
         let pack = tokio::task::spawn_blocking(move || {
-            crate::application::agent::install_capability_pack(&root, &bytes)
+            crate::application::agent::install_capability_pack(&root, &bytes, &locale)
         })
         .await
         .map_err(|e| e.to_string())??;

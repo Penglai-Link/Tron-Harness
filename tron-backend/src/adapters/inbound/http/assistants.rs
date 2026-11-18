@@ -364,7 +364,7 @@ async fn main_session(
     if soul.state != SoulState::Ready && soul.session_code.is_none() {
         soul = s
             .assistants
-            .begin_awakening(&code, &auth.user().user_code)?
+            .begin_awakening(&code, &auth.user().user_code, &auth.locale)?
             .0;
     }
     let d = if soul.user_code.as_deref() == Some(&auth.user().user_code)
@@ -398,7 +398,7 @@ async fn resolve_session(
     if soul.state != SoulState::Ready && soul.session_code.is_none() {
         soul = s
             .assistants
-            .begin_awakening(&code, &auth.user().user_code)?
+            .begin_awakening(&code, &auth.user().user_code, &auth.locale)?
             .0;
     }
     let d = if soul.user_code.as_deref() == Some(&auth.user().user_code)

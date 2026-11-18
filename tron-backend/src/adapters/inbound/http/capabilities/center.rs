@@ -294,7 +294,12 @@ async fn install(
     };
     match state
         .agent_framework
-        .import_center_pack(bytes, detail.manifest, request.expected_installed_version)
+        .import_center_pack(
+            bytes,
+            detail.manifest,
+            request.expected_installed_version,
+            &auth.locale,
+        )
         .await
     {
         Ok(pack) => Json(ApiResponse::protocol_success(InstallResponse {
@@ -323,7 +328,7 @@ fn rejected(error: String, locale: &str) -> Response {
 fn invalid_request(locale: &str) -> PersonAiApiError {
     PersonAiApiError(
         crate::application::model_provider::ModelProviderError::InvalidSelection(
-            tron_i18n::t!("capabilities.center.invalid_request", locale = locale).into_owned(),
+            tron_i18n::Message::new("capabilities.center.invalid_request"),
         ),
         locale.into(),
     )

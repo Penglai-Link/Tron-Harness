@@ -64,7 +64,9 @@ pub(crate) fn pinned_settings(
                     || doc.document.embedding_provider_model != first.embedding_provider_model
             })
         {
-            return Err(invalid("当前文档的向量空间不一致，请统一模型后重建再评测"));
+            return Err(invalid(
+                "knowledge.quality.diagnostic.embedding_space_mismatch",
+            ));
         }
         settings.embedding_model_code = first.embedding_model_code.clone();
     }
@@ -124,16 +126,16 @@ impl KnowledgeQualityService {
         let directory = tempfile::Builder::new()
             .prefix("tron-retrieval-evaluation-")
             .tempdir()
-            .map_err(invalid)?;
+            .map_err(invalid_error)?;
         let repo = Arc::new(Mutex::new(SqliteRagRepository::connect(
             directory
                 .path()
                 .join("candidate.sqlite3")
                 .to_str()
-                .ok_or_else(|| invalid("临时索引路径无效"))?,
+                .ok_or_else(|| invalid("knowledge.quality.temporary_path_invalid"))?,
         )?));
         let mut corpus = snapshot.corpus.clone();
-        corpus.capabilities["settings"] = serde_json::to_value(&settings).map_err(invalid)?;
+        corpus.capabilities["settings"] = serde_json::to_value(&settings).map_err(invalid_error)?;
         repo.save_managed_corpus(&corpus)?;
         let runtime = QualityRuntime {
             inner: self.host.rag.runtime_handle(),
@@ -148,16 +150,16 @@ impl KnowledgeQualityService {
                     .into_owned(),
             },
         )
-        .map_err(invalid)?;
+        .map_err(invalid_error)?;
         let graph_index =
             crate::adapters::outbound::persistence::SqliteRagGraphIndexRepository::open(
                 directory
                     .path()
                     .join("candidate.sqlite3")
                     .to_str()
-                    .ok_or_else(|| invalid("候选索引路径无效"))?,
+                    .ok_or_else(|| invalid("knowledge.quality.candidate_path_invalid"))?,
             )
-            .map_err(invalid)?;
+            .map_err(invalid_error)?;
         let graph = crate::application::rag::graph::GraphInfrastructure::new(
             Arc::new(crate::adapters::outbound::persistence::GrafeoRagStore::new(
                 graph_core,
@@ -177,9 +179,9 @@ impl KnowledgeQualityService {
                 settings.embedding_model_code.as_deref(),
                 settings.embedding_dimension,
             )
-            .map_err(invalid)?;
+            .map_err(invalid_error)?;
             if actual != snapshot.documents[0].document.embedding_space_fingerprint {
-                return Err(invalid("评测期间向量模型配置已变化"));
+                return Err(invalid("knowledge.quality.candidate_vector_model_changed"));
             }
         }
         let mut documents = Vec::new();
@@ -187,7 +189,7 @@ impl KnowledgeQualityService {
         let mut chunk_count = 0;
         let mut warnings = Vec::new();
         for document in &snapshot.documents {
-            budget.check().map_err(invalid)?;
+            budget.check().map_err(invalid_error)?;
             let mut chunked = split_document_with_strategies(
                 &document.parsed,
                 config,
@@ -195,19 +197,25 @@ impl KnowledgeQualityService {
                 &document.document.id,
                 &document.document.file_name,
             )
-            .map_err(|error| invalid(format!("切片策略失败：{error}")))?;
+            .map_err(|error| {
+                invalid_with(
+                    crate::shared::i18n_message::MessageText::new(
+                        "knowledge.quality.chunk_strategy_failed",
+                    )
+                    .arg("error", error.to_string()),
+                )
+            })?;
             if settings.vector
                 && self
                     .host
                     .llm
                     .embedding_accepts_images(
                         "PLATFORM",
-                        settings
-                            .embedding_model_code
-                            .as_deref()
-                            .ok_or_else(|| invalid("候选向量模型未固定"))?,
+                        settings.embedding_model_code.as_deref().ok_or_else(|| {
+                            invalid("knowledge.quality.candidate_vector_model_unpinned")
+                        })?,
                     )
-                    .map_err(invalid)?
+                    .map_err(invalid_error)?
             {
                 crate::application::knowledge_base::image_index::append_image_chunks(
                     &document.parsed,
@@ -215,13 +223,18 @@ impl KnowledgeQualityService {
                     &mut chunked.chunks,
                 )?;
             }
-            warnings.extend(chunked.warnings.clone());
+            warnings.extend(chunked.warnings.iter().map(|warning| {
+                crate::shared::i18n_message::MessageText::new("knowledge.quality.candidate_warning")
+                    .arg("number", (trial + 1).to_string())
+                    .arg("warning", warning.clone())
+                    .encode()
+            }));
             if chunked.chunks.is_empty() {
-                return Err(invalid("候选策略未产生有效切片"));
+                return Err(invalid("knowledge.quality.candidate_no_chunks"));
             }
             chunk_count += chunked.chunks.len();
             if chunk_count > 2000 {
-                return Err(invalid("候选索引超过2000片上限"));
+                return Err(invalid("knowledge.quality.candidate_chunk_limit"));
             }
             let task_id = format!("quality_{}_{}_{}", run.id, trial, document.document.id);
             let source = format!("{}_{}_1", document.document.id, task_id);
@@ -234,7 +247,7 @@ impl KnowledgeQualityService {
                 let model = settings
                     .embedding_model_code
                     .as_deref()
-                    .ok_or_else(|| invalid("候选向量模型未固定"))?;
+                    .ok_or_else(|| invalid("knowledge.quality.candidate_vector_model_unpinned"))?;
                 let inputs =
                     self.host
                         .index_embedding_inputs(user, "PLATFORM", &chunked.chunks, model)?;
@@ -242,7 +255,7 @@ impl KnowledgeQualityService {
                     .document
                     .embedding_space_fingerprint
                     .as_deref()
-                    .ok_or_else(|| invalid("候选向量空间缺失"))?;
+                    .ok_or_else(|| invalid("knowledge.quality.candidate_vector_space_missing"))?;
                 // Reuse image vectors by the exact media input hash, never by its display text.
                 if let Some(source) = document.document.active_source_code.as_deref() {
                     reuse
@@ -272,12 +285,12 @@ impl KnowledgeQualityService {
                         Some(&QualityCheckpoint(budget.clone())),
                     )
                     .await
-                    .map_err(invalid)?;
+                    .map_err(invalid_error)?;
                 if prepared.fingerprint.as_deref() != Some(fingerprint)
                     || prepared.model_code.as_deref() != Some(model)
                     || prepared.provider_model != document.document.embedding_provider_model
                 {
-                    return Err(invalid("候选索引的实际向量模型发生变化"));
+                    return Err(invalid("knowledge.quality.candidate_model_changed"));
                 }
                 for (input, vector) in inputs.iter().zip(&prepared.vectors) {
                     reuse
@@ -315,7 +328,7 @@ impl KnowledgeQualityService {
                 &graph_context,
                 &settings,
             )
-            .map_err(invalid)?;
+            .map_err(invalid_error)?;
             let prepared = rag
                 .prepare_index(
                     "PLATFORM",
@@ -326,7 +339,7 @@ impl KnowledgeQualityService {
                     &graph_checkpoint,
                 )
                 .await
-                .map_err(invalid)?;
+                .map_err(invalid_error)?;
             let graph_id = rag
                 .stage_graph_generation(
                     "PLATFORM",
@@ -336,7 +349,7 @@ impl KnowledgeQualityService {
                     &graph_checkpoint,
                 )
                 .await
-                .map_err(invalid)?;
+                .map_err(invalid_error)?;
             let stored = stored_contexts(&chunked.contexts, &chunked.chunks);
             for context in &stored {
                 contexts.insert(
@@ -506,11 +519,14 @@ impl RetrievalEvaluationRunner for ExperimentRunner<'_> {
             .await
             .map_err(|error| RetrievalEvaluationError(error.to_string()))?;
         if let Some(stage) = result.stages.iter().find(|stage| stage.status == "FAILED") {
-            return Err(RetrievalEvaluationError(format!(
-                "评测检索阶段{}失败：{}",
-                stage.channel,
-                stage.error.as_deref().unwrap_or_default()
-            )));
+            return Err(RetrievalEvaluationError(
+                crate::shared::i18n_message::MessageText::new(
+                    "knowledge.quality.retrieval_stage_failed",
+                )
+                .arg("stage", &stage.channel)
+                .arg("detail", stage.error.as_deref().unwrap_or_default())
+                .encode(),
+            ));
         }
         let mut evidence = Vec::new();
         for mut hit in result.hits {
@@ -523,7 +539,11 @@ impl RetrievalEvaluationRunner for ExperimentRunner<'_> {
             for hit in members {
                 let document_id = hit.row.text_metadata["documentId"]
                     .as_str()
-                    .ok_or_else(|| RetrievalEvaluationError("检索证据缺少资料标识".into()))?
+                    .ok_or_else(|| {
+                        RetrievalEvaluationError(
+                            "knowledge.quality.evidence_document_missing".into(),
+                        )
+                    })?
                     .to_owned();
                 let raw = hit
                     .row
@@ -534,8 +554,11 @@ impl RetrievalEvaluationRunner for ExperimentRunner<'_> {
                     hit.row.text_metadata["sourceFactsVersion"] == "normalized-blocks-v3"
                         && raw.as_array().is_some_and(|rows| !rows.is_empty())
                 }) {
-                    Some(raw) => serde_json::from_value(raw.clone())
-                        .map_err(|_| RetrievalEvaluationError("检索证据来源范围无效".into()))?,
+                    Some(raw) => serde_json::from_value(raw.clone()).map_err(|_| {
+                        RetrievalEvaluationError(
+                            "knowledge.quality.evidence_range_invalid_retrieval".into(),
+                        )
+                    })?,
                     None if hit.row.text_metadata["location"]["blockKind"] == "image_vector" => {
                         continue;
                     }
@@ -577,7 +600,9 @@ fn legacy_spans(
         .documents
         .iter()
         .find(|document| document.document.id == document_id)
-        .ok_or_else(|| RetrievalEvaluationError("检索证据引用了其他资料".into()))?;
+        .ok_or_else(|| {
+            RetrievalEvaluationError("knowledge.quality.evidence_foreign_document".into())
+        })?;
     let body = document
         .input
         .blocks
@@ -588,7 +613,7 @@ fn legacy_spans(
     let matches = body.match_indices(text).collect::<Vec<_>>();
     if matches.len() != 1 {
         return Err(RetrievalEvaluationError(
-            "现有切片缺少唯一原文来源，请先重建资料后评测".into(),
+            "knowledge.quality.chunks_missing_source".into(),
         ));
     }
     let start = body[..matches[0].0].chars().count();

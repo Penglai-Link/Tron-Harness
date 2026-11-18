@@ -67,9 +67,11 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
         });
         if result.hits.len() != before {
             super::access::invalidate_graph_statistics(result);
-            result
-                .warnings
-                .push("来源组的授权或发布版本已改变，相关整组证据已移除".into());
+            result.warnings.push(
+                crate::shared::i18n_message::MessageText::new("rag.bundle.scope_changed")
+                    .encode()
+                    .into(),
+            );
         }
         Ok(())
     }

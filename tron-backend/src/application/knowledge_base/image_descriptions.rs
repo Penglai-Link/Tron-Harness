@@ -74,8 +74,8 @@ fn relations<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<St
 impl ImageDescription {
     fn parse(text: &str) -> Result<Self, KnowledgeBaseError> {
         if text.len() > 64 * 1024 {
-            return Err(KnowledgeBaseError::Invalid(
-                "图片描述输出过长，请重试".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.image_description_output_too_long",
             ));
         }
         let text = text.trim();
@@ -95,13 +95,15 @@ impl ImageDescription {
                 };
                 serde_json::from_str(&format!("{prefix}]}}"))
             })
-            .map_err(|_| KnowledgeBaseError::Invalid("图片描述返回格式无效，请重试".into()))?;
+            .map_err(|_| {
+                KnowledgeBaseError::invalid("knowledge.base.image_description_format_invalid")
+            })?;
         if parsed.description.trim().is_empty()
             || parsed.relations.len() > 256
             || parsed.text().chars().count() > 8192
         {
-            return Err(KnowledgeBaseError::Invalid(
-                "图片描述返回内容无效，请重试".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.image_description_content_invalid",
             ));
         }
         Ok(parsed)
@@ -177,7 +179,7 @@ impl KnowledgeBaseService {
             let settings = self
                 .rag
                 .settings_for_corpus(&kb.id)
-                .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?;
+                .map_err(|error| KnowledgeBaseError::from_detail(error))?;
             config.enabled = true;
             config.model_code = settings.image_description_model_code.unwrap_or_default();
         }
@@ -197,7 +199,9 @@ impl KnowledgeBaseService {
             || config.timeout_seconds == 0
             || config.timeout_seconds > 300
         {
-            return Err(KnowledgeBaseError::Invalid("图片描述限制配置无效".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.image_description_limit_invalid",
+            ));
         }
         let images: BTreeSet<String> = parsed
             .sections
@@ -217,8 +221,8 @@ impl KnowledgeBaseService {
             })
             .collect();
         if images.len() > config.max_images_per_document {
-            return Err(KnowledgeBaseError::Invalid(
-                "图片数量超过描述处理上限，请调整限制或拆分文档".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "knowledge.base.image_description_count_limit",
             ));
         }
         if !generate && cached_doc.image_description_artifacts.is_empty() {
@@ -244,13 +248,13 @@ impl KnowledgeBaseService {
         } else {
             self.llm.vision_model_binding(workspace, requested)
         }
-        .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+        .map_err(|e| KnowledgeBaseError::invalid_message(e.localized_detail()))?;
         let mut pending = false;
         for image in images {
             self.owned(user, &kb.id)?;
             self.llm
                 .check_vision_binding(&binding)
-                .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+                .map_err(|e| KnowledgeBaseError::invalid_message(e.localized_detail()))?;
             let (_, record) = self.resources.download_binary_to_file(
                 user,
                 ResourceBinaryDownloadCommand {
@@ -262,7 +266,9 @@ impl KnowledgeBaseService {
             self.resources
                 .download_binary_storage(&record, &mut bytes)?;
             if bytes.is_empty() || bytes.len() > 20 * 1024 * 1024 {
-                return Err(KnowledgeBaseError::Invalid("图片大小不受支持".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.image_too_large_for_description",
+                ));
             }
             // Identify MIME from registered bytes, never from user-controlled remote URLs.
             let mime = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
@@ -272,7 +278,9 @@ impl KnowledgeBaseService {
             } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP".as_slice()) {
                 "image/webp"
             } else {
-                return Err(KnowledgeBaseError::Invalid("图片格式不受支持".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.image_format_unsupported",
+                ));
             };
             use sha2::{Digest, Sha256};
             let image_sha256 = format!("{:x}", Sha256::digest(&bytes));
@@ -300,19 +308,22 @@ impl KnowledgeBaseService {
                 let mut data = Vec::new();
                 self.resources.download_binary_storage(&record, &mut data)?;
                 if data.len() > 256 * 1024 {
-                    return Err(KnowledgeBaseError::Invalid(
-                        "图片描述缓存无效，请重试".into(),
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.image_description_cache_invalid",
                     ));
                 }
-                let stored: CachedDescription = serde_json::from_slice(&data)
-                    .map_err(|_| KnowledgeBaseError::Invalid("图片描述缓存无效，请重试".into()))?;
+                let stored: CachedDescription = serde_json::from_slice(&data).map_err(|_| {
+                    KnowledgeBaseError::invalid("knowledge.base.image_description_cache_invalid")
+                })?;
                 if stored.signature != signature
                     || stored.model_code != binding.model_code
                     || stored.image_resource_code != image
                     || stored.image_sha256 != image_sha256
                     || stored.prompt_version != PROMPT_VERSION
                 {
-                    return Err(KnowledgeBaseError::Invalid("图片描述缓存来源不匹配".into()));
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.image_description_cache_source_mismatch",
+                    ));
                 }
                 let content = stored.content.or_else(|| {
                     stored
@@ -333,11 +344,13 @@ impl KnowledgeBaseService {
                         .vision_generation_call(&binding, PROMPT, mime, &bytes),
                 )
                 .await
-                .map_err(|_| KnowledgeBaseError::Invalid("图片描述生成超时，请重试".into()))?
-                .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+                .map_err(|_| {
+                    KnowledgeBaseError::invalid("knowledge.base.image_description_timeout")
+                })?
+                .map_err(|e| KnowledgeBaseError::invalid_message(e.localized_detail()))?;
                 if output.len() > 64 * 1024 {
-                    return Err(KnowledgeBaseError::Invalid(
-                        "图片描述输出过长，请重试".into(),
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.image_description_output_too_long",
                     ));
                 }
                 // Persist the paid response before normalization. Parser repairs can
@@ -345,7 +358,7 @@ impl KnowledgeBaseService {
                 self.owned(user, &kb.id)?;
                 self.llm
                     .check_vision_binding(&binding)
-                    .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+                    .map_err(|e| KnowledgeBaseError::invalid_message(e.localized_detail()))?;
                 let stored = CachedDescription {
                     signature: signature.clone(),
                     model_code: binding.model_code.clone(),
@@ -390,7 +403,7 @@ impl KnowledgeBaseService {
             };
             self.llm
                 .check_vision_binding(&binding)
-                .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+                .map_err(|e| KnowledgeBaseError::invalid_message(e.localized_detail()))?;
             let description = content.text();
             for section in &mut parsed.sections {
                 if !section.location.image_resource_codes.contains(&image) {
@@ -425,7 +438,9 @@ impl KnowledgeBaseService {
         for section in &mut parsed.sections {
             size = size.saturating_add(section.text.len());
             if size > MAX_PARSED_TEXT_BYTES {
-                return Err(KnowledgeBaseError::Invalid("解析文本超过16 MiB上限".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "knowledge.base.parse_text_limit",
+                ));
             }
             section.location.char_start = offset;
             offset += section.text.chars().count();

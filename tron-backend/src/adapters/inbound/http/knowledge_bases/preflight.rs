@@ -78,7 +78,6 @@ impl IntoResponse for PreflightApiError {
             KnowledgeBaseError::Invalid(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        let english = self.1.starts_with("en");
         let message: String = match &self.0 {
             KnowledgeBaseError::Forbidden => {
                 t!("tron.knowledge_base.forbidden", locale = &self.1).into_owned()
@@ -89,14 +88,14 @@ impl IntoResponse for PreflightApiError {
             KnowledgeBaseError::Conflict => {
                 t!("knowledge.preflight.conflict", locale = &self.1).into_owned()
             }
-            KnowledgeBaseError::Invalid(_) if english => {
-                t!("knowledge.preflight.invalid", locale = &self.1).into_owned()
+            // The inspection error already carries a stable locale-independent
+            // message; render it with the request locale instead of forwarding text.
+            KnowledgeBaseError::Invalid(_) | KnowledgeBaseError::Storage(_) => {
+                self.0.localized(&self.1)
             }
-            KnowledgeBaseError::Storage(_) if english => {
-                t!("knowledge.preflight.failed", locale = &self.1).into_owned()
+            KnowledgeBaseError::NotEmpty => {
+                t!("tron.knowledge_base.not_empty", locale = &self.1).into_owned()
             }
-            // Remaining details are application-layer text; keep forwarding them.
-            _ => self.0.to_string(),
         };
         (
             status,
@@ -117,8 +116,9 @@ pub(super) async fn inspect(
 ) -> Result<Json<ApiResponse<PreflightView>>, PreflightApiError> {
     use tron_i18n::t;
     let locale = auth.locale.clone();
-    let error =
-        |message: String| PreflightApiError(KnowledgeBaseError::Invalid(message), locale.clone());
+    let error = |message: String| {
+        PreflightApiError(KnowledgeBaseError::from_detail(message), locale.clone())
+    };
     let mut file = None;
     let mut preference = None;
     while let Some(field) = multipart

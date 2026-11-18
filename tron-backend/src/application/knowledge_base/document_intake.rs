@@ -27,8 +27,8 @@ impl KnowledgeBaseService {
         preference: Option<DocumentParsePreference>,
     ) -> Result<DocumentParsePlan, KnowledgeBaseError> {
         let library = self.owned(user, kb)?;
-        let features = inspect_document(filename, bytes)
-            .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+        let features =
+            inspect_document(filename, bytes).map_err(|e| KnowledgeBaseError::from_detail(e))?;
         let plan = FeatureBasedDocumentRouter.plan(
             features,
             preference.unwrap_or(library.default_parse_preference),

@@ -38,7 +38,7 @@ impl LlmRuntimeService {
             .await
             .map_err(|e| LlmRuntimeError::model_resolution(e.to_string()))?
             .ok_or_else(|| {
-                LlmRuntimeError::model_resolution("默认图片说明没有可用的视觉对话模型")
+                LlmRuntimeError::localized_model_resolution("llm.vision.default_model_unconfigured")
             })?;
         self.vision_model_binding(workspace, &model.model_code)
     }
@@ -49,16 +49,22 @@ impl LlmRuntimeService {
     ) -> Result<VisionModelBinding, LlmRuntimeError> {
         if !model.starts_with("PERSON_AI:FIXED:High:") {
             return Err(LlmRuntimeError::model_resolution(
-                "请选择固定的 PersonAI 高质量视觉模型",
+                "llm.vision.fixed_quality_model_required",
             ));
         }
         let mut config = self
             .model_resolver
             .vision_runtime_model_config(workspace, model)
-            .map_err(|_| LlmRuntimeError::model_resolution("图片描述模型不可用"))?
-            .ok_or_else(|| LlmRuntimeError::model_resolution("图片描述模型不可用"))?;
+            .map_err(|_| {
+                LlmRuntimeError::localized_model_resolution("llm.vision.model_unavailable")
+            })?
+            .ok_or_else(|| {
+                LlmRuntimeError::localized_model_resolution("llm.vision.model_unavailable")
+            })?;
         if config.model_code != model {
-            return Err(LlmRuntimeError::model_resolution("图片描述模型发生变化"));
+            return Err(LlmRuntimeError::localized_model_resolution(
+                "llm.vision.model_changed",
+            ));
         }
         if config.model_type != crate::domain::model::ModelType::Text
             || !matches!(
@@ -68,7 +74,7 @@ impl LlmRuntimeService {
             )
         {
             return Err(LlmRuntimeError::model_resolution(
-                "图片描述模型协议不受支持",
+                "llm.vision.protocol_unsupported",
             ));
         }
         config.temperature = Some(0.0);
@@ -79,13 +85,23 @@ impl LlmRuntimeService {
         let scope = self
             .client
             .model_authorization_scope(&config)
-            .map_err(|_| LlmRuntimeError::model_resolution("图片描述模型授权不可用"))?
+            .map_err(|_| {
+                LlmRuntimeError::localized_model_resolution(
+                    "llm.vision.model_authorization_unavailable",
+                )
+            })?
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| LlmRuntimeError::model_resolution("图片描述需要账户绑定的模型授权"))?;
+            .ok_or_else(|| {
+                LlmRuntimeError::localized_model_resolution(
+                    "llm.vision.account_authorization_required",
+                )
+            })?;
         let cache_identity = self
             .model_resolver
             .vision_cache_identity()
-            .map_err(|_| LlmRuntimeError::model_resolution("图片描述账户不可用"))?
+            .map_err(|_| {
+                LlmRuntimeError::localized_model_resolution("llm.vision.account_unavailable")
+            })?
             .unwrap_or_else(|| scope.clone());
         let identity = serde_json::to_vec(&(
             &config.model_code,
@@ -96,7 +112,7 @@ impl LlmRuntimeService {
             &cache_identity,
             "kb-image-description-v1",
         ))
-        .map_err(|_| LlmRuntimeError::model_resolution("图片描述配置无效"))?;
+        .map_err(|_| LlmRuntimeError::localized_model_resolution("llm.vision.config_invalid"))?;
         Ok(VisionModelBinding {
             model_code: config.model_code.clone(),
             fingerprint: format!("{:x}", Sha256::digest(identity)),
@@ -111,9 +127,15 @@ impl LlmRuntimeService {
         let scope = self
             .client
             .model_authorization_scope(&binding.config)
-            .map_err(|_| LlmRuntimeError::model_resolution("图片描述模型授权不可用"))?;
+            .map_err(|_| {
+                LlmRuntimeError::localized_model_resolution(
+                    "llm.vision.model_authorization_unavailable",
+                )
+            })?;
         if scope.as_deref() != Some(&binding.authorization_scope) {
-            return Err(LlmRuntimeError::model_resolution("模型账户已改变，请重试"));
+            return Err(LlmRuntimeError::localized_model_resolution(
+                "llm.vision.account_changed",
+            ));
         }
         Ok(())
     }
@@ -130,14 +152,16 @@ impl LlmRuntimeService {
             || !matches!(mime, "image/jpeg" | "image/png" | "image/webp")
         {
             return Err(LlmRuntimeError::invalid_provider_response(
-                "图片格式或大小不受支持",
+                "llm.vision.image_unsupported",
             ));
         }
         let result = self
             .client
             .generate_vision(&binding.config, prompt, mime, bytes)
             .await
-            .map_err(|_| LlmRuntimeError::provider_failed("图片描述生成失败，请重试"))?;
+            .map_err(|_| {
+                LlmRuntimeError::localized_provider_failed("llm.vision.generation_failed")
+            })?;
         self.check_vision_binding(binding)?;
         Ok(result)
     }

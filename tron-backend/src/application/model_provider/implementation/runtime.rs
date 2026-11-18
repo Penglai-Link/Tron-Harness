@@ -122,7 +122,7 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
                 .map_err(|e| ModelError::RuntimeResolutionFailed(e.to_string()))?;
             if before != after {
                 return Err(ModelError::RuntimeResolutionFailed(
-                    "图片说明账户已改变".into(),
+                    "image description account changed during resolution".into(),
                 ));
             }
             let Some(candidate) = candidates.first() else {
@@ -334,15 +334,8 @@ pub(super) fn require_high_chat_quality(
     if quality == Some(ProviderModelQuality::High) {
         return Ok(());
     }
-    let english = crate::shared::auth_holder::AuthHolder::get()
-        .is_some_and(|context| context.locale == "en-US");
     Err(ModelProviderError::InvalidSelection(
-        if english {
-            "Tron only supports High-quality PersonAI chat models. Select a High-quality model or Chat Auto."
-        } else {
-            "Tron 仅支持 PersonAI 高质量对话模型，请选择高质量模型或对话自动路由。"
-        }
-        .into(),
+        tron_i18n::Message::new("tron.model_provider.high_quality_chat_required"),
     ))
 }
 

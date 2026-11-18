@@ -273,25 +273,23 @@ struct ChunkConfigVo {
     overlap_chars: usize,
     heading_depth: u8,
 }
-impl From<QualityTrial> for TrialVo {
-    fn from(t: QualityTrial) -> Self {
-        Self {
-            strategy: StrategyVo {
-                id: t.strategy.id,
-                version: t.strategy.version,
-            },
-            chunk_config: ChunkConfigVo {
-                mode: t.chunk_config.mode.strategy_id().into(),
-                max_chars: t.chunk_config.max_chars,
-                overlap_chars: t.chunk_config.overlap_chars,
-                heading_depth: t.chunk_config.heading_depth,
-            },
-            training: t.training.map(Into::into),
-            holdout: t.holdout.map(Into::into),
-            chunk_count: t.chunk_count,
-            duration_ms: t.duration_ms,
-            error: t.error.map(diagnostic),
-        }
+fn trial_vo(t: QualityTrial, locale: &str) -> TrialVo {
+    TrialVo {
+        strategy: StrategyVo {
+            id: t.strategy.id,
+            version: t.strategy.version,
+        },
+        chunk_config: ChunkConfigVo {
+            mode: t.chunk_config.mode.strategy_id().into(),
+            max_chars: t.chunk_config.max_chars,
+            overlap_chars: t.chunk_config.overlap_chars,
+            heading_depth: t.chunk_config.heading_depth,
+        },
+        training: t.training.map(Into::into),
+        holdout: t.holdout.map(Into::into),
+        chunk_count: t.chunk_count,
+        duration_ms: t.duration_ms,
+        error: t.error.map(|error| diagnostic(error, locale)),
     }
 }
 #[derive(Serialize)]
@@ -338,41 +336,47 @@ fn pascal(s: &str) -> String {
         })
         .collect()
 }
-impl From<QualityOptimizationRun> for RunVo {
-    fn from(r: QualityOptimizationRun) -> Self {
-        Self {
-            id: r.id,
-            library_id: r.library_id,
-            request_id: r.request_id,
-            source_fingerprint: r.source_fingerprint,
-            dataset_revision: r.dataset_revision,
-            cases: r.cases.into_iter().map(Into::into).collect(),
-            status: pascal(&r.status),
-            stage: pascal(&r.stage),
-            target_recall: r.options.target_recall,
-            top_k: r.options.top_k,
-            baseline_training: r.baseline_training.map(Into::into),
-            baseline_holdout: r.baseline_holdout.map(Into::into),
-            trials: r.trials.into_iter().map(Into::into).collect(),
-            selected_trial: r.selected_trial,
-            published: r.published,
-            target_reached: r.target_reached,
-            missing: r
-                .missing
-                .into_iter()
-                .map(|m| MissingVo {
-                    case_id: m.case_id,
-                    recall: m.recall,
-                    missing: m.missing.into_iter().map(Into::into).collect(),
-                })
-                .collect(),
-            model_operations: r.model_operations,
-            estimated_input_tokens: r.estimated_input_tokens,
-            warnings: r.warnings.into_iter().map(diagnostic).collect(),
-            error: r.error.map(diagnostic),
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-        }
+pub(super) fn run_vo(r: QualityOptimizationRun, locale: &str) -> RunVo {
+    RunVo {
+        id: r.id,
+        library_id: r.library_id,
+        request_id: r.request_id,
+        source_fingerprint: r.source_fingerprint,
+        dataset_revision: r.dataset_revision,
+        cases: r.cases.into_iter().map(Into::into).collect(),
+        status: pascal(&r.status),
+        stage: pascal(&r.stage),
+        target_recall: r.options.target_recall,
+        top_k: r.options.top_k,
+        baseline_training: r.baseline_training.map(Into::into),
+        baseline_holdout: r.baseline_holdout.map(Into::into),
+        trials: r
+            .trials
+            .into_iter()
+            .map(|trial| trial_vo(trial, locale))
+            .collect(),
+        selected_trial: r.selected_trial,
+        published: r.published,
+        target_reached: r.target_reached,
+        missing: r
+            .missing
+            .into_iter()
+            .map(|m| MissingVo {
+                case_id: m.case_id,
+                recall: m.recall,
+                missing: m.missing.into_iter().map(Into::into).collect(),
+            })
+            .collect(),
+        model_operations: r.model_operations,
+        estimated_input_tokens: r.estimated_input_tokens,
+        warnings: r
+            .warnings
+            .into_iter()
+            .map(|warning| diagnostic(warning, locale))
+            .collect(),
+        error: r.error.map(|error| diagnostic(error, locale)),
+        created_at: r.created_at,
+        updated_at: r.updated_at,
     }
 }
 #[derive(Serialize)]
@@ -414,79 +418,9 @@ pub(super) struct SessionRecordVo {
     pub updated_at: i64,
 }
 
-fn diagnostic(message: String) -> String {
-    use std::borrow::Cow;
-    use tron_i18n::t;
-    // Run warnings/errors are rendered from the request-scoped auth holder
-    // rather than a process-global locale.
-    let locale = crate::shared::auth_holder::AuthHolder::get()
-        .map(|context| context.locale.clone())
-        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_owned());
-    let translated: Option<Cow<'_, str>> = match message.as_str() {
-        "包含自动生成题，结果属于原文自测，不代表经人工标注的业务召回率" => {
-            Some(t!(
-                "knowledge.quality.diagnostic.generated_selftest",
-                locale = &locale
-            ))
-        }
-        "独立验证题未确认改善，当前索引未替换" => Some(t!(
-            "knowledge.quality.diagnostic.holdout_not_improved",
-            locale = &locale
-        )),
-        "没有候选方案达到当前训练题表现，当前索引未替换" => Some(t!(
-            "knowledge.quality.diagnostic.no_candidate_matched",
-            locale = &locale
-        )),
-        "优化已取消" => Some(t!(
-            "knowledge.quality.diagnostic.cancelled",
-            locale = &locale
-        )),
-        "优化达到时间预算，未发布候选索引" => Some(t!(
-            "knowledge.quality.diagnostic.time_budget",
-            locale = &locale
-        )),
-        "优化达到模型调用预算，未发布候选索引" => Some(t!(
-            "knowledge.quality.diagnostic.model_operation_budget",
-            locale = &locale
-        )),
-        "优化达到预估输入量预算，未发布候选索引" => Some(t!(
-            "knowledge.quality.diagnostic.input_budget",
-            locale = &locale
-        )),
-        "优化进程已中断；当前索引未被候选替换" => Some(t!(
-            "knowledge.quality.diagnostic.interrupted",
-            locale = &locale
-        )),
-        "文档正在索引或状态已改变，请刷新后重试" => Some(t!(
-            "knowledge.quality.diagnostic.source_changed",
-            locale = &locale
-        )),
-        "可评测原文不足8段，请补充资料或提供训练题与独立验证题" => {
-            Some(t!(
-                "knowledge.quality.diagnostic.insufficient_source",
-                locale = &locale
-            ))
-        }
-        "资料内容已变化，请更新人工标注的评测题集" => Some(t!(
-            "knowledge.quality.diagnostic.dataset_outdated",
-            locale = &locale
-        )),
-        "当前文档的向量空间不一致，请统一模型后重建再评测" => Some(t!(
-            "knowledge.quality.diagnostic.embedding_space_mismatch",
-            locale = &locale
-        )),
-        "自动生成的评测题格式无效；未开始候选索引" => Some(t!(
-            "knowledge.quality.diagnostic.generated_questions_invalid",
-            locale = &locale
-        )),
-        "自动评测证据没有唯一对应原文；未使用生成内容作为标签" => {
-            Some(t!(
-                "knowledge.quality.diagnostic.generated_evidence_unmatched",
-                locale = &locale
-            ))
-        }
-        // Unknown diagnostics originate in the application layer; keep forwarding them.
-        _ => None,
-    };
-    translated.map(|text| text.into_owned()).unwrap_or(message)
+fn diagnostic(message: String, locale: &str) -> String {
+    // Structured diagnostics persist a stable key + arguments and are rendered
+    // with the request locale. Legacy rows stored plain text before the
+    // migration and are passed through unchanged (no data migration).
+    crate::shared::i18n_message::StoredMessage::decode(message).render(locale, None)
 }

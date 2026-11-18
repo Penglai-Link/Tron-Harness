@@ -14,7 +14,7 @@ impl IntoResponse for SkinApiError {
         let descriptor = self.0.descriptor();
         let detail = match &self.0 {
             SkinError::CssRejected(detail) | SkinError::Incompatible(detail) => {
-                Some(detail.as_str())
+                Some(detail.render(&self.1))
             }
             _ => None,
         };
@@ -30,8 +30,8 @@ impl IntoResponse for SkinApiError {
         };
         use tron_i18n::t;
         let message: String = if let Some(detail) = detail {
-            // Detail text originates in the application layer; keep forwarding it.
-            detail.to_string()
+            // Structured reason rendered with the request locale.
+            detail
         } else {
             match descriptor.message_key {
                 "tron.skin.invalid" => t!("tron.skin.invalid", locale = &self.1).into_owned(),

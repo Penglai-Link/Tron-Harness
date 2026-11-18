@@ -64,13 +64,9 @@ impl ModelProviderService {
     ) -> Result<RuntimeModelConfig, ModelProviderError> {
         let available = self.text_generation_candidates(workspace)?;
         if available.is_empty() {
-            let english = crate::shared::auth_holder::AuthHolder::get()
-                .is_some_and(|context| context.locale == "en-US");
-            return Err(ModelProviderError::InvalidSelection(if english {
-                "Text generation auto route has no available Middle/Low-quality PersonAI models. Sync the model catalog."
-            } else {
-                "文本生成自动路由没有可用的 PersonAI 中、低质量模型，请同步模型目录。"
-            }.into()));
+            return Err(ModelProviderError::InvalidSelection(
+                tron_i18n::Message::new("tron.model_provider.text_generation_no_candidates"),
+            ));
         }
         let context = fw::AutoRouteContext {
             operation: fw::ModelOperation::Chat,
@@ -83,16 +79,24 @@ impl ModelProviderService {
         let model = self
             .auto_routers
             .select_text_generation(&context, &available)
-            .map_err(|error| ModelProviderError::InvalidSelection(error.to_string()))?;
+            .map_err(|_| {
+                ModelProviderError::InvalidSelection(tron_i18n::Message::new(
+                    "tron.model_provider.invalid_selection",
+                ))
+            })?;
         let encoded = model
             .model
             .strip_prefix("PERSON_AI:FIXED:")
             .and_then(|value| value.split_once(':'))
             .ok_or_else(|| {
-                ModelProviderError::InvalidSelection("invalid text generation route result".into())
+                ModelProviderError::InvalidSelection(tron_i18n::Message::new(
+                    "tron.model_provider.invalid_selection",
+                ))
             })?;
         let quality = ProviderModelQuality::from_storage(encoded.0).ok_or_else(|| {
-            ModelProviderError::InvalidSelection("invalid text generation route quality".into())
+            ModelProviderError::InvalidSelection(tron_i18n::Message::new(
+                "tron.model_provider.invalid_selection",
+            ))
         })?;
         self.resolve_temporary_text_selection(
             workspace,
@@ -123,7 +127,7 @@ impl ModelProviderService {
             }, || ModelProviderError::Storage)?;
             if !active {
                 return Err(ModelProviderError::InvalidSelection(
-                    "automatic route requires an active workspace".into(),
+                    tron_i18n::Message::new("tron.model_provider.invalid_selection"),
                 ));
             }
         }
@@ -146,7 +150,11 @@ impl ModelProviderService {
         } else {
             routers.select(&context, &available)
         })
-        .map_err(|error| ModelProviderError::InvalidSelection(error.to_string()))
+        .map_err(|_| {
+            ModelProviderError::InvalidSelection(tron_i18n::Message::new(
+                "tron.model_provider.invalid_selection",
+            ))
+        })
     }
 
     pub(super) fn auto_embedding_config(
@@ -181,23 +189,14 @@ impl ModelProviderService {
                 if multimodal { eliteforge_agent_capability_personai::PersonAiEmbeddingKind::Multimodal } else { eliteforge_agent_capability_personai::PersonAiEmbeddingKind::Text }, Some(1024)))
         }, || ModelProviderError::Storage)?;
         if candidates.is_empty() {
-            let english = crate::shared::auth_holder::AuthHolder::get()
-                .is_some_and(|context| context.locale == "en-US");
-            let message = match (multimodal, english) {
-                (false, false) => {
-                    "向量自动路由没有可用候选：Person-AI 模型列表须声明 text_embedding 标签和 1024 维向量，请检查平台标签并同步模型目录后重试索引。"
-                }
-                (true, false) => {
-                    "多模态向量自动路由没有可用候选：Person-AI 模型列表须声明 multimodal_embedding 标签和 1024 维向量，请检查平台标签并同步模型目录后重试索引。"
-                }
-                (false, true) => {
-                    "No text embedding route candidates: Person-AI must declare text_embedding tags and 1024 dimensions. Check platform tags, sync the model catalog, then retry indexing."
-                }
-                (true, true) => {
-                    "No multimodal embedding route candidates: Person-AI must declare multimodal_embedding tags and 1024 dimensions. Check platform tags, sync the model catalog, then retry indexing."
-                }
+            let message_key = if multimodal {
+                "tron.model_provider.multimodal_embedding_no_candidates"
+            } else {
+                "tron.model_provider.text_embedding_no_candidates"
             };
-            return Err(ModelProviderError::InvalidSelection(message.into()));
+            return Err(ModelProviderError::InvalidSelection(
+                tron_i18n::Message::new(message_key),
+            ));
         }
         let selected = self.select_auto_model(
             fw::ModelOperation::Embedding,
@@ -209,7 +208,9 @@ impl ModelProviderService {
             .model
             .strip_prefix(PERSON_AI_EMBEDDING_PREFIX)
             .ok_or_else(|| {
-                ModelProviderError::InvalidSelection("invalid embedding route result".into())
+                ModelProviderError::InvalidSelection(tron_i18n::Message::new(
+                    "tron.model_provider.invalid_selection",
+                ))
             })?;
         Ok(person_ai_embedding_config(code))
     }
@@ -254,7 +255,9 @@ impl ModelProviderService {
             .model
             .strip_prefix(PERSON_AI_RERANK_PREFIX)
             .ok_or_else(|| {
-                ModelProviderError::InvalidSelection("invalid rerank route result".into())
+                ModelProviderError::InvalidSelection(tron_i18n::Message::new(
+                    "tron.model_provider.invalid_selection",
+                ))
             })?;
         Ok(person_ai_rerank_config(id))
     }

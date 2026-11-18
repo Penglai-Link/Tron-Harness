@@ -58,7 +58,11 @@ impl<'a> GraphComputationCheckpoint<'a> {
         settings: &RagSettings,
     ) -> Result<Self, String> {
         if settings.graph && infrastructure.is_none() {
-            return Err("真实图谱存储未配置，索引未发布".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.storage_unconfigured",
+            )
+            .encode()
+            .into());
         }
         Ok(Self {
             base,
@@ -169,7 +173,11 @@ impl RagIndexCheckpoint for NodeVectorCheckpoint<'_> {
         if result.model_code != manifest.model_code
             || (manifest.completed_units > 0 && manifest.provider_model != result.provider_model)
         {
-            return Err("图谱节点向量批次的模型身份不匹配".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.node_vector_model_mismatch",
+            )
+            .encode()
+            .into());
         }
         let values = result
             .vectors
@@ -206,11 +214,13 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
         checkpoint: &dyn RagIndexCheckpoint,
     ) -> Result<(), String> {
         checkpoint.validate()?;
-        let destination = self.graph.as_ref().ok_or("真实图谱存储未配置")?;
-        let (manifest, projections) = origin
-            .index
-            .export_generation(id)?
-            .ok_or("候选图谱不存在")?;
+        let destination = self.graph.as_ref().ok_or(
+            crate::shared::i18n_message::MessageText::new("rag.graph.storage_unconfigured")
+                .encode(),
+        )?;
+        let (manifest, projections) = origin.index.export_generation(id)?.ok_or(
+            crate::shared::i18n_message::MessageText::new("rag.graph.candidate_missing").encode(),
+        )?;
         if manifest.partition != context.partition
             || manifest.source_code != context.source_code
             || manifest.logical_source_code != context.logical_source_code
@@ -218,7 +228,11 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
             || manifest.source_version != context.source_version
             || manifest.configuration_hash != context.configuration_hash
         {
-            return Err("候选图谱的来源或配置不匹配".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.candidate_source_mismatch",
+            )
+            .encode()
+            .into());
         }
         if self
             .runtime
@@ -226,7 +240,11 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
             .as_deref()
             != Some(&manifest.model_fingerprint)
         {
-            return Err("候选图谱节点向量空间已改变".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.candidate_vector_space_changed",
+            )
+            .encode()
+            .into());
         }
         let (facts, texts) = build_graph_generation(
             RagGraphGeneration {
@@ -239,7 +257,12 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
                 edges: vec![],
             },
             &prepared.units,
-            prepared.graph.as_ref().ok_or("候选图谱抽取缺失")?,
+            prepared.graph.as_ref().ok_or(
+                crate::shared::i18n_message::MessageText::new(
+                    "rag.graph.candidate_extraction_missing",
+                )
+                .encode(),
+            )?,
         )?;
         let by_id = projections
             .iter()
@@ -252,7 +275,11 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
                     .is_none_or(|v| v.text != p.text || v.chunk_codes != p.chunk_codes)
             })
         {
-            return Err("候选图谱投影与已测试原文不匹配".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.candidate_projection_mismatch",
+            )
+            .encode()
+            .into());
         }
         destination.index.begin_generation(&manifest)?;
         destination.store.stage_generation(&facts)?;
@@ -273,10 +300,10 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
         if !settings.graph {
             return Ok(None);
         }
-        let infrastructure = self
-            .graph
-            .as_ref()
-            .ok_or("真实图谱存储未配置，索引未发布")?;
+        let infrastructure = self.graph.as_ref().ok_or(
+            crate::shared::i18n_message::MessageText::new("rag.graph.storage_unconfigured")
+                .encode(),
+        )?;
         checkpoint.stage("GRAPH_NODE_EMBEDDING")?;
         let scope = stable_id(
             "GRAPH_COMPUTATION",
@@ -295,12 +322,22 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
                 None => self
                     .runtime
                     .resolve_index_model(workspace, settings.embedding_model_code.as_deref())?
-                    .ok_or("图谱节点向量模型未配置")?,
+                    .ok_or(
+                        crate::shared::i18n_message::MessageText::new(
+                            "rag.graph.node_vector_model_unconfigured",
+                        )
+                        .encode(),
+                    )?,
             };
             let fingerprint = self
                 .runtime
                 .embedding_fingerprint(workspace, Some(&model), settings.embedding_dimension)?
-                .ok_or("图谱节点向量空间身份缺失")?;
+                .ok_or(
+                    crate::shared::i18n_message::MessageText::new(
+                        "rag.graph.node_vector_space_missing",
+                    )
+                    .encode(),
+                )?;
             let pinned = PinnedNodeModel { model, fingerprint };
             infrastructure.index.save_checkpoint(
                 &context.task_id,
@@ -316,7 +353,11 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
             .as_deref()
             != Some(&pinned.fingerprint)
         {
-            return Err("图谱节点向量模型配置已改变，请重建索引".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.graph.node_vector_model_changed",
+            )
+            .encode()
+            .into());
         }
         let id = stable_id(
             "GENERATION",
@@ -340,7 +381,12 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
                 edges: vec![],
             },
             &prepared.units,
-            prepared.graph.as_ref().ok_or("图谱抽取检查点缺失")?,
+            prepared.graph.as_ref().ok_or(
+                crate::shared::i18n_message::MessageText::new(
+                    "rag.graph.extraction_checkpoint_missing",
+                )
+                .encode(),
+            )?,
         )?;
         let mut manifest = GraphGenerationManifest {
             id: id.clone(),
@@ -395,7 +441,16 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
                 .transpose()
         })
         .await
-        .map_err(|e| format!("图谱节点向量检查点恢复失败: {e}"))??;
+        .map_err(|error| {
+            format!(
+                "{}",
+                crate::shared::i18n_message::MessageText::new(
+                    "rag.graph.vector_checkpoint_restore_failed"
+                )
+                .arg("detail", error.to_string())
+                .encode()
+            )
+        })??;
         let (saved, restored_manifest) = restored.unwrap_or_else(|| {
             (
                 RagPreparedVectors {
@@ -453,7 +508,16 @@ impl<R: Clone, E: RagEmbeddingRuntime> RagService<R, E> {
         // A large durable Grafeo write must not starve the ingestion lease future.
         tokio::task::spawn_blocking(move || store.stage_generation(&facts))
             .await
-            .map_err(|error| format!("图谱暂存任务失败: {error}"))??;
+            .map_err(|error| {
+                format!(
+                    "{}",
+                    crate::shared::i18n_message::MessageText::new(
+                        "rag.graph.stage_generation_failed"
+                    )
+                    .arg("detail", error.to_string())
+                    .encode()
+                )
+            })??;
         checkpoint.validate()?;
         infrastructure
             .index

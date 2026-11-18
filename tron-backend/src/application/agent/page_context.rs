@@ -90,11 +90,7 @@ pub(crate) fn record_snapshot(
         return;
     };
     let metadata = serde_json::to_value(snapshot).expect("page context is JSON serializable");
-    let label = if locale.starts_with("en") {
-        "UI page at this message's submission (location data only)"
-    } else {
-        "本条消息发送时的页面（仅位置数据）"
-    };
+    let label = tron_i18n::t!("agent.page_context.snapshot_label", locale = locale);
     message.parts.insert(
         0,
         AgentMessagePart::Context {

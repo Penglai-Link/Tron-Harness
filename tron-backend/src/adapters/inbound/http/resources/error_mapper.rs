@@ -48,16 +48,20 @@ pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
         .into_response()
 }
 
-pub fn resource_error_with_field(error: ResourceError, field: &str, locale: &str) -> ResourceError {
-    use tron_i18n::t;
+pub fn resource_error_with_field(
+    error: ResourceError,
+    field: &str,
+    _locale: &str,
+) -> ResourceError {
+    use crate::shared::i18n_message::MessageText;
     match error {
         ResourceError::InvalidInput => ResourceError::InvalidField {
             field: field.to_string(),
-            reason: t!("resource.error.reason.invalid_input", locale = locale).into_owned(),
+            reason: MessageText::new("resource.error.reason.invalid_input").encode(),
         },
         ResourceError::InvalidCode => ResourceError::InvalidField {
             field: field.to_string(),
-            reason: t!("resource.error.reason.invalid_code", locale = locale).into_owned(),
+            reason: MessageText::new("resource.error.reason.invalid_code").encode(),
         },
         ResourceError::InvalidField {
             field: nested,
@@ -177,7 +181,12 @@ fn localized_resource_error(error: ResourceError, locale: &str) -> String {
 
 fn localized_invalid_field_error(field: String, reason: String, locale: &str) -> String {
     let field = field.trim();
-    let reason = reason.trim();
+    // Reasons are structured messages (key + args) produced by the application
+    // layer; only this display boundary turns them into text.
+    let reason = match crate::shared::i18n_message::MessageText::decode(&reason) {
+        Some(message) => message.render(locale),
+        None => reason.trim().to_owned(),
+    };
     tron_i18n::t!(
         "resource.error.invalid_field",
         locale = locale,

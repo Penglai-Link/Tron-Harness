@@ -27,15 +27,19 @@ impl RagRetrievalConfig {
             .min_vector_similarity
             .is_some_and(|score| !score.is_finite() || !(0.0..=1.0).contains(&score))
         {
-            return Err("minVectorSimilarity must be finite and between 0 and 1 / 向量相似度阈值必须在 0 到 1 之间".into());
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.search.min_similarity_invalid",
+            )
+            .encode());
         }
         if self
             .min_rerank_score
             .is_some_and(|score| !score.is_finite() || score < 0.0)
         {
-            return Err(
-                "minRerankScore must be finite and nonnegative / 重排阈值必须是有限非负数".into(),
-            );
+            return Err(crate::shared::i18n_message::MessageText::new(
+                "rag.search.min_rerank_score_invalid",
+            )
+            .encode());
         }
         Ok(())
     }

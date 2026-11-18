@@ -47,7 +47,9 @@ impl IntoResponse for SettingsApiError {
                 t!("tron.knowledge_base.forbidden", locale = &self.1)
             }
             KnowledgeBaseError::Invalid(_) => {
-                t!("knowledge.base.settings.invalid", locale = &self.1)
+                // Structured validation detail is rendered at the display edge.
+                use std::borrow::Cow;
+                Cow::Owned(self.0.localized(&self.1))
             }
             KnowledgeBaseError::Conflict => {
                 t!("tron.knowledge_base.conflict", locale = &self.1)

@@ -204,7 +204,11 @@ impl<R: Clone, E: RagEmbeddingRuntime + super::RagGraphRuntime> RagService<R, E>
     ) -> Result<RagPreparedIndex, String> {
         settings.validate().map_err(|error| error.to_string())?;
         if units.is_empty() || units.iter().any(|unit| unit.text.trim().is_empty()) {
-            return Err("没有可入库正文".into());
+            return Err(
+                crate::shared::i18n_message::MessageText::new("rag.index.no_ingest_text")
+                    .encode()
+                    .into(),
+            );
         }
         checkpoint.stage("INDEXING")?;
         let vectors = if settings.vector {
@@ -216,7 +220,11 @@ impl<R: Clone, E: RagEmbeddingRuntime + super::RagGraphRuntime> RagService<R, E>
                     .collect()
             });
             if contents.len() != units.len() {
-                return Err("索引输入数量与分块不一致".into());
+                return Err(crate::shared::i18n_message::MessageText::new(
+                    "rag.index.input_count_mismatch",
+                )
+                .encode()
+                .into());
             }
             for (unit, input) in units.iter_mut().zip(&contents) {
                 unit.metadata["embeddingInputHash"] =
@@ -275,10 +283,12 @@ impl<R: Clone, E: RagEmbeddingRuntime + super::RagGraphRuntime> RagService<R, E>
                 Some(
                     self.prepare_graph_with_cache(
                         workspace,
-                        settings
-                            .graph_model_code
-                            .as_deref()
-                            .ok_or("请先配置图谱抽取模型")?,
+                        settings.graph_model_code.as_deref().ok_or(
+                            crate::shared::i18n_message::MessageText::new(
+                                "rag.index.graph_model_unconfigured",
+                            )
+                            .encode(),
+                        )?,
                         &units,
                         Some(checkpoint),
                         cached_graphs,
@@ -303,8 +313,14 @@ fn structured_evidence(
     graph: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     use serde_json::{Value, json};
-    let nodes = graph["nodes"].as_array().ok_or("结构化图谱实体缺失")?;
-    let edges = graph["edges"].as_array().ok_or("结构化图谱关系缺失")?;
+    let nodes = graph["nodes"].as_array().ok_or(
+        crate::shared::i18n_message::MessageText::new("rag.index.structured_nodes_missing")
+            .encode(),
+    )?;
+    let edges = graph["edges"].as_array().ok_or(
+        crate::shared::i18n_message::MessageText::new("rag.index.structured_edges_missing")
+            .encode(),
+    )?;
     let body = units
         .iter()
         .map(|unit| unit.text.as_str())
@@ -329,7 +345,11 @@ fn structured_evidence(
                     .is_some_and(|value| refs.contains(value))
         })
     {
-        return Err("结构化实体或关系没有来源证据".into());
+        return Err(crate::shared::i18n_message::MessageText::new(
+            "rag.index.structured_evidence_missing",
+        )
+        .encode()
+        .into());
     }
     let mut evidence = serde_json::Map::new();
     for unit in units {
@@ -361,24 +381,42 @@ fn structured_evidence(
         let mut references = serde_json::Map::new();
         for relation in &chunk_edges {
             for endpoint in ["from", "to"] {
-                let reference = relation[endpoint].as_str().ok_or("结构化关系端点缺失")?;
+                let reference = relation[endpoint].as_str().ok_or(
+                    crate::shared::i18n_message::MessageText::new(
+                        "rag.index.structured_endpoint_missing",
+                    )
+                    .encode(),
+                )?;
                 if local_refs.contains(reference) {
                     continue;
                 }
                 let declaration = nodes
                     .iter()
                     .find(|node| node["ref"].as_str() == Some(reference))
-                    .ok_or("结构化关系端点不存在")?;
-                let quote = declaration["evidence"]
-                    .as_str()
-                    .ok_or("结构化实体证据缺失")?;
+                    .ok_or(
+                        crate::shared::i18n_message::MessageText::new(
+                            "rag.index.structured_endpoint_unknown",
+                        )
+                        .encode(),
+                    )?;
+                let quote = declaration["evidence"].as_str().ok_or(
+                    crate::shared::i18n_message::MessageText::new(
+                        "rag.index.structured_entity_evidence_missing",
+                    )
+                    .encode(),
+                )?;
                 let original = units
                     .iter()
                     .find(|source| {
                         source.unit_type != "IMAGE"
                             && super::graph::graph_source_text(source).contains(quote)
                     })
-                    .ok_or("结构化实体没有可定位的原文声明")?;
+                    .ok_or(
+                        crate::shared::i18n_message::MessageText::new(
+                            "rag.index.structured_entity_unlocatable",
+                        )
+                        .encode(),
+                    )?;
                 references.insert(reference.into(), json!(original.text_unit_code));
             }
         }

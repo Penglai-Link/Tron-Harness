@@ -773,3 +773,30 @@ automations.archived_invalid:
 automations.storage_failed:
   en: "automation storage operation failed"
   zh-CN: "自动化存储操作失败"
+
+# --- Provider auto-route labels (model select options) ---
+models.route.chat_auto:
+  en: "Chat Auto"
+  zh-CN: "对话自动路由"
+
+models.route.embedding_auto:
+  en: "Embedding Auto"
+  zh-CN: "向量自动路由"
+
+models.route.multimodal_embedding_auto:
+  en: "Multimodal Embedding Auto"
+  zh-CN: "多模态向量自动路由"
+
+models.route.rerank_auto:
+  en: "Rerank Auto"
+  zh-CN: "重排自动路由"
+
+# --- Agent message page-context label ---
+agent.page_context.snapshot_label:
+  en: "UI page at this message's submission (location data only)"
+  zh-CN: "本条消息发送时的页面（仅位置数据）"
+
+# --- Assistant soul awakening session ---
+assistant.awakening_title:
+  en: "First awakening"
+  zh-CN: "首次唤醒"

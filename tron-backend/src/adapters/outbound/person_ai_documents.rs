@@ -66,8 +66,8 @@ impl PersonAiDocumentParser {
         checkpoint: Option<Arc<dyn ParseCheckpoint>>,
     ) -> Result<StructuredParse, KnowledgeBaseError> {
         if bytes.is_empty() || bytes.len() > 50 * 1024 * 1024 {
-            return Err(KnowledgeBaseError::Invalid(
-                "文件必须非空且不超过 50 MB".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.file_required",
             ));
         }
         let mode = self.mode(tier);
@@ -81,7 +81,12 @@ impl PersonAiDocumentParser {
                 .document_parse_session(user)
                 .await
                 .map_err(|error| {
-                    KnowledgeBaseError::Storage(format!("Person-AI 解析账号暂不可用：{error}"))
+                    KnowledgeBaseError::storage_message(
+                        crate::shared::i18n_message::MessageText::new(
+                            "integration.person_ai.account_unavailable",
+                        )
+                        .arg("detail", error.to_string()),
+                    )
                 })?;
         let context = parse_context(credentials);
         let client = DocumentParseClient::new(base_url).map_err(platform_error)?;
@@ -126,7 +131,12 @@ impl PersonAiDocumentParser {
                 .document_parse_session(user)
                 .await
                 .map_err(|error| {
-                    KnowledgeBaseError::Storage(format!("Person-AI 解析账号暂不可用：{error}"))
+                    KnowledgeBaseError::storage_message(
+                        crate::shared::i18n_message::MessageText::new(
+                            "integration.person_ai.account_unavailable",
+                        )
+                        .arg("detail", error.to_string()),
+                    )
                 })?;
             let context = parse_context(credentials);
             let client = DocumentParseClient::new(base_url).map_err(platform_error)?;
@@ -145,32 +155,36 @@ impl PersonAiDocumentParser {
         task: ParseTask,
     ) -> Result<StructuredParse, KnowledgeBaseError> {
         let result = lifecycle::result_manifest(&task)?;
-        let files = result["files"]
-            .as_array()
-            .ok_or_else(|| KnowledgeBaseError::Storage("平台解析产物缺少文件列表".into()))?;
+        let files = result["files"].as_array().ok_or_else(|| {
+            KnowledgeBaseError::storage("integration.person_ai.artifact_file_list_missing")
+        })?;
         let file = files
             .iter()
             .find(|file| file["filename"] == filename)
             .or_else(|| (files.len() == 1).then(|| &files[0]))
-            .ok_or_else(|| KnowledgeBaseError::Storage("解析结果文件不匹配".into()))?;
+            .ok_or_else(|| {
+                KnowledgeBaseError::storage("integration.person_ai.artifact_file_mismatch")
+            })?;
         let source_hash = format!("{:x}", Sha256::digest(source));
         if file["source_hash"]
             .as_str()
             .is_some_and(|hash| hash != source_hash)
         {
-            return Err(KnowledgeBaseError::Storage(
-                "解析结果与原始文件哈希不一致".into(),
+            return Err(KnowledgeBaseError::storage(
+                "integration.person_ai.artifact_hash_mismatch",
             ));
         }
         if file["successful_pages"].as_i64().unwrap_or(0) <= 0 {
-            return Err(KnowledgeBaseError::Invalid("文档没有成功解析的页面".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.no_parsed_pages",
+            ));
         }
         if file["total_pages"]
             .as_i64()
             .is_some_and(|total| total > file["successful_pages"].as_i64().unwrap_or(0))
         {
-            return Err(KnowledgeBaseError::Invalid(
-                "文档有未成功解析的页面，未发布不完整索引".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.incomplete_pages",
             ));
         }
         let markdown_id = output_id(file, "markdown")?;
@@ -180,7 +194,12 @@ impl PersonAiDocumentParser {
                 .document_parse_session(user)
                 .await
                 .map_err(|error| {
-                    KnowledgeBaseError::Storage(format!("Person-AI 解析账号暂不可用：{error}"))
+                    KnowledgeBaseError::storage_message(
+                        crate::shared::i18n_message::MessageText::new(
+                            "integration.person_ai.account_unavailable",
+                        )
+                        .arg("detail", error.to_string()),
+                    )
                 })?;
         let context = parse_context(credentials);
         let client = DocumentParseClient::new(base_url).map_err(platform_error)?;
@@ -197,9 +216,9 @@ impl PersonAiDocumentParser {
             Vec::new()
         };
         let mut middle: Value = serde_json::from_slice(&middle)
-            .map_err(|_| KnowledgeBaseError::Storage("平台解析结构化结果无效".into()))?;
+            .map_err(|_| KnowledgeBaseError::storage("integration.person_ai.structured_invalid"))?;
         let markdown_text = String::from_utf8(markdown)
-            .map_err(|_| KnowledgeBaseError::Storage("平台 Markdown 结果不是 UTF-8".into()))?;
+            .map_err(|_| KnowledgeBaseError::storage("integration.person_ai.markdown_not_utf8"))?;
         attach_segment_source_ranges(&mut middle, file)?;
         let paths = assets.iter().map(|asset| asset.path.clone()).collect();
         let mut document =
@@ -210,8 +229,8 @@ impl PersonAiDocumentParser {
             .unwrap_or("document")
             .to_ascii_lowercase();
         if !middle.is_array() {
-            return Err(KnowledgeBaseError::Storage(
-                "平台结构化结果格式不受支持；未发布缺少图表结构的索引".into(),
+            return Err(KnowledgeBaseError::storage(
+                "integration.person_ai.structured_format_unsupported",
             ));
         }
         Ok(StructuredParse {
@@ -243,31 +262,33 @@ fn attach_segment_source_ranges(
         if part["data"]["metadata"]["file_suffix"] != "pdf" {
             continue;
         }
-        let seq = part["seq"]
-            .as_u64()
-            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段序号无效".into()))?;
+        let seq = part["seq"].as_u64().ok_or_else(|| {
+            KnowledgeBaseError::invalid("integration.person_ai.segment_index_invalid")
+        })?;
         let matches = segments
             .iter()
             .filter(|segment| segment["seq"].as_u64() == Some(seq))
             .collect::<Vec<_>>();
         if matches.len() != 1 {
-            return Err(KnowledgeBaseError::Invalid(
-                "解析分段来源范围缺失或重复".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.segment_range_missing",
             ));
         }
         let range = matches[0]["page_range"]
             .as_array()
             .filter(|range| range.len() == 2)
-            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段来源范围无效".into()))?;
-        let start = range[0]
-            .as_u64()
-            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段起始页无效".into()))?;
-        let end = range[1]
-            .as_u64()
-            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段结束页无效".into()))?;
-        let pages = part["data"]["pages"]
-            .as_array()
-            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段页信息缺失".into()))?;
+            .ok_or_else(|| {
+                KnowledgeBaseError::invalid("integration.person_ai.segment_range_invalid")
+            })?;
+        let start = range[0].as_u64().ok_or_else(|| {
+            KnowledgeBaseError::invalid("integration.person_ai.segment_start_page_invalid")
+        })?;
+        let end = range[1].as_u64().ok_or_else(|| {
+            KnowledgeBaseError::invalid("integration.person_ai.segment_end_page_invalid")
+        })?;
+        let pages = part["data"]["pages"].as_array().ok_or_else(|| {
+            KnowledgeBaseError::invalid("integration.person_ai.segment_page_missing")
+        })?;
         if end <= start
             || end - start != pages.len() as u64
             || pages
@@ -275,8 +296,8 @@ fn attach_segment_source_ranges(
                 .enumerate()
                 .any(|(i, page)| page["page_idx"].as_u64() != Some(i as u64))
         {
-            return Err(KnowledgeBaseError::Invalid(
-                "解析分段与原始页范围不一致".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.segment_page_mismatch",
             ));
         }
         part["source_page_start"] = start.into();
@@ -288,9 +309,11 @@ fn images_from_result_zip(
     archive: &tempfile::NamedTempFile,
 ) -> Result<Vec<ParsedAsset>, KnowledgeBaseError> {
     let mut outer = zip::ZipArchive::new(archive.reopen().map_err(platform_error)?)
-        .map_err(|_| KnowledgeBaseError::Storage("平台解析 ZIP 无效".into()))?;
+        .map_err(|_| KnowledgeBaseError::storage("integration.person_ai.artifact_zip_invalid"))?;
     if outer.len() > 4096 {
-        return Err(KnowledgeBaseError::Invalid("解析附件数量超过上限".into()));
+        return Err(KnowledgeBaseError::invalid(
+            "integration.person_ai.attachment_limit",
+        ));
     }
     let mut images = BTreeMap::<String, Vec<u8>>::new();
     let mut duplicates = BTreeSet::new();
@@ -298,7 +321,9 @@ fn images_from_result_zip(
     for i in 0..outer.len() {
         let mut item = outer.by_index(i).map_err(platform_error)?;
         let Some(path) = item.enclosed_name() else {
-            return Err(KnowledgeBaseError::Invalid("解析附件路径无效".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.attachment_path_invalid",
+            ));
         };
         let name = path.to_string_lossy();
         if item.is_dir() || !name.starts_with("zip/") || !name.ends_with(".zip") {
@@ -314,19 +339,23 @@ fn images_from_result_zip(
         .map_err(platform_error)?;
         expanded = expanded.saturating_add(copied as usize);
         if expanded > MAX_EXPANDED_BYTES {
-            return Err(KnowledgeBaseError::Invalid(
-                "解析附件解压内容超过100 MiB".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.attachment_unpacked_too_large",
             ));
         }
         let mut inner = zip::ZipArchive::new(inner_file.reopen().map_err(platform_error)?)
-            .map_err(|_| KnowledgeBaseError::Storage("平台解析图片 ZIP 无效".into()))?;
+            .map_err(|_| KnowledgeBaseError::storage("integration.person_ai.image_zip_invalid"))?;
         if inner.len() > 4096 {
-            return Err(KnowledgeBaseError::Invalid("解析图片数量超过上限".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.image_limit",
+            ));
         }
         for j in 0..inner.len() {
             let mut image = inner.by_index(j).map_err(platform_error)?;
             let Some(path) = image.enclosed_name() else {
-                return Err(KnowledgeBaseError::Invalid("解析图片路径无效".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "integration.person_ai.image_path_invalid",
+                ));
             };
             let name = path.to_string_lossy().replace('\\', "/");
             if image.is_dir() || !name.starts_with("images/") {
@@ -341,7 +370,9 @@ fn images_from_result_zip(
                 continue;
             }
             if image.size() > 20 * 1024 * 1024 {
-                return Err(KnowledgeBaseError::Invalid("单张解析图片超过20 MiB".into()));
+                return Err(KnowledgeBaseError::invalid(
+                    "integration.person_ai.image_too_large",
+                ));
             }
             let mut data = Vec::new();
             image
@@ -351,8 +382,8 @@ fn images_from_result_zip(
                 .map_err(platform_error)?;
             expanded = expanded.saturating_add(data.len());
             if expanded > MAX_EXPANDED_BYTES {
-                return Err(KnowledgeBaseError::Invalid(
-                    "解析附件解压内容超过100 MiB".into(),
+                return Err(KnowledgeBaseError::invalid(
+                    "integration.person_ai.attachment_unpacked_too_large",
                 ));
             }
             if images.insert(name.clone(), data).is_some() {
@@ -383,8 +414,8 @@ async fn download_to_temp(
         .content_length()
         .is_some_and(|size| size > MAX_EXPANDED_BYTES as u64)
     {
-        return Err(KnowledgeBaseError::Invalid(
-            "解析 ZIP 超过100 MiB上限".into(),
+        return Err(KnowledgeBaseError::invalid(
+            "integration.person_ai.zip_too_large",
         ));
     }
     let mut archive = tempfile::NamedTempFile::new().map_err(platform_error)?;
@@ -392,8 +423,8 @@ async fn download_to_temp(
     while let Some(chunk) = response.chunk().await.map_err(platform_error)? {
         size = size.saturating_add(chunk.len());
         if size > MAX_EXPANDED_BYTES {
-            return Err(KnowledgeBaseError::Invalid(
-                "解析 ZIP 超过100 MiB上限".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.zip_too_large",
             ));
         }
         archive.write_all(&chunk).map_err(platform_error)?;
@@ -407,7 +438,14 @@ fn output_id<'a>(file: &'a Value, kind: &str) -> Result<&'a str, KnowledgeBaseEr
         .as_str()
         .or_else(|| output["file_id"].as_str())
         .filter(|id| !id.is_empty())
-        .ok_or_else(|| KnowledgeBaseError::Storage(format!("解析产物缺少{kind}")))
+        .ok_or_else(|| {
+            KnowledgeBaseError::storage_message(
+                crate::shared::i18n_message::MessageText::new(
+                    "integration.person_ai.artifact_kind_missing",
+                )
+                .arg("kind", kind),
+            )
+        })
 }
 
 async fn download(
@@ -425,12 +463,16 @@ async fn download(
         .content_length()
         .is_some_and(|size| size > limit as u64)
     {
-        return Err(KnowledgeBaseError::Invalid("解析产物超过大小上限".into()));
+        return Err(KnowledgeBaseError::invalid(
+            "integration.person_ai.artifact_too_large",
+        ));
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(platform_error)? {
         if bytes.len().saturating_add(chunk.len()) > limit {
-            return Err(KnowledgeBaseError::Invalid("解析产物超过大小上限".into()));
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.artifact_too_large",
+            ));
         }
         bytes.extend_from_slice(&chunk);
     }
@@ -438,7 +480,10 @@ async fn download(
 }
 
 fn platform_error(error: impl std::fmt::Display) -> KnowledgeBaseError {
-    KnowledgeBaseError::Storage(format!("Person-AI 文件解析失败：{error}"))
+    KnowledgeBaseError::storage_message(
+        crate::shared::i18n_message::MessageText::new("integration.person_ai.file_parse_failed")
+            .arg("detail", error.to_string()),
+    )
 }
 
 fn parse_context(
@@ -465,12 +510,13 @@ impl KnowledgeDocumentParser for PersonAiDocumentParser {
         identity: &Value,
     ) -> Result<Option<Arc<dyn KnowledgeDocumentParser>>, KnowledgeBaseError> {
         if identity["provider"] != "person-ai-document-parse" {
-            return Err(KnowledgeBaseError::Invalid(
-                "原解析任务的供应方已改变".into(),
+            return Err(KnowledgeBaseError::invalid(
+                "integration.person_ai.supplier_changed",
             ));
         }
-        let mode = serde_json::from_value(identity["ocrMode"].clone())
-            .map_err(|_| KnowledgeBaseError::Invalid("原解析任务的文字识别模式无效".into()))?;
+        let mode = serde_json::from_value(identity["ocrMode"].clone()).map_err(|_| {
+            KnowledgeBaseError::invalid("integration.person_ai.original_ocr_mode_invalid")
+        })?;
         Ok(Some(Arc::new(Self {
             providers: self.providers.clone(),
             ocr_mode: mode,
@@ -531,7 +577,9 @@ impl KnowledgeDocumentParser for PersonAiDocumentParser {
         _bytes: &[u8],
         _tier: Option<ParsingTier>,
     ) -> Result<StructuredParse, KnowledgeBaseError> {
-        Err(KnowledgeBaseError::Invalid("解析需要用户身份".into()))
+        Err(KnowledgeBaseError::invalid(
+            "integration.person_ai.user_identity_required",
+        ))
     }
 
     async fn parse_for_user(

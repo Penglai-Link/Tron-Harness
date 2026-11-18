@@ -140,7 +140,7 @@ fn harness_tool_descriptors() -> Vec<eliteforge_agent_core::ToolDescriptor> {
         .clone()
 }
 
-pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
+pub(super) fn builtin_contents(id: &str, locale: &str) -> Vec<CapabilityContentInfo> {
     let mut items: Vec<_> = builtin_tool_descriptors(id)
         .into_iter()
         .map(|tool| content("Tool", tool.call_name, tool.description))
@@ -192,7 +192,7 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
     }
     // Keep detail contributions and the extension catalog on the same source.
     items.extend(
-        super::pack_extension_implementations()
+        super::pack_extension_implementations(locale)
             .into_iter()
             .filter(|implementation| implementation.provider_pack_id == id)
             .map(|implementation| {
@@ -395,11 +395,7 @@ pub(super) fn navigation_contents(
     for page in super::super::host::host_pages::read_pages(path, manifest)? {
         let title = page
             .title
-            .get(if locale.starts_with("zh") {
-                "zh-CN"
-            } else {
-                "en-US"
-            })
+            .get(tron_i18n::Locale::from_raw(locale).as_str())
             .cloned()
             .unwrap_or_else(|| page.id.clone());
         let mut item = content("Page", &page.id, "");

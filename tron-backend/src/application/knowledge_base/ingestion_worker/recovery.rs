@@ -40,7 +40,9 @@ impl KnowledgeBaseService {
                 self.repository.fail_ingestion_intent(
                     &doc,
                     revision,
-                    &format!("创建入库任务失败：{error}"),
+                    &crate::shared::i18n_message::MessageText::new("knowledge.base.enqueue_failed")
+                        .arg("error", &error.to_string())
+                        .encode(),
                     &reason,
                     retry.then(|| {
                         now_ms().saturating_add(

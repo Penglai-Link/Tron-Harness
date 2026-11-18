@@ -69,7 +69,11 @@ pub(super) async fn prepare_checkpointed_unit(
 
 fn parse_and_validate(unit: &RagTextUnitWrite, source: &str, raw: &str) -> Result<Value, String> {
     if raw.len() > MAX_RESPONSE_BYTES {
-        return Err("图谱抽取返回内容超过大小限制".into());
+        return Err(crate::shared::i18n_message::MessageText::new(
+            "rag.graph.extraction_too_large",
+        )
+        .encode()
+        .into());
     }
     let raw = raw.trim();
     let raw = raw
@@ -82,14 +86,22 @@ fn parse_and_validate(unit: &RagTextUnitWrite, source: &str, raw: &str) -> Resul
     let mut graph: Value =
         serde_json::from_str(raw).map_err(|error| format!("图谱抽取返回格式错误: {error}"))?;
     anchors::Anchors::new(source).expand(&mut graph, MAX_RESPONSE_BYTES)?;
-    let nodes = graph["nodes"].as_array().ok_or("图谱实体缺失")?;
-    let edges = graph["edges"].as_array().ok_or("图谱关系缺失")?;
+    let nodes = graph["nodes"]
+        .as_array()
+        .ok_or(crate::shared::i18n_message::MessageText::new("rag.graph.nodes_missing").encode())?;
+    let edges = graph["edges"]
+        .as_array()
+        .ok_or(crate::shared::i18n_message::MessageText::new("rag.graph.edges_missing").encode())?;
     let refs: BTreeSet<_> = nodes
         .iter()
         .filter_map(|node| node["ref"].as_str())
         .collect();
     if refs.len() != nodes.len() {
-        return Err("图谱实体 ref 缺失或重复".into());
+        return Err(
+            crate::shared::i18n_message::MessageText::new("rag.graph.node_ref_invalid")
+                .encode()
+                .into(),
+        );
     }
     for (index, item) in nodes.iter().chain(edges.iter()).enumerate() {
         if item["evidence"].as_str().is_none_or(|quote| {
@@ -108,7 +120,11 @@ fn parse_and_validate(unit: &RagTextUnitWrite, source: &str, raw: &str) -> Resul
                 .as_str()
                 .is_some_and(|value| refs.contains(value))
     }) {
-        return Err("图谱关系 from/to 必须引用本次 nodes 中的 ref".into());
+        return Err(
+            crate::shared::i18n_message::MessageText::new("rag.graph.edge_ref_invalid")
+                .encode()
+                .into(),
+        );
     }
     for (index, node) in nodes.iter().enumerate() {
         if node["name"]

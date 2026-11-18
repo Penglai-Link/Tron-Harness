@@ -52,7 +52,9 @@ pub(crate) fn append_image_chunks(
             .collect::<Vec<_>>()
             .join("\n");
         let text = if description.trim().is_empty() {
-            format!("{title} 中的图片")
+            crate::shared::i18n_message::MessageText::new("knowledge.image.title_of")
+                .arg("title", title)
+                .render(tron_i18n::DEFAULT_LOCALE.as_str())
         } else {
             description.chars().take(1200).collect()
         };
@@ -120,7 +122,7 @@ impl KnowledgeBaseService {
         let accepts_images = self
             .llm
             .embedding_accepts_images(workspace, model)
-            .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?;
+            .map_err(|error| KnowledgeBaseError::invalid_message(error.localized_detail()))?;
         let mut total_bytes = 0u64;
         chunks
             .iter()
@@ -135,13 +137,13 @@ impl KnowledgeBaseService {
                     return Ok(input);
                 }
                 if !accepts_images {
-                    return Err(KnowledgeBaseError::Invalid(
-                        "当前向量模型不支持原图，请重新补充索引".into(),
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.image_model_no_vector_support",
                     ));
                 }
                 let [code] = chunk.location.image_resource_codes.as_slice() else {
-                    return Err(KnowledgeBaseError::Invalid(
-                        "原图向量必须绑定唯一图片资源".into(),
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.image_vector_resource_invalid",
                     ));
                 };
                 let (_, record) = self.resources.download_binary_to_file(
@@ -153,8 +155,8 @@ impl KnowledgeBaseService {
                 )?;
                 total_bytes = total_bytes.saturating_add(record.byte_size as u64);
                 if record.byte_size > 20 * 1024 * 1024 || total_bytes > 100 * 1024 * 1024 {
-                    return Err(KnowledgeBaseError::Invalid(
-                        "图片向量输入超过大小上限".into(),
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.image_vector_input_too_large",
                     ));
                 }
                 let mut bytes = Vec::new();
@@ -168,8 +170,8 @@ impl KnowledgeBaseService {
                 {
                     "image/webp"
                 } else {
-                    return Err(KnowledgeBaseError::Invalid(
-                        "图片向量输入格式不受支持".into(),
+                    return Err(KnowledgeBaseError::invalid(
+                        "knowledge.base.image_vector_format_unsupported",
                     ));
                 };
                 use base64::Engine;

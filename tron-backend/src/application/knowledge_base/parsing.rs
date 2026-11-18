@@ -99,8 +99,8 @@ pub trait KnowledgeDocumentParser: Send + Sync {
         &self,
         _mode: OcrMode,
     ) -> Result<std::sync::Arc<dyn KnowledgeDocumentParser>, KnowledgeBaseError> {
-        Err(KnowledgeBaseError::Invalid(
-            "解析服务不支持文档文字识别方式覆盖".into(),
+        Err(KnowledgeBaseError::invalid(
+            "knowledge.base.ocr_override_unsupported",
         ))
     }
     fn profile_identity(&self) -> Value {
@@ -159,8 +159,8 @@ pub trait KnowledgeDocumentParser: Send + Sync {
             return Ok(Some(job.clone()));
         }
         if task.reconciling {
-            return Err(KnowledgeBaseError::Storage(
-                "原解析任务仍在对账，取消尚未确认".into(),
+            return Err(KnowledgeBaseError::storage(
+                "knowledge.base.cancelled_not_confirmed",
             ));
         }
         Ok(None)

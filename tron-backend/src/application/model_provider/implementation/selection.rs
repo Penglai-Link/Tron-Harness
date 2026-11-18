@@ -278,7 +278,7 @@ impl ModelProviderService {
                 }
                 match selection.kind {
                     ModelSelectionKind::Auto => Err(ModelProviderError::InvalidSelection(
-                        "Tron Auto must be resolved by the chat session router".into(),
+                        tron_i18n::Message::new("tron.model_provider.chat_auto_requires_router"),
                     )),
                     ModelSelectionKind::ProviderRoute => {
                         if selection.route_code != Some(ProviderRouteCode::ChatAuto)
@@ -286,7 +286,7 @@ impl ModelProviderService {
                             || selection.quality_type.is_some()
                         {
                             return Err(ModelProviderError::InvalidSelection(
-                                "Person-AI chat route must be ChatAuto without modelCode".into(),
+                                tron_i18n::Message::new("tron.model_provider.chat_route_shape"),
                             ));
                         }
                         Ok(Some(person_ai_agent_config(
@@ -304,9 +304,9 @@ impl ModelProviderService {
                             .map(str::trim)
                             .filter(|value| !value.is_empty())
                             .ok_or_else(|| {
-                                ModelProviderError::InvalidSelection(
-                                    "Person-AI Fixed selection requires modelCode".into(),
-                                )
+                                ModelProviderError::InvalidSelection(tron_i18n::Message::new(
+                                    "tron.model_provider.fixed_selection_requires_model_code",
+                                ))
                             })?;
                         let model = read_catalog_model(
                             &connection,
