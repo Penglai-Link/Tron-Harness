@@ -272,7 +272,7 @@ fn assistant_work_change_definition() -> ToolCatalogDefinition {
     definition("assistant.work_change", "assistant_work", ToolOperationKind::Command,
         schema("agent.toolCatalog.tools.assistant.work_change.description", json!([{"operation":"list","taskCode":"task-id"}]),
             json!({"type":"object","required":["operation"],"properties":{
-                "operation":{"type":"string","enum":["list","recordResult","record","resolve"],"description":"list: requires taskCode. recordResult: requires taskCode and result. record: requires taskCode, changeKey, kind, summary and evidence; NeedsDecision/Blocked also require requestedAction. resolve: requires changeId, resolution and evidence. Omit fields belonging to other operations."},
+                "operation":{"type":"string","enum":["list","recordResult","record","resolve"],"x-i18n-description-key":"agent.toolCatalog.tools.assistant.work_change.params.operation"},
                 "taskCode":{"type":"string","minLength":1},
                 "result":{"type":"string","minLength":1,"maxLength":32000},
                 "changeKey":{"type":"string","minLength":1,"maxLength":200},
@@ -292,14 +292,14 @@ fn assistant_soul_read_definition() -> ToolCatalogDefinition {
 fn assistant_soul_update_definition() -> ToolCatalogDefinition {
     definition("assistant.soul_update", "assistant_identity", ToolOperationKind::Command,
         schema("agent.toolCatalog.tools.assistant.soul_update.description", json!([
-            {"name":"小川"},
-            {"edits":[{"old":"","new":"回答简洁。"}]}
+            {"name":"__i18n__agent.toolCatalog.tools.assistant.soul_update.example.name"},
+            {"edits":[{"old":"","new":"__i18n__agent.toolCatalog.tools.assistant.soul_update.example.soul"}]}
         ]),json!({"type":"object","properties":{
-        "name":{"type":"string","minLength":1,"maxLength":100,"description":"Confirmed formal name, only when the user authorized naming or renaming."},
-        "initialSoul":{"type":"string","minLength":1,"maxLength":16384,"description":"Nonempty Markdown for first establishment in the onboarding session from user answers or an explicit soul request. Write the entire Markdown, including headings, in the language the user uses during onboarding; honor an explicit language preference first, retain the ongoing language for short answers, and use the interface locale only as fallback. Do not copy the language of system instructions or seed content. Preserve the confirmed name verbatim. Maximum 16384 UTF-8 bytes. Renaming alone does not authorize this. Cannot be combined with edits; unavailable once Ready."},
-        "edits":{"type":"array","minItems":1,"description":"Apply in order to the latest soul. Only change requested passages; a missing or ambiguous old passage fails the entire update. Result must fit 16384 UTF-8 bytes.","items":{"type":"object","required":["old","new"],"properties":{
-            "old":{"type":"string","maxLength":16384,"description":"Exact unique passage to replace; empty string appends new as a new line."},
-            "new":{"type":"string","maxLength":16384,"description":"Replacement text; empty string deletes a nonempty old passage. Must differ from old."}
+        "name":{"type":"string","minLength":1,"maxLength":100,"x-i18n-description-key":"agent.toolCatalog.tools.assistant.soul_update.params.name"},
+        "initialSoul":{"type":"string","minLength":1,"maxLength":16384,"x-i18n-description-key":"agent.toolCatalog.tools.assistant.soul_update.params.initialSoul"},
+        "edits":{"type":"array","minItems":1,"x-i18n-description-key":"agent.toolCatalog.tools.assistant.soul_update.params.edits","items":{"type":"object","required":["old","new"],"properties":{
+            "old":{"type":"string","maxLength":16384,"x-i18n-description-key":"agent.toolCatalog.tools.assistant.soul_update.params.edits.old"},
+            "new":{"type":"string","maxLength":16384,"x-i18n-description-key":"agent.toolCatalog.tools.assistant.soul_update.params.edits.new"}
         },"additionalProperties":false}}},"additionalProperties":false})))
 }
 

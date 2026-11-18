@@ -4,10 +4,12 @@
 Checks:
   1. every `locales/*.yml` file is a strict `_version: 2` resource with exactly
      the supported locale tags and no duplicate/empty entries;
-  2. every statically referenced translation key exists in the resources;
+  2. every statically referenced translation key exists in the resources,
+     including `__i18n__<key>` input-schema example sentinels;
   3. `tron_i18n::t!` is only used through the shared API with an explicit
      `locale = ...` argument;
-  4. business crates never reach into `rust_i18n` directly.
+  4. business crates never reach into `rust_i18n` directly and register the
+     resource directory only once, in `crates/i18n`.
 
 Run with `make be-i18n-check`. CI runs the same target. Only the Python
 standard library is used so the check works on macOS, Linux and Windows.
@@ -265,14 +267,43 @@ def rust_sources(root: Path):
             yield path
 
 
-def declared_catalog_keys(root: Path) -> set[str]:
-    """Collect keys referenced through `*_i18n_key: "..."` definitions."""
+def declared_catalog_keys(root: Path, errors: Error) -> set[str]:
+    """Collect keys referenced through `*_i18n_key: "..."` definitions and
+    `__i18n__<key>` schema example sentinels."""
     keys: set[str] = set()
-    pattern = re.compile(r'[A-Za-z_]*i18n_key:\s*"((?:[^"\\]|\\.)*)"')
+    i18n_key = re.compile(r'[A-Za-z_]*i18n_key:\s*"((?:[^"\\]|\\.)*)"')
+    schema_key = re.compile(r'schema\(\s*"((?:[^"\\]|\\.)*)"')
+    description_key = re.compile(
+        r'x-i18n-description-key"\s*:\s*"((?:[^"\\]|\\.)*)"'
+    )
+    sentinel = re.compile(r'__i18n__((?:[A-Za-z0-9_]|\.)+)')
+    registrations = 0
     for path in rust_sources(root):
+        relative = path.relative_to(root)
         source = strip_comments(path.read_text(encoding="utf-8", errors="replace"))
-        for match in pattern.finditer(source):
+        for pattern in (i18n_key, schema_key, description_key):
+            for match in pattern.finditer(source):
+                key = unescape(match.group(1))
+                if TRANSLATION_KEY.match(key):
+                    keys.add(key)
+        for match in sentinel.finditer(source):
             keys.add(unescape(match.group(1)))
+        if "i18n!(" in source and "rust_i18n::i18n!" in source:
+            registrations += 1
+            if relative.parts[:2] != ("crates", "i18n"):
+                errors.add(
+                    f"{path}: `i18n!` may only be registered once in crates/i18n"
+                )
+    if registrations != 1:
+        errors.add(
+            f"expected exactly one rust_i18n registration, found {registrations}"
+        )
+    for manifest in [root / "Cargo.toml", *sorted((root / "crates").glob("*/Cargo.toml"))]:
+        if not manifest.is_file():
+            continue
+        text = manifest.read_text(encoding="utf-8")
+        if "rust-i18n" in text and manifest.parent != root / "crates" / "i18n":
+            errors.add(f"{manifest}: only crates/i18n may depend on rust-i18n directly")
     return keys
 
 
@@ -281,7 +312,7 @@ def main() -> int:
     errors = Error()
     resources = collect_resources(root, errors)
     used = translation_keys_from_macro(root, errors)
-    used |= declared_catalog_keys(root)
+    used |= declared_catalog_keys(root, errors)
     for key in sorted(used):
         if key not in resources:
             errors.add(f"translation key `{key}` is used but not defined in locales/")

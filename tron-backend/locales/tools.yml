@@ -1945,3 +1945,35 @@ agent.toolCatalog.ragGraph.expand.description:
 agent.toolCatalog.ragGraph.expand.summary:
   en: "Returns an incremental subgraph, original sources and remaining expansion positions."
   zh-CN: "返回增量子图、原文来源和剩余展开位置。"
+
+agent.toolCatalog.tools.assistant.soul_update.example.name:
+  en: "Xiaochuan"
+  zh-CN: "小川"
+
+agent.toolCatalog.tools.assistant.soul_update.example.soul:
+  en: "Keep answers concise."
+  zh-CN: "回答简洁。"
+
+agent.toolCatalog.tools.assistant.work_change.params.operation:
+  en: "list: requires taskCode. recordResult: requires taskCode and result. record: requires taskCode, changeKey, kind, summary and evidence; NeedsDecision/Blocked also require requestedAction. resolve: requires changeId, resolution and evidence. Omit fields belonging to other operations."
+  zh-CN: "list：需要 taskCode。recordResult：需要 taskCode 和 result。record：需要 taskCode、changeKey、kind、summary 和 evidence；NeedsDecision/Blocked 还需要 requestedAction。resolve：需要 changeId、resolution 和 evidence。不要填写属于其他操作的字段。"
+
+agent.toolCatalog.tools.assistant.soul_update.params.name:
+  en: "Confirmed formal name, only when the user authorized naming or renaming."
+  zh-CN: "已确认的正式名称，仅在用户明确授权命名或改名时提供。"
+
+agent.toolCatalog.tools.assistant.soul_update.params.initialSoul:
+  en: "Nonempty Markdown for first establishment in the onboarding session from user answers or an explicit soul request. Write the entire Markdown, including headings, in the language the user uses during onboarding; honor an explicit language preference first, retain the ongoing language for short answers, and use the interface locale only as fallback. Do not copy the language of system instructions or seed content. Preserve the confirmed name verbatim. Maximum 16384 UTF-8 bytes. Renaming alone does not authorize this. Cannot be combined with edits; unavailable once Ready."
+  zh-CN: "引导会话中首次建立灵魂时的非空 Markdown，来源于用户回答或明确的灵魂请求。完整写入 Markdown（含标题），语言与用户在引导过程中使用的一致；用户明确的语言偏好优先，简短回答沿用当前引导语言，界面语言仅作回退。不要照搬系统指令或种子内容的语言。原样保留已确认的名称。最大 16384 UTF-8 字节。仅改名不足以授权此操作。不能与 edits 同时使用；状态为 Ready 后不可用。"
+
+agent.toolCatalog.tools.assistant.soul_update.params.edits:
+  en: "Apply in order to the latest soul. Only change requested passages; a missing or ambiguous old passage fails the entire update. Result must fit 16384 UTF-8 bytes."
+  zh-CN: "按顺序应用到最新灵魂。只修改用户要求的段落；旧段落缺失或有歧义会导致整次更新失败。结果必须在 16384 UTF-8 字节以内。"
+
+agent.toolCatalog.tools.assistant.soul_update.params.edits.old:
+  en: "Exact unique passage to replace; empty string appends new as a new line."
+  zh-CN: "要替换的精确且唯一的段落；空字符串表示追加新内容为新行。"
+
+agent.toolCatalog.tools.assistant.soul_update.params.edits.new:
+  en: "Replacement text; empty string deletes a nonempty old passage. Must differ from old."
+  zh-CN: "替换文本；空字符串会删除非空的旧段落。必须与 old 不同。"
