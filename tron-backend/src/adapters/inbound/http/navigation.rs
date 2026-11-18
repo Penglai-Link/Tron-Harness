@@ -135,60 +135,48 @@ fn child_display_name(
 
 pub(crate) fn navigation_error_response(error: NavigationError, locale: &str) -> Response {
     if let NavigationError::MaxDepthExceeded { depth, max_depth } = &error {
-        let message = if locale.starts_with("en") {
-            format!(
-                "Cannot save menu arrangement: the resulting tree has {depth} levels, exceeding the current limit of {max_depth}. Move the group to a shallower level or increase navigation.maxDepth in settings."
-            )
-        } else {
-            format!(
-                "无法保存菜单编排：调整后共 {depth} 层，超过当前上限 {max_depth} 层。请将分组移到更浅的层级，或在设置中提高 navigation.maxDepth。"
-            )
-        };
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 "NAVIGATION_MAX_DEPTH_EXCEEDED",
-                message,
+                tron_i18n::t!(
+                    "navigation.max_depth_exceeded",
+                    locale = locale,
+                    depth = depth,
+                    max_depth = max_depth
+                ),
             )),
         )
             .into_response();
     }
     if let NavigationError::DuplicateDomainItems(codes) = error {
         let codes = codes.join(", ");
-        let message = if locale.starts_with("en") {
-            format!("menus already exist in this domain: {codes}")
-        } else {
-            format!("领域中已存在这些菜单：{codes}")
-        };
         return (
             StatusCode::CONFLICT,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 "NAVIGATION_DUPLICATE",
-                message,
+                tron_i18n::t!("navigation.duplicate_items", locale = locale, codes = codes),
             )),
         )
             .into_response();
     }
-    let (status, code, zh, en) = match error {
+    let (status, code, message_key) = match error {
         NavigationError::DomainNotFound
         | NavigationError::MenuNotFound
         | NavigationError::ItemNotFound => (
             StatusCode::NOT_FOUND,
             "NAVIGATION_NOT_FOUND",
-            "导航资源不存在",
-            "navigation resource was not found",
+            "navigation.not_found",
         ),
         NavigationError::DomainAccessDenied => (
             StatusCode::FORBIDDEN,
             "NAVIGATION_DOMAIN_FORBIDDEN",
-            "无权访问该领域",
-            "navigation domain is not accessible",
+            "navigation.domain_forbidden",
         ),
         NavigationError::ManagementAccessDenied => (
             StatusCode::FORBIDDEN,
             "NAVIGATION_MANAGEMENT_FORBIDDEN",
-            "没有菜单管理权限",
-            "navigation management permission is required",
+            "navigation.management_forbidden",
         ),
         NavigationError::DuplicateDomainCode
         | NavigationError::DuplicateMenuCode
@@ -196,8 +184,7 @@ pub(crate) fn navigation_error_response(error: NavigationError, locale: &str) ->
         | NavigationError::DuplicateDomainItems(_) => (
             StatusCode::CONFLICT,
             "NAVIGATION_DUPLICATE",
-            "导航编码或菜单引用已存在",
-            "navigation code or menu reference already exists",
+            "navigation.duplicate_reference",
         ),
         NavigationError::CapabilityOwned
         | NavigationError::BuiltInMenuProtected
@@ -207,26 +194,25 @@ pub(crate) fn navigation_error_response(error: NavigationError, locale: &str) ->
         | NavigationError::NonLeafItem => (
             StatusCode::CONFLICT,
             "NAVIGATION_PROTECTED",
-            "导航资源当前状态不允许此操作",
-            "navigation resource cannot be changed in its current state",
+            "navigation.protected",
         ),
         NavigationError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "NAVIGATION_STORAGE_FAILURE",
-            "导航存储操作失败",
-            "navigation storage operation failed",
+            "navigation.storage_failure",
         ),
         _ => (
             StatusCode::BAD_REQUEST,
             "NAVIGATION_REQUEST_INVALID",
-            "导航请求参数无效",
-            "navigation request is invalid",
+            "navigation.request_invalid",
         ),
     };
-    let message = if locale.starts_with("en") { en } else { zh };
     (
         status,
-        Json(ApiResponse::<EmptyData>::protocol_error(code, message)),
+        Json(ApiResponse::<EmptyData>::protocol_error(
+            code,
+            tron_i18n::t!(message_key, locale = locale),
+        )),
     )
         .into_response()
 }

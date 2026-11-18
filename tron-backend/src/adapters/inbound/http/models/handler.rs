@@ -88,10 +88,7 @@ pub struct ProviderModelOptionsError {
 impl IntoResponse for ProviderModelOptionsError {
     fn into_response(self) -> Response {
         let descriptor = ConfiguredProviderError::Storage.descriptor();
-        let message = match self.locale {
-            SupportedLocale::EnUs => "Could not load provider models.",
-            _ => "无法加载供应商模型。",
-        };
+        let message = tron_i18n::t!("models.handler.load_failed", locale = self.locale);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::protocol_error(descriptor.code, message)),
@@ -177,26 +174,18 @@ pub async fn list_select_options(
         crate::domain::model::AutoRouterKind::Rerank,
     ] {
         let code = format!("AUTO:{}", kind.code());
-        let label = match (locale, kind) {
-            (SupportedLocale::EnUs, crate::domain::model::AutoRouterKind::Embedding) => {
-                "Embedding Automatic Routing"
-            }
-            (SupportedLocale::EnUs, _) => "Rerank Automatic Routing",
-            (_, crate::domain::model::AutoRouterKind::Embedding) => "向量自动路由",
-            _ => "重排自动路由",
+        let label_key = match kind {
+            crate::domain::model::AutoRouterKind::Embedding => "models.router.embedding_label",
+            _ => "models.router.rerank_label",
         };
+        let label = tron_i18n::t!(label_key, locale = locale).into_owned();
         records.push(ModelSelectOption {
             option_code: code.clone(),
             model_code: code.clone(),
-            display_name: label.into(),
-            model_name: label.into(),
+            display_name: label.clone(),
+            model_name: label,
             source_kind: ModelViewSourceKind::Provider,
-            source_label: if locale == SupportedLocale::EnUs {
-                "Automatic router"
-            } else {
-                "自动路由器"
-            }
-            .into(),
+            source_label: tron_i18n::t!("models.router.source_label", locale = locale).into_owned(),
             vendor: String::new(),
             protocol: if matches!(kind, crate::domain::model::AutoRouterKind::Embedding) {
                 ModelProtocol::OpenAiCompatibleEmbedding

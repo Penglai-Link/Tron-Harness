@@ -19,7 +19,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         let mut input=json!({"type":"object","properties":properties,"additionalProperties":false});
         if search{input["required"]=json!(["query"]);}else{input["oneOf"]=json!([{"required":["nodeIds"],"not":{"required":["cursor"]}},{"required":["cursor"],"not":{"anyOf":[{"required":["nodeIds"]},{"required":["corpusIds"]},{"required":["filters"]},{"required":["options"]}]}}]);}
         ToolCatalogDefinition{tool_code:code,tool_name:name.into(),domain_code:"harness_rag", category_code: "tron.platform",name_i18n_key:title,description_i18n_key:description,operation_kind:ToolOperationKind::Query,
-            input_schema:schema(description,if search{json!([{"query":"查找相关实体及原文依据"}])}else{json!([{"nodeIds":["node-id"],"options":{"incomingDepth":1,"outgoingDepth":3}}])},input),
+            input_schema:schema(description,if search{json!([{"query":"__i18n__agent.toolCatalog.tools.rag.graph.example.query"}])}else{json!([{"nodeIds":["node-id"],"options":{"incomingDepth":1,"outgoingDepth":3}}])},input),
             module_owner:"rag",availability_state:ToolAvailabilityState::Available,sample_result_summary_i18n_key:summary}
     }).collect()
 }

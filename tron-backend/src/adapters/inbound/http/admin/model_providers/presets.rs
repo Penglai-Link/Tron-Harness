@@ -11,7 +11,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::response::{ApiResponse, EmptyData};
-use crate::shared::locale::{SupportedLocale, resolve_request_locale};
+use crate::shared::locale::resolve_request_locale;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,16 +116,11 @@ pub(super) async fn models(Path(preset_id): Path<String>, headers: HeaderMap) ->
                 .get("accept-language")
                 .and_then(|value| value.to_str().ok()),
         );
-        let message = if SupportedLocale::from_raw(&locale) == SupportedLocale::EnUs {
-            "Provider preset was not found"
-        } else {
-            "供应商预设不存在"
-        };
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                message,
+                tron_i18n::t!("tron.model_provider.preset_not_found", locale = &locale),
             )),
         )
             .into_response();

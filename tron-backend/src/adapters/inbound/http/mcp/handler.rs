@@ -56,11 +56,11 @@ pub async fn list_platform_servers(
                         provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
                         assignable: server.enabled,
                         disabled_reason: owner.filter(|o| !o.available).map(|o| {
-                            if auth.locale.starts_with("zh") {
-                                format!("能力包 {} 已禁用", o.pack_id)
-                            } else {
-                                format!("Capability pack {} is disabled", o.pack_id)
-                            }
+                            tron_i18n::t!(
+                                "tron.mcp.capability_pack_disabled",
+                                locale = &auth.locale,
+                                pack = o.pack_id
+                            )
                         }),
                         server,
                     }
@@ -183,11 +183,11 @@ pub async fn list_workspace_effective_servers(
                         provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
                         assignable: server.effective_enabled,
                         disabled_reason: owner.filter(|o| !o.available).map(|o| {
-                            if auth.locale.starts_with("zh") {
-                                format!("能力包 {} 已禁用", o.pack_id)
-                            } else {
-                                format!("Capability pack {} is disabled", o.pack_id)
-                            }
+                            tron_i18n::t!(
+                                "tron.mcp.capability_pack_disabled",
+                                locale = &auth.locale,
+                                pack = o.pack_id
+                            )
                         }),
                         server,
                     }

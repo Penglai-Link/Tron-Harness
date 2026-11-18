@@ -49,10 +49,11 @@ pub(super) async fn list(
         .await
         .map_err(|error| {
             tracing::error!(%error, "could not load context block metadata");
-            let message = match locale {
-                SupportedLocale::EnUs => "Could not load context block descriptions.",
-                SupportedLocale::ZhCn => "无法读取上下文块描述。",
-            };
+            let message: String = tron_i18n::t!(
+                "agent_runtime.http.context_blocks.unavailable",
+                locale = locale.as_str()
+            )
+            .into_owned();
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::protocol_error("-1", message)),
@@ -65,7 +66,16 @@ pub(super) async fn list(
     )
     .into_iter()
     .map(|(id, entry)| {
-        let text = entry.metadata.resolve(locale.as_str());
+        let (display_name, description) = match entry.i18n {
+            Some(keys) => (
+                tron_i18n::translate(locale.as_str(), keys.display_name).into_owned(),
+                tron_i18n::translate(locale.as_str(), keys.description).into_owned(),
+            ),
+            None => {
+                let text = entry.metadata.resolve(locale.as_str());
+                (text.display_name, text.description)
+            }
+        };
         let compression = &entry.metadata.compression;
         let compression = (!compression.id.is_empty()).then(|| {
             let text = compression.resolve(locale.as_str());
@@ -77,8 +87,8 @@ pub(super) async fn list(
         });
         ContextBlockMetadataVo {
             id,
-            display_name: text.display_name,
-            description: text.description,
+            display_name,
+            description,
             update_mode: entry.metadata.update_mode,
             compression,
             provider_id: entry.provider_id,

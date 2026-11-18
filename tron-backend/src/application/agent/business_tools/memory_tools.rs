@@ -6,6 +6,7 @@ use crate::{
 };
 use serde::Deserialize;
 use std::{sync::Arc, thread};
+use tron_i18n::t;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SaveInput {
@@ -89,39 +90,24 @@ where
         request: ToolRequest,
         ctx: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
-        let en = ctx.locale.starts_with("en");
+        let locale = ctx.locale.as_str();
         let fail = |e: MemoryError| {
             ToolError::ExecutionFailed(match e {
-                MemoryError::Conflict(_) => if en {
-                    "Memory changed; get the current version before editing."
-                } else {
-                    "记忆已变更，请读取当前版本后编辑。"
+                MemoryError::Conflict(_) => {
+                    t!("agent_runtime.tool.memory.error.conflict", locale = locale).into_owned()
                 }
-                .into(),
-                MemoryError::NotFound(_) => if en {
-                    "Memory not found."
-                } else {
-                    "记忆不存在。"
+                MemoryError::NotFound(_) => {
+                    t!("agent_runtime.tool.memory.error.not_found", locale = locale).into_owned()
                 }
-                .into(),
-                MemoryError::Forbidden(_) => if en {
-                    "Memory scope is outside this run."
-                } else {
-                    "记忆范围超出当前运行授权。"
+                MemoryError::Forbidden(_) => {
+                    t!("agent_runtime.tool.memory.error.forbidden", locale = locale).into_owned()
                 }
-                .into(),
-                MemoryError::Validation(_) => if en {
-                    "Invalid memory content, scope or version."
-                } else {
-                    "记忆内容、范围或版本无效。"
-                }
-                .into(),
-                _ => if en {
-                    "Memory operation failed; retry or inspect diagnostics."
-                } else {
-                    "记忆操作失败，请重试或查看诊断。"
-                }
-                .into(),
+                MemoryError::Validation(_) => t!(
+                    "agent_runtime.tool.memory.error.validation",
+                    locale = locale
+                )
+                .into_owned(),
+                _ => t!("agent_runtime.tool.memory.error.failed", locale = locale).into_owned(),
             })
         };
         let user = ctx
@@ -144,7 +130,7 @@ where
         let name = self.name.strip_prefix("assistant_").unwrap_or(self.name);
         let value=match name {
             "memory_search"=>{
-                let cmd:MemorySearchCommand=parse_input(request.input,en)?;
+                let cmd:MemorySearchCommand=parse_input(request.input,locale)?;
                 let binding=self.memory.bind_backend(c.clone(),cmd.scope,cmd.scope_code);
                 let query=eliteforge_agent_core::MemoryQuery{text:cmd.query,limit:cmd.limit.unwrap_or(8),max_bytes:2*1024*1024};
                 let entries=binding.backend.search(&binding.namespace,&query).await.map_err(|e|ToolError::ExecutionFailed(e.to_string()))?;
@@ -162,14 +148,14 @@ where
                 let warnings=binding.diagnostics.lock().map(|v|v.clone()).unwrap_or_default();
                 serde_json::to_value(MemorySearchResponse{items,warnings})
             },
-            "memory_get"=>{let cmd:GetInput=parse_input(request.input,en)?;serde_json::to_value(self.memory.get(&c,&cmd.memory_code).map_err(fail)?)},
+            "memory_get"=>{let cmd:GetInput=parse_input(request.input,locale)?;serde_json::to_value(self.memory.get(&c,&cmd.memory_code).map_err(fail)?)},
             "memory_save"=>{
-                let cmd:SaveInput=parse_input(request.input,en)?;
+                let cmd:SaveInput=parse_input(request.input,locale)?;
                 let source=serde_json::json!({"kind":"AgentTool","sessionCode":ctx.conversation_code,"runCode":ctx.run_code,"userCode":user});
                 let cmd=MemorySaveCommand{memory_code:cmd.memory_code,version:cmd.version,scope:cmd.scope,scope_code:cmd.scope_code,title:cmd.title,text:cmd.text,enabled:cmd.enabled,source_label:"AgentTool".into(),source_refs:vec![source],..Default::default()};
                 serde_json::to_value(self.memory.save(c,cmd).await.map_err(fail)?)
             },
-            _=>{let cmd:DeleteInput=parse_input(request.input,en)?;serde_json::to_value(self.memory.delete(c,MemoryDeleteCommand{memory_code:cmd.memory_code,version:cmd.version}).await.map_err(fail)?)},
+            _=>{let cmd:DeleteInput=parse_input(request.input,locale)?;serde_json::to_value(self.memory.delete(c,MemoryDeleteCommand{memory_code:cmd.memory_code,version:cmd.version}).await.map_err(fail)?)},
         }.map_err(|e|ToolError::ExecutionFailed(e.to_string()))?;
         Ok(ToolExecutionResult::observation(ToolObservation {
             tool_name: self.name.into(),
@@ -206,8 +192,8 @@ where
         Some(Box::pin(async move {
             control.check_active()?;
             let output = tokio::select! {
-                _=control.cancelled()=>{control.check_active()?;return Err(ToolError::ExecutionFailed(if ctx.locale.starts_with("en"){"Memory request cancelled"}else{"记忆请求已取消"}.into()))},
-                result=tokio::time::timeout(control.remaining(),self.execute(request,ctx))=>result.map_err(|_|ToolError::ExecutionFailed(if ctx.locale.starts_with("en"){"Memory request timed out"}else{"记忆请求超时"}.into()))??,
+                _=control.cancelled()=>{control.check_active()?;return Err(ToolError::ExecutionFailed(t!("agent_runtime.tool.memory.cancelled",locale=ctx.locale.as_str()).into_owned()))},
+                result=tokio::time::timeout(control.remaining(),self.execute(request,ctx))=>result.map_err(|_|ToolError::ExecutionFailed(t!("agent_runtime.tool.memory.timed_out",locale=ctx.locale.as_str()).into_owned()))??,
             };
             control.check_active()?;
             Ok(output)
@@ -219,6 +205,7 @@ where
         ctx: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
         let tool = self.clone();
+        let locale = ctx.locale.clone();
         let ctx = ctx.clone();
         thread::spawn(move || {
             tokio::runtime::Builder::new_current_thread()
@@ -228,21 +215,24 @@ where
                 .block_on(tool.execute(request, &ctx))
         })
         .join()
-        .map_err(|_| ToolError::ExecutionFailed("memory worker failed".into()))?
+        .map_err(|_| {
+            ToolError::ExecutionFailed(
+                t!("agent_runtime.tool.memory.worker_failed", locale = &locale).into_owned(),
+            )
+        })?
     }
 }
 fn parse_input<T: for<'de> Deserialize<'de>>(
     input: serde_json::Value,
-    en: bool,
+    locale: &str,
 ) -> Result<T, ToolError> {
     serde_json::from_value(input).map_err(|_| {
         ToolError::ExecutionFailed(
-            if en {
-                "Invalid memory tool parameters"
-            } else {
-                "记忆工具参数无效"
-            }
-            .into(),
+            t!(
+                "agent_runtime.tool.memory.invalid_parameters",
+                locale = locale
+            )
+            .into_owned(),
         )
     })
 }

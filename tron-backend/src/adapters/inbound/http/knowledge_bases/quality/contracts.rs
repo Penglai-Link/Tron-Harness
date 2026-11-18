@@ -415,26 +415,78 @@ pub(super) struct SessionRecordVo {
 }
 
 fn diagnostic(message: String) -> String {
-    let english =
-        crate::shared::auth_holder::AuthHolder::get().is_some_and(|c| c.locale.starts_with("en"));
-    if !english {
-        return message;
-    }
-    match message.as_str() {
-        "包含自动生成题，结果属于原文自测，不代表经人工标注的业务召回率" => "Contains generated questions: this is a source self-test, not human-labeled business recall.",
-        "独立验证题未确认改善，当前索引未替换" => "Independent validation did not confirm improvement. The current index remains in use.",
-        "没有候选方案达到当前训练题表现，当前索引未替换" => "No candidate matched the current training score. The current index remains in use.",
-        "优化已取消" => "Optimization stopped.",
-        "优化达到时间预算，未发布候选索引" => "Time budget exhausted. No candidate was published.",
-        "优化达到模型调用预算，未发布候选索引" => "Model operation budget exhausted. No candidate was published.",
-        "优化达到预估输入量预算，未发布候选索引" => "Estimated input budget exhausted. No candidate was published.",
-        "优化进程已中断；当前索引未被候选替换" => "The process was interrupted. The candidate did not replace the current index.",
-        "文档正在索引或状态已改变，请刷新后重试" => "Source, dataset or configuration changed. Refresh and retry.",
-        "可评测原文不足8段，请补充资料或提供训练题与独立验证题" => "At least eight source excerpts or labeled training and validation questions are required.",
-        "资料内容已变化，请更新人工标注的评测题集" => "Source content changed. Update the human-labeled evaluation set.",
-        "当前文档的向量空间不一致，请统一模型后重建再评测" => "Documents use different embedding spaces. Align the model and rebuild before evaluating.",
-        "自动生成的评测题格式无效；未开始候选索引" => "Generated questions were invalid. Candidate indexing did not start.",
-        "自动评测证据没有唯一对应原文；未使用生成内容作为标签" => "Generated evidence did not match a unique source passage. It was rejected.",
-        _ => return message,
-    }.into()
+    use std::borrow::Cow;
+    use tron_i18n::t;
+    // Run warnings/errors are rendered from the request-scoped auth holder
+    // rather than a process-global locale.
+    let locale = crate::shared::auth_holder::AuthHolder::get()
+        .map(|context| context.locale.clone())
+        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_owned());
+    let translated: Option<Cow<'_, str>> = match message.as_str() {
+        "包含自动生成题，结果属于原文自测，不代表经人工标注的业务召回率" => {
+            Some(t!(
+                "knowledge.quality.diagnostic.generated_selftest",
+                locale = &locale
+            ))
+        }
+        "独立验证题未确认改善，当前索引未替换" => Some(t!(
+            "knowledge.quality.diagnostic.holdout_not_improved",
+            locale = &locale
+        )),
+        "没有候选方案达到当前训练题表现，当前索引未替换" => Some(t!(
+            "knowledge.quality.diagnostic.no_candidate_matched",
+            locale = &locale
+        )),
+        "优化已取消" => Some(t!(
+            "knowledge.quality.diagnostic.cancelled",
+            locale = &locale
+        )),
+        "优化达到时间预算，未发布候选索引" => Some(t!(
+            "knowledge.quality.diagnostic.time_budget",
+            locale = &locale
+        )),
+        "优化达到模型调用预算，未发布候选索引" => Some(t!(
+            "knowledge.quality.diagnostic.model_operation_budget",
+            locale = &locale
+        )),
+        "优化达到预估输入量预算，未发布候选索引" => Some(t!(
+            "knowledge.quality.diagnostic.input_budget",
+            locale = &locale
+        )),
+        "优化进程已中断；当前索引未被候选替换" => Some(t!(
+            "knowledge.quality.diagnostic.interrupted",
+            locale = &locale
+        )),
+        "文档正在索引或状态已改变，请刷新后重试" => Some(t!(
+            "knowledge.quality.diagnostic.source_changed",
+            locale = &locale
+        )),
+        "可评测原文不足8段，请补充资料或提供训练题与独立验证题" => {
+            Some(t!(
+                "knowledge.quality.diagnostic.insufficient_source",
+                locale = &locale
+            ))
+        }
+        "资料内容已变化，请更新人工标注的评测题集" => Some(t!(
+            "knowledge.quality.diagnostic.dataset_outdated",
+            locale = &locale
+        )),
+        "当前文档的向量空间不一致，请统一模型后重建再评测" => Some(t!(
+            "knowledge.quality.diagnostic.embedding_space_mismatch",
+            locale = &locale
+        )),
+        "自动生成的评测题格式无效；未开始候选索引" => Some(t!(
+            "knowledge.quality.diagnostic.generated_questions_invalid",
+            locale = &locale
+        )),
+        "自动评测证据没有唯一对应原文；未使用生成内容作为标签" => {
+            Some(t!(
+                "knowledge.quality.diagnostic.generated_evidence_unmatched",
+                locale = &locale
+            ))
+        }
+        // Unknown diagnostics originate in the application layer; keep forwarding them.
+        _ => None,
+    };
+    translated.map(|text| text.into_owned()).unwrap_or(message)
 }

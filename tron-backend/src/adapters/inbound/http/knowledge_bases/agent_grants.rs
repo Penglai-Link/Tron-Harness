@@ -21,34 +21,31 @@ pub(super) struct AgentLibraryVo {
 pub(super) struct AgentGrantsApiError(KnowledgeBaseError, String);
 impl IntoResponse for AgentGrantsApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.knowledge_base.not_found" => (
-                StatusCode::NOT_FOUND,
-                "知识库不存在",
-                "Knowledge base not found",
-            ),
-            "tron.knowledge_base.forbidden" => (
-                StatusCode::FORBIDDEN,
-                "无知识库权限",
-                "Access to this knowledge base is denied",
-            ),
-            "tron.knowledge_base.invalid" => (
-                StatusCode::BAD_REQUEST,
-                "请选择已定义的内部智能体",
-                "Choose a defined internal agent",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "知识库关联操作失败",
-                "Could not update knowledge base assignments",
-            ),
+        let status = match descriptor.message_key {
+            "tron.knowledge_base.not_found" => StatusCode::NOT_FOUND,
+            "tron.knowledge_base.forbidden" => StatusCode::FORBIDDEN,
+            "tron.knowledge_base.invalid" => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match descriptor.message_key {
+            "tron.knowledge_base.not_found" => {
+                t!("tron.knowledge_base.not_found", locale = &self.1)
+            }
+            "tron.knowledge_base.forbidden" => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1)
+            }
+            "tron.knowledge_base.invalid" => {
+                t!("knowledge.base.agent_grants.invalid", locale = &self.1)
+            }
+            _ => t!("knowledge.base.agent_grants.failed", locale = &self.1),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

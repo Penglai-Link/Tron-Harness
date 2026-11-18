@@ -1,5 +1,6 @@
 //! Native preparation and execution use one SDK owner through product completion.
 use super::*;
+use tron_i18n::t;
 impl FrameworkHost {
     pub(super) fn attach_skill_access(
         &self,
@@ -222,30 +223,33 @@ impl FrameworkHost {
                 } else {
                     context.user_code.clone()
                 },
-                display_name: Some(
-                    match (
-                        source,
-                        crate::shared::locale::SupportedLocale::from_raw(&context.locale),
-                    ) {
-                        ("Heartbeat", crate::shared::locale::SupportedLocale::EnUs) => {
-                            "System heartbeat"
-                        }
-                        ("TaskReminder", crate::shared::locale::SupportedLocale::EnUs) => {
-                            "Task reminder"
-                        }
-                        ("ThreadFeedback", crate::shared::locale::SupportedLocale::EnUs) => {
-                            "Thread feedback"
-                        }
-                        ("UserMessage", crate::shared::locale::SupportedLocale::EnUs) => "You",
-                        (_, crate::shared::locale::SupportedLocale::EnUs) => "Memory maintenance",
-                        ("Heartbeat", _) => "系统心跳",
-                        ("TaskReminder", _) => "任务提醒",
-                        ("ThreadFeedback", _) => "Thread 反馈",
-                        ("UserMessage", _) => "你",
-                        _ => "记忆整理",
-                    }
-                    .into(),
-                ),
+                display_name: Some(match source {
+                    "Heartbeat" => t!(
+                        "agent_runtime.message.sender.system_heartbeat",
+                        locale = context.locale.as_str()
+                    )
+                    .into_owned(),
+                    "TaskReminder" => t!(
+                        "agent_runtime.message.sender.task_reminder",
+                        locale = context.locale.as_str()
+                    )
+                    .into_owned(),
+                    "ThreadFeedback" => t!(
+                        "agent_runtime.message.sender.thread_feedback",
+                        locale = context.locale.as_str()
+                    )
+                    .into_owned(),
+                    "UserMessage" => t!(
+                        "agent_runtime.message.sender.user",
+                        locale = context.locale.as_str()
+                    )
+                    .into_owned(),
+                    _ => t!(
+                        "agent_runtime.message.sender.memory_maintenance",
+                        locale = context.locale.as_str()
+                    )
+                    .into_owned(),
+                }),
                 avatar_url: None,
             },
             source: Some(source.into()),

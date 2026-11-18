@@ -12,7 +12,8 @@ use crate::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
+use tron_i18n::t;
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -72,13 +73,12 @@ impl GraphTool {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
-        let english = context.locale.starts_with("en");
+        let locale = context.locale.as_str();
         let invalid = || {
-            failure(if english {
-                "Invalid graph query parameters"
-            } else {
-                "图谱查询参数无效"
-            })
+            failure(t!(
+                "agent_runtime.tool.graph.invalid_parameters",
+                locale = locale
+            ))
         };
         if serde_json::to_vec(&request.input)
             .map_err(|_| invalid())?
@@ -93,11 +93,10 @@ impl GraphTool {
                 .clone()
                 .filter(|v| !v.is_empty())
                 .ok_or_else(|| {
-                    failure(if english {
-                        "Missing trusted user identity"
-                    } else {
-                        "缺少可信用户身份"
-                    })
+                    failure(t!(
+                        "agent_runtime.tool.graph.missing_user_identity",
+                        locale = locale
+                    ))
                 })?,
             workspace_code: context.execution_workspace_code().to_owned(),
             agent_code: context
@@ -105,11 +104,10 @@ impl GraphTool {
                 .clone()
                 .filter(|v| !v.is_empty())
                 .ok_or_else(|| {
-                    failure(if english {
-                        "Missing trusted Agent identity"
-                    } else {
-                        "缺少可信智能体身份"
-                    })
+                    failure(t!(
+                        "agent_runtime.tool.graph.missing_agent_identity",
+                        locale = locale
+                    ))
                 })?,
         };
         let output = match self.kind {
@@ -152,7 +150,7 @@ impl GraphTool {
             failure(format!(
                 "{}: {}",
                 error.descriptor().code,
-                localized_error(&error, english)
+                localized_error(&error, locale)
             ))
         })?;
         let result = GraphToolResult::from(GraphPresentation::from(output));
@@ -177,10 +175,10 @@ impl Tool for GraphTool {
     ) -> Option<ToolExecutionFuture<'a>> {
         Some(Box::pin(async move {
             control.check_active()?;
-            let english = context.locale.starts_with("en");
+            let locale = context.locale.as_str();
             let result = tokio::select! {
-                _=control.cancelled()=>Err(failure(if english{"Graph query cancelled"}else{"图谱查询已取消"})),
-                output=tokio::time::timeout(control.remaining(),self.execute(request,context))=>output.map_err(|_|failure(if english{"Graph query timed out"}else{"图谱查询超时"}))?,
+                _=control.cancelled()=>Err(failure(t!("agent_runtime.tool.graph.cancelled", locale = locale))),
+                output=tokio::time::timeout(control.remaining(),self.execute(request,context))=>output.map_err(|_|failure(t!("agent_runtime.tool.graph.timed_out", locale = locale)))?,
             };
             control.check_active()?;
             result
@@ -207,24 +205,35 @@ impl Tool for GraphTool {
 fn failure(error: impl ToString) -> ToolError {
     ToolError::ExecutionFailed(error.to_string())
 }
-fn localized_error(error: &GraphQueryError, en: bool) -> &'static str {
-    match (error, en) {
-        (GraphQueryError::Invalid, true) => "Invalid graph query parameters",
-        (GraphQueryError::Invalid, false) => "图谱查询参数无效",
-        (GraphQueryError::Forbidden, true) => "Graph access denied",
-        (GraphQueryError::Forbidden, false) => "无权查询该语料图谱",
-        (GraphQueryError::Disabled, true) => "Graph indexing is disabled",
-        (GraphQueryError::Disabled, false) => "该语料尚未启用图谱",
-        (GraphQueryError::NodeNotFound, true) => "Node not found in accessible scope",
-        (GraphQueryError::NodeNotFound, false) => "节点不存在或不在可访问范围内",
-        (GraphQueryError::SnapshotChanged, true) => {
-            "Graph snapshot changed or expired; search again"
+fn localized_error(error: &GraphQueryError, locale: &str) -> Cow<'static, str> {
+    match error {
+        GraphQueryError::Invalid => t!("agent_runtime.tool.graph.error.invalid", locale = locale),
+        GraphQueryError::Forbidden => {
+            t!("agent_runtime.tool.graph.error.forbidden", locale = locale)
         }
-        (GraphQueryError::SnapshotChanged, false) => "授权、发布版本或游标已变化，请重新检索",
-        (GraphQueryError::Unavailable(_), true) => "Graph retrieval unavailable",
-        (GraphQueryError::Unavailable(_), false) => "图谱检索通道暂不可用",
-        (_, true) => "Could not read graph data",
-        (_, false) => "图谱读取失败",
+        GraphQueryError::Disabled => t!("agent_runtime.tool.graph.error.disabled", locale = locale),
+        GraphQueryError::NodeNotFound => {
+            t!(
+                "agent_runtime.tool.graph.error.node_not_found",
+                locale = locale
+            )
+        }
+        GraphQueryError::SnapshotChanged => {
+            t!(
+                "agent_runtime.tool.graph.error.snapshot_changed",
+                locale = locale
+            )
+        }
+        GraphQueryError::Unavailable(_) => {
+            t!(
+                "agent_runtime.tool.graph.error.unavailable",
+                locale = locale
+            )
+        }
+        _ => t!(
+            "agent_runtime.tool.graph.error.read_failed",
+            locale = locale
+        ),
     }
 }
 #[derive(serde::Serialize)]

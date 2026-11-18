@@ -154,6 +154,7 @@ pub(crate) async fn stream_message_command(
     session_code: String,
     mut request: SendChatMessageCommand,
 ) -> Response {
+    let stream_locale = SupportedLocale::from_raw(&auth.locale);
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
@@ -260,7 +261,7 @@ pub(crate) async fn stream_message_command(
                 {
                     match assistants.resolve_awaiting_input(&session_code_for_task, &result.run.final_output) {
                         Ok(()) => ChatStreamCompletion::Success(result),
-                        Err(error) => ChatStreamCompletion::Error { code: "101031004".into(), message: super::error_messages::message("101031004", &error.to_string()) },
+                        Err(error) => ChatStreamCompletion::Error { code: "101031004".into(), message: super::error_messages::message("101031004", &error.to_string(), stream_locale) },
                     }
                 } else {
                     ChatStreamCompletion::Success(result)
@@ -268,18 +269,18 @@ pub(crate) async fn stream_message_command(
             },
             Err(error) => {
                 let code = chat_send_error_code(&error).to_string();
-                let message = chat_send_error_message(error);
+                let message = chat_send_error_message(error, stream_locale);
                 ChatStreamCompletion::Error { code, message }
             }
         };
-        let mut done_payload = completion.payload(&session_code_for_task, &run_code_for_task);
+        let mut done_payload = completion.payload(&session_code_for_task, &run_code_for_task, stream_locale);
         if let Some(id)=a2ui_action_id {
             done_payload.data["productCompletion"]=json!(true);
             if let Ok(framework)=a2ui_host.storage_framework().await {
                 if let Ok(services)=framework.services() {
                     if let Some(service)=services.get::<eliteforge_agent_official_plugin_a2ui::A2uiService>() {
                         if let Err(error)=service.complete_action(&session_code_for_task,&id,done_payload.data.clone()).await {
-                            done_payload.data["productCompletionError"]=json!({"code":"101031004","message":super::error_messages::message("101031004", "")});
+                            done_payload.data["productCompletionError"]=json!({"code":"101031004","message":super::error_messages::message("101031004", "", stream_locale)});
                             let _ = error;
                         }
                     }
@@ -315,7 +316,7 @@ pub(crate) async fn stream_message_command(
         loop {
             interval.tick().await;
             if completion.is_none() {
-                let (received, unavailable)=poll_product_completion(&mut completion_receiver,&stream_key,&stream_run_code);
+                let (received, unavailable)=poll_product_completion(&mut completion_receiver,&stream_key,&stream_run_code,stream_locale);
                 completion=received;
                 presentation_incomplete |= unavailable;
                 if unavailable { stream_service.mark_incomplete(&stream_key,"product completion acknowledgment is unavailable"); }
@@ -337,7 +338,7 @@ pub(crate) async fn stream_message_command(
                     if has_continuation && !continuation_seen {
                         continuation_seen = true;
                         if let Some(terminal) = native_terminals.get(&stream_run_code) {
-                            yield Ok::<Event, Infallible>(ChatSsePayload::agui(terminal.sse_event.clone(), terminal.data.clone()).event());
+                            yield Ok::<Event, Infallible>(ChatSsePayload::agui(terminal.sse_event.clone(), terminal.data.clone(), stream_locale).event());
                         }
                     }
                     for event in events {
@@ -349,19 +350,19 @@ pub(crate) async fn stream_message_command(
                         if !seen.insert(key) { continue; }
                         if event.sse_event == "RUN_ERROR" && !native_protocol_execution_terminal(&event) {
                             presentation_incomplete = true;
-                            yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event, event.data).event());
+                            yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event, event.data, stream_locale).event());
                             continue;
                         }
                         if native_protocol_execution_terminal(&event) {
                             let product_run = event.data.get("runId").and_then(Value::as_str).unwrap_or(&stream_run_code).to_owned();
                             if continuation_seen || product_run != stream_run_code {
-                                yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event.clone(),event.data.clone()).event());
+                                yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event.clone(),event.data.clone(), stream_locale).event());
                             }
                             native_terminals.insert(product_run,event);
                             continue;
                         }
                         let data = run_started_with_supports_steer(&event.sse_event, event.data, supports_steer);
-                        yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event, data).event());
+                        yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event, data, stream_locale).event());
                     }
                 }
                 Some(Err(_)) if !presentation_incomplete => {
@@ -369,7 +370,7 @@ pub(crate) async fn stream_message_command(
                     yield Ok::<Event, Infallible>(ChatSsePayload::agui("CUSTOM", json!({
                         "type": "CUSTOM", "name": "tron.presentation.incomplete", "value": {"code": "AGENT_AGUI_REPLAY_INCOMPLETE"},
                         "threadId": stream_key, "runId": stream_run_code,
-                    })).event());
+                    }), stream_locale).event());
                 }
                 Some(Err(_)) | None => {}
             }
@@ -382,7 +383,7 @@ pub(crate) async fn stream_message_command(
                         native_terminals.into_values().max_by_key(|event|event.data.get("timestamp").and_then(Value::as_i64).unwrap_or(0))
                     } else { None }
                 });
-                let payload = product_completion_payload(native_terminal, done, presentation_incomplete);
+                let payload = product_completion_payload(native_terminal, done, presentation_incomplete, stream_locale);
                 lifecycle_guard.complete();
                 yield Ok::<Event, Infallible>(payload.event());
                 break;
@@ -435,6 +436,7 @@ fn product_completion_payload(
     native: Option<crate::domain::agent::AgentAguiProtocolEvent>,
     mut completion: ChatSsePayload,
     incomplete: bool,
+    locale: SupportedLocale,
 ) -> ChatSsePayload {
     if let Some(object) = completion.data.as_object_mut() {
         object.insert("productCompletion".into(), json!(true));
@@ -447,9 +449,9 @@ fn product_completion_payload(
             if let Some(object) = data.as_object_mut() {
                 object.insert("productCompletion".into(), json!(true));
                 object.insert("presentationIncomplete".into(), json!(true));
-                object.insert("productCompletionError".into(), json!({"code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":"product completion acknowledgment is unavailable"}));
+                object.insert("productCompletionError".into(), json!({"code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":t!("error.chat.product_completion_unavailable", locale = locale)}));
             }
-            return ChatSsePayload::agui(native.sse_event, data);
+            return ChatSsePayload::agui(native.sse_event, data, locale);
         }
         let output_failed = native
             .data
@@ -479,7 +481,7 @@ fn product_completion_payload(
                 object.insert("productCompletion".into(), json!(true));
                 object.insert("presentationIncomplete".into(), json!(incomplete));
             }
-            return ChatSsePayload::agui(native.sse_event, data);
+            return ChatSsePayload::agui(native.sse_event, data, locale);
         }
         if let Some(object) = completion.data.as_object_mut() {
             object.insert("metadata".into(), json!({"nativeTerminal": native.data}));
@@ -523,15 +525,21 @@ async fn ensure_native_resume(
     }
 }
 
-fn completion_channel_closed_payload(session_code: &str, run_code: &str) -> ChatSsePayload {
+fn completion_channel_closed_payload(
+    session_code: &str,
+    run_code: &str,
+    locale: SupportedLocale,
+) -> ChatSsePayload {
+    let message = t!("error.chat.product_completion_unavailable", locale = locale).into_owned();
     ChatSsePayload::agui(
         "RUN_ERROR",
         json!({
             "type":"RUN_ERROR","threadId":session_code,"runId":run_code,
-            "code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":"product completion acknowledgment is unavailable",
+            "code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":message,
             "presentationIncomplete":true,
-            "productCompletionError":{"code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":"product completion acknowledgment is unavailable"},
+            "productCompletionError":{"code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":message},
         }),
+        locale,
     )
 }
 
@@ -541,12 +549,13 @@ fn poll_product_completion(
     receiver: &mut tokio::sync::mpsc::Receiver<ChatSsePayload>,
     session_code: &str,
     run_code: &str,
+    locale: SupportedLocale,
 ) -> (Option<ChatSsePayload>, bool) {
     match receiver.try_recv() {
         Ok(completion) => (Some(completion), false),
         Err(tokio::sync::mpsc::error::TryRecvError::Empty) => (None, false),
         Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => (
-            Some(completion_channel_closed_payload(session_code, run_code)),
+            Some(completion_channel_closed_payload(session_code, run_code, locale)),
             true,
         ),
     }

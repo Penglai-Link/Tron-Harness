@@ -9,6 +9,7 @@ use crate::{
 };
 
 use super::{json_observation, parse_tool_input};
+use tron_i18n::t;
 
 const DEFAULT_READ_BYTES: usize = 64 * 1024;
 const MAX_READ_BYTES: usize = 256 * 1024;
@@ -69,8 +70,9 @@ impl Tool for ChatAttachmentReadTextTool {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
-        let input: ChatAttachmentReadTextInput = parse_tool_input(request.input)?;
-        let max_bytes = bounded_limit(input.max_bytes, DEFAULT_READ_BYTES, MAX_READ_BYTES)?;
+        let locale = context.locale.as_str();
+        let input: ChatAttachmentReadTextInput = parse_tool_input(request.input, locale)?;
+        let max_bytes = bounded_limit(locale, input.max_bytes, DEFAULT_READ_BYTES, MAX_READ_BYTES)?;
         let requested_start = input.start_byte.unwrap_or(0) as u64;
         let range_start = requested_start.saturating_sub(3);
         conversation_code(context)?;
@@ -83,30 +85,41 @@ impl Tool for ChatAttachmentReadTextTool {
                 max_bytes.saturating_add(3) as u64,
             )
             .map_err(|error| {
-                ToolError::ExecutionFailed(format!(
-                    "read chat attachment `{}` failed: {error}",
-                    input.attachment_code
+                ToolError::ExecutionFailed(t!(
+                    "agent_runtime.tool.attachment.read_failed",
+                    locale = locale,
+                    attachment_code = input.attachment_code,
+                    detail = error
                 ))
             })?;
         if requested_start > record.byte_size {
-            return Err(ToolError::ExecutionFailed(format!(
-                "startByte {} exceeds attachment size {}",
-                requested_start, record.byte_size
+            return Err(ToolError::ExecutionFailed(t!(
+                "agent_runtime.tool.attachment.start_exceeds_size",
+                locale = locale,
+                start = requested_start,
+                size = record.byte_size
             )));
         }
         let text = std::str::from_utf8(&bytes).map_err(|_| {
-            ToolError::ExecutionFailed(format!(
-                "attachment `{}` is not valid UTF-8 text",
-                input.attachment_code
+            ToolError::ExecutionFailed(t!(
+                "agent_runtime.tool.attachment.not_utf8",
+                locale = locale,
+                attachment_code = input.attachment_code
             ))
         })?;
         let local_start = requested_start.saturating_sub(range_start) as usize;
         let start = previous_char_boundary(text, local_start);
         let requested_end = start.saturating_add(max_bytes).min(bytes.len());
         let end = next_char_boundary(text, requested_end);
-        let content = text
-            .get(start..end)
-            .ok_or_else(|| ToolError::ExecutionFailed("text chunk boundary is invalid".into()))?;
+        let content = text.get(start..end).ok_or_else(|| {
+            ToolError::ExecutionFailed(
+                t!(
+                    "agent_runtime.tool.attachment.invalid_chunk_boundary",
+                    locale = locale
+                )
+                .into_owned(),
+            )
+        })?;
         let global_start = range_start as usize + start;
         let global_end = range_start as usize + end;
         let end_of_file = global_end >= record.byte_size as usize;
@@ -190,8 +203,10 @@ impl Tool for ChatAttachmentParseJsonTool {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
-        let input: ChatAttachmentParseJsonInput = parse_tool_input(request.input)?;
+        let locale = context.locale.as_str();
+        let input: ChatAttachmentParseJsonInput = parse_tool_input(request.input, locale)?;
         let max_value_bytes = bounded_limit(
+            locale,
             input.max_value_bytes,
             DEFAULT_JSON_VALUE_BYTES,
             MAX_JSON_VALUE_BYTES,
@@ -206,12 +221,16 @@ impl Tool for ChatAttachmentParseJsonTool {
             }),
             (Some(_), Some(_)) => {
                 return Err(ToolError::ExecutionFailed(
-                    "provide fileRef or legacy attachmentCode, not both".into(),
+                    t!(
+                        "agent_runtime.tool.attachment.ambiguous_source",
+                        locale = locale
+                    )
+                    .into_owned(),
                 ));
             }
             (None, None) => {
                 return Err(ToolError::ExecutionFailed(
-                    "fileRef is required (legacy attachmentCode is also accepted)".into(),
+                    t!("agent_runtime.tool.attachment.required", locale = locale).into_owned(),
                 ));
             }
         };
@@ -225,9 +244,11 @@ impl Tool for ChatAttachmentParseJsonTool {
         )?;
         let record = source.attachment_record.as_ref();
         let document = serde_json::from_slice::<Value>(&source.bytes).map_err(|error| {
-            ToolError::ExecutionFailed(format!(
-                "file `{}` is not valid JSON: {error}",
-                source.file_name
+            ToolError::ExecutionFailed(t!(
+                "agent_runtime.tool.attachment.invalid_json",
+                locale = locale,
+                file_name = source.file_name,
+                detail = error
             ))
         })?;
         let mut stats = JsonDocumentStats::default();
@@ -235,13 +256,21 @@ impl Tool for ChatAttachmentParseJsonTool {
         let path = input.json_path.unwrap_or_default();
         if !path.is_empty() && !path.starts_with('/') {
             return Err(ToolError::ExecutionFailed(
-                "jsonPath must be an RFC 6901 JSON Pointer beginning with `/`".into(),
+                t!(
+                    "agent_runtime.tool.attachment.invalid_json_pointer",
+                    locale = locale
+                )
+                .into_owned(),
             ));
         }
         let selected = document.pointer(&path).ok_or_else(|| {
-            ToolError::ExecutionFailed(format!("jsonPath `{path}` does not exist"))
+            ToolError::ExecutionFailed(t!(
+                "agent_runtime.tool.attachment.json_pointer_missing",
+                locale = locale,
+                path = path
+            ))
         })?;
-        let selection = select_json_value(&path, selected, max_value_bytes)?;
+        let selection = select_json_value(locale, &path, selected, max_value_bytes)?;
         json_observation(
             self.name(),
             &ChatAttachmentJsonOutput {
@@ -264,7 +293,11 @@ fn conversation_code(context: &AgentRunContext) -> Result<&str, ToolError> {
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             ToolError::ExecutionFailed(
-                "chat attachment tools require a conversation session".into(),
+                t!(
+                    "agent_runtime.tool.attachment.session_required",
+                    locale = context.locale.as_str()
+                )
+                .into_owned(),
             )
         })
 }
@@ -281,6 +314,7 @@ fn descriptor(
 }
 
 fn bounded_limit(
+    locale: &str,
     requested: Option<usize>,
     default: usize,
     maximum: usize,
@@ -288,7 +322,11 @@ fn bounded_limit(
     let limit = requested.unwrap_or(default);
     if limit == 0 {
         return Err(ToolError::ExecutionFailed(
-            "limit must be greater than zero".into(),
+            t!(
+                "agent_runtime.tool.attachment.limit_positive",
+                locale = locale
+            )
+            .into_owned(),
         ));
     }
     Ok(limit.min(maximum))
@@ -333,12 +371,17 @@ fn collect_json_stats(value: &Value, depth: usize, stats: &mut JsonDocumentStats
 }
 
 fn select_json_value(
+    locale: &str,
     path: &str,
     value: &Value,
     max_value_bytes: usize,
 ) -> Result<JsonSelection, ToolError> {
     let serialized = serde_json::to_vec(value).map_err(|error| {
-        ToolError::ExecutionFailed(format!("serialize JSON selection failed: {error}"))
+        ToolError::ExecutionFailed(t!(
+            "agent_runtime.tool.attachment.serialize_selection_failed",
+            locale = locale,
+            detail = error
+        ))
     })?;
     let (object_keys, object_keys_truncated) = match value {
         Value::Object(object) => {

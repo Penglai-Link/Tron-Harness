@@ -1,4 +1,6 @@
-use crate::{domain::project::ProjectError, response::ApiResponse};
+use crate::{
+    domain::project::ProjectError, response::ApiResponse, shared::auth_holder::AuthHolder,
+};
 use axum::{
     Json,
     http::StatusCode,
@@ -6,76 +8,82 @@ use axum::{
 };
 
 pub fn project_error_response(error: ProjectError) -> Response {
+    let locale = request_locale();
     if error == ProjectError::DuplicateName {
         let descriptor = crate::application::project::duplicate_name_descriptor();
-        let en = crate::shared::auth_holder::AuthHolder::get().is_some_and(|auth| {
-            crate::shared::locale::SupportedLocale::from_raw(&auth.locale)
-                == crate::shared::locale::SupportedLocale::EnUs
-        });
-        let message = match descriptor.message_key {
-            "tron.projects.duplicate_name" if en => {
-                "An active work topic with this name already exists in this workspace. Choose another name."
-            }
-            "tron.projects.duplicate_name" => "当前工作空间已有同名的未归档工作主题，请使用其他名称。",
-            _ => unreachable!("unknown project error message"),
-        };
         return (
             StatusCode::CONFLICT,
-            Json(ApiResponse::protocol_error(descriptor.code, message)),
+            Json(ApiResponse::protocol_error(
+                descriptor.code,
+                tron_i18n::t!("tron.projects.duplicate_name", locale = &locale),
+            )),
         )
             .into_response();
     }
-    let (status, code, message) = match error {
+    let (status, code, message_key) = match error {
         ProjectError::NotFound => (
             StatusCode::NOT_FOUND,
             "PROJECT_NOT_FOUND",
-            "project was not found",
+            "projects.not_found",
         ),
         ProjectError::ProjectCodeInvalid => (
             StatusCode::BAD_REQUEST,
             "PROJECT_CODE_INVALID",
-            "projectCode is invalid",
+            "projects.code_invalid",
         ),
         ProjectError::NameRequired => (
             StatusCode::BAD_REQUEST,
             "PROJECT_NAME_REQUIRED",
-            "project name is required",
+            "projects.name_required",
         ),
         ProjectError::DuplicateApp => (
             StatusCode::BAD_REQUEST,
             "PROJECT_APP_DUPLICATE",
-            "project cannot include an app more than once",
+            "projects.duplicate_app",
         ),
         ProjectError::DuplicateName => (
             StatusCode::CONFLICT,
             "PROJECT_NAME_DUPLICATE",
-            "project name already exists in the workspace",
+            "projects.name_duplicate",
         ),
         ProjectError::PrimaryAppInvalid => (
             StatusCode::BAD_REQUEST,
             "PROJECT_PRIMARY_APP_INVALID",
-            "primaryAppCode must be one of the selected apps",
+            "projects.primary_app_invalid",
         ),
         ProjectError::AppInvalid => (
             StatusCode::BAD_REQUEST,
             "PROJECT_APP_INVALID",
-            "project app must be active and in the current workspace",
+            "projects.app_invalid",
         ),
         ProjectError::WorkspaceInvalid => (
             StatusCode::BAD_REQUEST,
             "PROJECT_WORKSPACE_INVALID",
-            "project workspace must be active",
+            "projects.workspace_invalid",
         ),
         ProjectError::Archived => (
             StatusCode::CONFLICT,
             "PROJECT_ARCHIVED",
-            "archived project cannot be used",
+            "projects.archived",
         ),
         ProjectError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "PROJECT_STORAGE_FAILED",
-            "project storage operation failed",
+            "projects.storage_failed",
         ),
     };
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    (
+        status,
+        Json(ApiResponse::error(
+            code,
+            tron_i18n::t!(message_key, locale = &locale),
+        )),
+    )
+        .into_response()
+}
+
+fn request_locale() -> String {
+    AuthHolder::get()
+        .map(|context| context.locale.clone())
+        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_string())
 }

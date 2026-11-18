@@ -112,12 +112,11 @@ fn tool_policy_failure(
     descriptor: crate::application::capability::error::ApplicationErrorDescriptor,
     locale: &str,
 ) -> Response {
-    let message = match (descriptor.message_key, locale.starts_with("zh")) {
-        ("tron.capability.tool_policy_invalid", true) => "请提供有效的 Smart 开关状态",
-        ("tron.capability.tool_policy_invalid", false) => "Provide a valid Smart setting.",
-        (_, true) => "工具权限策略保存失败，请重试",
-        (_, false) => "Unable to save tool policy settings. Please retry.",
+    let message_key = match descriptor.message_key {
+        "tron.capability.tool_policy_invalid" => "tron.capability.tool_policy_invalid",
+        _ => "tron.capability.tool_policy_save_failed",
     };
+    let message = tron_i18n::t!(message_key, locale = locale);
     (
         status,
         Json(ApiResponse::protocol_error(descriptor.code, message)),
@@ -226,10 +225,15 @@ async fn set_pack_enabled(
         match installed.await {
             Ok(Ok(true)) => {}
             Ok(Ok(false)) => {
+                let locale = crate::shared::locale::resolve_request_locale(
+                    headers
+                        .get(axum::http::header::ACCEPT_LANGUAGE)
+                        .and_then(|value| value.to_str().ok()),
+                );
                 return failure(
                     StatusCode::NOT_FOUND,
                     "CAPABILITY_PACK_NOT_FOUND",
-                    "capability pack is not installed".into(),
+                    tron_i18n::t!("capabilities.pack_not_installed", locale = &locale).into_owned(),
                 );
             }
             Ok(Err(error)) => {
@@ -268,6 +272,7 @@ async fn set_pack_enabled(
     }
 }
 async fn set_extension_enabled(
+    auth: crate::adapters::inbound::http::auth::RequestAuthContext,
     State(state): State<AppState>,
     Path(point): Path<String>,
     Json(request): Json<EnabledRequest>,
@@ -279,7 +284,11 @@ async fn set_extension_enabled(
         return failure(
             StatusCode::NOT_FOUND,
             "EXTENSION_POINT_NOT_FOUND",
-            "extension point was not found".into(),
+            tron_i18n::t!(
+                "capabilities.extension_point_not_found",
+                locale = &auth.locale
+            )
+            .into_owned(),
         );
     }
     match state
@@ -291,7 +300,11 @@ async fn set_extension_enabled(
         Err(error) => failure(StatusCode::CONFLICT, "CAPABILITY_RECONFIGURE_FAILED", error),
     }
 }
-async fn import_pack(State(state): State<AppState>, mut multipart: Multipart) -> Response {
+async fn import_pack(
+    auth: crate::adapters::inbound::http::auth::RequestAuthContext,
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> Response {
     let mut bytes = None;
     loop {
         match multipart.next_field().await {
@@ -304,7 +317,8 @@ async fn import_pack(State(state): State<AppState>, mut multipart: Multipart) ->
                     return failure(
                         StatusCode::PAYLOAD_TOO_LARGE,
                         "CAPABILITY_PACKAGE_TOO_LARGE",
-                        "package exceeds 128 MiB".into(),
+                        tron_i18n::t!("capabilities.package_too_large", locale = &auth.locale)
+                            .into_owned(),
                     );
                 }
                 Err(error) => {
@@ -330,7 +344,7 @@ async fn import_pack(State(state): State<AppState>, mut multipart: Multipart) ->
         return failure(
             StatusCode::BAD_REQUEST,
             "CAPABILITY_FILE_REQUIRED",
-            "file field is required".into(),
+            tron_i18n::t!("capabilities.file_required", locale = &auth.locale).into_owned(),
         );
     };
     match state.agent_framework.import_pack(bytes.to_vec()).await {
@@ -361,44 +375,25 @@ async fn uninstall_pack(
         }))
         .into_response(),
         Err(error) => {
-            let zh = auth.locale.starts_with("zh");
-            let (code, message) = if error.contains("bundled") {
-                (
-                    "101031001",
-                    if zh {
-                        "随程序发布的能力包不能单独卸载"
-                    } else {
-                        "Bundled capability packs cannot be uninstalled"
-                    },
-                )
+            let (code, message_key) = if error.contains("bundled") {
+                ("101031001", "capabilities.uninstall_bundled")
             } else if error.contains("referenced")
                 || error.contains("Busy")
                 || error.contains("busy")
                 || error.contains("active")
             {
-                (
-                    "101031002",
-                    if zh {
-                        "能力包仍被运行或持久续跑引用，请结束运行后重试"
-                    } else {
-                        "Capability pack is in use by a running or durable session"
-                    },
-                )
+                ("101031002", "capabilities.uninstall_busy")
             } else {
-                (
-                    "101031003",
-                    if zh {
-                        "能力包卸载未完成，资源已停用，请重试"
-                    } else {
-                        "Capability pack cleanup is incomplete; retry the uninstall"
-                    },
-                )
+                ("101031003", "capabilities.uninstall_incomplete")
             };
             (
                 StatusCode::CONFLICT,
                 Json(ApiResponse::protocol_error(
                     code,
-                    format!("{message}: {error}"),
+                    format!(
+                        "{}: {error}",
+                        tron_i18n::t!(message_key, locale = &auth.locale)
+                    ),
                 )),
             )
                 .into_response()
@@ -418,7 +413,7 @@ struct GetPageVo {
     assets: std::collections::BTreeMap<String, String>,
 }
 async fn get_page(
-    _auth: crate::adapters::inbound::http::auth::RequestAuthContext,
+    auth: crate::adapters::inbound::http::auth::RequestAuthContext,
     State(state): State<AppState>,
     Path((id, page)): Path<(String, String)>,
 ) -> Response {
@@ -440,7 +435,7 @@ async fn get_page(
         _ => failure(
             StatusCode::NOT_FOUND,
             "CAPABILITY_PAGE_UNAVAILABLE",
-            "Capability page is unavailable / 能力包页面不可用".into(),
+            tron_i18n::t!("capabilities.page_unavailable", locale = &auth.locale).into_owned(),
         ),
     }
 }
@@ -452,7 +447,7 @@ struct ListPagesVo {
     title: std::collections::BTreeMap<String, String>,
 }
 async fn list_pages(
-    _auth: crate::adapters::inbound::http::auth::RequestAuthContext,
+    auth: crate::adapters::inbound::http::auth::RequestAuthContext,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Response {
@@ -474,7 +469,7 @@ async fn list_pages(
         _ => failure(
             StatusCode::NOT_FOUND,
             "CAPABILITY_PAGE_UNAVAILABLE",
-            "Capability page is unavailable / 能力包页面不可用".into(),
+            tron_i18n::t!("capabilities.page_unavailable", locale = &auth.locale).into_owned(),
         ),
     }
 }

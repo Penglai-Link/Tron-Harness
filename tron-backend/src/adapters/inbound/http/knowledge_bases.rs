@@ -115,11 +115,19 @@ pub fn routes() -> Router<AppState> {
         )
         .layer(DefaultBodyLimit::max(21 * 1024 * 1024))
 }
+fn request_locale() -> String {
+    crate::shared::auth_holder::AuthHolder::get()
+        .map(|context| context.locale.clone())
+        .unwrap_or_else(|| tron_i18n::DEFAULT_LOCALE.as_str().to_owned())
+}
+
 fn response<T: serde::Serialize>(result: Result<T, KnowledgeBaseError>) -> Response {
+    use tron_i18n::t;
     match result {
         Ok(v) => Json(ApiResponse::success(v)).into_response(),
         Err(e) => {
-            let (status, code) = match e {
+            let locale = request_locale();
+            let (status, code) = match &e {
                 KnowledgeBaseError::NotFound => (StatusCode::NOT_FOUND, "KB_NOT_FOUND"),
                 KnowledgeBaseError::Forbidden => (StatusCode::FORBIDDEN, "KB_FORBIDDEN"),
                 KnowledgeBaseError::Conflict => (StatusCode::CONFLICT, "KB_CONFLICT"),
@@ -127,7 +135,25 @@ fn response<T: serde::Serialize>(result: Result<T, KnowledgeBaseError>) -> Respo
                 KnowledgeBaseError::Invalid(_) => (StatusCode::BAD_REQUEST, "KB_INVALID"),
                 KnowledgeBaseError::Storage(_) => (StatusCode::INTERNAL_SERVER_ERROR, "KB_STORAGE"),
             };
-            (status, Json(ApiResponse::error(code, e.to_string()))).into_response()
+            let message: String = match &e {
+                KnowledgeBaseError::NotFound => {
+                    t!("knowledge.base.document_not_found", locale = &locale).into_owned()
+                }
+                KnowledgeBaseError::Forbidden => {
+                    t!("tron.knowledge_base.forbidden", locale = &locale).into_owned()
+                }
+                KnowledgeBaseError::Conflict => {
+                    t!("knowledge.base.document_conflict", locale = &locale).into_owned()
+                }
+                KnowledgeBaseError::NotEmpty => {
+                    t!("tron.knowledge_base.not_empty", locale = &locale).into_owned()
+                }
+                // Detail text originates in the application layer; keep forwarding it.
+                KnowledgeBaseError::Invalid(detail) | KnowledgeBaseError::Storage(detail) => {
+                    detail.clone()
+                }
+            };
+            (status, Json(ApiResponse::error(code, message))).into_response()
         }
     }
 }
@@ -163,6 +189,7 @@ async fn upload(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Response {
+    use tron_i18n::t;
     let mut file = None;
     let mut request_key = None;
     let mut preference = None;
@@ -176,7 +203,8 @@ async fn upload(
                         Ok(bytes) => file = Some((name, bytes)),
                         Err(_) => {
                             return response::<()>(Err(KnowledgeBaseError::Invalid(
-                                "文件超过上传限制或读取失败".into(),
+                                t!("knowledge.upload.file_unreadable", locale = &auth.locale)
+                                    .into_owned(),
                             )));
                         }
                     }
@@ -185,7 +213,11 @@ async fn upload(
                     Ok(value) => request_key = Some(value),
                     Err(_) => {
                         return response::<()>(Err(KnowledgeBaseError::Invalid(
-                            "入库请求标识无效".into(),
+                            t!(
+                                "knowledge.upload.request_key_invalid",
+                                locale = &auth.locale
+                            )
+                            .into_owned(),
                         )));
                     }
                 },
@@ -199,32 +231,35 @@ async fn upload(
                         Some(value) => Some(value),
                         None => {
                             return response::<()>(Err(KnowledgeBaseError::Invalid(
-                                "解析方式无效".into(),
+                                t!("knowledge.upload.preference_invalid", locale = &auth.locale)
+                                    .into_owned(),
                             )));
                         }
                     };
                 }
                 "parsePlan" => {
-                    plan =
-                        match field.text().await.ok().and_then(|v| {
-                            serde_json::from_str::<
+                    plan = match field.text().await.ok().and_then(|v| {
+                        serde_json::from_str::<
                                 crate::application::knowledge_base::DocumentParsePlan,
                             >(&v)
                             .ok()
-                        }) {
-                            Some(value) => Some(value),
-                            None => {
-                                return response::<()>(Err(KnowledgeBaseError::Invalid(
-                                    "解析计划无效".into(),
-                                )));
-                            }
-                        };
+                    }) {
+                        Some(value) => Some(value),
+                        None => {
+                            return response::<()>(Err(KnowledgeBaseError::Invalid(
+                                t!("knowledge.upload.parse_plan_invalid", locale = &auth.locale)
+                                    .into_owned(),
+                            )));
+                        }
+                    };
                 }
                 _ => {}
             },
             Ok(None) => break,
             Err(_) => {
-                return response::<()>(Err(KnowledgeBaseError::Invalid("上传表单无效".into())));
+                return response::<()>(Err(KnowledgeBaseError::Invalid(
+                    t!("knowledge.upload.form_invalid", locale = &auth.locale).into_owned(),
+                )));
             }
         }
     }
@@ -238,7 +273,9 @@ async fn upload(
             preference,
             plan.as_ref(),
         )),
-        _ => response::<()>(Err(KnowledgeBaseError::Invalid("需要file".into()))),
+        _ => response::<()>(Err(KnowledgeBaseError::Invalid(
+            t!("knowledge.upload.file_required", locale = &auth.locale).into_owned(),
+        ))),
     }
 }
 async fn configure(

@@ -25,29 +25,27 @@ pub(super) struct CreatedLibraryView {
 pub(super) struct CreateLibraryApiError(KnowledgeBaseError, String);
 impl IntoResponse for CreateLibraryApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.knowledge_base.invalid" => (
-                StatusCode::BAD_REQUEST,
-                "知识库名称或索引配置无效",
-                "Invalid knowledge base name or index settings",
-            ),
-            "tron.knowledge_base.forbidden" => (
-                StatusCode::FORBIDDEN,
-                "无知识库权限",
-                "Access to this knowledge base is denied",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "知识库创建失败",
-                "Could not create the knowledge base",
-            ),
+        let status = match descriptor.message_key {
+            "tron.knowledge_base.invalid" => StatusCode::BAD_REQUEST,
+            "tron.knowledge_base.forbidden" => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match descriptor.message_key {
+            "tron.knowledge_base.invalid" => {
+                t!("knowledge.base.create.invalid", locale = &self.1)
+            }
+            "tron.knowledge_base.forbidden" => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1)
+            }
+            _ => t!("knowledge.base.create.failed", locale = &self.1),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

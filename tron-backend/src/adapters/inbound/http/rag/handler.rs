@@ -12,6 +12,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tron_i18n::t;
 
 fn failure(error: impl std::fmt::Display) -> Response {
     (
@@ -80,7 +81,7 @@ pub async fn corpora(State(state): State<AppState>, auth: RequestAuthContext) ->
                 .collect::<Vec<_>>(),
         ))
         .into_response(),
-        Err(error) => rag_error_response(error),
+        Err(error) => rag_error_response(error, &auth.locale),
     }
 }
 pub async fn configure(
@@ -90,14 +91,20 @@ pub async fn configure(
     Json(settings): Json<RagSettings>,
 ) -> Response {
     if !managed(&state, &auth.user().user_code, &id) {
-        return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
+        return rag_error_response(
+            crate::domain::rag::RagError::SearchScopeInvalid,
+            &auth.locale,
+        );
     }
     if settings.graph && id != "skill" && settings.graph_model_code.is_none() {
-        return failure("开启图谱索引需要选择抽取模型");
+        return failure(t!(
+            "rag.handler.graph_model_required",
+            locale = &auth.locale,
+        ));
     }
     let old_settings = match state.rag.settings_for_corpus(&id) {
         Ok(settings) => settings,
-        Err(error) => return rag_error_response(error),
+        Err(error) => return rag_error_response(error, &auth.locale),
     };
     match state.rag.configure_corpus(&id, settings) {
         Ok(settings) => {
@@ -113,7 +120,7 @@ pub async fn configure(
             }
             Json(ApiResponse::success(settings)).into_response()
         }
-        Err(error) => rag_error_response(error),
+        Err(error) => rag_error_response(error, &auth.locale),
     }
 }
 #[derive(Deserialize)]
@@ -145,7 +152,10 @@ pub async fn search(
         .workspace_is_active(&input.workspace_code)
         .unwrap_or(false)
     {
-        return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
+        return rag_error_response(
+            crate::domain::rag::RagError::SearchScopeInvalid,
+            &auth.locale,
+        );
     }
     let identity = RagIdentity {
         user_code: auth.user().user_code.clone(),
@@ -168,7 +178,7 @@ pub async fn search(
         .await
     {
         Ok(result) => Json(ApiResponse::success(SearchResponse::from(result))).into_response(),
-        Err(error) => rag_error_response(error),
+        Err(error) => rag_error_response(error, &auth.locale),
     }
 }
 /// Management recall derives its entire scope from the authenticated user.
@@ -191,14 +201,14 @@ pub async fn recall(
         .await
     {
         Ok(result) => Json(ApiResponse::success(RecallResponse::from(result))).into_response(),
-        Err(error) => rag_error_response(error),
+        Err(error) => rag_error_response(error, &auth.locale),
     }
 }
 pub async fn tasks(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
     let user = &auth.user().user_code;
     let mut tasks = match state.rag.record_task_views(user) {
         Ok(tasks) => tasks,
-        Err(error) => return rag_error_response(error),
+        Err(error) => return rag_error_response(error, &auth.locale),
     };
     match state.knowledge_bases.rag_task_views(user) {
         Ok(knowledge) => tasks.extend(knowledge),
@@ -206,7 +216,7 @@ pub async fn tasks(State(state): State<AppState>, auth: RequestAuthContext) -> R
     }
     let deleted = match state.rag.repository_handle().deleted_task_history(user) {
         Ok(deleted) => deleted,
-        Err(error) => return rag_error_response(error),
+        Err(error) => return rag_error_response(error, &auth.locale),
     };
     tasks.retain(|task| !deleted.contains(&task.id));
     tasks.sort_by_key(|task| std::cmp::Reverse((task.created_at, task.id.clone())));
@@ -226,7 +236,10 @@ pub async fn submit(
 ) -> Response {
     let user = &auth.user().user_code;
     if !managed(&state, user, &input.corpus_id) {
-        return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
+        return rag_error_response(
+            crate::domain::rag::RagError::SearchScopeInvalid,
+            &auth.locale,
+        );
     }
     if input.corpus_id == "skill" {
         let indexer = crate::application::skill::SkillRagIndexService::new(
@@ -239,7 +252,7 @@ pub async fn submit(
     } else if input.corpus_id == "memory-card" {
         let records = match state.rag.record_task_views(user) {
             Ok(records) => records,
-            Err(error) => return rag_error_response(error),
+            Err(error) => return rag_error_response(error, &auth.locale),
         };
         let mut sources = std::collections::BTreeSet::new();
         for task in records
@@ -253,7 +266,7 @@ pub async fn submit(
             }
             let queued = match state.rag.prepare_retry_record_task(user, &task.id, true) {
                 Ok(task) => task,
-                Err(error) => return rag_error_response(error),
+                Err(error) => return rag_error_response(error, &auth.locale),
             };
             let rag = state.rag.clone();
             crate::app::telemetry::spawn_traced(async move {
@@ -270,7 +283,7 @@ pub async fn submit(
             .as_ref()
             .is_some_and(|id| !kb.documents.iter().any(|doc| doc.id == *id))
         {
-            return failure("文档不存在");
+            return failure(t!("rag.handler.document_not_found", locale = &auth.locale));
         }
         for doc in kb
             .documents
@@ -337,7 +350,7 @@ async fn control(
             Err(error) => return failure(error),
         };
         if current.first().is_none_or(|task| task.id != id) {
-            return failure("任务状态已改变，请刷新列表");
+            return failure(t!("rag.handler.task_state_changed", locale = &auth.locale));
         }
         let result = match action {
             TaskControl::Retry => state
@@ -378,10 +391,10 @@ async fn control(
                 .record_task_is_latest(&task)
                 .unwrap_or(false)
             {
-                return failure("任务状态已改变，请刷新列表");
+                return failure(t!("rag.handler.task_state_changed", locale = &auth.locale));
             }
             if matches!(task.state.as_str(), "RUNNING" | "QUEUED") {
-                return failure("任务仍在运行");
+                return failure(t!("rag.handler.task_running", locale = &auth.locale));
             }
             let name = task.payload["domainFields"]["skillName"]
                 .as_str()
@@ -403,7 +416,7 @@ async fn control(
             matches!(action, TaskControl::Rebuild),
         ) {
             Ok(task) => task,
-            Err(error) => return rag_error_response(error),
+            Err(error) => return rag_error_response(error, &auth.locale),
         };
         let task_id = task.id.clone();
         let rag = state.rag.clone();
@@ -420,7 +433,7 @@ async fn control(
     } else {
         match state.rag.cancel_record_task(owner, &id) {
             Ok(task) => Json(ApiResponse::success(task)).into_response(),
-            Err(error) => rag_error_response(error),
+            Err(error) => rag_error_response(error, &auth.locale),
         }
     }
 }

@@ -56,11 +56,13 @@ impl fw::ContextContributor for LongTermMemoryContributor {
             Err(error) => {
                 tracing::warn!(%error,"Long-term memory retrieval failed");
                 input.run.emit_output(fw::OutputEvent::Custom{name:"tron.memory.retrieval.failed".into(),value:serde_json::json!({"blockId":"long_term_memory","error":error.to_string()})});
-                let messages = vec![fw::Message::user(if self.locale.starts_with("en") {
-                    "[Long-term memory retrieval failed; no memory evidence is available.]"
-                } else {
-                    "[长期记忆检索失败，本轮没有可用记忆证据。]"
-                })];
+                let messages = vec![fw::Message::user(
+                    tron_i18n::t!(
+                        "agent_runtime.context.memory.retrieval_failed",
+                        locale = self.locale.as_str()
+                    )
+                    .into_owned(),
+                )];
                 if fw::context_tokens(&messages, input.model, input.estimator).await?
                     <= input.budget.max_tokens
                 {
@@ -75,8 +77,10 @@ impl fw::ContextContributor for LongTermMemoryContributor {
             .map(|v| v.clone())
             .unwrap_or_default();
         for warning in warnings {
-            let message = fw::Message::user(format!(
-                "[Memory retrieval diagnostic / 记忆检索诊断: {warning}]"
+            let message = fw::Message::user(tron_i18n::t!(
+                "agent_runtime.context.memory.retrieval_diagnostic",
+                locale = self.locale.as_str(),
+                warning = warning
             ));
             let mut proposed = block.messages.clone();
             proposed.push(message);
@@ -96,9 +100,12 @@ impl fw::ContextContributor for LongTermMemoryContributor {
             let Ok(version) = version.parse::<u32>() else {
                 continue;
             };
-            let text = format!(
-                "[Long-term memory / 长期记忆: {} | sources / 来源: {}]\n{}",
-                memory_code, item.value.source.id, item.value.content
+            let text = tron_i18n::t!(
+                "agent_runtime.context.memory.entry",
+                locale = self.locale.as_str(),
+                memory_code = memory_code,
+                source = item.value.source.id,
+                content = item.value.content
             );
             let mut proposed = block.messages.clone();
             proposed.push(fw::Message::user(text));

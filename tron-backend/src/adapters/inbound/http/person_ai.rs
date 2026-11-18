@@ -17,49 +17,34 @@ pub struct PersonAiApiError(pub ModelProviderError, pub String);
 impl IntoResponse for PersonAiApiError {
     fn into_response(self) -> Response {
         let descriptor = self.0.person_ai_service_descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.capability.pack_unavailable" => (
-                StatusCode::NOT_FOUND,
-                "此能力包已下架或不存在，请刷新能力中心。本地已安装内容不受影响。",
-                "This pack was withdrawn or does not exist. Refresh the capability center. Your installed pack is unchanged.",
-            ),
-            "tron.capability.release_unavailable" => (
-                StatusCode::NOT_FOUND,
-                "此版本已下架或不存在，请选择其他已上架版本。本地已安装内容不受影响。",
-                "This release was withdrawn or does not exist. Choose another published release. Your installed pack is unchanged.",
-            ),
-            "tron.personAi.device_unbound" => (
-                StatusCode::UNAUTHORIZED,
-                "设备已解绑，请重新授权",
-                "Device unbound; authorize again",
-            ),
-            "tron.personAi.auth_required" => (
-                StatusCode::UNAUTHORIZED,
-                "请先完成 Person-AI 授权",
-                "Person-AI authorization required",
-            ),
+        let (status, message_key) = match descriptor.message_key {
+            "tron.capability.pack_unavailable" => {
+                (StatusCode::NOT_FOUND, "tron.capability.pack_unavailable")
+            }
+            "tron.capability.release_unavailable" => {
+                (StatusCode::NOT_FOUND, "tron.capability.release_unavailable")
+            }
+            "tron.personAi.device_unbound" => {
+                (StatusCode::UNAUTHORIZED, "tron.personAi.device_unbound")
+            }
+            "tron.personAi.auth_required" => {
+                (StatusCode::UNAUTHORIZED, "tron.personAi.auth_required")
+            }
             "tron.personAi.invalid_request" => {
-                (StatusCode::BAD_REQUEST, "请求参数无效", "Invalid request")
+                (StatusCode::BAD_REQUEST, "tron.personAi.invalid_request")
             }
             "tron.personAi.storage_failed" => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "账户数据读写失败",
-                "Could not access account storage",
+                "tron.personAi.storage_failed",
             ),
-            _ => (
-                StatusCode::BAD_GATEWAY,
-                "Person-AI 请求失败",
-                "Person-AI request failed",
-            ),
+            _ => (StatusCode::BAD_GATEWAY, "tron.personAi.request_failed"),
         };
         let message = if let ModelProviderError::Remote(detail)
         | ModelProviderError::InvalidSelection(detail) = &self.0
         {
             detail.clone()
-        } else if self.1.starts_with("en") {
-            en.to_owned()
         } else {
-            zh.to_owned()
+            tron_i18n::t!(message_key, locale = &self.1).into_owned()
         };
         (
             status,

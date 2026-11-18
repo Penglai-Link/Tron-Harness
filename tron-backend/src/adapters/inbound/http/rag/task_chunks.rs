@@ -39,34 +39,31 @@ struct TaskChunkView {
 pub(super) struct TaskChunksApiError(RagTaskChunksError, String);
 impl IntoResponse for TaskChunksApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.descriptor();
-        let (status, zh, en) = match self.0 {
-            RagTaskChunksError::NotFound => (
-                StatusCode::NOT_FOUND,
-                "任务记录不存在",
-                "Task record not found",
-            ),
-            RagTaskChunksError::InvalidPagination => (
-                StatusCode::BAD_REQUEST,
-                "分块分页参数无效",
-                "Invalid chunk pagination",
-            ),
-            RagTaskChunksError::Unavailable => (
-                StatusCode::CONFLICT,
-                "请查看最新已完成任务的分块",
-                "View chunks from the latest completed task",
-            ),
-            RagTaskChunksError::StorageFailure => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "分块读取失败",
-                "Could not load chunks",
-            ),
+        let status = match self.0 {
+            RagTaskChunksError::NotFound => StatusCode::NOT_FOUND,
+            RagTaskChunksError::InvalidPagination => StatusCode::BAD_REQUEST,
+            RagTaskChunksError::Unavailable => StatusCode::CONFLICT,
+            RagTaskChunksError::StorageFailure => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match descriptor.message_key {
+            "tron.rag.task_chunks_not_found" => {
+                t!("tron.rag.task_chunks_not_found", locale = &self.1)
+            }
+            "tron.rag.task_chunks_pagination_invalid" => {
+                t!("tron.rag.task_chunks_pagination_invalid", locale = &self.1)
+            }
+            "tron.rag.task_chunks_unavailable" => {
+                t!("tron.rag.task_chunks_unavailable", locale = &self.1)
+            }
+            _ => t!("tron.rag.task_chunks_storage_failed", locale = &self.1),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

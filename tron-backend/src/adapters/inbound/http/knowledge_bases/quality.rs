@@ -35,33 +35,34 @@ pub(super) fn routes() -> Router<AppState> {
 pub(super) struct QualityApiError(KnowledgeBaseError, String);
 impl IntoResponse for QualityApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, en) = match self.0 {
-            KnowledgeBaseError::NotFound => (
-                StatusCode::NOT_FOUND,
-                "Knowledge base or evaluation not found",
-            ),
-            KnowledgeBaseError::Forbidden => (
-                StatusCode::FORBIDDEN,
-                "Access to this knowledge base is denied",
-            ),
-            KnowledgeBaseError::Conflict => (
-                StatusCode::CONFLICT,
-                "The data or configuration changed, or an optimization is already active. Refresh and retry.",
-            ),
-            KnowledgeBaseError::Invalid(_) => (
-                StatusCode::BAD_REQUEST,
-                "Evaluation requires published documents with reusable parsed content, a valid question set and bounded options. Inspect the documents and retry.",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Knowledge evaluation failed",
-            ),
+        let status = match &self.0 {
+            KnowledgeBaseError::NotFound => StatusCode::NOT_FOUND,
+            KnowledgeBaseError::Forbidden => StatusCode::FORBIDDEN,
+            KnowledgeBaseError::Conflict => StatusCode::CONFLICT,
+            KnowledgeBaseError::Invalid(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        let message = if self.1.starts_with("en") {
-            en.into()
-        } else {
-            self.0.to_string()
+        let english = self.1.starts_with("en");
+        let message: String = match &self.0 {
+            KnowledgeBaseError::NotFound => {
+                t!("knowledge.quality.not_found", locale = &self.1).into_owned()
+            }
+            KnowledgeBaseError::Forbidden => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1).into_owned()
+            }
+            KnowledgeBaseError::Conflict => {
+                t!("knowledge.quality.conflict", locale = &self.1).into_owned()
+            }
+            KnowledgeBaseError::Invalid(_) if english => {
+                t!("knowledge.quality.invalid", locale = &self.1).into_owned()
+            }
+            KnowledgeBaseError::Storage(_) if english => {
+                t!("knowledge.quality.failed", locale = &self.1).into_owned()
+            }
+            // Remaining details are application-layer text; keep forwarding them.
+            _ => self.0.to_string(),
         };
         (
             status,
@@ -181,17 +182,24 @@ async fn session(
         .knowledge_bases
         .detail(&auth.user().user_code, &id)
         .map_err(|e| QualityApiError(e, auth.locale.clone()))?;
-    let title = if auth.locale.starts_with("en") {
-        format!("Retrieval optimization · {}", kb.name)
-    } else {
-        format!("检索优化 · {}", kb.name)
-    };
+    use tron_i18n::t;
+    let title = t!(
+        "knowledge.quality.session_title",
+        locale = &auth.locale,
+        name = kb.name
+    );
     let s = state
         .chats
         .ensure_knowledge_quality_session(&auth.user().user_code, &id, &title)
         .map_err(|_| {
             QualityApiError(
-                KnowledgeBaseError::Storage("知识库会话创建失败".into()),
+                KnowledgeBaseError::Storage(
+                    t!(
+                        "knowledge.quality.session_create_failed",
+                        locale = &auth.locale
+                    )
+                    .into_owned(),
+                ),
                 auth.locale,
             )
         })?;

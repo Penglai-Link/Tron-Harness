@@ -30,44 +30,40 @@ impl From<KnowledgeBase> for KnowledgeLibraryListVo {
 pub(super) struct LibraryDeletionApiError(KnowledgeBaseError, String);
 impl IntoResponse for LibraryDeletionApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.knowledge_base.not_empty" => (
-                StatusCode::CONFLICT,
-                "请先删除知识库内的所有资源",
-                "Delete all resources in the knowledge base first",
-            ),
-            "tron.knowledge_base.not_found" => (
-                StatusCode::NOT_FOUND,
-                "知识库不存在",
-                "Knowledge base not found",
-            ),
-            "tron.knowledge_base.forbidden" => (
-                StatusCode::FORBIDDEN,
-                "无知识库权限",
-                "Access to this knowledge base is denied",
-            ),
-            "tron.knowledge_base.conflict" => (
-                StatusCode::CONFLICT,
-                "知识库状态已改变，请刷新后重试",
-                "Knowledge base changed; refresh and try again",
-            ),
-            "tron.knowledge_base.invalid" => (
-                StatusCode::BAD_REQUEST,
-                "知识库请求无效",
-                "Invalid knowledge base request",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "知识库删除失败",
-                "Could not delete the knowledge base",
-            ),
+        let status = match descriptor.message_key {
+            "tron.knowledge_base.not_empty" | "tron.knowledge_base.conflict" => {
+                StatusCode::CONFLICT
+            }
+            "tron.knowledge_base.not_found" => StatusCode::NOT_FOUND,
+            "tron.knowledge_base.forbidden" => StatusCode::FORBIDDEN,
+            "tron.knowledge_base.invalid" => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match descriptor.message_key {
+            "tron.knowledge_base.not_empty" => {
+                t!("tron.knowledge_base.not_empty", locale = &self.1)
+            }
+            "tron.knowledge_base.not_found" => {
+                t!("tron.knowledge_base.not_found", locale = &self.1)
+            }
+            "tron.knowledge_base.forbidden" => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1)
+            }
+            "tron.knowledge_base.conflict" => {
+                t!("tron.knowledge_base.conflict", locale = &self.1)
+            }
+            "tron.knowledge_base.invalid" => {
+                t!("tron.knowledge_base.invalid", locale = &self.1)
+            }
+            _ => t!("knowledge.base.delete.failed", locale = &self.1),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

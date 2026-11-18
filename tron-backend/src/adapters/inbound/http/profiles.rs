@@ -7,7 +7,7 @@ use axum::{
     Json, Router,
     body::Body,
     extract::{Path, State},
-    http::{HeaderValue, StatusCode, header},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{
         IntoResponse, Response, Sse,
         sse::{Event, KeepAlive},
@@ -42,31 +42,31 @@ pub struct UpdatePreferencesRequest {
     time_zone: String,
 }
 
+fn request_locale(headers: &HeaderMap) -> String {
+    crate::shared::locale::resolve_request_locale(
+        headers
+            .get(header::ACCEPT_LANGUAGE)
+            .and_then(|value| value.to_str().ok()),
+    )
+}
+
 #[utoipa::path(patch, path = "/api/v1/profiles/active/preferences", request_body = UpdatePreferencesRequest,
     responses((status = 200, description = "User time zone saved"), (status = 400, description = "Invalid IANA time zone")), tag = "Profiles")]
 pub async fn update_preferences(
     State(state): State<AppState>,
-    headers: axum::http::HeaderMap,
+    headers: HeaderMap,
     Json(request): Json<UpdatePreferencesRequest>,
 ) -> Response {
+    let locale = request_locale(&headers);
     let context = match state.profiles.current_context() {
         Ok(context) => context,
-        Err(error) => return profile_error_response(error),
+        Err(error) => return profile_error_response(error, &locale),
     };
     if request.time_zone.trim().parse::<chrono_tz::Tz>().is_err() {
-        let locale = crate::shared::locale::resolve_request_locale(
-            headers
-                .get(header::ACCEPT_LANGUAGE)
-                .and_then(|v| v.to_str().ok()),
-        );
         return generic_profile_error(
             StatusCode::BAD_REQUEST,
             "PERSONAI_PROFILE_INVALID_TIME_ZONE",
-            if locale.starts_with("zh") {
-                "请选择有效的 IANA 时区"
-            } else {
-                "Select a valid IANA time zone"
-            },
+            tron_i18n::t!("profiles.invalid_time_zone", locale = &locale),
         );
     }
     match state
@@ -77,7 +77,7 @@ pub async fn update_preferences(
             serde_json::json!({"timeZone": time_zone}),
         ))
         .into_response(),
-        Err(error) => profile_error_response(error),
+        Err(error) => profile_error_response(error, &locale),
     }
 }
 
@@ -101,16 +101,17 @@ async fn server_auth_events(State(state): State<AppState>) -> Response {
         .into_response()
 }
 
-async fn active_profile_token(State(state): State<AppState>) -> Response {
+async fn active_profile_token(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let locale = request_locale(&headers);
     let profile = match state.profiles.current_context() {
         Ok(profile) => profile,
-        Err(error) => return profile_error_response(error),
+        Err(error) => return profile_error_response(error, &locale),
     };
     if let Err(error) = state
         .model_providers
         .activate_person_ai_profile(&profile.person_ai_user_id, &profile.person_ai_username)
     {
-        return active_profile_token_error(error);
+        return active_profile_token_error(error, &locale);
     }
     match state.model_providers.get_person_ai_access_token().await {
         Ok(token) => {
@@ -125,11 +126,11 @@ async fn active_profile_token(State(state): State<AppState>) -> Response {
             }
             Json(ApiResponse::success(serde_json::json!({ "token": token }))).into_response()
         }
-        Err(error) => active_profile_token_error(error),
+        Err(error) => active_profile_token_error(error, &locale),
     }
 }
 
-fn active_profile_token_error(error: ModelProviderError) -> Response {
+fn active_profile_token_error(error: ModelProviderError, locale: &str) -> Response {
     match error {
         ModelProviderError::AuthenticationRequired
         | ModelProviderError::Unauthorized
@@ -137,22 +138,27 @@ fn active_profile_token_error(error: ModelProviderError) -> Response {
         | ModelProviderError::ConnectionNotReady => generic_profile_error(
             StatusCode::UNAUTHORIZED,
             "PERSONAI_PROFILE_AUTH_REQUIRED",
-            "The active PersonAI profile is not authorized",
+            tron_i18n::t!("profiles.auth_required", locale = locale),
         ),
         ModelProviderError::Remote(_) => generic_profile_error(
             StatusCode::SERVICE_UNAVAILABLE,
             "PERSONAI_PROFILE_TEMPORARILY_UNAVAILABLE",
-            "PersonAI is temporarily unavailable; please retry",
+            tron_i18n::t!("profiles.temporarily_unavailable", locale = locale),
         ),
         _ => generic_profile_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "PERSONAI_PROFILE_TOKEN_FAILED",
-            "Could not load the active PersonAI profile token",
+            tron_i18n::t!("profiles.token_failed", locale = locale),
         ),
     }
 }
 
-async fn remove_profile(State(state): State<AppState>, Path(profile_id): Path<String>) -> Response {
+async fn remove_profile(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(profile_id): Path<String>,
+) -> Response {
+    let locale = request_locale(&headers);
     match state.profiles.remove(&profile_id) {
         Ok(()) => {
             if let Ok(Some(profile)) = state.profiles.active() {
@@ -160,28 +166,34 @@ async fn remove_profile(State(state): State<AppState>, Path(profile_id): Path<St
                     &profile.person_ai_user_id,
                     &profile.person_ai_username,
                 ) {
-                    return provider_activation_error_response(error);
+                    return provider_activation_error_response(error, &locale);
                 }
             }
             state.account_sync.request_sync();
             Json(ApiResponse::success(serde_json::json!({}))).into_response()
         }
-        Err(error) => profile_error_response(error),
+        Err(error) => profile_error_response(error, &locale),
     }
 }
 
-async fn bootstrap_status(State(state): State<AppState>) -> Response {
+async fn bootstrap_status(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let locale = request_locale(&headers);
     match state.profiles.bootstrap_status() {
         Ok(status) => Json(ApiResponse::success(status)).into_response(),
-        Err(error) => profile_error_response(error),
+        Err(error) => profile_error_response(error, &locale),
     }
 }
 
-async fn profile_avatar(State(state): State<AppState>, Path(profile_id): Path<String>) -> Response {
+async fn profile_avatar(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(profile_id): Path<String>,
+) -> Response {
+    let locale = request_locale(&headers);
     let avatar = match state.profiles.cached_avatar(&profile_id) {
         Ok(Some(avatar)) => avatar,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(error) => return profile_error_response(error),
+        Err(error) => return profile_error_response(error, &locale),
     };
     let content_type = match HeaderValue::from_str(&avatar.content_type) {
         Ok(content_type) => content_type,
@@ -199,24 +211,28 @@ async fn profile_avatar(State(state): State<AppState>, Path(profile_id): Path<St
     response
 }
 
-async fn list_profiles(State(state): State<AppState>) -> Response {
+async fn list_profiles(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let locale = request_locale(&headers);
     match state.profiles.list() {
         Ok(records) => Json(ApiResponse::success(records)).into_response(),
-        Err(error) => profile_error_response(error),
+        Err(error) => profile_error_response(error, &locale),
     }
 }
 
-async fn create_pending_profile(State(state): State<AppState>) -> Response {
+async fn create_pending_profile(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let locale = request_locale(&headers);
     match state.profiles.create_pending() {
         Ok(record) => (StatusCode::CREATED, Json(ApiResponse::success(record))).into_response(),
-        Err(error) => profile_error_response(error),
+        Err(error) => profile_error_response(error, &locale),
     }
 }
 
 async fn activate_profile(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(profile_id): Path<String>,
 ) -> Response {
+    let locale = request_locale(&headers);
     match state.profiles.activate(&profile_id) {
         Ok(record) => match state
             .model_providers
@@ -226,41 +242,50 @@ async fn activate_profile(
                 state.account_sync.request_sync();
                 Json(ApiResponse::success(record)).into_response()
             }
-            Err(error) => provider_activation_error_response(error),
+            Err(error) => provider_activation_error_response(error, &locale),
         },
-        Err(error) => profile_error_response(error),
+        Err(error) => profile_error_response(error, &locale),
     }
 }
 
 fn provider_activation_error_response(
     error: crate::application::model_provider::ModelProviderError,
+    locale: &str,
 ) -> Response {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiResponse::<EmptyData>::error(
             "PERSONAI_PROFILE_CREDENTIALS_FAILED",
-            format!("failed to activate PersonAI profile credentials: {error}"),
+            tron_i18n::t!(
+                "profiles.credentials_failed",
+                locale = locale,
+                detail = error
+            ),
         )),
     )
         .into_response()
 }
 
-fn profile_error_response(error: ProfileRegistryError) -> Response {
+fn profile_error_response(error: ProfileRegistryError, locale: &str) -> Response {
     let (status, code, message) = match error {
         ProfileRegistryError::ProfileNotFound(profile_id) => (
             StatusCode::NOT_FOUND,
             "PERSONAI_PROFILE_NOT_FOUND",
-            format!("PersonAI profile `{profile_id}` was not found"),
+            tron_i18n::t!(
+                "profiles.not_found",
+                locale = locale,
+                profile_id = profile_id
+            ),
         ),
         ProfileRegistryError::InvalidInput(field) => (
             StatusCode::BAD_REQUEST,
             "PERSONAI_PROFILE_INVALID",
-            format!("{field} is required"),
+            tron_i18n::t!("profiles.invalid_input", locale = locale, field = field),
         ),
         ProfileRegistryError::Storage(_) | ProfileRegistryError::LockPoisoned => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "PERSONAI_PROFILE_REGISTRY_FAILED",
-            "PersonAI profile registry operation failed".to_owned(),
+            tron_i18n::t!("profiles.registry_failed", locale = locale).into_owned(),
         ),
     };
     generic_profile_error(status, code, message)

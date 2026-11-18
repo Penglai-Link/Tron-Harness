@@ -238,11 +238,17 @@ impl Runtime {
                                 .as_ref()
                                 .is_some_and(|value| value["kind"] == "ask_caller")
                         }) {
-                            feedback_host.notify_native_run(&origin.run_id.to_string(), &format!(
-                                "独立线程 {} 正在等待调用方回答。用 thread_wait 获取交互，再用 thread_answer 回答。interactions={}",
-                                summary.session_id,
-                                serde_json::to_string(&result.interactions).unwrap_or_default(),
-                            ));
+                            feedback_host.notify_native_run(
+                                &origin.run_id.to_string(),
+                                &tron_i18n::t!(
+                                    "agent_runtime.collaboration.thread_awaiting_answer",
+                                    locale = thread.context.locale.as_str(),
+                                    thread_id = summary.session_id,
+                                    interactions = serde_json::to_string(&result.interactions)
+                                        .unwrap_or_default()
+                                ),
+                                thread.context.locale.as_str(),
+                            );
                         }
                     }
                 }

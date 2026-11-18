@@ -15,49 +15,42 @@ impl GraphApiError {
 }
 impl IntoResponse for GraphApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.descriptor();
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.rag.graph.invalid_request" => (
-                StatusCode::BAD_REQUEST,
-                "图谱查询参数无效",
-                "Invalid graph query parameters",
-            ),
-            "tron.rag.graph.scope_denied" => (
-                StatusCode::FORBIDDEN,
-                "无权查询该语料图谱",
-                "Access to this corpus graph is denied",
-            ),
-            "tron.rag.graph.node_not_found" => (
-                StatusCode::NOT_FOUND,
-                "节点不存在或不在可访问范围内",
-                "Node not found in the accessible scope",
-            ),
-            "tron.rag.graph.snapshot_changed" => (
-                StatusCode::CONFLICT,
-                "授权、发布版本或查询游标已变化，请重新检索",
-                "Authorization, publication or cursor has changed; search again",
-            ),
-            "tron.rag.graph.channel_unavailable" => (
-                StatusCode::BAD_GATEWAY,
-                "图谱检索通道暂不可用，请稍后重试",
-                "Graph retrieval is unavailable; try again later",
-            ),
-            "tron.rag.graph.disabled" => (
-                StatusCode::CONFLICT,
-                "该语料尚未启用图谱",
-                "Graph indexing is disabled for this corpus",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "图谱读取失败",
-                "Could not read graph data",
-            ),
+        let status = match descriptor.message_key {
+            "tron.rag.graph.invalid_request" => StatusCode::BAD_REQUEST,
+            "tron.rag.graph.scope_denied" => StatusCode::FORBIDDEN,
+            "tron.rag.graph.node_not_found" => StatusCode::NOT_FOUND,
+            "tron.rag.graph.snapshot_changed" | "tron.rag.graph.disabled" => StatusCode::CONFLICT,
+            "tron.rag.graph.channel_unavailable" => StatusCode::BAD_GATEWAY,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match descriptor.message_key {
+            "tron.rag.graph.invalid_request" => {
+                t!("tron.rag.graph.invalid_request", locale = &self.1)
+            }
+            "tron.rag.graph.scope_denied" => {
+                t!("tron.rag.graph.scope_denied", locale = &self.1)
+            }
+            "tron.rag.graph.node_not_found" => {
+                t!("tron.rag.graph.node_not_found", locale = &self.1)
+            }
+            "tron.rag.graph.snapshot_changed" => {
+                t!("tron.rag.graph.snapshot_changed", locale = &self.1)
+            }
+            "tron.rag.graph.channel_unavailable" => {
+                t!("tron.rag.graph.channel_unavailable", locale = &self.1)
+            }
+            "tron.rag.graph.disabled" => {
+                t!("tron.rag.graph.disabled", locale = &self.1)
+            }
+            _ => t!("tron.rag.graph.storage_failed", locale = &self.1),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

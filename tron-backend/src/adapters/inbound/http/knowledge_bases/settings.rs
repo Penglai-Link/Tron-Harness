@@ -30,39 +30,35 @@ pub(super) struct UpdatedSettingsView {
 pub(super) struct SettingsApiError(KnowledgeBaseError, String);
 impl IntoResponse for SettingsApiError {
     fn into_response(self) -> Response {
+        use tron_i18n::t;
         let descriptor = self.0.library_deletion_descriptor();
-        let (status, zh, en) = match self.0 {
-            KnowledgeBaseError::NotFound => (
-                StatusCode::NOT_FOUND,
-                "知识库不存在",
-                "Knowledge base not found",
-            ),
-            KnowledgeBaseError::Forbidden => (
-                StatusCode::FORBIDDEN,
-                "无知识库权限",
-                "Access to this knowledge base is denied",
-            ),
-            KnowledgeBaseError::Invalid(_) => (
-                StatusCode::BAD_REQUEST,
-                "知识库名称、说明或索引配置无效",
-                "Invalid knowledge base name, description or index settings",
-            ),
-            KnowledgeBaseError::Conflict => (
-                StatusCode::CONFLICT,
-                "知识库状态已改变，请刷新后重试",
-                "Knowledge base changed; refresh and try again",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "知识库配置操作失败，请刷新后重试",
-                "Could not configure the knowledge base; refresh and try again",
-            ),
+        let status = match &self.0 {
+            KnowledgeBaseError::NotFound => StatusCode::NOT_FOUND,
+            KnowledgeBaseError::Forbidden => StatusCode::FORBIDDEN,
+            KnowledgeBaseError::Invalid(_) => StatusCode::BAD_REQUEST,
+            KnowledgeBaseError::Conflict => StatusCode::CONFLICT,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        let message = match &self.0 {
+            KnowledgeBaseError::NotFound => {
+                t!("tron.knowledge_base.not_found", locale = &self.1)
+            }
+            KnowledgeBaseError::Forbidden => {
+                t!("tron.knowledge_base.forbidden", locale = &self.1)
+            }
+            KnowledgeBaseError::Invalid(_) => {
+                t!("knowledge.base.settings.invalid", locale = &self.1)
+            }
+            KnowledgeBaseError::Conflict => {
+                t!("tron.knowledge_base.conflict", locale = &self.1)
+            }
+            _ => t!("knowledge.base.settings.failed", locale = &self.1),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

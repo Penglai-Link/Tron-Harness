@@ -1,0 +1,993 @@
+# Agent runtime, business tools and context presentation text.
+#
+# Every message here is resolved with the Agent run locale (`AgentRunContext.locale`,
+# the run/tool invocation extension or the HTTP request locale) and never with the
+# process-global rust-i18n locale: concurrent sessions may use different languages.
+_version: 2
+agent_runtime.tool.graph.invalid_parameters:
+  en: "Invalid graph query parameters"
+  zh-CN: "图谱查询参数无效"
+
+agent_runtime.tool.graph.missing_user_identity:
+  en: "Missing trusted user identity"
+  zh-CN: "缺少可信用户身份"
+
+agent_runtime.tool.graph.missing_agent_identity:
+  en: "Missing trusted Agent identity"
+  zh-CN: "缺少可信智能体身份"
+
+agent_runtime.tool.graph.cancelled:
+  en: "Graph query cancelled"
+  zh-CN: "图谱查询已取消"
+
+agent_runtime.tool.graph.timed_out:
+  en: "Graph query timed out"
+  zh-CN: "图谱查询超时"
+
+agent_runtime.tool.graph.error.invalid:
+  en: "Invalid graph query parameters"
+  zh-CN: "图谱查询参数无效"
+
+agent_runtime.tool.graph.error.forbidden:
+  en: "Graph access denied"
+  zh-CN: "无权查询该语料图谱"
+
+agent_runtime.tool.graph.error.disabled:
+  en: "Graph indexing is disabled"
+  zh-CN: "该语料尚未启用图谱"
+
+agent_runtime.tool.graph.error.node_not_found:
+  en: "Node not found in accessible scope"
+  zh-CN: "节点不存在或不在可访问范围内"
+
+agent_runtime.tool.graph.error.snapshot_changed:
+  en: "Graph snapshot changed or expired; search again"
+  zh-CN: "授权、发布版本或游标已变化，请重新检索"
+
+agent_runtime.tool.graph.error.unavailable:
+  en: "Graph retrieval unavailable"
+  zh-CN: "图谱检索通道暂不可用"
+
+agent_runtime.tool.graph.error.read_failed:
+  en: "Could not read graph data"
+  zh-CN: "图谱读取失败"
+
+agent_runtime.tool.memory.error.conflict:
+  en: "Memory changed; get the current version before editing."
+  zh-CN: "记忆已变更，请读取当前版本后编辑。"
+
+agent_runtime.tool.memory.error.not_found:
+  en: "Memory not found."
+  zh-CN: "记忆不存在。"
+
+agent_runtime.tool.memory.error.forbidden:
+  en: "Memory scope is outside this run."
+  zh-CN: "记忆范围超出当前运行授权。"
+
+agent_runtime.tool.memory.error.validation:
+  en: "Invalid memory content, scope or version."
+  zh-CN: "记忆内容、范围或版本无效。"
+
+agent_runtime.tool.memory.error.failed:
+  en: "Memory operation failed; retry or inspect diagnostics."
+  zh-CN: "记忆操作失败，请重试或查看诊断。"
+
+agent_runtime.tool.memory.cancelled:
+  en: "Memory request cancelled"
+  zh-CN: "记忆请求已取消"
+
+agent_runtime.tool.memory.timed_out:
+  en: "Memory request timed out"
+  zh-CN: "记忆请求超时"
+
+agent_runtime.tool.memory.worker_failed:
+  en: "Memory worker failed"
+  zh-CN: "记忆工具执行异常"
+
+agent_runtime.tool.memory.invalid_parameters:
+  en: "Invalid memory tool parameters"
+  zh-CN: "记忆工具参数无效"
+
+agent_runtime.tool.rag.cancelled:
+  en: "Retrieval cancelled"
+  zh-CN: "检索已取消"
+
+agent_runtime.tool.rag.timed_out:
+  en: "Retrieval timed out"
+  zh-CN: "检索超时"
+
+agent_runtime.tool.rag.worker_failed:
+  en: "Retrieval worker failed"
+  zh-CN: "检索任务异常退出"
+
+agent_runtime.tool.rag.missing_user_identity:
+  en: "Retrieval run context is missing the user identity"
+  zh-CN: "检索运行上下文缺少用户身份"
+
+agent_runtime.tool.rag.missing_agent_identity:
+  en: "Retrieval run context is missing the Agent identity"
+  zh-CN: "检索运行上下文缺少智能体身份"
+
+agent_runtime.tool.quality.missing_user_identity:
+  en: "Missing trusted user identity"
+  zh-CN: "缺少可信用户身份"
+
+agent_runtime.tool.quality.no_session_permission:
+  en: "No permission for this session"
+  zh-CN: "无会话权限"
+
+agent_runtime.tool.quality.bound_library_only:
+  en: "This session can only operate the bound knowledge base"
+  zh-CN: "当前会话只能操作绑定的知识库"
+
+agent_runtime.tool.quality.library_required:
+  en: "libraryId is required"
+  zh-CN: "需要 libraryId"
+
+agent_runtime.tool.quality.source_fingerprint_required:
+  en: "sourceFingerprint is required"
+  zh-CN: "需要 sourceFingerprint"
+
+agent_runtime.tool.quality.request_id_required:
+  en: "A unique requestId is required; reuse it when retrying the same operation"
+  zh-CN: "需要唯一 requestId，重试同一操作时沿用"
+
+agent_runtime.tool.quality.wait_seconds_limit:
+  en: "waitSeconds must not exceed 25 seconds"
+  zh-CN: "waitSeconds 不能超过 25 秒"
+
+agent_runtime.tool.quality.run_id_required:
+  en: "runId is required"
+  zh-CN: "需要 runId"
+
+agent_runtime.tool.quality.cancelled:
+  en: "Tool call cancelled; a started optimization can be stopped with rag_quality_cancel"
+  zh-CN: "工具调用已取消；已启动的优化可通过 rag_quality_cancel 停止"
+
+agent_runtime.tool.quality.timed_out:
+  en: "Tool wait timed out; use rag_quality_status to keep checking"
+  zh-CN: "工具等待超时；可用 rag_quality_status 继续查询"
+
+agent_runtime.tool.quality.async_runtime_required:
+  en: "Retrieval optimization requires the host async runtime"
+  zh-CN: "检索优化需要宿主异步运行时"
+
+agent_runtime.tool.quality.worker_failed:
+  en: "Quality evaluation tool exited unexpectedly"
+  zh-CN: "评测工具异常退出"
+
+agent_runtime.context.block.seed_prompt_prefix.name:
+  en: "System prompt"
+  zh-CN: "系统提示词"
+
+agent_runtime.context.block.seed_prompt_prefix.description:
+  en: "Base system and developer instructions, including the usage rules supplied by enabled capabilities."
+  zh-CN: "基础系统提示、开发者指令，以及已启用能力提供的使用规则。"
+
+agent_runtime.context.block.conversation_history_summary.name:
+  en: "Conversation summary"
+  zh-CN: "对话历史摘要"
+
+agent_runtime.context.block.conversation_history_summary.description:
+  en: "A compressed summary of earlier conversation turns, retaining decisions, progress and information needed to continue."
+  zh-CN: "较早对话的压缩摘要，保留决策、进展及继续任务所需的信息。"
+
+agent_runtime.context.block.current_session_history.name:
+  en: "Conversation history"
+  zh-CN: "对话历史"
+
+agent_runtime.context.block.current_session_history.description:
+  en: "Recent user and assistant messages, model reasoning retained by the provider, tool calls and their results."
+  zh-CN: "近期用户与助手消息、供应商保留的推理内容，以及工具调用和执行结果。"
+
+agent_runtime.context.block.current_session_working_state.name:
+  en: "Working state"
+  zh-CN: "工作状态"
+
+agent_runtime.context.block.current_session_working_state.description:
+  en: "The current session's goal, plan, tasks, progress and other mutable state used to resume work."
+  zh-CN: "当前会话的目标、计划、任务、进度及恢复工作所需的动态状态。"
+
+agent_runtime.context.block.runtime_identity.name:
+  en: "Runtime identity"
+  zh-CN: "运行身份"
+
+agent_runtime.context.block.runtime_identity.description:
+  en: "The current agent or PersonAI's name, identity confirmation state, soul settings and interface language."
+  zh-CN: "当前智能体或 PersonAI 的名称、身份确认状态、灵魂设定及界面语言。"
+
+agent_runtime.context.block.assistant_onboarding.name:
+  en: "PersonAI onboarding"
+  zh-CN: "PersonAI 唤醒配置"
+
+agent_runtime.context.block.assistant_onboarding.description:
+  en: "The PersonAI's initialization state, name confirmation and pending interaction; empty once initialization is complete."
+  zh-CN: "PersonAI 的初始化状态、名称确认情况及待处理交互；初始化完成后为空。"
+
+agent_runtime.context.block.tool_domains.name:
+  en: "Tool domains"
+  zh-CN: "工具领域"
+
+agent_runtime.context.block.tool_domains.description:
+  en: "The authorized tool-domain catalog and instructions for discovering the tools needed for a task. Full tool schemas are counted separately."
+  zh-CN: "已授权工具领域的目录，以及按任务发现工具的说明；完整工具参数定义单独统计。"
+
+agent_runtime.context.block.agent_directory.name:
+  en: "Agent directory"
+  zh-CN: "智能体目录"
+
+agent_runtime.context.block.agent_directory.description:
+  en: "Authorized agents that can receive delegated tasks, with their codes, names and responsibilities."
+  zh-CN: "可委派任务的已授权智能体，包括标识、名称和职责。"
+
+agent_runtime.context.block.page_context.name:
+  en: "Page context"
+  zh-CN: "页面上下文"
+
+agent_runtime.context.block.page_context.description:
+  en: "The latest user input's page location snapshot: title, path, workspace and selected object. An input without a page snapshot clears this block."
+  zh-CN: "最新一条用户消息发送时的页面位置快照，包括标题、路径、工作区和选中对象；该条消息没有页面快照时清空本块。"
+
+agent_runtime.context.block.application_context.name:
+  en: "Application execution context"
+  zh-CN: "应用执行上下文"
+
+agent_runtime.context.block.application_context.description:
+  en: "Selected applications, working directories, Git branches, execution environment and loaded project instructions such as AGENTS.md."
+  zh-CN: "选中的应用、工作目录、Git 分支、执行环境，以及已加载的 AGENTS.md 等项目指令。"
+
+agent_runtime.context.block.topic_memo.name:
+  en: "Topic notes and references"
+  zh-CN: "主题说明与引用"
+
+agent_runtime.context.block.topic_memo.description:
+  en: "The current topic's notes and resource references, refreshed for each model request."
+  zh-CN: "当前主题的说明和资源引用，在每次模型请求时刷新。"
+
+agent_runtime.context.block.long_term_memory.name:
+  en: "Long-term memory"
+  zh-CN: "长期记忆"
+
+agent_runtime.context.block.long_term_memory.description:
+  en: "Relevant enabled memories, with original sources and retrieval diagnostics."
+  zh-CN: "按相关性召回的启用记忆，展示原始来源、实际用量和检索异常。"
+
+agent_runtime.context.block.knowledge_base.name:
+  en: "Knowledge-base information"
+  zh-CN: "知识库信息"
+
+agent_runtime.context.block.knowledge_base.description:
+  en: "Knowledge-base information and retrieved reference material available within the current agent's authorization scope."
+  zh-CN: "当前智能体权限范围内可用的知识库信息，以及检索得到的参考资料。"
+
+agent_runtime.context.block.assistant_environment.name:
+  en: "PersonAI environment"
+  zh-CN: "PersonAI 运行环境"
+
+agent_runtime.context.block.assistant_environment.description:
+  en: "The PersonAI's user and workspace, selected applications, working directory and execution scope."
+  zh-CN: "PersonAI 所属用户和工作区、选中的应用、工作目录及执行范围。"
+
+agent_runtime.context.block.assistant_wakeup.name:
+  en: "Current trigger"
+  zh-CN: "本轮触发信息"
+
+agent_runtime.context.block.assistant_wakeup.description:
+  en: "The event, notification or scheduled task that triggered this PersonAI run, and its related input."
+  zh-CN: "触发本轮 PersonAI 运行的事件、通知或定时任务，以及相关输入。"
+
+agent_runtime.context.block.agent_directory_guidance.name:
+  en: "Agent directory instructions"
+  zh-CN: "智能体目录指令"
+
+agent_runtime.context.block.agent_directory_guidance.description:
+  en: "Rules for selecting authorized agents and delegating tasks through the agent directory."
+  zh-CN: "通过智能体目录选择已授权智能体并委派任务的规则。"
+
+agent_runtime.context.block.assistant_guidance.name:
+  en: "PersonAI instructions"
+  zh-CN: "PersonAI 指令"
+
+agent_runtime.context.block.assistant_guidance.description:
+  en: "Instructions governing PersonAI initialization, background work, progress and notifications."
+  zh-CN: "管理 PersonAI 初始化、后台工作、进展汇报和通知的规则。"
+
+agent_runtime.context.block.protocol.name:
+  en: "Tool definitions"
+  zh-CN: "工具定义"
+
+agent_runtime.context.block.protocol.description:
+  en: "Names, descriptions and parameter schemas of the tools sent to the model. These protocol tokens are deducted before allocating context-block shares."
+  zh-CN: "实际发送给模型的工具名称、描述和参数结构。其协议开销先从输入窗口扣除，再按比例分配各上下文块预算。"
+
+agent_runtime.http.context_blocks.unavailable:
+  en: "Could not load context block descriptions."
+  zh-CN: "无法读取上下文块描述。"
+
+agent_runtime.http.context_layout.invalid:
+  en: "The context configuration is invalid."
+  zh-CN: "上下文配置无效。"
+
+agent_runtime.http.context_layout.invalid_total:
+  en: "Context shares must be positive and total at most 100%."
+  zh-CN: "每块占比至少为 0.01%，合计不能超过 100%。"
+
+agent_runtime.http.context_layout.unavailable:
+  en: "Could not load or save context configuration settings."
+  zh-CN: "无法读取或保存上下文配置。"
+
+agent_runtime.http.context_layout.conflict:
+  en: "Context configuration changed elsewhere. Refresh and try again."
+  zh-CN: "上下文配置已被其他操作修改，请刷新后重试。"
+
+agent_runtime.chat.title.prompt_unavailable:
+  en: "The title generation prompt is unavailable"
+  zh-CN: "标题生成提示词不可用"
+
+agent_runtime.chat.title.routing_unavailable:
+  en: "Automatic text generation routing is not configured"
+  zh-CN: "文本生成自动路由未配置"
+
+agent_runtime.chat.title.session_read_failed:
+  en: "Could not read the session; the title was not saved"
+  zh-CN: "读取会话失败，标题未保存"
+
+agent_runtime.chat.title.persistence_failed:
+  en: "Could not save the session title"
+  zh-CN: "会话标题保存失败"
+
+agent_runtime.chat.title.model_unavailable:
+  en: "No title generation model is available"
+  zh-CN: "标题生成模型不可用"
+
+agent_runtime.chat.title.format_invalid:
+  en: "The model returned an empty or invalid title"
+  zh-CN: "模型返回的标题为空或格式无效"
+
+agent_runtime.chat.title.upstream_timeout:
+  en: "The title generation model call timed out"
+  zh-CN: "标题生成模型调用超时"
+
+agent_runtime.chat.title.upstream_failed:
+  en: "The title generation model call failed: %{detail}"
+  zh-CN: "标题生成模型调用失败：%{detail}"
+
+agent_runtime.assistant.awakening_message:
+  en: "Wake up"
+  zh-CN: "醒醒"
+
+agent_runtime.assistant.stale_task_reminder_skipped:
+  en: "The task was adjusted, so the stale reminder was skipped"
+  zh-CN: "任务已调整，旧提醒已跳过"
+
+agent_runtime.message.sender.system_heartbeat:
+  en: "System heartbeat"
+  zh-CN: "系统心跳"
+
+agent_runtime.message.sender.task_reminder:
+  en: "Task reminder"
+  zh-CN: "任务提醒"
+
+agent_runtime.message.sender.thread_feedback:
+  en: "Thread feedback"
+  zh-CN: "Thread 反馈"
+
+agent_runtime.message.sender.user:
+  en: "You"
+  zh-CN: "你"
+
+agent_runtime.message.sender.memory_maintenance:
+  en: "Memory maintenance"
+  zh-CN: "记忆整理"
+
+agent_runtime.message.sender.system_notification:
+  en: "System notice"
+  zh-CN: "系统通知"
+
+agent_runtime.collaboration.child_awaiting_input:
+  en: "Waiting for the caller's answer. Use child_wait to get the full interaction, then answer with child_answer. interactions=%{interactions}"
+  zh-CN: "等待调用方回答。用 child_wait 获取完整交互，再用 child_answer 回答。interactions=%{interactions}"
+
+agent_runtime.collaboration.child_finished:
+  en: "The background child execution finished (childRunId=%{child_run_id}, status=%{status}, agent=%{session_id}). Output summary: %{summary}. Use child_wait when the full result is needed."
+  zh-CN: "后台子执行已结束（childRunId=%{child_run_id}，status=%{status}，agent=%{session_id}）。输出摘要：%{summary}。需要完整结果时用 child_wait 获取。"
+
+agent_runtime.collaboration.thread_awaiting_answer:
+  en: "Independent thread %{thread_id} is waiting for the caller's answer. Use thread_wait to get the interaction, then answer with thread_answer. interactions=%{interactions}"
+  zh-CN: "独立线程 %{thread_id} 正在等待调用方回答。用 thread_wait 获取交互，再用 thread_answer 回答。interactions=%{interactions}"
+
+agent_runtime.context.topic.unavailable:
+  en: "[Topic information is unavailable; do not assume the topic references were read.]"
+  zh-CN: "[主题信息不可用，请勿假定已读取主题引用。]"
+
+agent_runtime.context.topic.partial:
+  en: "[Part of the topic notes or references are not shown; with topic_read permission the full authorized information can be loaded.]"
+  zh-CN: "[部分主题说明或引用未显示；如有 topic_read 权限，可获取授权范围内的完整信息。]"
+
+agent_runtime.context.topic.head:
+  en: "[Topic %{code}, revision %{revision}]"
+  zh-CN: "[主题 %{code}，版本 %{revision}]"
+
+agent_runtime.context.topic.reference_identity:
+  en: "Topic reference identifier: %{identity}"
+  zh-CN: "主题引用标识：%{identity}"
+
+agent_runtime.context.topic.reference_detail:
+  en: "Topic reference detail: %{text}"
+  zh-CN: "主题引用详情：%{text}"
+
+agent_runtime.context.topic.notes_prefix:
+  en: "Topic notes: "
+  zh-CN: "主题说明："
+
+agent_runtime.context.knowledge.retrieval_failed:
+  en: "[Knowledge-base retrieval failed: %{error}. No evidence is available now; do not claim the material was verified.]"
+  zh-CN: "[知识库检索失败：%{error}。当前没有可用证据，不得声称已经核对资料。]"
+
+agent_runtime.context.knowledge.visual_authorization_failed:
+  en: "[Knowledge-base source or image authorization check failed: %{error}. The related evidence cannot be used.]"
+  zh-CN: "[知识库原文或图片授权校验失败：%{error}。相关证据不可使用。]"
+
+agent_runtime.context.knowledge.image_unsupported:
+  en: "Image resource %{resource_code} cannot be processed within the SDK image limits; the model has not seen the original image"
+  zh-CN: "图片资源%{resource_code}无法在SDK图片限制内处理；当前模型未查看该原图"
+
+agent_runtime.context.knowledge.visual_evidence_unloaded:
+  en: "[Visual evidence was not loaded: %{warning}]"
+  zh-CN: "[视觉证据未载入: %{warning}]"
+
+agent_runtime.context.memory.retrieval_failed:
+  en: "[Long-term memory retrieval failed; no memory evidence is available.]"
+  zh-CN: "[长期记忆检索失败，本轮没有可用记忆证据。]"
+
+agent_runtime.context.memory.retrieval_diagnostic:
+  en: "[Memory retrieval diagnostic: %{warning}]"
+  zh-CN: "[记忆检索诊断: %{warning}]"
+
+agent_runtime.context.memory.entry:
+  en: "[Long-term memory: %{memory_code} | sources: %{source}]\n%{content}"
+  zh-CN: "[长期记忆: %{memory_code} | 来源: %{source}]\n%{content}"
+
+agent_runtime.assistant.identity_service_unavailable:
+  en: "PersonAI identity service unavailable"
+  zh-CN: "PersonAI 身份服务不可用"
+
+agent_runtime.assistant.service_unavailable:
+  en: "PersonAI service unavailable"
+  zh-CN: "PersonAI 服务不可用"
+
+agent_runtime.assistant.prompt_missing:
+  en: "Bundled developer prompt is missing: %{key}"
+  zh-CN: "缺少内置开发者提示词：%{key}"
+
+agent_runtime.assistant.guidance.lockstep:
+  en: "Coordinate other agents and use your assistant_memory_*, assistant_task_*, and notification tools for memories, your own tasks, and notifications. Delegate Harness platform configuration and workspace business data to the main agent."
+  zh-CN: "PersonAI 负责协调其他 Agent，并使用自己的 assistant_memory_*、assistant_task_* 和通知工具管理记忆、本人负责的任务及通知。Harness 平台配置和工作区业务数据交给主 Agent 处理。"
+
+agent_runtime.model.stream_overflow:
+  en: "Model stream exceeded the bounded host handoff capacity"
+  zh-CN: "模型流超出宿主转发容量上限"
+
+agent_runtime.model.empty_final_output:
+  en: "Agent completed without an assistant response"
+  zh-CN: "智能体运行结束但没有生成助手回复"
+
+agent_runtime.model.empty_final_output_with_tool_failure:
+  en: "Agent completed without an assistant response; last tool failure: %{failure}"
+  zh-CN: "智能体运行结束但没有生成助手回复；最后一次工具失败：%{failure}"
+
+agent_runtime.tool.authority.unauthorized_tool:
+  en: "Unauthorized tool: %{tool}"
+  zh-CN: "未授权的工具：%{tool}"
+
+agent_runtime.tool.authority.missing_acl:
+  en: "Missing tool ACL: %{tool}"
+  zh-CN: "缺少工具权限配置：%{tool}"
+
+agent_runtime.tool.authority.extension_disabled:
+  en: "The tool extension is disabled"
+  zh-CN: "工具扩展已关闭"
+
+agent_runtime.tool.authority.computer_use_restricted:
+  en: "Computer Use is restricted to the main Agent and main PersonAI"
+  zh-CN: "Computer Use 仅限主 Agent 和主 PersonAI 使用"
+
+agent_runtime.tool.authority.skill_unavailable:
+  en: "The skill is not assigned or is unavailable"
+  zh-CN: "该技能未分配或不可用"
+
+agent_runtime.tool.authority.changed_after_admission:
+  en: "Tool authority changed after catalog admission"
+  zh-CN: "工具权限在目录准入后发生了变化"
+
+agent_runtime.capability.plugin.external_agent:
+  en: "External Agent Binding"
+  zh-CN: "外部 Agent 绑定"
+
+agent_runtime.capability.plugin.external_agent_loop:
+  en: "External Agent Loop"
+  zh-CN: "外部 Agent 执行循环"
+
+agent_runtime.capability.plugin.scoped_terminal_service:
+  en: "Scoped Terminal Service"
+  zh-CN: "授权终端服务"
+
+agent_runtime.capability.plugin.scoped_local_tools:
+  en: "Scoped Local Tools"
+  zh-CN: "授权本地工具"
+
+agent_runtime.capability.plugin.agent_collaboration_tools:
+  en: "Agent Collaboration Tools"
+  zh-CN: "Agent 协作工具"
+
+agent_runtime.capability.plugin.a2ui_interfaces:
+  en: "A2UI Interfaces"
+  zh-CN: "A2UI 交互界面"
+
+agent_runtime.capability.plugin.personai_services:
+  en: "PersonAI Services"
+  zh-CN: "PersonAI 服务"
+
+agent_runtime.capability.plugin.tool_discovery:
+  en: "Tool Discovery"
+  zh-CN: "工具发现"
+
+agent_runtime.capability.plugin.web_tools:
+  en: "Web Tools"
+  zh-CN: "网页工具"
+
+agent_runtime.capability.plugin.media_tools:
+  en: "Media Tools"
+  zh-CN: "媒体工具"
+
+agent_runtime.capability.plugin.tron_business_tools:
+  en: "Tron Business Tools"
+  zh-CN: "Tron 业务工具"
+
+agent_runtime.capability.plugin.tron_tool_permissions:
+  en: "Tron Tool Permissions"
+  zh-CN: "Tron 工具权限"
+
+agent_runtime.capability.plugin.context_assembly:
+  en: "Context Assembly"
+  zh-CN: "上下文组装"
+
+agent_runtime.capability.external_provider:
+  en: "External"
+  zh-CN: "外部"
+
+agent_runtime.capability.imported_package_description:
+  en: "Imported external capability package"
+  zh-CN: "导入的外部能力包"
+
+agent_runtime.capability.pack.external_agent.name:
+  en: "External Agent"
+  zh-CN: "外部 Agent"
+
+agent_runtime.capability.pack.external_agent.description:
+  en: "External Agent Invocation and Session Bridge"
+  zh-CN: "外部 Agent 调用与会话桥接"
+
+agent_runtime.capability.pack.scoped_local.name:
+  en: "Scoped Local Tools"
+  zh-CN: "授权本地工具"
+
+agent_runtime.capability.pack.scoped_local.description:
+  en: "Scoped filesystem, command and shared PTY capabilities"
+  zh-CN: "受控的文件系统、命令与共享 PTY 能力"
+
+agent_runtime.capability.pack.agent_collaboration.name:
+  en: "Agent Collaboration"
+  zh-CN: "Agent 协作"
+
+agent_runtime.capability.pack.agent_collaboration.description:
+  en: "Named child-agent delegation and independent threads"
+  zh-CN: "具名子智能体委派与独立线程"
+
+agent_runtime.capability.pack.a2ui.name:
+  en: "A2UI Interfaces"
+  zh-CN: "A2UI 交互界面"
+
+agent_runtime.capability.pack.a2ui.description:
+  en: "Optional interactive cards, forms, guidance and skills for A2UI v0.9.1 clients"
+  zh-CN: "面向 A2UI v0.9.1 客户端的可选交互卡片、表单、指引与技能"
+
+agent_runtime.capability.pack.personai.name:
+  en: "PersonAI"
+  zh-CN: "PersonAI"
+
+agent_runtime.capability.pack.personai.description:
+  en: "Web search, image generation, task querying and AIGC detection with host credentials"
+  zh-CN: "使用宿主凭据的网页搜索、图片生成、任务查询与 AIGC 检测"
+
+agent_runtime.capability.pack.web.name:
+  en: "Web Fetch"
+  zh-CN: "网页读取"
+
+agent_runtime.capability.pack.web.description:
+  en: "Read public webpage text"
+  zh-CN: "读取公开网页文本"
+
+agent_runtime.capability.pack.media.name:
+  en: "Media"
+  zh-CN: "媒体"
+
+agent_runtime.capability.pack.media.description:
+  en: "Read scoped images and PDF files or attachments"
+  zh-CN: "读取授权范围内的图片与 PDF 文件或附件"
+
+agent_runtime.capability.pack.development.name:
+  en: "EliteForge Agent Development"
+  zh-CN: "EliteForge Agent 开发"
+
+agent_runtime.capability.pack.development.description:
+  en: "Framework and Agent UI development skills, including the Tron capability scaffold generator"
+  zh-CN: "Framework 与 Agent UI 开发技能，包含 Tron 能力脚手架生成器"
+
+agent_runtime.capability.pack.remote_access.name:
+  en: "Remote Access"
+  zh-CN: "远程访问"
+
+agent_runtime.capability.pack.remote_access.description:
+  en: "Mobile pairing, short-lived access tokens and remote listener management for PersonAI products"
+  zh-CN: "PersonAI 产品的移动端配对、短期访问令牌与远程监听管理"
+
+agent_runtime.capability.pack.tron_harness.name:
+  en: "Tron Harness"
+  zh-CN: "Tron Harness"
+
+agent_runtime.capability.pack.tron_harness.description:
+  en: "Tron context, business tool policy and bundled theme / memory skills"
+  zh-CN: "Tron 上下文、业务工具策略及内置主题 / 记忆技能"
+
+agent_runtime.tool.input.invalid:
+  en: "Tool input is invalid: %{detail}"
+  zh-CN: "工具输入无效：%{detail}"
+
+agent_runtime.tool.path.required:
+  en: "path is required"
+  zh-CN: "需要 path"
+
+agent_runtime.tool.path.working_directory_unavailable:
+  en: "The configured working directory `%{path}` is unavailable"
+  zh-CN: "配置的工作目录 `%{path}` 不可用"
+
+agent_runtime.tool.path.relative_allowed_directory:
+  en: "Linked project directories must be absolute"
+  zh-CN: "关联项目目录必须是绝对路径"
+
+agent_runtime.tool.path.outside_allowed_directories:
+  en: "The path is outside the linked project directories"
+  zh-CN: "路径不在关联项目目录范围内"
+
+agent_runtime.tool.path.no_existing_parent:
+  en: "The path has no existing parent directory"
+  zh-CN: "该路径没有已存在的父目录"
+
+agent_runtime.tool.path.cannot_resolve:
+  en: "The path cannot be resolved"
+  zh-CN: "无法解析该路径"
+
+agent_runtime.tool.path.directory_missing:
+  en: "Directory `%{path}` does not exist"
+  zh-CN: "目录 `%{path}` 不存在"
+
+agent_runtime.tool.path.current_directory_unavailable:
+  en: "The current application directory is unavailable; explicitly select a valid worktree"
+  zh-CN: "当前应用目录不可用；请显式选择一个有效的工作树"
+
+agent_runtime.tool.file_ref.ambiguous_source:
+  en: "Provide fileRef or legacy path, not both"
+  zh-CN: "请提供 fileRef 或旧版 path，不能同时提供"
+
+agent_runtime.tool.file_ref.invalid_reference:
+  en: "fileRef is invalid: %{detail}"
+  zh-CN: "fileRef 无效：%{detail}"
+
+agent_runtime.tool.file_ref.path_required:
+  en: "path is required"
+  zh-CN: "需要 path"
+
+agent_runtime.tool.file_ref.required:
+  en: "fileRef is required (legacy path is also accepted)"
+  zh-CN: "需要 fileRef（也接受旧版 path）"
+
+agent_runtime.tool.file_ref.attachment_code_required:
+  en: "fileRef.attachmentCode is required"
+  zh-CN: "需要 fileRef.attachmentCode"
+
+agent_runtime.tool.file_access.resource_storage_requires_reference:
+  en: "Resource storage objects must be read through authorized resource references"
+  zh-CN: "资源存储对象必须通过授权资源引用读取"
+
+agent_runtime.tool.file_access.read_failed:
+  en: "File read failed: %{detail}"
+  zh-CN: "文件读取失败：%{detail}"
+
+agent_runtime.tool.file_access.metadata_failed:
+  en: "File metadata read failed: %{detail}"
+  zh-CN: "文件元数据读取失败：%{detail}"
+
+agent_runtime.tool.file_access.file_too_large:
+  en: "The file exceeds the %{limit} byte input limit"
+  zh-CN: "文件超过 %{limit} 字节的输入上限"
+
+agent_runtime.tool.file_access.session_required:
+  en: "Session attachment fileRef requires a conversation session"
+  zh-CN: "会话附件 fileRef 需要会话上下文"
+
+agent_runtime.tool.file_access.attachment_read_failed:
+  en: "Session attachment `%{attachment_code}` could not be read: %{detail}"
+  zh-CN: "无法读取会话附件 `%{attachment_code}`：%{detail}"
+
+agent_runtime.tool.file_access.attachment_too_large:
+  en: "The attachment exceeds the %{limit} byte input limit"
+  zh-CN: "附件超过 %{limit} 字节的输入上限"
+
+agent_runtime.tool.attachment.read_failed:
+  en: "Reading chat attachment `%{attachment_code}` failed: %{detail}"
+  zh-CN: "读取聊天附件 `%{attachment_code}` 失败：%{detail}"
+
+agent_runtime.tool.attachment.start_exceeds_size:
+  en: "startByte %{start} exceeds the attachment size %{size}"
+  zh-CN: "startByte %{start} 超过附件大小 %{size}"
+
+agent_runtime.tool.attachment.not_utf8:
+  en: "Attachment `%{attachment_code}` is not valid UTF-8 text"
+  zh-CN: "附件 `%{attachment_code}` 不是有效的 UTF-8 文本"
+
+agent_runtime.tool.attachment.invalid_chunk_boundary:
+  en: "The text chunk boundary is invalid"
+  zh-CN: "文本分块边界无效"
+
+agent_runtime.tool.attachment.ambiguous_source:
+  en: "Provide fileRef or legacy attachmentCode, not both"
+  zh-CN: "请提供 fileRef 或旧版 attachmentCode，不能同时提供"
+
+agent_runtime.tool.attachment.required:
+  en: "fileRef is required (legacy attachmentCode is also accepted)"
+  zh-CN: "需要 fileRef（也接受旧版 attachmentCode）"
+
+agent_runtime.tool.attachment.invalid_json:
+  en: "File `%{file_name}` is not valid JSON: %{detail}"
+  zh-CN: "文件 `%{file_name}` 不是有效的 JSON：%{detail}"
+
+agent_runtime.tool.attachment.invalid_json_pointer:
+  en: "jsonPath must be an RFC 6901 JSON Pointer beginning with `/`"
+  zh-CN: "jsonPath 必须是以 `/` 开头的 RFC 6901 JSON Pointer"
+
+agent_runtime.tool.attachment.json_pointer_missing:
+  en: "jsonPath `%{path}` does not exist"
+  zh-CN: "jsonPath `%{path}` 不存在"
+
+agent_runtime.tool.attachment.serialize_selection_failed:
+  en: "Serializing the JSON selection failed: %{detail}"
+  zh-CN: "序列化 JSON 选取结果失败：%{detail}"
+
+agent_runtime.tool.attachment.session_required:
+  en: "Chat attachment tools require a conversation session"
+  zh-CN: "聊天附件工具需要会话上下文"
+
+agent_runtime.tool.attachment.limit_positive:
+  en: "limit must be greater than zero"
+  zh-CN: "limit 必须大于零"
+
+agent_runtime.tool.productivity.input_too_large:
+  en: "Tool input exceeds 4 MiB"
+  zh-CN: "工具输入超过 4 MiB"
+
+agent_runtime.tool.productivity.definition_unavailable:
+  en: "The tool definition is unavailable"
+  zh-CN: "工具定义不可用"
+
+agent_runtime.tool.productivity.invalid_input:
+  en: "Invalid tool input: %{detail}"
+  zh-CN: "工具输入无效：%{detail}"
+
+agent_runtime.tool.productivity.result_too_large:
+  en: "The result exceeds 64 KiB; request a smaller range"
+  zh-CN: "结果超过 64 KiB；请缩小请求范围"
+
+agent_runtime.tool.productivity.parameter_required:
+  en: "%{parameter} is required"
+  zh-CN: "需要 %{parameter}"
+
+agent_runtime.tool.productivity.working_directory_required:
+  en: "A working directory is required"
+  zh-CN: "需要工作目录"
+
+agent_runtime.tool.productivity.file_too_large:
+  en: "The file exceeds the 32 MiB limit"
+  zh-CN: "文件超过 32 MiB 上限"
+
+agent_runtime.tool.productivity.output_parent_required:
+  en: "The output parent directory is required"
+  zh-CN: "需要输出目录的父目录"
+
+agent_runtime.tool.productivity.output_parent_missing:
+  en: "The output parent directory does not exist"
+  zh-CN: "输出目录的父目录不存在"
+
+agent_runtime.tool.worktree.git_output_too_large:
+  en: "Git output exceeds the limit; narrow the query"
+  zh-CN: "Git 输出超过上限；请缩小查询范围"
+
+agent_runtime.tool.worktree.project_application_required:
+  en: "Worktree selection requires a project-linked application"
+  zh-CN: "选择工作树需要关联项目的应用"
+
+agent_runtime.tool.worktree.not_registered:
+  en: "The path is not a registered worktree of the current repository"
+  zh-CN: "该路径不是当前仓库已注册的工作树"
+
+agent_runtime.tool.worktree.invalid_name:
+  en: "Worktree name must contain 1-64 letters, digits, underscores or hyphens"
+  zh-CN: "工作树名称必须由 1-64 个字母、数字、下划线或连字符组成"
+
+agent_runtime.tool.worktree.invalid_branch:
+  en: "Invalid branch name"
+  zh-CN: "分支名称无效"
+
+agent_runtime.tool.worktree.main_worktree_missing:
+  en: "The main worktree is unavailable"
+  zh-CN: "主工作树不可用"
+
+agent_runtime.tool.worktree.repository_parent_missing:
+  en: "The repository parent directory is unavailable"
+  zh-CN: "仓库父目录不可用"
+
+agent_runtime.tool.worktree.root_symlink:
+  en: "The managed worktree root must not be a symlink"
+  zh-CN: "托管工作树根目录不能是符号链接"
+
+agent_runtime.tool.worktree.destination_exists:
+  en: "The worktree destination already exists"
+  zh-CN: "目标工作树已存在"
+
+agent_runtime.tool.worktree.unknown_tool:
+  en: "Unknown worktree tool"
+  zh-CN: "未知的工作树工具"
+
+agent_runtime.tool.office.package_too_many_entries:
+  en: "The Office package contains too many entries"
+  zh-CN: "Office 包内条目过多"
+
+agent_runtime.tool.office.package_too_large:
+  en: "The Office package is too large"
+  zh-CN: "Office 包过大"
+
+agent_runtime.tool.office.package_expanded_too_large:
+  en: "The expanded Office package exceeds 64 MiB"
+  zh-CN: "解压后的 Office 包超过 64 MiB"
+
+agent_runtime.tool.office.entry_too_large:
+  en: "An Office entry is too large"
+  zh-CN: "Office 包内条目过大"
+
+agent_runtime.tool.office.duplicate_entry:
+  en: "The Office package contains a duplicate entry"
+  zh-CN: "Office 包内存在重复条目"
+
+agent_runtime.tool.office.not_a_docx:
+  en: "Not a DOCX document"
+  zh-CN: "不是 DOCX 文档"
+
+agent_runtime.tool.office.paragraphs_not_array:
+  en: "paragraphs must be an array"
+  zh-CN: "paragraphs 必须是数组"
+
+agent_runtime.tool.office.paragraphs_range:
+  en: "Provide 1-2000 paragraphs"
+  zh-CN: "请提供 1-2000 个段落"
+
+agent_runtime.tool.office.paragraph_too_large:
+  en: "A paragraph exceeds 64 KiB"
+  zh-CN: "单个段落超过 64 KiB"
+
+agent_runtime.tool.office.heading_range:
+  en: "heading must be between 0 and 6"
+  zh-CN: "heading 必须在 0 到 6 之间"
+
+agent_runtime.tool.office.table_rows_too_many:
+  en: "The table exceeds 1000 rows"
+  zh-CN: "表格超过 1000 行"
+
+agent_runtime.tool.office.table_rows_not_array:
+  en: "table rows must be arrays"
+  zh-CN: "表格行必须是数组"
+
+agent_runtime.tool.office.table_cells_not_strings:
+  en: "table cells must be strings"
+  zh-CN: "表格单元格必须是字符串"
+
+agent_runtime.tool.office.invalid_text_element:
+  en: "Invalid text element"
+  zh-CN: "无效的文本节点"
+
+agent_runtime.tool.office.replacement_count_mismatch:
+  en: "Expected %{expected} matches but found %{count}; no file was written"
+  zh-CN: "预期匹配 %{expected} 处，实际匹配 %{count} 处；未写入文件"
+
+agent_runtime.tool.office.invalid_xml_characters:
+  en: "Office text contains invalid XML control characters"
+  zh-CN: "Office 文本包含无效的 XML 控制字符"
+
+agent_runtime.tool.office.word_requires_docx:
+  en: "Word tools support .docx files"
+  zh-CN: "Word 工具仅支持 .docx 文件"
+
+agent_runtime.tool.office.paragraph_output_limit:
+  en: "A paragraph exceeds the output limit"
+  zh-CN: "段落超过输出上限"
+
+agent_runtime.tool.office.word_output_extension:
+  en: "outputPath must end in .docx"
+  zh-CN: "outputPath 必须以 .docx 结尾"
+
+agent_runtime.tool.office.replace_not_string:
+  en: "replace must be a string"
+  zh-CN: "replace 必须是字符串"
+
+agent_runtime.tool.office.source_required:
+  en: "fileRef is required (legacy path is also accepted)"
+  zh-CN: "需要 fileRef（也接受旧版 path）"
+
+agent_runtime.tool.office.excel_requires_xlsx:
+  en: "Excel tools support .xlsx files"
+  zh-CN: "Excel 工具仅支持 .xlsx 文件"
+
+agent_runtime.tool.office.excel_output_required:
+  en: "outputPath is required when editing a referenced workbook"
+  zh-CN: "编辑引用工作簿时必须提供 outputPath"
+
+agent_runtime.tool.office.range_out_of_bounds:
+  en: "The range exceeds the worksheet bounds"
+  zh-CN: "范围超出工作表边界"
+
+agent_runtime.tool.office.range_output_limit:
+  en: "The range exceeds the output limit; read a smaller range"
+  zh-CN: "范围超过输出上限；请读取更小的范围"
+
+agent_runtime.tool.office.sheets_not_array:
+  en: "sheets must be an array"
+  zh-CN: "sheets 必须是数组"
+
+agent_runtime.tool.office.sheets_range:
+  en: "Provide 1-100 sheets"
+  zh-CN: "请提供 1-100 个工作表"
+
+agent_runtime.tool.office.cells_not_array:
+  en: "cells must be an array"
+  zh-CN: "cells 必须是数组"
+
+agent_runtime.tool.office.write_cells_limit:
+  en: "The write exceeds 10000 cells"
+  zh-CN: "写入超过 10000 个单元格"
+
+agent_runtime.tool.office.row_required:
+  en: "row is required"
+  zh-CN: "需要 row"
+
+agent_runtime.tool.office.column_required:
+  en: "column is required"
+  zh-CN: "需要 column"
+
+agent_runtime.tool.office.cell_out_of_bounds:
+  en: "The cell exceeds the worksheet bounds"
+  zh-CN: "单元格超出工作表边界"
+
+agent_runtime.tool.office.invalid_number:
+  en: "Invalid number"
+  zh-CN: "无效的数字"
+
+agent_runtime.tool.office.cell_value_invalid:
+  en: "A cell requires a string, number, boolean, or formula"
+  zh-CN: "单元格需要字符串、数字、布尔值或公式"
+
+agent_runtime.tool.office.excel_output_extension:
+  en: "outputPath must end in .xlsx"
+  zh-CN: "outputPath 必须以 .xlsx 结尾"
+
+agent_runtime.tool.office.output_parent_required:
+  en: "The output parent directory is required"
+  zh-CN: "需要输出目录的父目录"

@@ -12,7 +12,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         operation_kind: ToolOperationKind::Query,
         input_schema: schema(
             "agent.toolCatalog.tools.rag.search.description",
-            json!([{"query":"查找问题相关证据"}]),
+            json!([{"query":"__i18n__agent.toolCatalog.tools.rag.search.example.query"}]),
             json!({"type":"object","required":["query"],"properties":{"query":{"type":"string","minLength":1},"corpusIds":{"type":"array","items":{"type":"string"}},"filters":{"type":"object"},"limit":{"type":"integer","minimum":1,"maximum":100,"default":8}},"additionalProperties":false}),
         ),
         module_owner: "rag",

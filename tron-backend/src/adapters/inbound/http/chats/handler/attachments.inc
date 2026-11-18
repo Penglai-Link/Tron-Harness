@@ -152,28 +152,34 @@ async fn read_session_attachment_text(
     String::from_utf8(bytes).map_err(|_| SessionAttachmentFormError::Invalid)
 }
 
-fn chat_attachment_form_error_response(error: SessionAttachmentFormError) -> Response {
+fn chat_attachment_form_error_response(
+    error: SessionAttachmentFormError,
+    locale: SupportedLocale,
+) -> Response {
     match error {
-        SessionAttachmentFormError::Invalid => chat_error_response(ChatError::AttachmentInvalid(
-            "attachment upload form is invalid".to_string(),
-        )),
+        SessionAttachmentFormError::Invalid => chat_error_response_for(
+            ChatError::AttachmentInvalid("attachment upload form is invalid".to_string()),
+            locale,
+        ),
         SessionAttachmentFormError::TooLarge => (
             StatusCode::PAYLOAD_TOO_LARGE,
             Json(ApiResponse::error(
                 "CHAT_ATTACHMENT_TOO_LARGE",
-                super::error_messages::message("CHAT_ATTACHMENT_TOO_LARGE", ""),
+                super::error_messages::message("CHAT_ATTACHMENT_TOO_LARGE", "", locale),
             )),
         )
             .into_response(),
-        SessionAttachmentFormError::Storage => chat_error_response(ChatError::StorageFailure),
+        SessionAttachmentFormError::Storage => {
+            chat_error_response_for(ChatError::StorageFailure, locale)
+        }
     }
 }
 
-fn chat_attachment_request_error(status: StatusCode) -> Response {
+fn chat_attachment_request_error(status: StatusCode, locale: SupportedLocale) -> Response {
     if status == StatusCode::PAYLOAD_TOO_LARGE {
-        return chat_attachment_form_error_response(SessionAttachmentFormError::TooLarge);
+        return chat_attachment_form_error_response(SessionAttachmentFormError::TooLarge, locale);
     }
-    chat_attachment_form_error_response(SessionAttachmentFormError::Invalid)
+    chat_attachment_form_error_response(SessionAttachmentFormError::Invalid, locale)
 }
 
 fn chat_attachment_content_disposition(

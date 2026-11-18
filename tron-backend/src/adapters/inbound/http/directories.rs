@@ -230,14 +230,7 @@ async fn pick(
     };
     match state
         .directories
-        .pick_and_register(
-            &request.workspace_code,
-            if locale == SupportedLocale::EnUs {
-                "en-US"
-            } else {
-                "zh-CN"
-            },
-        )
+        .pick_and_register(&request.workspace_code, locale.as_str())
         .await
     {
         Ok(item) => Json(ApiResponse::protocol_success(
@@ -269,14 +262,7 @@ async fn pick_path(
     let locale = native_picker_locale(peer, &headers)?;
     let path = state
         .directories
-        .pick_path(
-            &request.workspace_code,
-            if locale == SupportedLocale::EnUs {
-                "en-US"
-            } else {
-                "zh-CN"
-            },
-        )
+        .pick_path(&request.workspace_code, locale.as_str())
         .await
         .map_err(|error| error_response(error, &headers))?;
     Ok(Json(ApiResponse::protocol_success(
@@ -320,11 +306,7 @@ fn native_picker_locale(
             StatusCode::FORBIDDEN,
             Json(ApiResponse::protocol_error(
                 "DIRECTORY_PICKER_LOCAL_ONLY",
-                if locale == SupportedLocale::EnUs {
-                    "Open Tron locally to choose a directory."
-                } else {
-                    "请在本机打开 Tron 后选择目录。"
-                },
+                tron_i18n::t!("tron.directory.picker_local_only", locale = locale),
             )),
         )
             .into_response());
@@ -397,60 +379,40 @@ pub(crate) fn error_response(error: DirectoryError, headers: &HeaderMap) -> Resp
             .get("accept-language")
             .and_then(|value| value.to_str().ok()),
     );
-    let (status, code, en, zh) = match error {
-        DirectoryError::WorkspaceInvalid => (
-            StatusCode::BAD_REQUEST,
-            "DIRECTORY_WORKSPACE_INVALID",
-            "The selected space is unavailable.",
-            "所选空间不可用。",
-        ),
-        DirectoryError::PathInvalid => (
-            StatusCode::BAD_REQUEST,
-            "DIRECTORY_PATH_INVALID",
-            "Choose an existing absolute directory path.",
-            "请选择存在的绝对目录路径。",
-        ),
-        DirectoryError::NameInvalid => (
-            StatusCode::BAD_REQUEST,
-            "DIRECTORY_NAME_INVALID",
-            "Enter a name of 1 to 200 characters.",
-            "请输入 1 至 200 个字符的名称。",
-        ),
-        DirectoryError::NotFound => (
-            StatusCode::NOT_FOUND,
-            "DIRECTORY_NOT_FOUND",
-            "The directory was not found.",
-            "未找到该目录。",
-        ),
-        DirectoryError::PickerBusy => (
-            StatusCode::CONFLICT,
-            "DIRECTORY_PICKER_BUSY",
-            "A folder picker is already open.",
-            "文件夹选择器已打开。",
-        ),
+    use tron_i18n::t;
+    let (status, code) = match error {
+        DirectoryError::WorkspaceInvalid => {
+            (StatusCode::BAD_REQUEST, "DIRECTORY_WORKSPACE_INVALID")
+        }
+        DirectoryError::PathInvalid => (StatusCode::BAD_REQUEST, "DIRECTORY_PATH_INVALID"),
+        DirectoryError::NameInvalid => (StatusCode::BAD_REQUEST, "DIRECTORY_NAME_INVALID"),
+        DirectoryError::NotFound => (StatusCode::NOT_FOUND, "DIRECTORY_NOT_FOUND"),
+        DirectoryError::PickerBusy => (StatusCode::CONFLICT, "DIRECTORY_PICKER_BUSY"),
         DirectoryError::PickerUnavailable => (
             StatusCode::SERVICE_UNAVAILABLE,
             "DIRECTORY_PICKER_UNAVAILABLE",
-            "The system folder picker is unavailable. Open Tron on a computer with a desktop session.",
-            "系统文件夹选择器不可用，请在有桌面环境的电脑上打开 Tron。",
         ),
         DirectoryError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "DIRECTORY_STORAGE_FAILED",
-            "The directory could not be saved.",
-            "无法保存目录。",
         ),
     };
-    (
-        status,
-        Json(ApiResponse::protocol_error(
-            code,
-            if locale == SupportedLocale::EnUs {
-                en
-            } else {
-                zh
-            },
-        )),
-    )
-        .into_response()
+    let message = match code {
+        "DIRECTORY_WORKSPACE_INVALID" => {
+            t!("tron.directory.workspace_invalid", locale = locale)
+        }
+        "DIRECTORY_PATH_INVALID" => {
+            t!("tron.directory.path_invalid", locale = locale)
+        }
+        "DIRECTORY_NAME_INVALID" => {
+            t!("tron.directory.name_invalid", locale = locale)
+        }
+        "DIRECTORY_NOT_FOUND" => t!("tron.directory.not_found", locale = locale),
+        "DIRECTORY_PICKER_BUSY" => t!("tron.directory.picker_busy", locale = locale),
+        "DIRECTORY_PICKER_UNAVAILABLE" => {
+            t!("tron.directory.picker_unavailable", locale = locale)
+        }
+        _ => t!("tron.directory.storage_failed", locale = locale),
+    };
+    (status, Json(ApiResponse::protocol_error(code, message))).into_response()
 }

@@ -180,6 +180,7 @@ impl ChatService {
             let workspace_code = workspace_code.clone();
             let user_message_content = content.clone();
             let title_run_code = run_code.clone();
+            let title_locale = locale.clone();
             crate::app::telemetry::spawn_traced(async move {
                 chat_service
                     .try_generate_manual_session_title(
@@ -187,6 +188,7 @@ impl ChatService {
                         &workspace_code,
                         &user_message_content,
                         &title_run_code,
+                        title_locale,
                         llm_runtime,
                     )
                     .await;

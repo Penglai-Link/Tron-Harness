@@ -15,6 +15,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use tron_i18n::t;
 
 #[derive(Deserialize)]
 enum ArchiveKind {
@@ -69,43 +70,32 @@ pub(super) struct ApiError(ArchiveError, SupportedLocale);
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let descriptor = self.0.descriptor();
-        let (status, zh, en) = match descriptor.message_key {
+        let locale = self.1;
+        let (status, message) = match descriptor.message_key {
             "tron.archives.invalid_query" => (
                 StatusCode::BAD_REQUEST,
-                "归档类型或分页参数无效",
-                "Invalid archive type or pagination",
+                t!("tron.archives.invalid_query", locale = locale),
             ),
             "tron.archives.not_found" => (
                 StatusCode::NOT_FOUND,
-                "归档记录不存在或已恢复",
-                "Archive was not found or has already been restored",
+                t!("tron.archives.not_found", locale = locale),
             ),
             "tron.archives.workspace_inactive" => (
                 StatusCode::CONFLICT,
-                "请先恢复所属工作空间",
-                "Restore the workspace first",
+                t!("tron.archives.workspace_inactive", locale = locale),
             ),
             "tron.archives.topic_name_conflict" => (
                 StatusCode::CONFLICT,
-                "当前工作空间已有同名的未归档工作主题，请先重命名该工作主题，再恢复归档工作主题。",
-                "An active work topic with this name already exists. Rename it before restoring the archived work topic.",
+                t!("tron.archives.topic_name_conflict", locale = locale),
             ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "无法读取或更新归档记录",
-                "Could not read or update archives",
+                t!("tron.archives.storage_failed", locale = locale),
             ),
         };
         (
             status,
-            Json(ApiResponse::protocol_error(
-                descriptor.code,
-                if self.1 == SupportedLocale::EnUs {
-                    en
-                } else {
-                    zh
-                },
-            )),
+            Json(ApiResponse::protocol_error(descriptor.code, message)),
         )
             .into_response()
     }

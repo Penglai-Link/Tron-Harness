@@ -243,17 +243,11 @@ pub fn skill_list(items: Vec<RegistrySkillListItem>, locale: &str) -> Vec<Regist
         .map(|s| {
             let mut vo = RegistrySkillListItemVo::from(s);
             if !vo.available {
-                vo.disabled_reason = Some(if locale.starts_with("en") {
-                    format!(
-                        "Capability pack {} is disabled",
-                        vo.provider_pack_id.as_deref().unwrap_or("")
-                    )
-                } else {
-                    format!(
-                        "所属能力包 {} 已禁用",
-                        vo.provider_pack_id.as_deref().unwrap_or("")
-                    )
-                });
+                vo.disabled_reason = Some(tron_i18n::t!(
+                    "skills.pack.disabled_reason",
+                    locale = locale,
+                    pack = vo.provider_pack_id.as_deref().unwrap_or("")
+                ));
             }
             vo
         })

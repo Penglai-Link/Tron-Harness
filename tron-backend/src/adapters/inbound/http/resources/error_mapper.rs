@@ -48,15 +48,16 @@ pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
         .into_response()
 }
 
-pub fn resource_error_with_field(error: ResourceError, field: &str) -> ResourceError {
+pub fn resource_error_with_field(error: ResourceError, field: &str, locale: &str) -> ResourceError {
+    use tron_i18n::t;
     match error {
         ResourceError::InvalidInput => ResourceError::InvalidField {
             field: field.to_string(),
-            reason: "does not satisfy the resource validation rules".to_string(),
+            reason: t!("resource.error.reason.invalid_input", locale = locale).into_owned(),
         },
         ResourceError::InvalidCode => ResourceError::InvalidField {
             field: field.to_string(),
-            reason: "must match the resource code format".to_string(),
+            reason: t!("resource.error.reason.invalid_code", locale = locale).into_owned(),
         },
         ResourceError::InvalidField {
             field: nested,
@@ -78,11 +79,7 @@ pub fn malformed_request_response(status: StatusCode, locale: &str) -> Response 
         status,
         Json(ResourceHttpApiResponse::error(
             RESOURCE_MALFORMED_REQUEST_CODE,
-            localized_message(
-                locale,
-                "请求参数或请求体格式不正确",
-                "The request parameters or body are invalid",
-            ),
+            tron_i18n::t!("resource.error.malformed_request", locale = locale),
         )),
     )
         .into_response()
@@ -124,80 +121,69 @@ pub fn internal_error_response(locale: &str) -> Response {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ResourceHttpApiResponse::error(
             "-1",
-            localized_message(
-                locale,
-                "资源服务内部错误",
-                "Resource service failed internally",
-            ),
+            tron_i18n::t!("resource.error.internal", locale = locale),
         )),
     )
         .into_response()
 }
 
 fn localized_resource_error(error: ResourceError, locale: &str) -> String {
-    let (zh, en) = match error {
-        ResourceError::NotFound => ("资源不存在", "The resource was not found"),
-        ResourceError::Forbidden => (
-            "无权执行资源操作",
-            "You are not authorized to manage this resource",
-        ),
-        ResourceError::WorkspaceRequired => ("必须提供工作空间编码", "workspaceCode is required"),
-        ResourceError::InvalidWorkspace => ("工作空间不可用", "The workspace is not active"),
-        ResourceError::InvalidCode => (
-            "资源业务编码不正确",
-            "The resource business code is invalid",
-        ),
-        ResourceError::InvalidInput => ("资源请求参数不正确", "The resource request is invalid"),
+    use tron_i18n::t;
+    match error {
+        ResourceError::NotFound => t!("resource.error.not_found", locale = locale).into_owned(),
+        ResourceError::Forbidden => t!("resource.error.forbidden", locale = locale).into_owned(),
+        ResourceError::WorkspaceRequired => {
+            t!("resource.error.workspace_required", locale = locale).into_owned()
+        }
+        ResourceError::InvalidWorkspace => {
+            t!("resource.error.invalid_workspace", locale = locale).into_owned()
+        }
+        ResourceError::InvalidCode => {
+            t!("resource.error.invalid_code", locale = locale).into_owned()
+        }
+        ResourceError::InvalidInput => {
+            t!("resource.error.invalid_input", locale = locale).into_owned()
+        }
         ResourceError::InvalidField { field, reason } => {
-            return localized_invalid_field_error(field, reason, locale);
+            localized_invalid_field_error(field, reason, locale)
         }
-        ResourceError::InvalidVariableReference => (
-            "资源变量引用不正确",
-            "The resource Variable reference is invalid",
-        ),
-        ResourceError::Conflict => (
-            "资源状态发生冲突",
-            "The resource state conflicts with this operation",
-        ),
+        ResourceError::InvalidVariableReference => {
+            t!("resource.error.invalid_variable_reference", locale = locale).into_owned()
+        }
+        ResourceError::Conflict => t!("resource.error.conflict", locale = locale).into_owned(),
         ResourceError::StorageFailure => {
-            ("资源存储操作失败", "The resource storage operation failed")
+            t!("resource.error.storage_failed", locale = locale).into_owned()
         }
-        ResourceError::MissingBinaryObject => (
-            "资源二进制内容不存在",
-            "The resource binary object is unavailable",
-        ),
-        ResourceError::PathDenied => (
-            "资源临时文件路径不合法",
-            "The resource temporary-file path is not allowed",
-        ),
-        ResourceError::StorageProfileNotFound => (
-            "资源存储配置不存在",
-            "The resource storage profile was not found",
-        ),
-        ResourceError::StorageLocatorInvalid => (
-            "资源存储位置不正确",
-            "The resource storage locator is invalid",
-        ),
-        ResourceError::ConnectionVerificationFailed(_) => (
-            "连接信息未通过连通性检测",
-            "The connection information did not pass connectivity verification",
-        ),
-        ResourceError::ServerHasAccounts => (
-            "服务器仍关联账号，不能删除",
-            "The server still has accounts and cannot be deleted",
-        ),
-    };
-    localized_message(locale, zh, en)
+        ResourceError::MissingBinaryObject => {
+            t!("resource.error.binary_missing", locale = locale).into_owned()
+        }
+        ResourceError::PathDenied => t!("resource.error.path_denied", locale = locale).into_owned(),
+        ResourceError::StorageProfileNotFound => {
+            t!("resource.error.storage_profile_not_found", locale = locale).into_owned()
+        }
+        ResourceError::StorageLocatorInvalid => {
+            t!("resource.error.storage_locator_invalid", locale = locale).into_owned()
+        }
+        ResourceError::ConnectionVerificationFailed(_) => t!(
+            "resource.error.connection_verification_failed",
+            locale = locale
+        )
+        .into_owned(),
+        ResourceError::ServerHasAccounts => {
+            t!("resource.error.server_has_accounts", locale = locale).into_owned()
+        }
+    }
 }
 
 fn localized_invalid_field_error(field: String, reason: String, locale: &str) -> String {
     let field = field.trim();
     let reason = reason.trim();
-    if locale.starts_with("en") {
-        format!("Invalid resource field '{field}': {reason}")
-    } else {
-        format!("资源字段不正确：{field}（{reason}）")
-    }
+    tron_i18n::t!(
+        "resource.error.invalid_field",
+        locale = locale,
+        field = field,
+        reason = reason
+    )
 }
 
 fn localized_json_request_error(detail: String, locale: &str) -> String {
@@ -219,22 +205,16 @@ fn localized_json_request_error(detail: String, locale: &str) -> String {
         })
     });
     if let Some(field) = field {
-        if locale.to_ascii_lowercase().starts_with("zh") {
-            return format!("资源字段不正确：{field}（{detail}）");
-        }
-        return format!("Invalid resource field '{field}': {detail}");
+        return tron_i18n::t!(
+            "resource.error.request_field_invalid_with_field",
+            locale = locale,
+            field = field,
+            detail = detail
+        );
     }
-    if locale.to_ascii_lowercase().starts_with("zh") {
-        format!("资源请求字段格式不正确：{detail}")
-    } else {
-        format!("Invalid resource request field: {detail}")
-    }
-}
-
-fn localized_message(locale: &str, zh: &str, en: &str) -> String {
-    if locale.to_ascii_lowercase().starts_with("zh") {
-        zh.to_string()
-    } else {
-        en.to_string()
-    }
+    tron_i18n::t!(
+        "resource.error.request_field_invalid",
+        locale = locale,
+        detail = detail
+    )
 }

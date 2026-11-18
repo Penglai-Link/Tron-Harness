@@ -1,0 +1,79 @@
+# Administration surfaces: model provider configuration, connection and
+# automatic routing settings.
+#
+# Format: rust-i18n `_version: 2`; one flat dotted key per message with both
+# supported locales. Keys prefixed `tron.` are stable display-layer keys that
+# match the `message_key` of application/domain error descriptors.
+_version: 2
+
+# --- Configured model providers (ConfiguredProviderError.message_key) ---
+model_provider.not_found:
+  en: "Provider not found."
+  zh-CN: "未找到供应商。"
+
+model_provider.already_exists:
+  en: "Provider ID already exists."
+  zh-CN: "供应商标识已存在。"
+
+model_provider.invalid_id:
+  en: "Use 1–80 lowercase letters, numbers, dots, underscores or hyphens for the provider ID."
+  zh-CN: "供应商标识需为1至80位小写字母、数字、点、下划线或连字符。"
+
+model_provider.invalid_name:
+  en: "Enter a provider name of at most 200 characters."
+  zh-CN: "请填写不超过200个字符的供应商名称。"
+
+model_provider.invalid_url:
+  en: "Enter an HTTP(S) API base URL without credentials, query parameters or fragments."
+  zh-CN: "请输入不含凭据、查询参数或片段的HTTP(S) API基础地址。"
+
+model_provider.invalid_headers:
+  en: "Request headers are invalid or contain reserved authentication or connection headers. Enter credentials in the API key field."
+  zh-CN: "请求头无效或含保留的认证、连接请求头；请在API密钥字段填写凭据。"
+
+model_provider.invalid_models:
+  en: "Add 1–500 models with unique IDs, names and valid token limits. Supported model inputs are text and images."
+  zh-CN: "请添加1至500个模型，使用唯一模型ID、名称及有效Token上限；当前支持的模型输入为文本和图像。"
+
+model_provider.invalid_model_ownership:
+  en: "A model does not belong to this provider."
+  zh-CN: "模型不属于当前供应商。"
+
+model_provider.conflict:
+  en: "The provider changed. Reload before saving."
+  zh-CN: "供应商配置已变化，请重新加载后保存。"
+
+model_provider.storage_failed:
+  en: "Could not save provider configuration."
+  zh-CN: "供应商配置存储失败。"
+
+# --- Provider presets ---
+tron.model_provider.preset_not_found:
+  en: "Provider preset was not found"
+  zh-CN: "供应商预设不存在"
+
+# --- Automatic routers ---
+tron.automatic_router.invalid_sources:
+  en: "Invalid automatic router sources."
+  zh-CN: "自动路由器的数据来源无效。"
+
+tron.automatic_router.storage_failed:
+  en: "Could not load or save automatic router settings."
+  zh-CN: "无法读取或保存自动路由器配置。"
+
+# --- Provider authorization handlers ---
+admin.model_providers.auth_account_mismatch:
+  en: "Authorize with the current profile's PersonAI account; add another account from the profile page"
+  zh-CN: "请使用当前 Profile 对应的 PersonAI 账号重新授权；其他账号请从 Profile 页面添加"
+
+admin.model_providers.not_found:
+  en: "model provider was not found"
+  zh-CN: "未找到模型供应商"
+
+admin.model_providers.default_workspace_init_failed:
+  en: "failed to initialize default workspace: %{detail}"
+  zh-CN: "初始化默认工作区失败：%{detail}"
+
+admin.model_providers.profile_register_failed:
+  en: "failed to register PersonAI profile: %{detail}"
+  zh-CN: "注册 PersonAI 档案失败：%{detail}"

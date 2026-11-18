@@ -4,6 +4,7 @@ use crate::{
     application::short_term_memory::{SavedContextAssembly, context_assembly_error_descriptor},
     domain::short_term_memory::ShortTermMemoryError,
     response::{ApiResponse, EmptyData},
+    shared::locale::SupportedLocale,
 };
 use axum::{
     Json,
@@ -14,6 +15,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tron_i18n::t;
 // Rust/FE consensus §§2.1,2.4–2.6: compact camelCase VO, scoped query and localized errors.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -102,32 +104,33 @@ impl From<SavedContextAssembly> for SnapshotView {
         }
     }
 }
-pub(super) struct AssemblyApiError(ShortTermMemoryError, String);
+pub(super) struct AssemblyApiError(ShortTermMemoryError, SupportedLocale);
 impl IntoResponse for AssemblyApiError {
     fn into_response(self) -> Response {
         let descriptor = context_assembly_error_descriptor(&self.0);
-        let (status, zh, en) = match descriptor.message_key {
+        let locale = self.1;
+        let (status, message) = match descriptor.message_key {
             "tron.chat.context_assembly_not_found" => (
                 StatusCode::NOT_FOUND,
-                "会话或装配报告不存在",
-                "Session or assembly report not found",
+                t!("tron.chat.context_assembly_not_found", locale = locale),
             ),
             "tron.chat.context_assembly_request_invalid" => (
                 StatusCode::BAD_REQUEST,
-                "装配报告请求无效",
-                "Invalid context assembly request",
+                t!(
+                    "tron.chat.context_assembly_request_invalid",
+                    locale = locale
+                ),
             ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "装配报告读取失败",
-                "Could not read the context assembly report",
+                t!("tron.chat.context_assembly_read_failed", locale = locale),
             ),
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()
@@ -138,28 +141,28 @@ pub(super) async fn read(
     auth: RequestAuthContext,
     query: Result<Query<AssemblyQuery>, QueryRejection>,
 ) -> Result<Json<ApiResponse<AssemblyView>>, AssemblyApiError> {
+    let locale = SupportedLocale::from_raw(&auth.locale);
     let input = query
-        .map_err(|_| AssemblyApiError(ShortTermMemoryError::GoalInvalid, auth.locale.clone()))?
+        .map_err(|_| AssemblyApiError(ShortTermMemoryError::GoalInvalid, locale))?
         .0;
     let _workspace = input.workspace_code; // Applied by the shared session-scope middleware.
     if input.session_code.trim().is_empty() {
-        return Err(AssemblyApiError(
-            ShortTermMemoryError::GoalInvalid,
-            auth.locale,
-        ));
+        return Err(AssemblyApiError(ShortTermMemoryError::GoalInvalid, locale));
     }
     let sequence = input
         .snapshot_sequence
         .map(|value| {
-            value.parse::<u64>().ok().filter(|v| *v > 0).ok_or_else(|| {
-                AssemblyApiError(ShortTermMemoryError::GoalInvalid, auth.locale.clone())
-            })
+            value
+                .parse::<u64>()
+                .ok()
+                .filter(|v| *v > 0)
+                .ok_or_else(|| AssemblyApiError(ShortTermMemoryError::GoalInvalid, locale))
         })
         .transpose()?;
     let value = state
         .short_term_memory
         .saved_context_assembly(&input.session_code, sequence)
-        .map_err(|e| AssemblyApiError(e, auth.locale))?;
+        .map_err(|e| AssemblyApiError(e, locale))?;
     Ok(Json(ApiResponse::protocol_success(AssemblyView {
         snapshot: value.map(Into::into),
     })))

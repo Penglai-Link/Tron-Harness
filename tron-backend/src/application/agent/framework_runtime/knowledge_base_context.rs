@@ -2,6 +2,7 @@
 use crate::application::{knowledge_base::KnowledgeBaseService, llm::ContextQueryAllowance};
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
+use tron_i18n::t;
 
 pub(super) struct KnowledgeBaseContributor {
     pub service: Option<KnowledgeBaseService>,
@@ -38,6 +39,7 @@ impl fw::ContextContributor for KnowledgeBaseContributor {
         if input.budget.max_tokens == 0 || query.trim().is_empty() {
             return Ok(block);
         }
+        let locale = tron_harness_capability::run_locale(input.run);
         let mut run = input.run.clone();
         run.extensions.insert(self.allowance.clone());
         let context = match service
@@ -53,8 +55,10 @@ impl fw::ContextContributor for KnowledgeBaseContributor {
         {
             Ok(context) => context,
             Err(error) => {
-                block.messages.push(fw::Message::user(format!(
-                    "[知识库检索失败：{error}。当前没有可用证据，不得声称已经核对资料。]"
+                block.messages.push(fw::Message::user(t!(
+                    "agent_runtime.context.knowledge.retrieval_failed",
+                    locale = locale,
+                    error = error
                 )));
                 return Ok(block);
             }
@@ -68,8 +72,10 @@ impl fw::ContextContributor for KnowledgeBaseContributor {
             ) {
                 Ok(visual) => visual,
                 Err(error) => {
-                    block.messages.push(fw::Message::user(format!(
-                        "[知识库原文或图片授权校验失败：{error}。相关证据不可使用。]"
+                    block.messages.push(fw::Message::user(t!(
+                        "agent_runtime.context.knowledge.visual_authorization_failed",
+                        locale = locale,
+                        error = error
                     )));
                     return Ok(block);
                 }
@@ -90,18 +96,21 @@ impl fw::ContextContributor for KnowledgeBaseContributor {
                         },
                         fw::ContentBlock::Media { media },
                     ]))),
-                    Err(_) => warnings.push(format!(
-                        "图片资源{}无法在SDK图片限制内处理；当前模型未查看该原图",
-                        evidence.resource_code
+                    Err(_) => warnings.push(t!(
+                        "agent_runtime.context.knowledge.image_unsupported",
+                        locale = locale,
+                        resource_code = evidence.resource_code
                     )),
                 }
             }
             // Keep visibility limitations before body text so bounding cannot
             // retain a caption while dropping the image-not-viewed notice.
             for warning in warnings {
-                block
-                    .messages
-                    .push(fw::Message::user(format!("[视觉证据未载入: {warning}]")));
+                block.messages.push(fw::Message::user(t!(
+                    "agent_runtime.context.knowledge.visual_evidence_unloaded",
+                    locale = locale,
+                    warning = warning
+                )));
             }
             if !context.text.is_empty() {
                 block.messages.push(fw::Message::user(context.text));

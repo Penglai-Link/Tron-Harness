@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
+use tron_i18n::t;
 
 use crate::application::topic::TopicService;
 
@@ -39,10 +40,13 @@ impl fw::ContextContributor for TopicContributor {
             return Ok(block);
         }
         input.run.check_cancelled()?;
+        let locale = tron_harness_capability::run_locale(input.run);
         let memo = match service.get(user, code) {
             Ok(memo) => memo,
             Err(_) => {
-                let message = fw::Message::user("[主题信息不可用，请勿假定已读取主题引用。]");
+                let message = fw::Message::user(
+                    t!("agent_runtime.context.topic.unavailable", locale = locale).into_owned(),
+                );
                 if input.estimator.message(input.model, &message).await? <= input.budget.max_tokens
                 {
                     block.messages.push(message);
@@ -52,11 +56,16 @@ impl fw::ContextContributor for TopicContributor {
         };
         block.source_version = Some(format!("{}:{}", code, memo.revision));
         let marker = fw::Message::user(
-            "[部分主题说明或引用未显示；如有 topic_read 权限，可获取授权范围内的完整信息。]",
+            t!("agent_runtime.context.topic.partial", locale = locale).into_owned(),
         );
         let marker_cost = input.estimator.message(input.model, &marker).await?;
         let budget = input.budget.max_tokens.saturating_sub(marker_cost);
-        let head = fw::Message::user(format!("[主题 {code}，版本 {}]", memo.revision));
+        let head = fw::Message::user(t!(
+            "agent_runtime.context.topic.head",
+            locale = locale,
+            code = code,
+            revision = memo.revision
+        ));
         let mut used = input.estimator.message(input.model, &head).await?;
         if used <= budget {
             block.messages.push(head);
@@ -74,7 +83,11 @@ impl fw::ContextContributor for TopicContributor {
                 "connectionCode": reference.connection_code,
                 "available": reference.available,
             });
-            let entry = fw::Message::user(format!("主题引用标识：{identity}"));
+            let entry = fw::Message::user(t!(
+                "agent_runtime.context.topic.reference_identity",
+                locale = locale,
+                identity = identity
+            ));
             let cost = input.estimator.message(input.model, &entry).await?;
             if used.saturating_add(cost) <= budget {
                 used += cost;
@@ -86,7 +99,11 @@ impl fw::ContextContributor for TopicContributor {
         for reference in &memo.references {
             let text = serde_json::to_string(reference)
                 .map_err(|error| fw::AgentError::InvalidConfiguration(error.to_string()))?;
-            let entry = fw::Message::user(format!("主题引用详情：{text}"));
+            let entry = fw::Message::user(t!(
+                "agent_runtime.context.topic.reference_detail",
+                locale = locale,
+                text = text
+            ));
             let cost = input.estimator.message(input.model, &entry).await?;
             if used.saturating_add(cost) <= budget {
                 used += cost;
@@ -95,7 +112,7 @@ impl fw::ContextContributor for TopicContributor {
                 omitted = true;
             }
         }
-        let prefix = "主题说明：";
+        let prefix = t!("agent_runtime.context.topic.notes_prefix", locale = locale).into_owned();
         let characters: Vec<char> = memo.notes.chars().collect();
         let mut low = 0usize;
         let mut high = characters.len();

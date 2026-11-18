@@ -5,6 +5,7 @@ use crate::{
 };
 use eliteforge_agent_core as fw;
 use serde_json::json;
+use tron_i18n::t;
 
 pub(super) struct AssistantContributor {
     pub service: Option<AssistantService>,
@@ -36,7 +37,13 @@ impl fw::ContextContributor for AssistantContributor {
                 self.service
                     .as_ref()
                     .ok_or_else(|| {
-                        fw::AgentError::Run("PersonAI identity service unavailable".into())
+                        fw::AgentError::Run(
+                            t!(
+                                "agent_runtime.assistant.identity_service_unavailable",
+                                locale = tron_harness_capability::run_locale(input.run)
+                            )
+                            .into_owned(),
+                        )
                     })?
                     .soul(code)
                     .map_err(|error| fw::AgentError::Run(error.to_string()))?,
@@ -111,7 +118,15 @@ impl fw::ContextContributor for AssistantContributor {
                 let work = self
                     .service
                     .as_ref()
-                    .ok_or_else(|| fw::AgentError::Run("PersonAI service unavailable".into()))?
+                    .ok_or_else(|| {
+                        fw::AgentError::Run(
+                            t!(
+                                "agent_runtime.assistant.service_unavailable",
+                                locale = tron_harness_capability::run_locale(input.run)
+                            )
+                            .into_owned(),
+                        )
+                    })?
                     .work_execution_context(code, ctx.user_code.as_deref().unwrap_or(""))
                     .map_err(|error| fw::AgentError::Run(error.to_string()))?;
                 let event = trigger_event(memory.and_then(|value| value.input_metadata.as_ref()));
@@ -213,14 +228,15 @@ impl fw::ContextContributor for AssistantGuidance {
             })
             .collect::<Result<Vec<_>, _>>()?;
         if !self.onboarding {
-            let guidance = if self.locale.starts_with("zh") {
-                "PersonAI 负责协调其他 Agent，并使用自己的 assistant_memory_*、assistant_task_* 和通知工具管理记忆、本人负责的任务及通知。Harness 平台配置和工作区业务数据交给主 Agent 处理。"
-            } else {
-                "Coordinate other agents and use your assistant_memory_*, assistant_task_*, and notification tools for memories, your own tasks, and notifications. Delegate Harness platform configuration and workspace business data to the main agent."
-            };
             messages.push(
-                fw::Message::system(guidance)
-                    .with_instruction_origin(fw::InstructionOrigin::Plugin),
+                fw::Message::system(
+                    t!(
+                        "agent_runtime.assistant.guidance.lockstep",
+                        locale = self.locale.as_str()
+                    )
+                    .into_owned(),
+                )
+                .with_instruction_origin(fw::InstructionOrigin::Plugin),
             );
         }
         Ok(fw::ContextBlock::instructions(self.block_id(), messages))
@@ -233,7 +249,11 @@ fn managed_guidance(
     locale: &str,
 ) -> Result<String, fw::AgentError> {
     let fallback = crate::domain::prompt::builtin_prompt_text(key, locale).ok_or_else(|| {
-        fw::AgentError::InvalidConfiguration(format!("bundled developer prompt is missing: {key}"))
+        fw::AgentError::InvalidConfiguration(t!(
+            "agent_runtime.assistant.prompt_missing",
+            locale = locale,
+            key = key
+        ))
     })?;
     fw::ManagedDeveloperPrompts::resolve(input.run, key, fallback)
 }

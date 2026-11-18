@@ -152,6 +152,58 @@ pub fn translate_with<'a>(
     replace(&text, names, values)
 }
 
+/// Structured, locale-independent user-facing message.
+///
+/// Business and domain layers may keep a [`Message`] (for example inside an
+/// error enum) instead of translated text; the HTTP/SSE/approval display layer
+/// renders it with the locale that belongs to the request or run. This keeps
+/// language decisions out of business logic and lets logs reuse the same key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Message {
+    key: &'static str,
+    args: Vec<(&'static str, String)>,
+}
+
+impl Message {
+    /// Create a message from a stable translation key.
+    pub fn new(key: &'static str) -> Self {
+        Self {
+            key,
+            args: Vec::new(),
+        }
+    }
+
+    /// Add a `%{name}` placeholder value.
+    pub fn arg(mut self, name: &'static str, value: impl Into<String>) -> Self {
+        self.args.push((name, value.into()));
+        self
+    }
+
+    /// Stable translation key for logs and structured output.
+    pub fn key(&self) -> &'static str {
+        self.key
+    }
+
+    /// Render for the given locale at the display layer.
+    pub fn render(&self, locale: impl AsRef<str>) -> String {
+        let names = self.args.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+        let values = self
+            .args
+            .iter()
+            .map(|(_, value)| value.clone())
+            .collect::<Vec<_>>();
+        translate_with(locale, self.key, &names, &values)
+    }
+}
+
+impl std::fmt::Display for Message {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Display is for diagnostics only; user-facing output must call
+        // `render(locale)` from the display layer.
+        formatter.write_str(self.key)
+    }
+}
+
 /// Translate a user-facing string stored as a stable key.
 ///
 /// The `locale` argument is mandatory: the macro intentionally has no arm that

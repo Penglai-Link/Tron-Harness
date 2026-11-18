@@ -1,0 +1,438 @@
+# Knowledge base, RAG and resource text for the Tron backend.
+#
+# Stable `tron.*` keys mirror the descriptor `message_key` values returned by
+# the application/domain error types; other keys are display-layer semantic keys.
+# Every key carries both supported locales.
+_version: 2
+
+tron.knowledge_base.not_empty:
+  en: "Delete all resources in the knowledge base first"
+  zh-CN: "请先删除知识库内的所有资源"
+
+tron.knowledge_base.not_found:
+  en: "Knowledge base not found"
+  zh-CN: "知识库不存在"
+
+tron.knowledge_base.forbidden:
+  en: "Access to this knowledge base is denied"
+  zh-CN: "无知识库权限"
+
+tron.knowledge_base.conflict:
+  en: "Knowledge base changed; refresh and try again"
+  zh-CN: "知识库状态已改变，请刷新后重试"
+
+tron.knowledge_base.invalid:
+  en: "Invalid knowledge base request"
+  zh-CN: "知识库请求无效"
+
+knowledge.base.document_not_found:
+  en: "Knowledge base or document not found"
+  zh-CN: "知识库或文档不存在"
+
+knowledge.base.document_conflict:
+  en: "The document is being indexed or its state changed; refresh and try again"
+  zh-CN: "文档正在索引或状态已改变，请刷新后重试"
+
+knowledge.base.create.invalid:
+  en: "Invalid knowledge base name or index settings"
+  zh-CN: "知识库名称或索引配置无效"
+
+knowledge.base.create.failed:
+  en: "Could not create the knowledge base"
+  zh-CN: "知识库创建失败"
+
+knowledge.base.delete.failed:
+  en: "Could not delete the knowledge base"
+  zh-CN: "知识库删除失败"
+
+knowledge.base.agent_grants.invalid:
+  en: "Choose a defined internal agent"
+  zh-CN: "请选择已定义的内部智能体"
+
+knowledge.base.agent_grants.failed:
+  en: "Could not update knowledge base assignments"
+  zh-CN: "知识库关联操作失败"
+
+knowledge.base.library_agent_grants.invalid:
+  en: "Choose an internal agent on the platform"
+  zh-CN: "请选择平台内部智能体"
+
+knowledge.base.library_agent_grants.failed:
+  en: "Could not update knowledge base agent authorization"
+  zh-CN: "知识库智能体授权失败"
+
+knowledge.base.catalog.failed:
+  en: "Could not load knowledge bases"
+  zh-CN: "知识库列表加载失败"
+
+knowledge.base.settings.invalid:
+  en: "Invalid knowledge base name, description or index settings"
+  zh-CN: "知识库名称、说明或索引配置无效"
+
+knowledge.base.settings.failed:
+  en: "Could not configure the knowledge base; refresh and try again"
+  zh-CN: "知识库配置操作失败，请刷新后重试"
+
+knowledge.upload.file_unreadable:
+  en: "The file exceeds the upload limit or could not be read"
+  zh-CN: "文件超过上传限制或读取失败"
+
+knowledge.upload.request_key_invalid:
+  en: "The ingestion request identifier is invalid"
+  zh-CN: "入库请求标识无效"
+
+knowledge.upload.preference_invalid:
+  en: "The parse preference is invalid"
+  zh-CN: "解析方式无效"
+
+knowledge.upload.parse_plan_invalid:
+  en: "The parse plan is invalid"
+  zh-CN: "解析计划无效"
+
+knowledge.upload.form_invalid:
+  en: "The upload form is invalid"
+  zh-CN: "上传表单无效"
+
+knowledge.upload.file_required:
+  en: "A file is required"
+  zh-CN: "需要file"
+
+knowledge.preflight.form_invalid:
+  en: "The upload form is invalid"
+  zh-CN: "上传表单无效"
+
+knowledge.preflight.single_file:
+  en: "Only one file can be checked at a time"
+  zh-CN: "每次检查只允许一个文件"
+
+knowledge.preflight.file_unreadable:
+  en: "The file exceeds the upload limit or could not be read"
+  zh-CN: "文件超过上传限制或读取失败"
+
+knowledge.preflight.preference_invalid:
+  en: "The parse preference is invalid"
+  zh-CN: "解析方式无效"
+
+knowledge.preflight.file_required:
+  en: "A file is required"
+  zh-CN: "需要file"
+
+knowledge.preflight.timeout:
+  en: "File checking timed out or failed. No parsing task was submitted."
+  zh-CN: "文件检查超时或失败；尚未提交解析"
+
+knowledge.preflight.conflict:
+  en: "File checking is busy. Please retry."
+  zh-CN: "文档正在索引或状态已改变，请刷新后重试"
+
+knowledge.preflight.invalid:
+  en: "The file or parsing choice is invalid. No parsing task was submitted."
+  zh-CN: "文件或解析方式无效，尚未提交解析任务"
+
+knowledge.preflight.failed:
+  en: "File checking failed. No parsing task was submitted."
+  zh-CN: "文件检查失败，尚未提交解析任务"
+
+knowledge.quality.not_found:
+  en: "Knowledge base or evaluation not found"
+  zh-CN: "知识库或文档不存在"
+
+knowledge.quality.conflict:
+  en: "The data or configuration changed, or an optimization is already active. Refresh and retry."
+  zh-CN: "文档正在索引或状态已改变，请刷新后重试"
+
+knowledge.quality.invalid:
+  en: "Evaluation requires published documents with reusable parsed content, a valid question set and bounded options. Inspect the documents and retry."
+  zh-CN: "评测需要已发布且含可复用解析内容的文档、有效的问题集和合规的选项，请检查文档后重试"
+
+knowledge.quality.failed:
+  en: "Knowledge evaluation failed"
+  zh-CN: "知识库评测失败"
+
+knowledge.quality.session_title:
+  en: "Retrieval optimization · %{name}"
+  zh-CN: "检索优化 · %{name}"
+
+knowledge.quality.session_create_failed:
+  en: "Could not create the knowledge base session"
+  zh-CN: "知识库会话创建失败"
+
+knowledge.quality.request_invalid:
+  en: "The evaluation request is invalid or exceeds the 256 KiB limit"
+  zh-CN: "评测请求格式无效或超过256 KiB限制"
+
+knowledge.quality.diagnostic.generated_selftest:
+  en: "Contains generated questions: this is a source self-test, not human-labeled business recall."
+  zh-CN: "包含自动生成题，结果属于原文自测，不代表经人工标注的业务召回率"
+
+knowledge.quality.diagnostic.holdout_not_improved:
+  en: "Independent validation did not confirm improvement. The current index remains in use."
+  zh-CN: "独立验证题未确认改善，当前索引未替换"
+
+knowledge.quality.diagnostic.no_candidate_matched:
+  en: "No candidate matched the current training score. The current index remains in use."
+  zh-CN: "没有候选方案达到当前训练题表现，当前索引未替换"
+
+knowledge.quality.diagnostic.cancelled:
+  en: "Optimization stopped."
+  zh-CN: "优化已取消"
+
+knowledge.quality.diagnostic.time_budget:
+  en: "Time budget exhausted. No candidate was published."
+  zh-CN: "优化达到时间预算，未发布候选索引"
+
+knowledge.quality.diagnostic.model_operation_budget:
+  en: "Model operation budget exhausted. No candidate was published."
+  zh-CN: "优化达到模型调用预算，未发布候选索引"
+
+knowledge.quality.diagnostic.input_budget:
+  en: "Estimated input budget exhausted. No candidate was published."
+  zh-CN: "优化达到预估输入量预算，未发布候选索引"
+
+knowledge.quality.diagnostic.interrupted:
+  en: "The process was interrupted. The candidate did not replace the current index."
+  zh-CN: "优化进程已中断；当前索引未被候选替换"
+
+knowledge.quality.diagnostic.source_changed:
+  en: "Source, dataset or configuration changed. Refresh and retry."
+  zh-CN: "文档正在索引或状态已改变，请刷新后重试"
+
+knowledge.quality.diagnostic.insufficient_source:
+  en: "At least eight source excerpts or labeled training and validation questions are required."
+  zh-CN: "可评测原文不足8段，请补充资料或提供训练题与独立验证题"
+
+knowledge.quality.diagnostic.dataset_outdated:
+  en: "Source content changed. Update the human-labeled evaluation set."
+  zh-CN: "资料内容已变化，请更新人工标注的评测题集"
+
+knowledge.quality.diagnostic.embedding_space_mismatch:
+  en: "Documents use different embedding spaces. Align the model and rebuild before evaluating."
+  zh-CN: "当前文档的向量空间不一致，请统一模型后重建再评测"
+
+knowledge.quality.diagnostic.generated_questions_invalid:
+  en: "Generated questions were invalid. Candidate indexing did not start."
+  zh-CN: "自动生成的评测题格式无效；未开始候选索引"
+
+knowledge.quality.diagnostic.generated_evidence_unmatched:
+  en: "Generated evidence did not match a unique source passage. It was rejected."
+  zh-CN: "自动评测证据没有唯一对应原文；未使用生成内容作为标签"
+
+tron.rag.graph.invalid_request:
+  en: "Invalid graph query parameters"
+  zh-CN: "图谱查询参数无效"
+
+tron.rag.graph.scope_denied:
+  en: "Access to this corpus graph is denied"
+  zh-CN: "无权查询该语料图谱"
+
+tron.rag.graph.node_not_found:
+  en: "Node not found in the accessible scope"
+  zh-CN: "节点不存在或不在可访问范围内"
+
+tron.rag.graph.snapshot_changed:
+  en: "Authorization, publication or cursor has changed; search again"
+  zh-CN: "授权、发布版本或查询游标已变化，请重新检索"
+
+tron.rag.graph.channel_unavailable:
+  en: "Graph retrieval is unavailable; try again later"
+  zh-CN: "图谱检索通道暂不可用，请稍后重试"
+
+tron.rag.graph.disabled:
+  en: "Graph indexing is disabled for this corpus"
+  zh-CN: "该语料尚未启用图谱"
+
+tron.rag.graph.storage_failed:
+  en: "Could not read graph data"
+  zh-CN: "图谱读取失败"
+
+tron.rag.task_chunks_not_found:
+  en: "Task record not found"
+  zh-CN: "任务记录不存在"
+
+tron.rag.task_chunks_pagination_invalid:
+  en: "Invalid chunk pagination"
+  zh-CN: "分块分页参数无效"
+
+tron.rag.task_chunks_unavailable:
+  en: "View chunks from the latest completed task"
+  zh-CN: "请查看最新已完成任务的分块"
+
+tron.rag.task_chunks_storage_failed:
+  en: "Could not load chunks"
+  zh-CN: "分块读取失败"
+
+tron.rag.task_history_not_found:
+  en: "Task record not found"
+  zh-CN: "任务记录不存在"
+
+tron.rag.task_history_active:
+  en: "Cancel the active task before deleting its record"
+  zh-CN: "请先取消运行中的任务，再删除记录"
+
+tron.rag.task_history_storage_failed:
+  en: "Could not delete the task record"
+  zh-CN: "任务记录删除失败"
+
+rag.error.schema_incompatible:
+  en: "The legacy RAG data schema is incompatible; use a new database. Existing data was not deleted."
+  zh-CN: "旧 RAG 数据结构不兼容，请使用新数据库；现有数据未删除"
+
+rag.error.ingest_request_invalid:
+  en: "The RAG ingest request is invalid"
+  zh-CN: "RAG 入库请求无效"
+
+rag.error.ingest_scope_invalid:
+  en: "The RAG ingest target scope is invalid"
+  zh-CN: "RAG 入库目标范围无效"
+
+rag.error.embedding_failed:
+  en: "RAG embedding failed"
+  zh-CN: "RAG 向量化失败"
+
+rag.error.embedding_failure:
+  en: "RAG embedding failed: %{detail}"
+  zh-CN: "RAG 向量化失败：%{detail}"
+
+rag.error.search_request_invalid:
+  en: "The RAG search request is invalid"
+  zh-CN: "RAG 检索请求无效"
+
+rag.error.search_filter_invalid:
+  en: "The RAG search filter is invalid"
+  zh-CN: "RAG 检索过滤条件无效"
+
+rag.error.search_scope_invalid:
+  en: "The RAG search scope is invalid"
+  zh-CN: "RAG 检索范围无效"
+
+rag.error.search_route_unavailable:
+  en: "The RAG search route is unavailable"
+  zh-CN: "RAG 检索通道不可用"
+
+rag.error.debug_request_invalid:
+  en: "The RAG debug request is invalid"
+  zh-CN: "RAG 调试请求无效"
+
+rag.error.trace_payload_invalid:
+  en: "The RAG trace payload is invalid"
+  zh-CN: "RAG 追踪数据无效"
+
+rag.error.source_not_found:
+  en: "The RAG source was not found"
+  zh-CN: "未找到 RAG 语料来源"
+
+rag.error.storage_failed:
+  en: "RAG ingest storage failed"
+  zh-CN: "RAG 入库存储失败"
+
+rag.handler.graph_model_required:
+  en: "Choose an extraction model before enabling graph indexing"
+  zh-CN: "开启图谱索引需要选择抽取模型"
+
+rag.handler.document_not_found:
+  en: "The document was not found"
+  zh-CN: "文档不存在"
+
+rag.handler.task_state_changed:
+  en: "The task state changed; refresh the list"
+  zh-CN: "任务状态已改变，请刷新列表"
+
+rag.handler.task_running:
+  en: "The task is still running"
+  zh-CN: "任务仍在运行"
+
+resource.error.not_found:
+  en: "The resource was not found"
+  zh-CN: "资源不存在"
+
+resource.error.forbidden:
+  en: "You are not authorized to manage this resource"
+  zh-CN: "无权执行资源操作"
+
+resource.error.workspace_required:
+  en: "workspaceCode is required"
+  zh-CN: "必须提供工作空间编码"
+
+resource.error.invalid_workspace:
+  en: "The workspace is not active"
+  zh-CN: "工作空间不可用"
+
+resource.error.invalid_code:
+  en: "The resource business code is invalid"
+  zh-CN: "资源业务编码不正确"
+
+resource.error.invalid_input:
+  en: "The resource request is invalid"
+  zh-CN: "资源请求参数不正确"
+
+resource.error.invalid_variable_reference:
+  en: "The resource variable reference is invalid"
+  zh-CN: "资源变量引用不正确"
+
+resource.error.conflict:
+  en: "The resource state conflicts with this operation"
+  zh-CN: "资源状态发生冲突"
+
+resource.error.storage_failed:
+  en: "The resource storage operation failed"
+  zh-CN: "资源存储操作失败"
+
+resource.error.binary_missing:
+  en: "The resource binary object is unavailable"
+  zh-CN: "资源二进制内容不存在"
+
+resource.error.path_denied:
+  en: "The resource temporary-file path is not allowed"
+  zh-CN: "资源临时文件路径不合法"
+
+resource.error.storage_profile_not_found:
+  en: "The resource storage profile was not found"
+  zh-CN: "资源存储配置不存在"
+
+resource.error.storage_locator_invalid:
+  en: "The resource storage locator is invalid"
+  zh-CN: "资源存储位置不正确"
+
+resource.error.connection_verification_failed:
+  en: "The connection information did not pass connectivity verification"
+  zh-CN: "连接信息未通过连通性检测"
+
+resource.error.server_has_accounts:
+  en: "The server still has accounts and cannot be deleted"
+  zh-CN: "服务器仍关联账号，不能删除"
+
+resource.error.malformed_request:
+  en: "The request parameters or body are invalid"
+  zh-CN: "请求参数或请求体格式不正确"
+
+resource.error.internal:
+  en: "Resource service failed internally"
+  zh-CN: "资源服务内部错误"
+
+resource.error.invalid_field:
+  en: "Invalid resource field '%{field}': %{reason}"
+  zh-CN: "资源字段不正确：%{field}（%{reason}）"
+
+resource.error.request_field_invalid_with_field:
+  en: "Invalid resource field '%{field}': %{detail}"
+  zh-CN: "资源字段不正确：%{field}（%{detail}）"
+
+resource.error.request_field_invalid:
+  en: "Invalid resource request field: %{detail}"
+  zh-CN: "资源请求字段格式不正确：%{detail}"
+
+resource.error.reason.invalid_input:
+  en: "does not satisfy the resource validation rules"
+  zh-CN: "不符合资源校验规则"
+
+resource.error.reason.file_kind:
+  en: "must be a file resource kind"
+  zh-CN: "必须是文件类资源"
+
+resource.error.reason.not_blank:
+  en: "must not be blank"
+  zh-CN: "不能为空"
+
+resource.error.reason.invalid_code:
+  en: "must match the resource code format"
+  zh-CN: "必须符合资源编码格式"

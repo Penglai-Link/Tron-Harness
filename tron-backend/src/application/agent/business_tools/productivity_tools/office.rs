@@ -5,6 +5,7 @@ use std::{
     collections::BTreeMap,
     io::{Cursor, Write},
 };
+use tron_i18n::t;
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 const WORD_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
@@ -15,20 +16,38 @@ fn escape(text: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
 }
-fn package(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, ToolError> {
+fn package(bytes: &[u8], locale: &str) -> Result<BTreeMap<String, Vec<u8>>, ToolError> {
     let mut zip = ZipArchive::new(Cursor::new(bytes)).map_err(error)?;
     if zip.len() > 4096 {
-        return Err(error("Office package contains too many entries"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.office.package_too_many_entries",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     let mut total = 0u64;
     let mut entries = BTreeMap::new();
     for index in 0..zip.len() {
         let file = zip.by_index(index).map_err(error)?;
-        total = total
-            .checked_add(file.size())
-            .ok_or_else(|| error("Office package too large"))?;
+        total = total.checked_add(file.size()).ok_or_else(|| {
+            error(
+                t!(
+                    "agent_runtime.tool.office.package_too_large",
+                    locale = locale
+                )
+                .into_owned(),
+            )
+        })?;
         if total > 64 * 1024 * 1024 {
-            return Err(error("expanded Office package exceeds 64 MiB"));
+            return Err(error(
+                t!(
+                    "agent_runtime.tool.office.package_expanded_too_large",
+                    locale = locale
+                )
+                .into_owned(),
+            ));
         }
         if file.is_dir() {
             continue;
@@ -39,10 +58,14 @@ fn package(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, ToolError> {
             .read_to_end(&mut data)
             .map_err(error)?;
         if data.len() > 64 * 1024 * 1024 {
-            return Err(error("Office entry too large"));
+            return Err(error(
+                t!("agent_runtime.tool.office.entry_too_large", locale = locale).into_owned(),
+            ));
         }
         if entries.insert(name, data).is_some() {
-            return Err(error("duplicate Office package entry"));
+            return Err(error(
+                t!("agent_runtime.tool.office.duplicate_entry", locale = locale).into_owned(),
+            ));
         }
     }
     Ok(entries)
@@ -59,30 +82,51 @@ fn pack(entries: BTreeMap<String, Vec<u8>>) -> Result<Vec<u8>, ToolError> {
     }
     Ok(zip.finish().map_err(error)?.into_inner())
 }
-fn xml_document(entries: &BTreeMap<String, Vec<u8>>) -> Result<&str, ToolError> {
-    std::str::from_utf8(
-        entries
-            .get("word/document.xml")
-            .ok_or_else(|| error("not a DOCX document"))?,
-    )
+fn xml_document<'a>(
+    entries: &'a BTreeMap<String, Vec<u8>>,
+    locale: &str,
+) -> Result<&'a str, ToolError> {
+    std::str::from_utf8(entries.get("word/document.xml").ok_or_else(|| {
+        error(t!("agent_runtime.tool.office.not_a_docx", locale = locale).into_owned())
+    })?)
     .map_err(error)
 }
-fn word_create(input: &Value) -> Result<Vec<u8>, ToolError> {
-    let paragraphs = input["paragraphs"]
-        .as_array()
-        .ok_or_else(|| error("paragraphs must be an array"))?;
+fn word_create(input: &Value, locale: &str) -> Result<Vec<u8>, ToolError> {
+    let paragraphs = input["paragraphs"].as_array().ok_or_else(|| {
+        error(
+            t!(
+                "agent_runtime.tool.office.paragraphs_not_array",
+                locale = locale
+            )
+            .into_owned(),
+        )
+    })?;
     if paragraphs.is_empty() || paragraphs.len() > 2000 {
-        return Err(error("provide 1-2000 paragraphs"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.office.paragraphs_range",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     let mut body = String::new();
     for paragraph in paragraphs {
-        let content = text(paragraph, "text")?;
+        let content = text(paragraph, "text", locale)?;
         if content.len() > 65536 {
-            return Err(error("paragraph exceeds 64 KiB"));
+            return Err(error(
+                t!(
+                    "agent_runtime.tool.office.paragraph_too_large",
+                    locale = locale
+                )
+                .into_owned(),
+            ));
         }
         let heading = paragraph["heading"].as_u64().unwrap_or(0);
         if heading > 6 {
-            return Err(error("heading must be between 0 and 6"));
+            return Err(error(
+                t!("agent_runtime.tool.office.heading_range", locale = locale).into_owned(),
+            ));
         }
         let properties = if heading > 0 {
             format!("<w:pPr><w:pStyle w:val=\"Heading{heading}\"/></w:pPr>")
@@ -96,21 +140,37 @@ fn word_create(input: &Value) -> Result<Vec<u8>, ToolError> {
     }
     if let Some(rows) = input.get("table").and_then(Value::as_array) {
         if rows.len() > 1000 {
-            return Err(error("table exceeds 1000 rows"));
+            return Err(error(
+                t!(
+                    "agent_runtime.tool.office.table_rows_too_many",
+                    locale = locale
+                )
+                .into_owned(),
+            ));
         }
         body.push_str("<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/></w:tblPr>");
         for row in rows {
             body.push_str("<w:tr>");
-            for cell in row
-                .as_array()
-                .ok_or_else(|| error("table rows must be arrays"))?
-            {
+            for cell in row.as_array().ok_or_else(|| {
+                error(
+                    t!(
+                        "agent_runtime.tool.office.table_rows_not_array",
+                        locale = locale
+                    )
+                    .into_owned(),
+                )
+            })? {
                 body.push_str(&format!(
                     "<w:tc><w:p><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p></w:tc>",
-                    escape(
-                        cell.as_str()
-                            .ok_or_else(|| error("table cells must be strings"))?
-                    )
+                    escape(cell.as_str().ok_or_else(|| {
+                        error(
+                            t!(
+                                "agent_runtime.tool.office.table_cells_not_strings",
+                                locale = locale
+                            )
+                            .into_owned(),
+                        )
+                    })?)
                 ));
             }
             body.push_str("</w:tr>");
@@ -131,6 +191,7 @@ fn word_replace(
     find: &str,
     replacement: &str,
     expected: u64,
+    locale: &str,
 ) -> Result<(String, usize), ToolError> {
     let doc = roxmltree::Document::parse(xml).map_err(error)?;
     let mut edits = Vec::new();
@@ -182,18 +243,30 @@ fn word_replace(
             }
             if changed != original {
                 let original_xml = &xml[node.range()];
-                let close = original_xml
-                    .find('>')
-                    .ok_or_else(|| error("invalid text element"))?;
+                let close = original_xml.find('>').ok_or_else(|| {
+                    error(
+                        t!(
+                            "agent_runtime.tool.office.invalid_text_element",
+                            locale = locale
+                        )
+                        .into_owned(),
+                    )
+                })?;
                 let opening = &original_xml[..close];
                 let space = if opening.contains("xml:space=") {
                     ""
                 } else {
                     " xml:space=\"preserve\""
                 };
-                let end_tag = original_xml
-                    .rfind("</")
-                    .ok_or_else(|| error("invalid text element"))?;
+                let end_tag = original_xml.rfind("</").ok_or_else(|| {
+                    error(
+                        t!(
+                            "agent_runtime.tool.office.invalid_text_element",
+                            locale = locale
+                        )
+                        .into_owned(),
+                    )
+                })?;
                 edits.push((
                     node.range(),
                     format!(
@@ -207,8 +280,11 @@ fn word_replace(
         }
     }
     if count as u64 != expected {
-        return Err(error(format!(
-            "expected {expected} matches, found {count}; no file written"
+        return Err(error(t!(
+            "agent_runtime.tool.office.replacement_count_mismatch",
+            locale = locale,
+            expected = expected,
+            count = count
         )));
     }
     let mut result = xml.to_string();
@@ -234,19 +310,32 @@ pub(super) fn execute(
             _ => true,
         }
     }
+    let locale = context.locale.as_str();
     if !valid_xml(input) {
-        return Err(error("Office text contains invalid XML control characters"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.office.invalid_xml_characters",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     if name.starts_with("excel_") {
-        return excel(name, input, context, resources);
+        return excel(name, input, context, resources, locale);
     }
     if name == "word_create" {
         let file = path(input, "path", context)?;
         if file.extension().and_then(|v| v.to_str()) != Some("docx") {
-            return Err(error("Word tools support .docx files"));
+            return Err(error(
+                t!(
+                    "agent_runtime.tool.office.word_requires_docx",
+                    locale = locale
+                )
+                .into_owned(),
+            ));
         }
-        let bytes = word_create(input)?;
-        write_new(&file, &bytes)?;
+        let bytes = word_create(input, locale)?;
+        write_new(&file, &bytes, locale)?;
         return Ok(json!({"path":file,"created":true}));
     }
     let source = resolve_input_file(input, context, resources)?;
@@ -255,10 +344,16 @@ pub(super) fn execute(
         .and_then(|value| value.to_str())
         != Some("docx")
     {
-        return Err(error("Word tools support .docx files"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.office.word_requires_docx",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
-    let mut entries = package(&source.bytes)?;
-    let xml = xml_document(&entries)?;
+    let mut entries = package(&source.bytes, locale)?;
+    let xml = xml_document(&entries, locale)?;
     if name == "word_read" {
         let doc = roxmltree::Document::parse(xml).map_err(error)?;
         let start = input["startParagraph"].as_u64().unwrap_or(0) as usize;
@@ -291,7 +386,13 @@ pub(super) fn execute(
                 .collect::<String>();
             if bytes + content.len() > MAX_OUTPUT_BYTES {
                 if result.is_empty() {
-                    return Err(error("paragraph exceeds output limit"));
+                    return Err(error(
+                        t!(
+                            "agent_runtime.tool.office.paragraph_output_limit",
+                            locale = locale
+                        )
+                        .into_owned(),
+                    ));
                 }
                 break;
             }
@@ -304,20 +405,33 @@ pub(super) fn execute(
     }
     let output = path(input, "outputPath", context)?;
     if output.extension().and_then(|v| v.to_str()) != Some("docx") {
-        return Err(error("outputPath must end in .docx"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.office.word_output_extension",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
-    let find = text(input, "find")?;
-    let replacement = input["replace"]
-        .as_str()
-        .ok_or_else(|| error("replace must be a string"))?;
+    let find = text(input, "find", locale)?;
+    let replacement = input["replace"].as_str().ok_or_else(|| {
+        error(
+            t!(
+                "agent_runtime.tool.office.replace_not_string",
+                locale = locale
+            )
+            .into_owned(),
+        )
+    })?;
     let (updated, count) = word_replace(
         xml,
         find,
         replacement,
         input["expectedCount"].as_u64().unwrap_or(1),
+        locale,
     )?;
     entries.insert("word/document.xml".into(), updated.into_bytes());
-    write_new(&output, &pack(entries)?)?;
+    write_new(&output, &pack(entries)?, locale)?;
     Ok(
         json!({"path":output,"replacements":count,"sourcePath":source.workspace_path,"sourceFileName":source.file_name,"sourceFileRef":source.reference}),
     )
@@ -328,6 +442,7 @@ fn excel(
     input: &Value,
     context: &AgentRunContext,
     resources: &ResourceService,
+    locale: &str,
 ) -> Result<Value, ToolError> {
     let is_read = name == "excel_read";
     let has_source = is_read || input.get("fileRef").is_some() || input.get("outputPath").is_some();
@@ -335,7 +450,9 @@ fn excel(
         .then(|| resolve_input_file(input, context, resources))
         .transpose()?;
     if is_read && source.is_none() {
-        return Err(error("fileRef is required (legacy path is also accepted)"));
+        return Err(error(
+            t!("agent_runtime.tool.office.source_required", locale = locale).into_owned(),
+        ));
     }
     if source.as_ref().is_some_and(|source| {
         Path::new(&source.file_name)
@@ -343,17 +460,27 @@ fn excel(
             .and_then(|value| value.to_str())
             != Some("xlsx")
     }) {
-        return Err(error("Excel tools support .xlsx files"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.office.excel_requires_xlsx",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
     if name == "excel_write" && input.get("fileRef").is_some() && input.get("outputPath").is_none()
     {
         return Err(error(
-            "outputPath is required when editing a referenced workbook",
+            t!(
+                "agent_runtime.tool.office.excel_output_required",
+                locale = locale
+            )
+            .into_owned(),
         ));
     }
     let mut attachment_temp = None;
     let input_path = if let Some(source) = source.as_ref() {
-        let _ = package(&source.bytes)?; // Bound compressed and expanded package size before parsing.
+        let _ = package(&source.bytes, locale)?; // Bound compressed and expanded package size before parsing.
         if let Some(path) = source.workspace_path.as_ref() {
             Some(path.clone())
         } else {
@@ -398,7 +525,13 @@ fn excel(
             || column > 16_384
             || column + columns - 1 > 16_384
         {
-            return Err(error("range exceeds worksheet bounds"));
+            return Err(error(
+                t!(
+                    "agent_runtime.tool.office.range_out_of_bounds",
+                    locale = locale
+                )
+                .into_owned(),
+            ));
         }
         let mut cells = Vec::new();
         let mut bytes = 0;
@@ -409,7 +542,13 @@ fn excel(
                     let formula = cell.formula().to_string();
                     bytes += value.len() + formula.len();
                     if bytes > MAX_OUTPUT_BYTES {
-                        return Err(error("range exceeds output limit; read a smaller range"));
+                        return Err(error(
+                            t!(
+                                "agent_runtime.tool.office.range_output_limit",
+                                locale = locale
+                            )
+                            .into_owned(),
+                        ));
                     }
                     cells.push(json!({"row":r,"column":c,"value":value,"formula":formula}));
                 }
@@ -420,35 +559,55 @@ fn excel(
             json!({"path":source.workspace_path,"fileName":source.file_name,"fileRef":source.reference,"sheet":sheet_name,"cells":cells,"formulaValues":"cached; not recalculated by this tool"}),
         );
     }
-    let sheets = input["sheets"]
-        .as_array()
-        .ok_or_else(|| error("sheets must be an array"))?;
+    let sheets = input["sheets"].as_array().ok_or_else(|| {
+        error(
+            t!(
+                "agent_runtime.tool.office.sheets_not_array",
+                locale = locale
+            )
+            .into_owned(),
+        )
+    })?;
     if sheets.is_empty() || sheets.len() > 100 {
-        return Err(error("provide 1-100 sheets"));
+        return Err(error(
+            t!("agent_runtime.tool.office.sheets_range", locale = locale).into_owned(),
+        ));
     }
     let mut count = 0;
     for specification in sheets {
-        let sheet_name = text(specification, "name")?;
+        let sheet_name = text(specification, "name", locale)?;
         if book.sheet_by_name(sheet_name).is_err() {
             book.new_sheet(sheet_name).map_err(error)?;
         }
         let sheet = book.sheet_by_name_mut(sheet_name).map_err(error)?;
-        let cells = specification["cells"]
-            .as_array()
-            .ok_or_else(|| error("cells must be an array"))?;
+        let cells = specification["cells"].as_array().ok_or_else(|| {
+            error(t!("agent_runtime.tool.office.cells_not_array", locale = locale).into_owned())
+        })?;
         count += cells.len();
         if count > 10000 {
-            return Err(error("write exceeds 10000 cells"));
+            return Err(error(
+                t!(
+                    "agent_runtime.tool.office.write_cells_limit",
+                    locale = locale
+                )
+                .into_owned(),
+            ));
         }
         for specification in cells {
-            let row = specification["row"]
-                .as_u64()
-                .ok_or_else(|| error("row is required"))?;
-            let column = specification["column"]
-                .as_u64()
-                .ok_or_else(|| error("column is required"))?;
+            let row = specification["row"].as_u64().ok_or_else(|| {
+                error(t!("agent_runtime.tool.office.row_required", locale = locale).into_owned())
+            })?;
+            let column = specification["column"].as_u64().ok_or_else(|| {
+                error(t!("agent_runtime.tool.office.column_required", locale = locale).into_owned())
+            })?;
             if !(1..=1_048_576).contains(&row) || !(1..=16_384).contains(&column) {
-                return Err(error("cell exceeds worksheet bounds"));
+                return Err(error(
+                    t!(
+                        "agent_runtime.tool.office.cell_out_of_bounds",
+                        locale = locale
+                    )
+                    .into_owned(),
+                ));
             }
             let cell = sheet.cell_mut((column as u32, row as u32));
             if let Some(formula) = specification.get("formula").and_then(Value::as_str) {
@@ -459,14 +618,25 @@ fn excel(
                         cell.set_value_string(value);
                     }
                     Value::Number(value) => {
-                        cell.set_value_number(
-                            value.as_f64().ok_or_else(|| error("invalid number"))?,
-                        );
+                        cell.set_value_number(value.as_f64().ok_or_else(|| {
+                            error(
+                                t!("agent_runtime.tool.office.invalid_number", locale = locale)
+                                    .into_owned(),
+                            )
+                        })?);
                     }
                     Value::Bool(value) => {
                         cell.set_value_bool(*value);
                     }
-                    _ => return Err(error("cell requires a string, number, boolean, or formula")),
+                    _ => {
+                        return Err(error(
+                            t!(
+                                "agent_runtime.tool.office.cell_value_invalid",
+                                locale = locale
+                            )
+                            .into_owned(),
+                        ));
+                    }
                 }
             }
         }
@@ -477,16 +647,28 @@ fn excel(
         path(input, "path", context)?
     };
     if output.extension().and_then(|v| v.to_str()) != Some("xlsx") {
-        return Err(error("outputPath must end in .xlsx"));
+        return Err(error(
+            t!(
+                "agent_runtime.tool.office.excel_output_extension",
+                locale = locale
+            )
+            .into_owned(),
+        ));
     }
-    let parent = output
-        .parent()
-        .ok_or_else(|| error("output parent is required"))?;
+    let parent = output.parent().ok_or_else(|| {
+        error(
+            t!(
+                "agent_runtime.tool.office.output_parent_required",
+                locale = locale
+            )
+            .into_owned(),
+        )
+    })?;
     let temporary = tempfile::NamedTempFile::new_in(parent).map_err(error)?;
     umya_spreadsheet::writer::xlsx::write(&book, temporary.path()).map_err(error)?;
     // Formula values are not computed here; ask Excel to recalculate on opening.
-    let output_bytes = read_file(temporary.path())?;
-    let mut entries = package(&output_bytes)?;
+    let output_bytes = read_file(temporary.path(), locale)?;
+    let mut entries = package(&output_bytes, locale)?;
     if let Some(data) = entries.get_mut("xl/workbook.xml") {
         let mut xml = String::from_utf8(data.clone()).map_err(error)?;
         let document = roxmltree::Document::parse(&xml).map_err(error)?;
@@ -502,7 +684,7 @@ fn excel(
         }
         *data = xml.into_bytes();
     }
-    write_new(&output, &pack(entries)?)?;
+    write_new(&output, &pack(entries)?, locale)?;
     drop(attachment_temp);
     Ok(json!({"path":output,"cellsWritten":count,"formulasRecalculated":false}))
 }

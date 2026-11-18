@@ -28,31 +28,25 @@ impl IntoResponse for SkinApiError {
             SkinError::Storage => StatusCode::INTERNAL_SERVER_ERROR,
             SkinError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
         };
-        let (zh, en) = match descriptor.message_key {
-            "tron.skin.invalid" => ("皮肤包格式或资源无效", "Invalid skin package or resource"),
-            "tron.skin.not_found" => ("皮肤或资源不存在", "Skin or resource not found"),
-            "tron.skin.conflict" => (
-                "皮肤 ID 已存在，请修改 ID 后导入",
-                "Skin ID already exists; use a different ID",
-            ),
-            "tron.skin.protected" => ("内置主题不能卸载", "Built-in themes cannot be uninstalled"),
-            "tron.skin.too_large" => (
-                "皮肤包不能超过 20 MB",
-                "Skin packages must be smaller than 20 MB",
-            ),
-            _ => ("皮肤文件读写失败", "Could not read or write skin files"),
+        use tron_i18n::t;
+        let message: String = if let Some(detail) = detail {
+            // Detail text originates in the application layer; keep forwarding it.
+            detail.to_string()
+        } else {
+            match descriptor.message_key {
+                "tron.skin.invalid" => t!("tron.skin.invalid", locale = &self.1).into_owned(),
+                "tron.skin.not_found" => t!("tron.skin.not_found", locale = &self.1).into_owned(),
+                "tron.skin.conflict" => t!("tron.skin.conflict", locale = &self.1).into_owned(),
+                "tron.skin.protected" => t!("tron.skin.protected", locale = &self.1).into_owned(),
+                "tron.skin.too_large" => t!("tron.skin.too_large", locale = &self.1).into_owned(),
+                _ => t!("tron.skin.storage_failed", locale = &self.1).into_owned(),
+            }
         };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if let Some(detail) = detail {
-                    detail.to_string()
-                } else if self.1.starts_with("en") {
-                    en.to_string()
-                } else {
-                    zh.to_string()
-                },
+                message,
             )),
         )
             .into_response()

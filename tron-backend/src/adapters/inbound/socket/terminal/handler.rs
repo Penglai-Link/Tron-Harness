@@ -6,7 +6,8 @@ use socketioxide::{
 use std::future::{Ready, ready};
 use tokio::sync::mpsc;
 
-use crate::application::terminal::TERMINAL_SOCKET_NAMESPACE;
+use crate::{application::terminal::TERMINAL_SOCKET_NAMESPACE, shared::locale::SupportedLocale};
+use tron_i18n::t;
 
 use super::{
     TerminalSocketGateway,
@@ -30,7 +31,13 @@ async fn terminal_connected(
     let auth = match auth {
         Ok(auth) if !auth.ticket.trim().is_empty() => auth,
         Ok(_) | Err(_) => {
-            emit_session_error(&socket, "终端连接票据无效");
+            emit_session_error(
+                &socket,
+                t!(
+                    "socket.terminal.ticket_invalid",
+                    locale = socket_locale(&socket)
+                ),
+            );
             socket.disconnect().ok();
             return;
         }
@@ -41,7 +48,10 @@ async fn terminal_connected(
     let descriptor = match gateway.open_session(socket_id, auth.ticket, output).await {
         Ok(descriptor) => descriptor,
         Err(error) => {
-            emit_session_error(&socket, error.to_string());
+            emit_session_error(
+                &socket,
+                t!(error.message_key(), locale = socket_locale(&socket)),
+            );
             socket.disconnect().ok();
             return;
         }
@@ -93,7 +103,10 @@ fn write_terminal_input(
         return ready(());
     };
     if let Err(error) = gateway.write_input(&socket.id.to_string(), payload) {
-        emit_session_error(&socket, error.to_string());
+        emit_session_error(
+            &socket,
+            t!(error.message_key(), locale = socket_locale(&socket)),
+        );
     }
     ready(())
 }
@@ -107,7 +120,10 @@ fn resize_terminal(
         return ready(());
     };
     if let Err(error) = gateway.resize(&socket.id.to_string(), payload) {
-        emit_session_error(&socket, error.to_string());
+        emit_session_error(
+            &socket,
+            t!(error.message_key(), locale = socket_locale(&socket)),
+        );
     }
     ready(())
 }
@@ -121,13 +137,29 @@ fn signal_terminal(
         return ready(());
     };
     if let Err(error) = gateway.signal(&socket.id.to_string(), payload) {
-        emit_session_error(&socket, error.to_string());
+        emit_session_error(
+            &socket,
+            t!(error.message_key(), locale = socket_locale(&socket)),
+        );
     }
     ready(())
 }
 
 async fn terminal_disconnected(socket: SocketRef, State(gateway): State<TerminalSocketGateway>) {
     gateway.close_session(&socket.id.to_string());
+}
+
+/// Locale negotiated by the Socket.IO handshake (`Accept-Language`), defaulting
+/// to zh-CN when the client does not send one. Request/session locales are not
+/// threaded into socket frames, so the handshake is the only available source.
+fn socket_locale(socket: &SocketRef) -> SupportedLocale {
+    SupportedLocale::from_request(
+        socket
+            .req_parts()
+            .headers
+            .get("accept-language")
+            .and_then(|value| value.to_str().ok()),
+    )
 }
 
 fn emit_session_error(socket: &SocketRef, message: impl Into<String>) {

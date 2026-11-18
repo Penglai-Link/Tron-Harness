@@ -279,6 +279,7 @@ impl Runtime {
                     session_id: state.summary.session_id.clone(),
                     origin_session_code: state.origin_session_code.clone(),
                     parent_run_code: state.parent_run_code.clone(),
+                    locale: child.context.locale.clone(),
                     status: status.clone(),
                     run_id,
                     sequence: state.execution_sequence,
@@ -503,6 +504,7 @@ impl Runtime {
                     session_id: state.summary.session_id.clone(),
                     origin_session_code: state.origin_session_code.clone(),
                     parent_run_code: state.parent_run_code.clone(),
+                    locale: context.locale.clone(),
                     status: status.clone(),
                     run_id,
                     sequence: state.execution_sequence,
@@ -515,7 +517,6 @@ impl Runtime {
                 .deliver_child_notification(notification)
                 .await;
         });
-        let _ = context;
         Ok(summary)
     }
 }
@@ -525,6 +526,8 @@ struct ChildNotification {
     session_id: String,
     origin_session_code: String,
     parent_run_code: String,
+    /// Locale of the child run's session; host notices follow it.
+    locale: String,
     status: fw::ChildRunStatus,
     run_id: fw::RunId,
     sequence: u64,
@@ -568,26 +571,31 @@ impl FrameworkHost {
             return;
         }
         let outcome = match &notification.result {
-            Ok(result) if result.result.status == fw::RunStatus::AwaitingInput => {
-                format!(
-                    "等待调用方回答。用 child_wait 获取完整交互，再用 child_answer 回答。interactions={}",
+            Ok(result) if result.result.status == fw::RunStatus::AwaitingInput => tron_i18n::t!(
+                "agent_runtime.collaboration.child_awaiting_input",
+                locale = &notification.locale,
+                interactions =
                     serde_json::to_string(&result.result.interactions).unwrap_or_default()
-                )
-            }
-            Ok(result) => format!("{}", result.result.output),
-            Err(error) => error.clone(),
+            ),
+            Ok(result) => format!("{}", result.result.output).into(),
+            Err(error) => error.clone().into(),
         };
-        let message = format!(
-            "后台子执行已结束（childRunId={}，status={}，agent={}）。输出摘要：{}。需要完整结果时用 child_wait 获取。",
-            notification.run_id,
-            serde_json::to_value(&notification.status)
+        let message = tron_i18n::t!(
+            "agent_runtime.collaboration.child_finished",
+            locale = &notification.locale,
+            child_run_id = notification.run_id,
+            status = serde_json::to_value(&notification.status)
                 .ok()
                 .and_then(|value| value.as_str().map(str::to_owned))
                 .unwrap_or_default(),
-            notification.session_id,
-            outcome
+            session_id = notification.session_id,
+            summary = outcome
         );
-        self.notify_native_run(&notification.parent_run_code, &message);
+        self.notify_native_run(
+            &notification.parent_run_code,
+            &message,
+            &notification.locale,
+        );
     }
     pub(super) async fn enqueue_child_feedback(
         &self,

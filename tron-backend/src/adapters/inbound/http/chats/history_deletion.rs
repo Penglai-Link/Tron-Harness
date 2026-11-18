@@ -5,11 +5,12 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use eliteforge_agent_core as fw;
 use serde::{Deserialize, Serialize};
+use tron_i18n::t;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -26,13 +27,11 @@ pub struct DeleteHistoryTurnResponse {
 
 pub async fn delete_turn(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path((session, root)): Path<(String, String)>,
-    headers: HeaderMap,
     body: Result<Json<DeleteHistoryTurnRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
-    let locale =
-        SupportedLocale::from_request(headers.get("accept-language").and_then(|v| v.to_str().ok()));
+    let locale = SupportedLocale::from_raw(&auth.locale);
     if let Err(error) = state.chats.get_session(&session) {
         return super::error_mapper::chat_error_response(error);
     }
@@ -63,50 +62,33 @@ pub async fn delete_turn(
         .into_response(),
         Err(error) => {
             let descriptor = crate::application::chat::history_error::deletion_descriptor(&error);
-            let (status, zh, en) = match descriptor.message_key {
+            let (status, message) = match descriptor.message_key {
                 "tron.chat.history_delete_unsupported" => (
                     StatusCode::BAD_REQUEST,
-                    "外部 Agent 会话不支持删除历史轮次",
-                    "External agent sessions do not support deleting turns",
+                    t!("tron.chat.history_delete_unsupported", locale = locale),
                 ),
                 "tron.chat.history_delete_busy" => (
                     StatusCode::CONFLICT,
-                    "请先结束当前运行及待处理的用户交互，再删除历史轮次",
-                    "Finish the active run and pending interactions before deleting a turn",
+                    t!("tron.chat.history_delete_busy", locale = locale),
                 ),
                 "tron.chat.history_version_changed" => (
                     StatusCode::CONFLICT,
-                    "会话历史已更新，请刷新后重试",
-                    "History changed; refresh and retry",
+                    t!("tron.chat.history_version_changed", locale = locale),
                 ),
                 "tron.chat.history_not_found" => (
                     StatusCode::NOT_FOUND,
-                    "会话或历史轮次不存在",
-                    "Session or turn not found",
+                    t!("tron.chat.history_turn_not_found", locale = locale),
                 ),
                 "tron.chat.history_delete_invalid" => (
                     StatusCode::BAD_REQUEST,
-                    "无法删除该历史轮次，请检查请求",
-                    "This history turn cannot be deleted; check the request",
+                    t!("tron.chat.history_delete_invalid", locale = locale),
                 ),
                 _ => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "删除历史轮次失败",
-                    "Could not delete the history turn",
+                    t!("tron.chat.history_delete_failed", locale = locale),
                 ),
             };
-            (
-                status,
-                Json(ApiResponse::error(
-                    descriptor.code,
-                    if locale == SupportedLocale::EnUs {
-                        en
-                    } else {
-                        zh
-                    },
-                )),
-            )
-                .into_response()
+            (status, Json(ApiResponse::error(descriptor.code, message))).into_response()
         }
     }
 }

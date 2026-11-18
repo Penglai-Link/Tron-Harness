@@ -1,11 +1,4 @@
-mod catalog;
-mod knowledge_quality;
-mod rag_graph;
-use catalog::{translate_en_us, translate_zh_cn};
-mod business;
-mod coding;
-mod productivity;
-mod terminal;
+use std::borrow::Cow;
 
 use serde_json::Value;
 
@@ -17,6 +10,9 @@ use crate::{
 use super::definitions::{ToolCatalogDefinition, domain_definitions};
 
 const DESCRIPTION_I18N_KEY: &str = "x-i18n-description-key";
+/// Marks a JSON string value as a translation key that is resolved when the
+/// input schema is materialized, so static schema examples stay out of source.
+const INLINE_I18N_PREFIX: &str = "__i18n__";
 
 pub(super) fn localize_tool_record(
     locale: SupportedLocale,
@@ -39,43 +35,49 @@ pub(super) fn localize_tool_record(
             ),
             ..Default::default()
         },
-        name: translate(locale, definition.name_i18n_key).to_string(),
-        description: translate(locale, definition.description_i18n_key).to_string(),
+        name: translate(locale, definition.name_i18n_key).into_owned(),
+        description: translate(locale, definition.description_i18n_key).into_owned(),
         operation_kind: definition.operation_kind,
         input_schema: materialize_schema(locale, &definition.input_schema),
         module_owner: definition.module_owner.to_string(),
         availability_state: definition.availability_state,
         sample_result_summary: translate(locale, definition.sample_result_summary_i18n_key)
-            .to_string(),
+            .into_owned(),
     };
+    // Host aliases of official assistant tools keep the shared catalog identity
+    // but present the host's own text, which lives in the shared resources too.
     if record.domain_code == "assistant_memory" {
-        record.description = match locale {
-            SupportedLocale::ZhCn => "管理当前用户或工作领域的记忆。".into(),
-            _ => "Manage memories for the current user or work domain.".into(),
-        };
+        record.description = tron_i18n::t!(
+            "agent.toolCatalog.records.assistant_memory.description",
+            locale = locale
+        )
+        .into_owned();
         record.input_schema["description"] = record.description.clone().into();
         if let Some(scope) = record.input_schema.pointer_mut("/properties/scope") {
-            scope["description"] = match locale {
-                SupportedLocale::ZhCn => "选择用户或工作领域记忆。",
-                _ => "Choose user or work-domain memory.",
-            }
+            scope["description"] = tron_i18n::t!(
+                "agent.toolCatalog.records.assistant_memory.params.scope",
+                locale = locale
+            )
+            .into_owned()
             .into();
         }
     } else if record.domain_code == "assistant_task" {
-        let scope = match locale {
-            SupportedLocale::ZhCn => "管理当前 PersonAI 负责的平台任务。",
-            _ => "Manage platform tasks owned by the current PersonAI.",
-        };
-        let description = match (record.tool_name.as_str(), locale) {
-            ("assistant_task_page", SupportedLocale::ZhCn) => {
-                "分页查询当前 PersonAI 负责的平台任务。"
-            }
-            ("assistant_task_page", _) => "Page platform tasks owned by the current PersonAI.",
-            ("assistant_task_create", SupportedLocale::ZhCn) => {
-                "创建由当前 PersonAI 负责的平台任务。"
-            }
-            ("assistant_task_create", _) => "Create a platform task owned by the current PersonAI.",
-            _ => &record.description,
+        let scope = tron_i18n::t!(
+            "agent.toolCatalog.records.assistant_task.scope",
+            locale = locale
+        );
+        let description = match record.tool_name.as_str() {
+            "assistant_task_page" => tron_i18n::t!(
+                "agent.toolCatalog.records.assistant_task.page.description",
+                locale = locale
+            )
+            .into_owned(),
+            "assistant_task_create" => tron_i18n::t!(
+                "agent.toolCatalog.records.assistant_task.create.description",
+                locale = locale
+            )
+            .into_owned(),
+            _ => record.description.clone(),
         };
         record.description = format!("{scope} {description}")
             .replace("task_get", "assistant_task_get")
@@ -94,10 +96,7 @@ pub(super) fn localize_tool_record(
             .find(|d| d.call_name == record.tool_name)
         {
             record.display = descriptor.display.clone();
-            let resolved = descriptor.resolve_display(match locale {
-                SupportedLocale::ZhCn => "zh-CN",
-                SupportedLocale::EnUs => "en-US",
-            });
+            let resolved = descriptor.resolve_display(locale.as_str());
             record.name = resolved.name;
             record.description = resolved.description;
             record.input_schema = resolved.input_schema;
@@ -125,8 +124,8 @@ pub(super) fn localize_domain_record(
     {
         return ToolDomainRecord {
             domain_code: definition.domain_code.to_string(),
-            name: translate(locale, definition.name_i18n_key).to_string(),
-            description: translate(locale, definition.description_i18n_key).to_string(),
+            name: translate(locale, definition.name_i18n_key).into_owned(),
+            description: translate(locale, definition.description_i18n_key).into_owned(),
             tool_count: items.len(),
             sample_tools,
             has_mutation_tools: items
@@ -137,15 +136,20 @@ pub(super) fn localize_domain_record(
 
     ToolDomainRecord {
         domain_code: domain_code.to_string(),
-        name: match (locale, domain_code) {
-            (SupportedLocale::ZhCn, "media") => "图片与文档".into(),
-            (SupportedLocale::EnUs, "media") => "Images and documents".into(),
-            _ => format!("{domain_code} Tools"),
+        name: if domain_code == "media" {
+            tron_i18n::t!("agent.toolCatalog.domains.media.name", locale = locale).into_owned()
+        } else {
+            tron_i18n::t!(
+                "agent.toolCatalog.domains.fallback.name",
+                locale = locale,
+                code = domain_code
+            )
         },
-        description: match locale {
-            SupportedLocale::ZhCn => format!("可用工具：{}。", sample_tools.join("、")),
-            SupportedLocale::EnUs => format!("Available tools: {}.", sample_tools.join(", ")),
-        },
+        description: tron_i18n::t!(
+            "agent.toolCatalog.domains.fallback.description",
+            locale = locale,
+            tools = sample_tools.join(", ")
+        ),
         tool_count: items.len(),
         sample_tools,
         has_mutation_tools: items
@@ -163,12 +167,23 @@ pub(crate) fn materialize_schema(locale: SupportedLocale, schema: &Value) -> Val
 }
 
 fn materialize_schema_node(locale: SupportedLocale, node: &mut Value) {
+    // Inline translation sentinels reach here from static schema examples.
+    if node.is_string() {
+        let key = node
+            .as_str()
+            .and_then(|text| text.strip_prefix(INLINE_I18N_PREFIX))
+            .map(str::to_owned);
+        if let Some(key) = key {
+            *node = Value::String(translate(locale, &key).into_owned());
+        }
+        return;
+    }
     match node {
         Value::Object(map) => {
             if let Some(Value::String(key)) = map.remove(DESCRIPTION_I18N_KEY) {
                 map.insert(
                     "description".to_string(),
-                    Value::String(translate(locale, &key).to_string()),
+                    Value::String(translate(locale, &key).into_owned()),
                 );
             }
             for value in map.values_mut() {
@@ -184,19 +199,6 @@ fn materialize_schema_node(locale: SupportedLocale, node: &mut Value) {
     }
 }
 
-pub(crate) fn translate(locale: SupportedLocale, key: &str) -> &'static str {
-    if let Some(value) = knowledge_quality::translate(locale, key) {
-        return value;
-    }
-    if let Some(value) = rag_graph::translate(locale, key) {
-        return value;
-    }
-    match locale {
-        SupportedLocale::EnUs => translate_en_us(key),
-        SupportedLocale::ZhCn => translate_zh_cn(key),
-    }
-}
-
-fn key_leak_fallback() -> &'static str {
-    "UNTRANSLATED_AGENT_CATALOG_KEY"
+pub(crate) fn translate<'a>(locale: SupportedLocale, key: &'a str) -> Cow<'a, str> {
+    tron_i18n::translate(locale, key)
 }

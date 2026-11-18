@@ -58,17 +58,19 @@ pub async fn restore_session(
 
 pub async fn batch_delete_archived_sessions(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     request: Result<Json<BatchDeleteArchivedSessionsCommand>, JsonRejection>,
 ) -> Response {
+    let locale = SupportedLocale::from_raw(&auth.locale);
     let Json(request) = match request {
         Ok(request) => request,
         Err(error) => {
+            tracing::debug!(?error, "archived session batch delete body rejected");
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<EmptyData>::error(
                     "CHAT_BATCH_DELETE_INVALID",
-                    error.body_text(),
+                    t!("error.chat.batch_delete_invalid_body", locale = locale),
                 )),
             )
                 .into_response();
@@ -83,7 +85,7 @@ pub async fn batch_delete_archived_sessions(
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<EmptyData>::error(
                     "CHAT_BATCH_DELETE_INVALID",
-                    "sessionCodes must not contain empty values",
+                    t!("error.chat.batch_delete_empty_code", locale = locale),
                 )),
             )
                 .into_response();
@@ -97,7 +99,11 @@ pub async fn batch_delete_archived_sessions(
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<EmptyData>::error(
                 "CHAT_BATCH_DELETE_INVALID",
-                format!("sessionCodes must contain between 1 and {MAX_ARCHIVED_SESSION_DELETE_BATCH} unique values"),
+                t!(
+                    "error.chat.batch_delete_code_count",
+                    locale = locale,
+                    max = MAX_ARCHIVED_SESSION_DELETE_BATCH
+                ),
             )),
         )
             .into_response();
@@ -118,7 +124,7 @@ pub async fn batch_delete_archived_sessions(
                         error_code: None,
                         message: None,
                     },
-                    Err(error) => chat_delete_failure(session_code, error),
+                    Err(error) => chat_delete_failure(session_code, error, locale),
                 })
                 .collect::<Vec<_>>()
         });
@@ -140,7 +146,9 @@ pub async fn batch_delete_archived_sessions(
                 session_code: code.clone(),
                 success: false,
                 error_code: Some("CHAT_SESSION_DELETE_FAILED".to_string()),
-                message: Some("deletion worker failed; retry this item".to_string()),
+                message: Some(
+                    t!("error.chat.delete_worker_failed", locale = locale).into_owned(),
+                ),
             });
         }
     }
@@ -223,8 +231,12 @@ pub async fn delete_archived_session(
     }
 }
 
-fn chat_delete_failure(session_code: String, error: ChatError) -> BatchDeleteArchivedSessionItem {
-    let (code, message) = match error {
+fn chat_delete_failure(
+    session_code: String,
+    error: ChatError,
+    locale: SupportedLocale,
+) -> BatchDeleteArchivedSessionItem {
+    let (code, detail) = match error {
         ChatError::SessionNotFound => ("CHAT_SESSION_NOT_FOUND", "chat session was not found"),
         ChatError::SessionMustBeArchived => (
             "CHAT_SESSION_MUST_BE_ARCHIVED",
@@ -239,7 +251,11 @@ fn chat_delete_failure(session_code: String, error: ChatError) -> BatchDeleteArc
             "chat session cleanup failed; retry this item",
         ),
     };
-    failed_delete_item(session_code, code, message)
+    failed_delete_item(
+        session_code,
+        code,
+        &super::error_messages::message(code, detail, locale),
+    )
 }
 
 fn failed_delete_item(
@@ -257,18 +273,19 @@ fn failed_delete_item(
 
 pub async fn upload_session_attachment(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path(session_code): Path<String>,
     request: Result<Multipart, MultipartRejection>,
 ) -> Response {
+    let locale = SupportedLocale::from_raw(&auth.locale);
     let multipart = match request {
         Ok(request) => request,
-        Err(error) => return chat_attachment_request_error(error.status()),
+        Err(error) => return chat_attachment_request_error(error.status(), locale),
     };
     let maximum = state.resources.max_chat_session_attachment_bytes();
     let form = match parse_session_attachment_form(multipart, maximum).await {
         Ok(form) => form,
-        Err(error) => return chat_attachment_form_error_response(error),
+        Err(error) => return chat_attachment_form_error_response(error, locale),
     };
     let chats = state.chats.clone();
     let result = tokio::task::spawn_blocking(move || {

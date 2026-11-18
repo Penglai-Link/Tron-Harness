@@ -5,6 +5,7 @@ use crate::application::agent::tool_framework::FrameworkToolRegistryExt;
 use crate::domain::agent::{AgentRunContext, EffectiveTool, ToolRegistry, ToolRequest};
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
+use tron_i18n::t;
 
 pub(super) fn has_product_implementation(
     registry: &ToolRegistry,
@@ -86,9 +87,10 @@ pub(crate) fn map_authorized_descriptor(
         });
     }
     if !context.is_tool_authorized(&descriptor.call_name) {
-        return Err(fw::AgentError::ToolSetup(format!(
-            "unauthorized tool: {}",
-            descriptor.call_name
+        return Err(fw::AgentError::ToolSetup(t!(
+            "agent_runtime.tool.authority.unauthorized_tool",
+            locale = context.locale.as_str(),
+            tool = descriptor.call_name
         )));
     }
     let mut tool = context
@@ -97,7 +99,11 @@ pub(crate) fn map_authorized_descriptor(
         .find(|tool| tool.tool_name == descriptor.call_name)
         .cloned()
         .ok_or_else(|| {
-            fw::AgentError::ToolSetup(format!("missing tool ACL: {}", descriptor.call_name))
+            fw::AgentError::ToolSetup(t!(
+                "agent_runtime.tool.authority.missing_acl",
+                locale = context.locale.as_str(),
+                tool = descriptor.call_name
+            ))
         })?;
     tool.description = descriptor.description.clone();
     tool.input_schema = descriptor.input_schema.clone();
@@ -393,7 +399,11 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             .load(std::sync::atomic::Ordering::Acquire)
         {
             return Ok(fw::ToolPolicyDecision::Deny(
-                "tool extension is disabled".into(),
+                t!(
+                    "agent_runtime.tool.authority.extension_disabled",
+                    locale = tron_harness_capability::run_locale(invocation.run)
+                )
+                .into_owned(),
             ));
         }
         // The stable gateway pair is host infrastructure: executing discovery
@@ -413,7 +423,11 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             )
         {
             return Ok(fw::ToolPolicyDecision::Deny(
-                "Computer Use is restricted to the main Agent and main PersonAI".into(),
+                t!(
+                    "agent_runtime.tool.authority.computer_use_restricted",
+                    locale = tron_harness_capability::run_locale(invocation.run)
+                )
+                .into_owned(),
             ));
         }
         if let Some(management) = &self.management {
@@ -450,7 +464,11 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                     .contains(name)
                 {
                     return Ok(fw::ToolPolicyDecision::Deny(
-                        "skill is not assigned or is unavailable".into(),
+                        t!(
+                            "agent_runtime.tool.authority.skill_unavailable",
+                            locale = tron_harness_capability::run_locale(invocation.run)
+                        )
+                        .into_owned(),
                     ));
                 }
             }
@@ -471,7 +489,11 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             || overridden_native_skill(&host, &state, invocation.descriptor)
         {
             return Ok(fw::ToolPolicyDecision::Deny(
-                "tool authority changed after catalog admission".into(),
+                t!(
+                    "agent_runtime.tool.authority.changed_after_admission",
+                    locale = tron_harness_capability::run_locale(invocation.run)
+                )
+                .into_owned(),
             ));
         }
         Ok(fw::ToolPolicyDecision::Allow)

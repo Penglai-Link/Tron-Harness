@@ -6,6 +6,7 @@ use crate::{
     app::AppState,
     domain::chat::{ChatError, ChatSessionStatus},
     response::{ApiResponse, EmptyData},
+    shared::locale::SupportedLocale,
 };
 use axum::{
     Json,
@@ -15,6 +16,24 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use tron_i18n::t;
+
+/// Locale of the current request: the authenticated context when the profile
+/// middleware already resolved it, otherwise the `Accept-Language` header.
+fn request_locale(request: &Request) -> SupportedLocale {
+    request
+        .extensions()
+        .get::<RequestAuthContext>()
+        .map(|auth| SupportedLocale::from_raw(&auth.locale))
+        .unwrap_or_else(|| {
+            SupportedLocale::from_request(
+                request
+                    .headers()
+                    .get("accept-language")
+                    .and_then(|value| value.to_str().ok()),
+            )
+        })
+}
 pub async fn require_workspace(
     State(state): State<AppState>,
     mut request: Request,
@@ -216,6 +235,7 @@ pub async fn require_workspace(
             Err(_) => return chat_error_response(ChatError::WorkspaceRequired),
         }
     }
+    let locale = request_locale(&request);
     let mut payload = serde_json::Value::Null;
     if request
         .headers()
@@ -231,7 +251,7 @@ pub async fn require_workspace(
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<EmptyData>::error(
                         "CHAT_REQUEST_INVALID",
-                        "request body is too large",
+                        t!("error.chat.request_too_large", locale = locale),
                     )),
                 )
                     .into_response();
@@ -244,7 +264,7 @@ pub async fn require_workspace(
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<EmptyData>::error(
                         "CHAT_REQUEST_INVALID",
-                        "invalid JSON",
+                        t!("error.chat.invalid_json", locale = locale),
                     )),
                 )
                     .into_response();

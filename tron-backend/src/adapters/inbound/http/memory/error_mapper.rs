@@ -17,29 +17,19 @@ impl IntoResponse for ApiError {
             MemoryError::Conflict(_) => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        let (zh, en) = match d.message_key {
-            "tron.memory.invalid" => (
-                "记忆内容、范围或分页参数无效",
-                "Invalid memory content, scope or pagination",
-            ),
-            "tron.memory.not_found" => ("记忆不存在", "Memory not found"),
-            "tron.memory.forbidden" => ("无权访问此记忆范围", "Memory scope is not accessible"),
-            "tron.memory.conflict" => (
-                "记忆已变更或存在不同内容，请刷新后重新编辑",
-                "Memory changed or contains conflicting content; refresh before editing",
-            ),
-            "tron.memory.index" => ("记忆索引暂不可用", "Memory index is unavailable"),
-            _ => ("记忆存储失败", "Could not access memory storage"),
+        let message_key = match d.message_key {
+            "tron.memory.invalid" => "tron.memory.invalid",
+            "tron.memory.not_found" => "tron.memory.not_found",
+            "tron.memory.forbidden" => "tron.memory.forbidden",
+            "tron.memory.conflict" => "tron.memory.conflict",
+            "tron.memory.index" => "tron.memory.index",
+            _ => "tron.memory.storage",
         };
         (
             status,
             Json(ApiResponse::protocol_error(
                 d.code,
-                if self.1 == SupportedLocale::EnUs {
-                    en
-                } else {
-                    zh
-                },
+                tron_i18n::t!(message_key, locale = self.1),
             )),
         )
             .into_response()

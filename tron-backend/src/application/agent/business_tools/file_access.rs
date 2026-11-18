@@ -2,6 +2,7 @@ use std::{io::Read, path::PathBuf};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tron_i18n::t;
 
 use crate::{
     application::resource::ResourceService,
@@ -104,24 +105,41 @@ pub(super) fn resolve_input_file_bounded(
         context.execution_workspace_code(),
     );
     let limit = limit.min(MAX_INPUT_FILE_BYTES);
+    let locale = context.locale.as_str();
     let reference = match (input.get("fileRef"), input.get("path")) {
         (Some(_), Some(_)) => {
             return Err(ToolError::ExecutionFailed(
-                "provide fileRef or legacy path, not both".into(),
+                t!(
+                    "agent_runtime.tool.file_ref.ambiguous_source",
+                    locale = locale
+                )
+                .into_owned(),
             ));
         }
-        (Some(value), None) => serde_json::from_value::<AgentFileRef>(value.clone())
-            .map_err(|e| ToolError::ExecutionFailed(format!("fileRef is invalid: {e}")))?,
+        (Some(value), None) => {
+            serde_json::from_value::<AgentFileRef>(value.clone()).map_err(|e| {
+                ToolError::ExecutionFailed(t!(
+                    "agent_runtime.tool.file_ref.invalid_reference",
+                    locale = locale,
+                    detail = e
+                ))
+            })?
+        }
         (None, Some(value)) => AgentFileRef::WorkspacePath {
             path: value
                 .as_str()
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| ToolError::ExecutionFailed("path is required".into()))?
+                .ok_or_else(|| {
+                    ToolError::ExecutionFailed(
+                        t!("agent_runtime.tool.file_ref.path_required", locale = locale)
+                            .into_owned(),
+                    )
+                })?
                 .to_string(),
         },
         (None, None) => {
             return Err(ToolError::ExecutionFailed(
-                "fileRef is required (legacy path is also accepted)".into(),
+                t!("agent_runtime.tool.file_ref.required", locale = locale).into_owned(),
             ));
         }
     };
@@ -134,28 +152,52 @@ pub(super) fn resolve_input_file_bounded(
                 path.starts_with(actual_root)
             }) {
                 return Err(ToolError::ExecutionFailed(
-                    "resource storage objects must be read through authorized resource references"
-                        .into(),
+                    t!(
+                        "agent_runtime.tool.file_access.resource_storage_requires_reference",
+                        locale = locale
+                    )
+                    .into_owned(),
                 ));
             }
-            let file = std::fs::File::open(&path)
-                .map_err(|e| ToolError::ExecutionFailed(format!("file read failed: {e}")))?;
+            let file = std::fs::File::open(&path).map_err(|e| {
+                ToolError::ExecutionFailed(t!(
+                    "agent_runtime.tool.file_access.read_failed",
+                    locale = locale,
+                    detail = e
+                ))
+            })?;
             let size = file
                 .metadata()
-                .map_err(|e| ToolError::ExecutionFailed(format!("file metadata failed: {e}")))?
+                .map_err(|e| {
+                    ToolError::ExecutionFailed(t!(
+                        "agent_runtime.tool.file_access.metadata_failed",
+                        locale = locale,
+                        detail = e
+                    ))
+                })?
                 .len();
             if size > limit {
-                return Err(ToolError::ExecutionFailed(format!(
-                    "file exceeds {limit} byte input limit"
+                return Err(ToolError::ExecutionFailed(t!(
+                    "agent_runtime.tool.file_access.file_too_large",
+                    locale = locale,
+                    limit = limit
                 )));
             }
             let mut bytes = Vec::with_capacity(size as usize);
             file.take(limit.saturating_add(1))
                 .read_to_end(&mut bytes)
-                .map_err(|e| ToolError::ExecutionFailed(format!("file read failed: {e}")))?;
+                .map_err(|e| {
+                    ToolError::ExecutionFailed(t!(
+                        "agent_runtime.tool.file_access.read_failed",
+                        locale = locale,
+                        detail = e
+                    ))
+                })?;
             if bytes.len() as u64 > limit {
-                return Err(ToolError::ExecutionFailed(format!(
-                    "file exceeds {limit} byte input limit"
+                return Err(ToolError::ExecutionFailed(t!(
+                    "agent_runtime.tool.file_access.file_too_large",
+                    locale = locale,
+                    limit = limit
                 )));
             }
             let file_name = path
@@ -175,7 +217,11 @@ pub(super) fn resolve_input_file_bounded(
             let attachment_code = attachment_code.trim();
             if attachment_code.is_empty() {
                 return Err(ToolError::ExecutionFailed(
-                    "fileRef.attachmentCode is required".into(),
+                    t!(
+                        "agent_runtime.tool.file_ref.attachment_code_required",
+                        locale = locale
+                    )
+                    .into_owned(),
                 ));
             }
             context
@@ -184,19 +230,28 @@ pub(super) fn resolve_input_file_bounded(
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| {
                     ToolError::ExecutionFailed(
-                        "session attachment fileRef requires a conversation session".into(),
+                        t!(
+                            "agent_runtime.tool.file_access.session_required",
+                            locale = locale
+                        )
+                        .into_owned(),
                     )
                 })?;
             let (record, _, bytes) =
                 read_session_attachment_range(&resources, context, attachment_code, 0, limit)
                     .map_err(|error| {
-                        ToolError::ExecutionFailed(format!(
-                            "session attachment `{attachment_code}` could not be read: {error}"
+                        ToolError::ExecutionFailed(t!(
+                            "agent_runtime.tool.file_access.attachment_read_failed",
+                            locale = locale,
+                            attachment_code = attachment_code,
+                            detail = error
                         ))
                     })?;
             if record.byte_size > limit {
-                return Err(ToolError::ExecutionFailed(format!(
-                    "attachment exceeds {limit} byte input limit"
+                return Err(ToolError::ExecutionFailed(t!(
+                    "agent_runtime.tool.file_access.attachment_too_large",
+                    locale = locale,
+                    limit = limit
                 )));
             }
             Ok(ResolvedInputFile {

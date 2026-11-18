@@ -143,7 +143,7 @@ impl FrameworkHost {
     }
     /// Queue host-owned context into a still-executing native run without
     /// attributing the notification to the human sender.
-    pub fn notify_native_run(&self, key: &str, message: &str) -> bool {
+    pub fn notify_native_run(&self, key: &str, message: &str, locale: &str) -> bool {
         let control = self
             .0
             .control
@@ -162,7 +162,13 @@ impl FrameworkHost {
                             sender: fw::MessageSender {
                                 kind: "SYSTEM".into(),
                                 id: None,
-                                display_name: Some("系统通知".into()),
+                                display_name: Some(
+                                    tron_i18n::translate(
+                                        locale,
+                                        "agent_runtime.message.sender.system_notification",
+                                    )
+                                    .into_owned(),
+                                ),
                                 avatar_url: None,
                             },
                             source: Some("ChildRunCompletion".into()),

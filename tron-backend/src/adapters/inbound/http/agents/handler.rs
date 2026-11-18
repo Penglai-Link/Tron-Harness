@@ -254,11 +254,11 @@ pub async fn list_tools(
                         .map(|issue| issue.message.clone())
                         .or_else(|| {
                             owner.as_ref().filter(|o| !o.available).map(|o| {
-                                if auth.locale.starts_with("zh") {
-                                    format!("能力包 {} 已禁用", o.pack_id)
-                                } else {
-                                    format!("Capability pack {} is disabled", o.pack_id)
-                                }
+                                tron_i18n::t!(
+                                    "agents.tool.pack_disabled",
+                                    locale = &auth.locale,
+                                    pack = o.pack_id
+                                )
                             })
                         });
                 ToolAssignmentVo {
@@ -305,7 +305,7 @@ pub async fn get_tool(
             StatusCode::NOT_FOUND,
             Json(ApiResponse::error(
                 "AGENT_TOOL_NOT_FOUND",
-                "tool was not found in platform catalog",
+                tron_i18n::t!("agents.tool.not_found", locale = &auth.locale),
             )),
         )
             .into_response(),
@@ -336,16 +336,19 @@ pub async fn get_workspace_internal_agent(
 
 pub async fn update_workspace_internal_agent_policy(
     State(agent_management): State<AgentManagementService>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path((workspace_code, agent_code)): Path<(String, String)>,
     Json(request): Json<UpdateInternalAgentPolicyRequest>,
 ) -> Response {
     let command = match to_internal_agent_policy_command(request) {
         Ok(command) => command,
-        Err((code, message)) => {
+        Err((code, message_key)) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::error(code, message)),
+                Json(ApiResponse::error(
+                    code,
+                    tron_i18n::t!(message_key, locale = &auth.locale),
+                )),
             )
                 .into_response();
         }
@@ -386,16 +389,19 @@ pub async fn reset_workspace_internal_agent_policy(
 
 pub async fn update_workspace_internal_agent_mcp_policy(
     State(agent_management): State<AgentManagementService>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path((workspace_code, agent_code)): Path<(String, String)>,
     Json(request): Json<UpdateInternalAgentMcpPolicyRequest>,
 ) -> Response {
     let command = match to_internal_agent_mcp_policy_command(request) {
         Ok(command) => command,
-        Err((code, message)) => {
+        Err((code, message_key)) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::error(code, message)),
+                Json(ApiResponse::error(
+                    code,
+                    tron_i18n::t!(message_key, locale = &auth.locale),
+                )),
             )
                 .into_response();
         }
@@ -449,7 +455,7 @@ pub async fn list_runtime_capabilities(
 
 pub async fn get_runtime_capability(
     State(agent_management): State<AgentManagementService>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path(adapter_key): Path<String>,
 ) -> Response {
     match agent_management.runtime_capability(&adapter_key) {
@@ -458,7 +464,7 @@ pub async fn get_runtime_capability(
             StatusCode::NOT_FOUND,
             Json(ApiResponse::error(
                 "AGENT_RUNTIME_NOT_FOUND",
-                "runtime adapter capability was not found",
+                tron_i18n::t!("agents.runtime.not_found", locale = &auth.locale),
             )),
         )
             .into_response(),
@@ -585,7 +591,7 @@ fn parse_tool_assignment_mode(
         "all_read_only_tools" | "allreadonlytools" => Ok(ToolAssignmentMode::AllReadOnlyTools),
         _ => Err((
             "AGENT_TOOL_ASSIGNMENT_MODE_INVALID",
-            "invalid tool assignment mode",
+            "agents.policy.tool_assignment_mode_invalid",
         )),
     }
 }
@@ -595,7 +601,10 @@ fn parse_mcp_access_mode(raw: &str) -> Result<McpAccessMode, (&'static str, &'st
         "disabled" => Ok(McpAccessMode::Disabled),
         "all_enabled_servers" => Ok(McpAccessMode::AllEnabledServers),
         "selected_servers" => Ok(McpAccessMode::SelectedServers),
-        _ => Err(("AGENT_MCP_ACCESS_MODE_INVALID", "invalid MCP access mode")),
+        _ => Err((
+            "AGENT_MCP_ACCESS_MODE_INVALID",
+            "agents.policy.mcp_access_mode_invalid",
+        )),
     }
 }
 

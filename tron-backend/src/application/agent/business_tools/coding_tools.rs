@@ -12,6 +12,7 @@ use crate::{
     application::resource::ResourceService,
     domain::agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolObservation},
 };
+use tron_i18n::t;
 
 // Product-owned attachment publication. Generic file, command and terminal
 // tools are leased from the official Framework capability pack.
@@ -21,9 +22,15 @@ pub(super) fn coding_domain_tools(resources: ResourceService) -> Vec<Arc<dyn Too
 
 pub(super) fn parse_tool_input<T: for<'de> Deserialize<'de>>(
     input: serde_json::Value,
+    locale: &str,
 ) -> Result<T, ToolError> {
-    serde_json::from_value(input)
-        .map_err(|error| ToolError::ExecutionFailed(format!("tool input is invalid: {error}")))
+    serde_json::from_value(input).map_err(|error| {
+        ToolError::ExecutionFailed(t!(
+            "agent_runtime.tool.input.invalid",
+            locale = locale,
+            detail = error
+        ))
+    })
 }
 
 pub(super) fn json_observation<T: Serialize>(
@@ -44,7 +51,13 @@ pub(super) fn resolve_path(
 ) -> Result<PathBuf, ToolError> {
     let trimmed = raw_path.trim();
     if trimmed.is_empty() {
-        return Err(ToolError::ExecutionFailed("path is required".into()));
+        return Err(ToolError::ExecutionFailed(
+            t!(
+                "agent_runtime.tool.path.required",
+                locale = context.locale.as_str()
+            )
+            .into_owned(),
+        ));
     }
     let path = expand_tilde(trimmed);
     let resolved = if path.is_absolute() {
@@ -55,9 +68,10 @@ pub(super) fn resolve_path(
         if context.execution_scope.local_directory.is_some()
             && (!cwd.is_absolute() || !cwd.is_dir())
         {
-            return Err(ToolError::ExecutionFailed(format!(
-                "configured working directory `{}` is unavailable",
-                cwd.display()
+            return Err(ToolError::ExecutionFailed(t!(
+                "agent_runtime.tool.path.working_directory_unavailable",
+                locale = context.locale.as_str(),
+                path = cwd.display()
             )));
         }
         cwd.join(path)
@@ -69,7 +83,8 @@ fn ensure_allowed_path(context: &AgentRunContext, path: PathBuf) -> Result<PathB
     if context.execution_scope.allowed_local_directories.is_empty() {
         return Ok(path);
     }
-    let candidate = canonicalize_existing_path(&path)?;
+    let locale = context.locale.as_str();
+    let candidate = canonicalize_existing_path(locale, &path)?;
     let allowed = context
         .execution_scope
         .allowed_local_directories
@@ -78,22 +93,30 @@ fn ensure_allowed_path(context: &AgentRunContext, path: PathBuf) -> Result<PathB
             let root = expand_tilde(root);
             if !root.is_absolute() {
                 return Err(ToolError::ExecutionFailed(
-                    "linked project directories must be absolute".into(),
+                    t!(
+                        "agent_runtime.tool.path.relative_allowed_directory",
+                        locale = context.locale.as_str()
+                    )
+                    .into_owned(),
                 ));
             }
-            canonicalize_existing_path(&root)
+            canonicalize_existing_path(locale, &root)
         })
         .collect::<Result<Vec<_>, _>>()?;
     if allowed.iter().any(|root| candidate.starts_with(root)) {
         Ok(path)
     } else {
         Err(ToolError::ExecutionFailed(
-            "path is outside the linked project directories".into(),
+            t!(
+                "agent_runtime.tool.path.outside_allowed_directories",
+                locale = locale
+            )
+            .into_owned(),
         ))
     }
 }
 
-fn canonicalize_existing_path(path: &Path) -> Result<PathBuf, ToolError> {
+fn canonicalize_existing_path(locale: &str, path: &Path) -> Result<PathBuf, ToolError> {
     let mut existing = path;
     let mut missing = Vec::new();
     while !existing.exists() {
@@ -101,12 +124,21 @@ fn canonicalize_existing_path(path: &Path) -> Result<PathBuf, ToolError> {
             break;
         };
         missing.push(name.to_os_string());
-        existing = existing
-            .parent()
-            .ok_or_else(|| ToolError::ExecutionFailed("path has no existing parent".into()))?;
+        existing = existing.parent().ok_or_else(|| {
+            ToolError::ExecutionFailed(
+                t!(
+                    "agent_runtime.tool.path.no_existing_parent",
+                    locale = locale
+                )
+                .into_owned(),
+            )
+        })?;
     }
-    let mut canonical = fs::canonicalize(existing)
-        .map_err(|_| ToolError::ExecutionFailed("path cannot be resolved".into()))?;
+    let mut canonical = fs::canonicalize(existing).map_err(|_| {
+        ToolError::ExecutionFailed(
+            t!("agent_runtime.tool.path.cannot_resolve", locale = locale).into_owned(),
+        )
+    })?;
     for segment in missing.iter().rev() {
         canonical.push(segment);
     }
@@ -124,9 +156,10 @@ pub(super) fn resolve_optional_directory(
         Some(value) => {
             let path = resolve_path(context, value)?;
             if !path.is_dir() {
-                return Err(ToolError::ExecutionFailed(format!(
-                    "directory `{}` does not exist",
-                    path.display()
+                return Err(ToolError::ExecutionFailed(t!(
+                    "agent_runtime.tool.path.directory_missing",
+                    locale = context.locale.as_str(),
+                    path = path.display()
                 )));
             }
             Ok(Some(path))
@@ -136,9 +169,10 @@ pub(super) fn resolve_optional_directory(
             let default = default_cwd_for_context(context);
             if context.execution_scope.local_directory.is_some() {
                 if !default.is_absolute() || !default.is_dir() {
-                    return Err(ToolError::ExecutionFailed(format!(
-                        "configured working directory `{}` is unavailable",
-                        default.display()
+                    return Err(ToolError::ExecutionFailed(t!(
+                        "agent_runtime.tool.path.working_directory_unavailable",
+                        locale = context.locale.as_str(),
+                        path = default.display()
                     )));
                 }
                 Ok(Some(ensure_allowed_path(context, default)?))
@@ -162,8 +196,11 @@ fn validate_current_directory(context: &AgentRunContext) -> Result<(), ToolError
             )
     }) {
         return Err(ToolError::ExecutionFailed(
-            "current application directory is unavailable; explicitly select a valid worktree"
-                .into(),
+            t!(
+                "agent_runtime.tool.path.current_directory_unavailable",
+                locale = context.locale.as_str()
+            )
+            .into_owned(),
         ));
     }
     Ok(())

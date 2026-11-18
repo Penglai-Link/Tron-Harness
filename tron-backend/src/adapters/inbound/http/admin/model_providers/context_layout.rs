@@ -81,59 +81,55 @@ pub(super) struct UpdateContextLayoutRequest {
 
 pub(super) struct LayoutError {
     status: StatusCode,
-    english: bool,
-    message: &'static str,
+    locale: SupportedLocale,
+    key: &'static str,
 }
 
 impl LayoutError {
-    fn invalid(headers: &HeaderMap) -> Self {
+    fn new(status: StatusCode, key: &'static str, headers: &HeaderMap) -> Self {
         Self {
-            status: StatusCode::BAD_REQUEST,
-            english: is_english(headers),
-            message: "The context configuration is invalid.",
+            status,
+            locale: request_locale(headers),
+            key,
         }
+    }
+
+    fn invalid(headers: &HeaderMap) -> Self {
+        Self::new(
+            StatusCode::BAD_REQUEST,
+            "agent_runtime.http.context_layout.invalid",
+            headers,
+        )
     }
 
     fn invalid_total(headers: &HeaderMap) -> Self {
-        Self {
-            status: StatusCode::BAD_REQUEST,
-            english: is_english(headers),
-            message: "Context shares must be positive and total at most 100%.",
-        }
+        Self::new(
+            StatusCode::BAD_REQUEST,
+            "agent_runtime.http.context_layout.invalid_total",
+            headers,
+        )
     }
+
     fn unavailable(headers: &HeaderMap) -> Self {
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            english: is_english(headers),
-            message: "Could not load or save context configuration settings.",
-        }
+        Self::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "agent_runtime.http.context_layout.unavailable",
+            headers,
+        )
     }
 
     fn conflict(headers: &HeaderMap) -> Self {
-        Self {
-            status: StatusCode::CONFLICT,
-            english: is_english(headers),
-            message: "Context configuration changed elsewhere. Refresh and try again.",
-        }
+        Self::new(
+            StatusCode::CONFLICT,
+            "agent_runtime.http.context_layout.conflict",
+            headers,
+        )
     }
 }
 
 impl IntoResponse for LayoutError {
     fn into_response(self) -> Response {
-        let message = if self.english {
-            self.message
-        } else {
-            match self.message {
-                "The context configuration is invalid." => "上下文配置无效。",
-                "Context shares must be positive and total at most 100%." => {
-                    "每块占比至少为 0.01%，合计不能超过 100%。"
-                }
-                "Context configuration changed elsewhere. Refresh and try again." => {
-                    "上下文配置已被其他操作修改，请刷新后重试。"
-                }
-                _ => "无法读取或保存上下文配置。",
-            }
-        };
+        let message: String = tron_i18n::translate(self.locale.as_str(), self.key).into_owned();
         (
             self.status,
             Json(ApiResponse::<crate::response::EmptyData>::protocol_error(
@@ -143,14 +139,6 @@ impl IntoResponse for LayoutError {
         )
             .into_response()
     }
-}
-
-fn is_english(headers: &HeaderMap) -> bool {
-    crate::shared::locale::SupportedLocale::from_request(
-        headers
-            .get("accept-language")
-            .and_then(|value| value.to_str().ok()),
-    ) == crate::shared::locale::SupportedLocale::EnUs
 }
 
 pub(super) async fn list(
@@ -289,14 +277,21 @@ fn build_layout(
     let blocks = order
         .iter()
         .map(|id| {
-            let text = catalog
-                .get(id)
-                .map(|entry| entry.metadata.resolve(locale.as_str()));
-            let display_name = text
-                .as_ref()
-                .map(|text| text.display_name.clone())
-                .unwrap_or_else(|| id.clone());
-            let description = text.map(|text| text.description).unwrap_or_default();
+            let (display_name, description) = match catalog.get(id) {
+                Some(entry) => match entry.i18n {
+                    // Host blocks carry stable resource keys; translate them here
+                    // so persisted layouts never store localized text.
+                    Some(keys) => (
+                        tron_i18n::translate(locale.as_str(), keys.display_name).into_owned(),
+                        tron_i18n::translate(locale.as_str(), keys.description).into_owned(),
+                    ),
+                    None => {
+                        let text = entry.metadata.resolve(locale.as_str());
+                        (text.display_name, text.description)
+                    }
+                },
+                None => (id.clone(), String::new()),
+            };
             let update_mode = catalog
                 .get(id)
                 .map(|entry| entry.metadata.update_mode)
