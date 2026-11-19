@@ -1,6 +1,15 @@
 //! Stable ownership for capability package resources.
 pub mod center;
 pub mod error;
+pub mod queue;
+pub use queue::{
+    CAPABILITY_OPERATION_LOG_LIMIT, CAPABILITY_QUEUE_ERROR_LIMIT, CAPABILITY_QUEUE_LIMIT,
+    CAPABILITY_QUEUE_NAME_LIMIT, CAPABILITY_UNINSTALL_BUNDLED, CAPABILITY_UNINSTALL_BUSY,
+    CAPABILITY_UNINSTALL_INCOMPLETE, CAPABILITY_UNINSTALL_REFERENCED, CapabilityEnqueueRecord,
+    CapabilityOperationRecord, CapabilityQueueItem, CapabilityQueueOperation,
+    CapabilityQueueOutcome, CapabilityQueueRepository, CapabilityQueueService,
+    CapabilityQueueStatus,
+};
 use std::sync::{Arc, Mutex};
 #[derive(Clone, Debug)]
 pub struct CapabilityResource {

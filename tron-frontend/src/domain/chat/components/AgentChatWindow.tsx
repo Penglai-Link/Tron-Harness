@@ -45,8 +45,38 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
   onSessionChange?: (value: ChatSession | null) => void;
   onRunStateChange?: (value: ChatRuntimeRunState) => void;
   createSendInput?: (session: ChatSession, content: string, attachments: ChatMessageAttachment[]) => SendChatMessageInput | null;
-  /** Hosts that expose plan mode pass the toggle; others hide the `/plan` command. */
-  onPlanCommand?: () => void;
+  /**
+   * Hosts that expose plan mode pass this handler; others hide the `/plan`
+   * command. `toggle` flips the mode for a bare `/plan`; `ensure` switches plan
+   * mode on and reports whether the mode is ready before a described request is
+   * sent.
+   */
+  onPlanCommand?: (session: ChatSession, intent: "toggle" | "ensure") => Promise<boolean>;
+}
+
+const planCommandToken = "/plan";
+
+/**
+ * `/plan` is a host command that may sit anywhere in the composer text. It must
+ * stand as its own token so paths such as `/plan.md`, `docs/plan`, or
+ * `https://host/plan` stay literal, while Chinese descriptions typed right after
+ * it (no space) still match.
+ */
+const planCommandPattern = /(^|[^A-Za-z0-9_./\\-])\/plan(?![A-Za-z0-9_./\\-])/i;
+
+function extractPlanCommand(text: string): { content: string; requested: boolean } {
+  const match = planCommandPattern.exec(text);
+  if (!match) return { content: text, requested: false };
+  const start = match.index + match[1].length;
+  const before = text.slice(0, start);
+  const after = text.slice(start + planCommandToken.length);
+  const leading = /\s*$/.exec(before)?.[0] ?? "";
+  const trailing = /^\s*/.exec(after)?.[0] ?? "";
+  const left = before.slice(0, before.length - leading.length);
+  const right = after.slice(trailing.length);
+  // Keep one separator when text remains on both sides, preferring a line break.
+  const separator = !left || !right ? "" : /\r|\n/.test(leading + trailing) ? "\n" : leading || trailing ? " " : "";
+  return { content: `${left}${separator}${right}`.trim(), requested: true };
 }
 
 function ComposerControls({ children }: { children: React.ReactNode }) {
@@ -222,15 +252,37 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     });
   }, [refreshComposerMetrics]);
   const createInput = useCallback((value: Ui.ChatSession, content: string, files: Ui.ChatMessageAttachment[]) => {
-    // `/plan` is a host command, not chat content: toggle the mode and keep the
-    // message out of the transcript. The runtime clears the draft on success only,
-    // so an aborted send clears it here.
-    if (onPlanCommand && content.trim().toLowerCase() === "/plan") {
-      onPlanCommand();
-      changeDraft("");
-      return null;
-    }
     const hostSession = fromUiSession(value);
+    if (onPlanCommand) {
+      const plan = extractPlanCommand(content);
+      if (plan.requested) {
+        // `/plan` is a host command, not chat content: strip it and keep the
+        // message out of the transcript. The runtime clears the draft on success
+        // only, so the command clears it here. A description is sent after the
+        // mode is stored, so the run is admitted in plan mode.
+        changeDraft("");
+        if (!plan.content) {
+          void onPlanCommand(hostSession, "toggle").catch(() => undefined);
+          return null;
+        }
+        const restoreDraft = () => {
+          if (!draftRef.current) changeDraft(content);
+        };
+        void onPlanCommand(hostSession, "ensure")
+          .then((accepted) => accepted
+            ? runtimeSubmitterRef.current?.submit({ content: plan.content, attachments: files }) ?? false
+            : false)
+          .then((sent) => {
+            if (!sent) {
+              restoreDraft();
+              return;
+            }
+            if (files.length) onPendingAttachmentsChange?.([]);
+          })
+          .catch(restoreDraft);
+        return null;
+      }
+    }
     const hostFiles = files.map(fromUiAttachment);
     const input = createSendInput ? createSendInput(hostSession, content, hostFiles) : {
       content, attachments: hostFiles, workspaceCode: hostSession.workspaceCode,
@@ -238,7 +290,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
       agentCode: config.agentCode, clientCapabilities: { userInputRequests: true },
     };
     return input ? toUiInput(input) : null;
-  }, [changeDraft, createSendInput, config.appCode, config.taskCode, config.agentCode, onPlanCommand]);
+  }, [changeDraft, createSendInput, config.appCode, config.taskCode, config.agentCode, onPlanCommand, onPendingAttachmentsChange]);
   return <>{turnDeletion.dialog}
     {activeSession && tabVisible && (!config.floating || !props.windowState || (props.windowState.open && !props.windowState.collapsed)) && <SudoPasswordDialog
       key={activeSession.sessionCode} sessionCode={activeSession.sessionCode}

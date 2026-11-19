@@ -1,9 +1,12 @@
 use crate::{
     app::AppState,
     application::model::ConfiguredProviderCommand,
-    domain::model::{
-        ConfiguredModelProvider, ConfiguredProviderError, ConfiguredProviderModel,
-        ConfiguredProviderModelType, ConfiguredProviderProtocol, ModelInputCapability,
+    domain::{
+        model::{
+            ConfiguredModelProvider, ConfiguredProviderError, ConfiguredProviderModel,
+            ConfiguredProviderModelType, ConfiguredProviderProtocol, ModelInputCapability,
+        },
+        reasoning::ReasoningEffort,
     },
     response::{ApiResponse, EmptyData},
     shared::locale::SupportedLocale,
@@ -27,6 +30,8 @@ pub(super) struct CreateConfiguredProviderRequest {
     api_key: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
+    #[serde(default)]
+    default_reasoning_efforts: Vec<ReasoningEffort>,
     models: Vec<ConfiguredProviderModel>,
 }
 impl CreateConfiguredProviderRequest {
@@ -39,6 +44,7 @@ impl CreateConfiguredProviderRequest {
             api_key: self.api_key,
             request_headers: self.request_headers,
             enabled: self.enabled,
+            default_reasoning_efforts: self.default_reasoning_efforts,
             models: self.models,
         }
     }
@@ -53,6 +59,8 @@ pub(super) struct UpdateConfiguredProviderRequest {
     api_key: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
+    #[serde(default)]
+    default_reasoning_efforts: Vec<ReasoningEffort>,
     models: Vec<ConfiguredProviderModel>,
 }
 impl UpdateConfiguredProviderRequest {
@@ -65,6 +73,7 @@ impl UpdateConfiguredProviderRequest {
             api_key: self.api_key,
             request_headers: self.request_headers,
             enabled: self.enabled,
+            default_reasoning_efforts: self.default_reasoning_efforts,
             models: self.models,
         }
     }
@@ -81,6 +90,8 @@ struct ConfiguredModelResponse {
     context_window_tokens: Option<u32>,
     max_output_tokens: Option<u32>,
     reasoning: bool,
+    supported_reasoning_efforts: Vec<ReasoningEffort>,
+    default_reasoning_effort: Option<ReasoningEffort>,
     supports_developer_role: bool,
     input_capabilities: Vec<ModelInputCapability>,
     enabled: bool,
@@ -97,6 +108,8 @@ impl From<ConfiguredProviderModel> for ConfiguredModelResponse {
             context_window_tokens: model.context_window_tokens,
             max_output_tokens: model.max_output_tokens,
             reasoning: model.reasoning,
+            supported_reasoning_efforts: model.supported_reasoning_efforts,
+            default_reasoning_effort: model.default_reasoning_effort,
             supports_developer_role: model.supports_developer_role,
             input_capabilities: model.input_capabilities,
             enabled: model.enabled,
@@ -115,6 +128,7 @@ struct ListConfiguredProviderResponse {
     api_key_summary: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
+    default_reasoning_efforts: Vec<ReasoningEffort>,
     models: Vec<ConfiguredModelResponse>,
     created_at: i64,
     updated_at: i64,
@@ -131,6 +145,7 @@ impl From<ConfiguredModelProvider> for ListConfiguredProviderResponse {
             api_key_summary: provider.api_key_summary,
             request_headers: provider.request_headers,
             enabled: provider.enabled,
+            default_reasoning_efforts: provider.default_reasoning_efforts,
             models: provider.models.into_iter().map(Into::into).collect(),
             created_at: provider.created_at,
             updated_at: provider.updated_at,
@@ -149,6 +164,7 @@ struct GetConfiguredProviderResponse {
     api_key_summary: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
+    default_reasoning_efforts: Vec<ReasoningEffort>,
     models: Vec<ConfiguredModelResponse>,
     created_at: i64,
     updated_at: i64,
@@ -165,6 +181,7 @@ impl From<ConfiguredModelProvider> for GetConfiguredProviderResponse {
             api_key_summary: provider.api_key_summary,
             request_headers: provider.request_headers,
             enabled: provider.enabled,
+            default_reasoning_efforts: provider.default_reasoning_efforts,
             models: provider.models.into_iter().map(Into::into).collect(),
             created_at: provider.created_at,
             updated_at: provider.updated_at,
@@ -183,6 +200,7 @@ struct CreateConfiguredProviderResponse {
     api_key_summary: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
+    default_reasoning_efforts: Vec<ReasoningEffort>,
     models: Vec<ConfiguredModelResponse>,
     created_at: i64,
     updated_at: i64,
@@ -199,6 +217,7 @@ impl From<ConfiguredModelProvider> for CreateConfiguredProviderResponse {
             api_key_summary: provider.api_key_summary,
             request_headers: provider.request_headers,
             enabled: provider.enabled,
+            default_reasoning_efforts: provider.default_reasoning_efforts,
             models: provider.models.into_iter().map(Into::into).collect(),
             created_at: provider.created_at,
             updated_at: provider.updated_at,
@@ -217,6 +236,7 @@ struct UpdateConfiguredProviderResponse {
     api_key_summary: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
+    default_reasoning_efforts: Vec<ReasoningEffort>,
     models: Vec<ConfiguredModelResponse>,
     created_at: i64,
     updated_at: i64,
@@ -233,6 +253,7 @@ impl From<ConfiguredModelProvider> for UpdateConfiguredProviderResponse {
             api_key_summary: provider.api_key_summary,
             request_headers: provider.request_headers,
             enabled: provider.enabled,
+            default_reasoning_efforts: provider.default_reasoning_efforts,
             models: provider.models.into_iter().map(Into::into).collect(),
             created_at: provider.created_at,
             updated_at: provider.updated_at,

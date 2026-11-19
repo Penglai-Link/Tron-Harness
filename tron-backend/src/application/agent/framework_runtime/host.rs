@@ -22,8 +22,11 @@ use tokio::sync::{Mutex, OnceCell};
 mod host_cell;
 use host_cell::RuntimeCell;
 
+#[path = "host_capability_queue.rs"]
+mod capability_queue;
 #[path = "host_capability_state.rs"]
 mod capability_state;
+pub use capability_queue::{CapabilityQueueEnqueueError, CapabilityQueueSnapshot};
 #[path = "host_collaboration.rs"]
 pub(super) mod collaboration;
 #[path = "host_subagents.rs"]
@@ -104,6 +107,9 @@ struct Host {
     skill_registry: OnceCell<crate::application::skill::SkillRegistryService>,
     prompt_service: OnceCell<crate::application::prompt::PromptService>,
     capability_resources: OnceCell<crate::application::capability::CapabilityResources>,
+    capability_queue: OnceCell<crate::application::capability::CapabilityQueueService>,
+    capability_queue_lock: tokio::sync::Mutex<()>,
+    capability_queue_running: std::sync::Mutex<Option<String>>,
     navigation: OnceCell<crate::application::navigation::NavigationService>,
     skills: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     installed_packs: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
@@ -927,6 +933,9 @@ impl FrameworkHost {
             skill_registry: OnceCell::new(),
             prompt_service: OnceCell::new(),
             capability_resources: OnceCell::new(),
+            capability_queue: OnceCell::new(),
+            capability_queue_lock: tokio::sync::Mutex::new(()),
+            capability_queue_running: std::sync::Mutex::new(None),
             navigation: OnceCell::new(),
             skills: Default::default(),
             installed_packs: Default::default(),
@@ -987,6 +996,9 @@ impl FrameworkHost {
             skill_registry: OnceCell::new(),
             prompt_service: OnceCell::new(),
             capability_resources: OnceCell::new(),
+            capability_queue: OnceCell::new(),
+            capability_queue_lock: tokio::sync::Mutex::new(()),
+            capability_queue_running: std::sync::Mutex::new(None),
             navigation: OnceCell::new(),
             skills: Default::default(),
             installed_packs: Default::default(),

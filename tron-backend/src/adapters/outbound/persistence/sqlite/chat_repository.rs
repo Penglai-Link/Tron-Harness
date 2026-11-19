@@ -571,6 +571,36 @@ impl ChatRepository for SqliteChatRepository {
             Ok(result)
         })
     }
+    fn session_codes_by_workspaces(
+        &mut self,
+        workspace_codes: &[String],
+    ) -> Result<Vec<String>, ChatError> {
+        if workspace_codes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let codes =
+            serde_json::to_string(workspace_codes).map_err(|_| ChatError::StorageFailure)?;
+        blocking(async {
+            let db = self.host.shared_database().await.map_err(chat_error)?;
+            db.call_read(move |c| -> Result<Vec<String>, ChatError> {
+                let mut statement = c
+                    .prepare(
+                        "SELECT session_id FROM workspace_session_links
+                         WHERE workspace_code IN (SELECT value FROM json_each(?1))
+                         ORDER BY session_id",
+                    )
+                    .map_err(|_| ChatError::StorageFailure)?;
+                statement
+                    .query_map([&codes], |row| row.get::<_, String>(0))
+                    .map_err(|_| ChatError::StorageFailure)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| ChatError::StorageFailure)
+            })
+            .await
+            .map_err(|_| ChatError::StorageFailure)
+        })
+    }
+
     /// Management listing keeps filtering, counting and paging in SQL so the
     /// settings page scales across every workspace at once.
     fn list_managed_sessions(

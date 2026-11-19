@@ -32,8 +32,8 @@ model_provider.invalid_headers:
   zh-CN: "请求头无效或含保留的认证、连接请求头；请在API密钥字段填写凭据。"
 
 model_provider.invalid_models:
-  en: "Add 1–500 models with unique IDs, names and valid token limits. Supported model inputs are text and images."
-  zh-CN: "请添加1至500个模型，使用唯一模型ID、名称及有效Token上限；当前支持的模型输入为文本和图像。"
+  en: "Add 1–500 models with unique IDs, names, valid token limits and consistent reasoning-effort settings. Supported model inputs are text and images."
+  zh-CN: "请添加1至500个模型，使用唯一模型ID、名称、有效Token上限及一致的智力档位设置；当前支持的模型输入为文本和图像。"
 
 model_provider.invalid_model_ownership:
   en: "A model does not belong to this provider."
@@ -221,6 +221,18 @@ admin.workspaces.hierarchy_invalid:
 admin.workspaces.archived_invalid:
   en: "Archived workspaces cannot be modified in this operation."
   zh-CN: "已归档工作空间不能进行该操作。"
+
+admin.workspaces.delete_requires_archive:
+  en: "Only archived workspaces can be permanently deleted. Archive this workspace first."
+  zh-CN: "仅已归档的工作空间可以永久删除。请先归档该工作空间。"
+
+admin.workspaces.delete_sessions_busy:
+  en: "Stop all running conversations in this workspace before deleting it."
+  zh-CN: "请先停止该工作空间内正在运行的会话，再永久删除。"
+
+admin.workspaces.session_cleanup_failed:
+  en: "The conversations in this workspace could not be deleted."
+  zh-CN: "该工作空间内的会话删除失败。"
 
 admin.workspaces.storage_failed:
   en: "Workspace storage operation failed."

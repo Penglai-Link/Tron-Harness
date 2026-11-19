@@ -63,4 +63,12 @@ impl ReasoningEffort {
             .into_iter()
             .find(|effort| effort.storage_value() == value)
     }
+
+    /// De-duplicate and order efforts by the canonical ladder.
+    pub fn normalize(values: &[Self]) -> Vec<Self> {
+        Self::ALL
+            .into_iter()
+            .filter(|effort| values.contains(effort))
+            .collect()
+    }
 }

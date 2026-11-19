@@ -50,9 +50,8 @@ pub struct CenterPack {
 
 impl CenterPack {
     pub fn from_release(release: CapabilitySummary, local: Option<&CapabilityPackInfo>) -> Self {
-        let update_available = local.is_some_and(|pack| {
-            pack.provider == "External" && newer(&release.version, &pack.version)
-        });
+        let update_available =
+            local.is_some_and(|pack| !pack.builtin && newer(&release.version, &pack.version));
         Self {
             pack_id: release.pack_id,
             release_id: Some(release.id),
@@ -64,7 +63,7 @@ impl CenterPack {
             category: Some(release.category),
             installed_version: local.map(|p| p.version.clone()),
             enabled: local.is_some_and(|p| p.effective),
-            builtin: local.is_some_and(|p| p.provider != "External"),
+            builtin: local.is_some_and(|p| p.builtin),
             update_available,
             update_check_failed: false,
             file_size: Some(release.file_size),
@@ -74,7 +73,7 @@ impl CenterPack {
         }
     }
     fn local(pack: CapabilityPackInfo, failed: bool) -> Self {
-        let builtin = pack.provider != "External";
+        let builtin = pack.builtin;
         Self {
             pack_id: pack.id,
             release_id: None,
@@ -181,7 +180,7 @@ pub async fn page(
         {
             continue;
         }
-        if pack.provider != "External" {
+        if pack.builtin {
             records.push(CenterPack::local(pack, false));
             continue;
         }
@@ -309,7 +308,7 @@ pub fn validate_release(
         }
     }
     if let Some(pack) = local.iter().find(|p| p.id == manifest.id) {
-        if pack.provider != "External" {
+        if pack.builtin {
             return Err(InstallBlock::Builtin);
         }
         if !newer(&detail.summary.version, &pack.version) {

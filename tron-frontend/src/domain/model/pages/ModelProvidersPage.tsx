@@ -93,7 +93,7 @@ export function ModelProvidersPage() {
       const current = await fetchConfiguredProvider(provider.providerCode);
       await updateConfiguredProvider(provider.providerCode, {
         displayName: current.displayName, protocol: current.protocol, baseUrl: current.baseUrl,
-        requestHeaders: current.requestHeaders, models: current.models, apiKey: null, enabled,
+        requestHeaders: current.requestHeaders, defaultReasoningEfforts: current.defaultReasoningEfforts, models: current.models, apiKey: null, enabled,
       });
     }, enabled ? "configuredProviders.messages.enabled" : "configuredProviders.messages.disabled", "configuredProviders.errors.save");
   }, [runAction]);

@@ -46,6 +46,21 @@ pub fn workspace_error_response(error: WorkspaceError) -> Response {
             "ADMIN_WORKSPACE_ARCHIVED_INVALID",
             "admin.workspaces.archived_invalid",
         ),
+        WorkspaceError::ActiveWorkspaceDeleteDenied => (
+            StatusCode::CONFLICT,
+            "ADMIN_WORKSPACE_DELETE_REQUIRES_ARCHIVE",
+            "admin.workspaces.delete_requires_archive",
+        ),
+        WorkspaceError::WorkspaceSessionsBusy => (
+            StatusCode::CONFLICT,
+            "ADMIN_WORKSPACE_SESSIONS_BUSY",
+            "admin.workspaces.delete_sessions_busy",
+        ),
+        WorkspaceError::SessionCleanupFailed => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ADMIN_WORKSPACE_SESSION_CLEANUP_FAILED",
+            "admin.workspaces.session_cleanup_failed",
+        ),
         WorkspaceError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "ADMIN_WORKSPACE_STORAGE_FAILED",

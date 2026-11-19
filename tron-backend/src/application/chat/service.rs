@@ -6,6 +6,8 @@ include!("service/messages.inc");
 include!("service/artifacts.inc");
 include!("service/validation.inc");
 
+mod workspace_cleanup;
+
 include!("service/application_context.inc");
 
 include!("service/composer_input.inc");

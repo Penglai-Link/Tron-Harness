@@ -54,6 +54,7 @@ pub(crate) use knowledge_base_repository::{
 };
 pub use knowledge_ingestion_queue::SqliteKnowledgeIngestionQueue;
 
+pub mod capability_queue_repository;
 pub mod capability_repository;
 
 mod assistant_repository;

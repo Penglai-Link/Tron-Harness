@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::{ModelProtocol, ModelType};
+use crate::domain::reasoning::ReasoningEffort;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConfiguredProviderProtocol {
@@ -124,6 +125,12 @@ pub struct ConfiguredProviderModel {
     pub context_window_tokens: Option<u32>,
     pub max_output_tokens: Option<u32>,
     pub reasoning: bool,
+    /// Reasoning levels this model accepts. Empty inherits the provider default.
+    #[serde(default)]
+    pub supported_reasoning_efforts: Vec<ReasoningEffort>,
+    /// Initial level shown in the composer; `None` lets the provider decide.
+    #[serde(default)]
+    pub default_reasoning_effort: Option<ReasoningEffort>,
     pub supports_developer_role: bool,
     pub input_capabilities: Vec<ModelInputCapability>,
     pub enabled: bool,
@@ -145,9 +152,31 @@ pub struct ConfiguredModelProvider {
     pub api_key_summary: Option<String>,
     pub request_headers: BTreeMap<String, String>,
     pub enabled: bool,
+    /// Default reasoning levels for chat models that do not declare their own.
+    #[serde(default)]
+    pub default_reasoning_efforts: Vec<ReasoningEffort>,
     pub models: Vec<ConfiguredProviderModel>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+impl ConfiguredModelProvider {
+    /// Chat models advertise the levels they declare, falling back to the
+    /// provider default. Non-chat and non-reasoning models advertise none.
+    pub fn effective_reasoning_efforts(
+        &self,
+        model: &ConfiguredProviderModel,
+    ) -> Vec<ReasoningEffort> {
+        if model.model_type != ConfiguredProviderModelType::Text || !model.reasoning {
+            return Vec::new();
+        }
+        let declared = if model.supported_reasoning_efforts.is_empty() {
+            &self.default_reasoning_efforts
+        } else {
+            &model.supported_reasoning_efforts
+        };
+        ReasoningEffort::normalize(declared)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

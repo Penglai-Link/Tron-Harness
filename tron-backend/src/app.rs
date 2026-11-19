@@ -5,6 +5,7 @@ use std::{
 
 mod assistant_runner;
 mod automation_runner;
+mod capability_queue_runner;
 mod routing;
 mod startup;
 mod state_extractors;
@@ -507,6 +508,7 @@ impl AppState {
         knowledge_bases.bind_skills(skills.clone());
         agent_framework.bind_agent_management(agent_management.clone());
         let capability_resources=crate::application::capability::CapabilityResources::new(crate::adapters::outbound::persistence::sqlite::capability_repository::SqliteCapabilityRepository::connect(&config.database_url).expect("capability resource storage"));
+        let capability_queue=crate::application::capability::CapabilityQueueService::new(crate::adapters::outbound::persistence::sqlite::capability_queue_repository::SqliteCapabilityQueueRepository::connect(&config.database_url).expect("capability queue storage"));
         agent_management.bind_capabilities(capability_resources.clone());
         mcp.bind_capabilities(capability_resources.clone());
         agent_management.bind_mcp(mcp.clone());
@@ -521,6 +523,9 @@ impl AppState {
             // opening; the next startup or pack change retries reconciliation.
             tracing::error!(%error, "capability resource reconciliation failed");
         }
+        agent_framework
+            .bind_capability_queue(capability_queue)
+            .expect("capability queue binding");
         if let Ok(runtime) = tokio::runtime::Handle::try_current() {
             let indexer =
                 crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone());
@@ -669,6 +674,8 @@ impl AppState {
         .with_prompt_service(prompts.clone())
         .with_llm_router(llm_router.clone())
         .with_event_bus(event_bus.clone());
+        workspaces.bind_session_purger(Arc::new(chats.clone()));
+        workspaces.bind_resource_purger(Arc::new(resources.clone()));
         automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
             agent_framework.clone(),
             automations.clone(),
@@ -861,6 +868,7 @@ pub fn build_remote_router_with_state(state: AppState) -> Result<Router, AppBoot
 
 fn start_background_services(state: &AppState) {
     assistant_runner::start(state.clone());
+    capability_queue_runner::start(state.clone());
     state.account_sync.start();
     state.model_providers.start_background_sync();
     state.model_providers.start_person_ai_heartbeat();

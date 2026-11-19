@@ -142,7 +142,7 @@ export function BrowserNotificationSettingsCard() {
           {t("settingsGeneral.browserNotifications.actions.test")}
         </Button>
         {canOpenSettings ? (
-          <Button type="button" variant="ghost" disabled={pending} onClick={() => void openSettings()}>
+          <Button type="button" variant="outline" disabled={pending} onClick={() => void openSettings()}>
             {t("settingsGeneral.browserNotifications.actions.settings")}
           </Button>
         ) : null}

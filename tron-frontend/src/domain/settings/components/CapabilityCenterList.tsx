@@ -11,6 +11,7 @@ import type { CenterPack } from "../api/capabilityCenterApi";
 interface Props {
   records: CenterPack[];
   busy: boolean;
+  queuedPackIds?: Set<string>;
   onDetail: (pack: CenterPack) => void;
   onToggle: (pack: CenterPack) => void;
   onRemove: (pack: CenterPack) => void;
@@ -18,6 +19,7 @@ interface Props {
 export function CapabilityCenterList({
   records,
   busy,
+  queuedPackIds,
   onDetail,
   onToggle,
   onRemove,
@@ -75,6 +77,9 @@ export function CapabilityCenterList({
                       {text(pack.enabled ? "enabled" : "disabled")}
                     </Badge>
                   ) : null}
+                  {queuedPackIds?.has(pack.packId) && (
+                    <Badge variant="info">{text("queue.queued")}</Badge>
+                  )}
                   {pack.category && (
                     <span className="break-words text-xs text-[var(--color-on-surface-variant)]">
                       {pack.category}
@@ -127,7 +132,7 @@ export function CapabilityCenterList({
                         className="pointer-events-auto border-[var(--color-error)]/40 text-[var(--color-error)]"
                         variant="outline"
                         size="sm"
-                        disabled={busy}
+                        disabled={busy || queuedPackIds?.has(pack.packId)}
                         onClick={() => onRemove(pack)}
                       >
                         {text("uninstall")}
@@ -137,7 +142,7 @@ export function CapabilityCenterList({
                       className="pointer-events-auto"
                       variant="outline"
                       size="sm"
-                      disabled={busy}
+                      disabled={busy || queuedPackIds?.has(pack.packId)}
                       onClick={() => onToggle(pack)}
                     >
                       {text(pack.enabled ? "disable" : "enable")}

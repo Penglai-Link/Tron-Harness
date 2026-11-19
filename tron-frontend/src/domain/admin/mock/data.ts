@@ -465,3 +465,22 @@ export function restoreWorkspaceRecord(workspaceCode: string) {
     affectedWorkspaceCount: flattenWorkspaceTree([findWorkspaceNode(workspaceCode)!]).length,
   };
 }
+
+export function deleteWorkspaceRecord(workspaceCode: string) {
+  const target = findWorkspaceNode(workspaceCode);
+  if (!target) throw new Error(`Workspace ${workspaceCode} was not found.`);
+  if (target.status !== "Archived") throw new Error("Archive the workspace before deleting it.");
+
+  const removedCodes = collectDescendantCodes(target);
+  const removal = removeWorkspaceNode(workspaceNodes, workspaceCode);
+  if (!removal.removedNode) throw new Error(`Workspace ${workspaceCode} was not found.`);
+  workspaceNodes = removal.nextRecords;
+  recalculateWorkspaceState();
+  removedCodes.forEach((code) => workspaceTimestamps.delete(code));
+
+  return {
+    workspaceCode,
+    affectedWorkspaceCount: removedCodes.size,
+    deletedSessionCount: 0,
+  };
+}

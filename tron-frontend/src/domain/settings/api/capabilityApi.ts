@@ -84,18 +84,6 @@ export function listExtensionImplementations(signal?: AbortSignal) {
   );
 }
 
-export async function setCapabilityPackEnabled(packId: string, enabled: boolean) {
-  const result = await requestApi<CapabilityPackRecord>(
-    "PUT /api/v1/capabilities/packs/{id}/enabled",
-    {
-      pathParams: { id: packId },
-      body: { enabled },
-    }
-  );
-  window.dispatchEvent(new Event("tron:navigation-updated"));
-  return result;
-}
-
 export function setExtensionEnabled(extensionPoint: string, enabled: boolean) {
   return requestApi<ExtensionImplementationRecord[]>(
     "PUT /api/v1/capabilities/extensions/{point}/enabled",
@@ -113,15 +101,6 @@ export async function importCapabilityPack(file: File) {
     "POST /api/v1/capabilities/packs/import",
     { body }
   );
-  window.dispatchEvent(new Event("tron:navigation-updated"));
-  return result;
-}
-
-export async function uninstallCapabilityPack(id: string, force = false) {
-  const result = await requestApi<unknown>("DELETE /api/v1/capabilities/packs/{id}", {
-    pathParams: { id },
-    queryParams: force ? { force: true } : undefined,
-  });
   window.dispatchEvent(new Event("tron:navigation-updated"));
   return result;
 }

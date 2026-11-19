@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{agent::AgentModelProtocol, model::ModelType};
+use crate::domain::{agent::AgentModelProtocol, model::ModelType, reasoning::ReasoningEffort};
 
 /// A platform integration that owns a remote model catalogue and its credentials.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -412,6 +412,10 @@ pub struct ProviderModelSelectOption {
     pub input_coefficient: Option<f64>,
     pub cache_hit_coefficient: Option<f64>,
     pub output_coefficient: Option<f64>,
+    #[serde(default)]
+    pub supported_reasoning_efforts: Vec<ReasoningEffort>,
+    #[serde(default)]
+    pub default_reasoning_effort: Option<ReasoningEffort>,
     pub is_default: bool,
 }
 

@@ -19,6 +19,9 @@ pub struct CapabilityPackInfo {
     pub provider: String,
     pub updated_at: Option<String>,
     pub effective: bool,
+    /// Stable classification. `provider` is localized for display, so it must
+    /// not be compared with the literal "External".
+    pub builtin: bool,
     pub kind: String,
     pub contents: Vec<CapabilityContentInfo>,
 }
@@ -212,6 +215,7 @@ pub fn query_installed_capability_packs(
                 .into_owned(),
             updated_at: None,
             effective: false,
+            builtin: false,
             kind: "capability".into(),
         });
     }
@@ -295,6 +299,7 @@ pub fn install_capability_pack(
             .into_owned(),
         updated_at: None,
         effective: false,
+        builtin: false,
         kind: "capability".into(),
     })
 }
@@ -407,6 +412,7 @@ fn capability_pack_entries(
             provider: provider.into(),
             updated_at: updated_at.map(str::to_owned),
             effective: true,
+            builtin: true,
             kind: "capability".into(),
         },
     )

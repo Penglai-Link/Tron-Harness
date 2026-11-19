@@ -804,3 +804,39 @@ assistant.awakening_title:
 capabilities.uninstall_referenced:
   en: "Capability pack is still referenced by unfinished runs; force uninstall is available"
   zh-CN: "能力包仍被未完成的运行引用，可以强制卸载"
+
+capabilities.queue.enabled_title:
+  en: "Capability pack enabled"
+  zh-CN: "能力包已启用"
+
+capabilities.queue.enabled_body:
+  en: "Enabled %{name} from the capability task queue."
+  zh-CN: "已从能力任务队列启用 %{name}。"
+
+capabilities.queue.disabled_title:
+  en: "Capability pack disabled"
+  zh-CN: "能力包已停用"
+
+capabilities.queue.disabled_body:
+  en: "Disabled %{name} from the capability task queue."
+  zh-CN: "已从能力任务队列停用 %{name}。"
+
+capabilities.queue.pack_missing:
+  en: "The capability pack is no longer installed; the queued operation was skipped: %{name}"
+  zh-CN: "能力包已不存在，已跳过排队操作：%{name}"
+
+capabilities.queue.full:
+  en: "The capability task queue is full. Wait for the queued operations to run and try again."
+  zh-CN: "能力任务队列已满，请等待队列中的操作执行后再试。"
+
+capabilities.queue.unavailable:
+  en: "The capability task queue is unavailable."
+  zh-CN: "能力任务队列不可用。"
+
+capabilities.queue.uninstalled_title:
+  en: "Capability pack uninstalled"
+  zh-CN: "能力包已卸载"
+
+capabilities.queue.uninstalled_body:
+  en: "Uninstalled %{name} from the capability task queue."
+  zh-CN: "已从能力任务队列卸载 %{name}。"

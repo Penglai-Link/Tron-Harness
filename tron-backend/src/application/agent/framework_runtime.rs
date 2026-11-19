@@ -35,8 +35,8 @@ pub use capability_catalog::{
     query_installed_capability_packs,
 };
 pub use host::{
-    AssistantThreadCatalogItem, FrameworkHost, SubagentRecord, SubagentView, ThreadFeedback,
-    ThreadFeedbackSink,
+    AssistantThreadCatalogItem, CapabilityQueueEnqueueError, CapabilityQueueSnapshot,
+    FrameworkHost, SubagentRecord, SubagentView, ThreadFeedback, ThreadFeedbackSink,
 };
 pub(crate) use host::{PendingSudoInput, SudoInputError};
 

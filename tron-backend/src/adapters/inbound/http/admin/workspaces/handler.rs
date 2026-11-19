@@ -108,3 +108,14 @@ pub async fn restore_workspace(
         Err(error) => workspace_error_response(error),
     }
 }
+
+pub async fn delete_workspace(
+    State(workspaces): State<WorkspaceService>,
+    auth: RequestAuthContext,
+    Path(workspace_code): Path<String>,
+) -> Response {
+    match workspaces.delete_workspace(auth.user(), &workspace_code) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => workspace_error_response(error),
+    }
+}

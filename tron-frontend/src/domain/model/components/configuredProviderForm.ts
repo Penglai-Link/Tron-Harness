@@ -8,6 +8,8 @@ import type {
   ProviderPreset,
   ProviderPresetModel,
 } from "@/domain/model/api/configuredProviderApi";
+import { normalizeReasoningEfforts } from "@/domain/model/constants/modelPageOptions";
+import type { ReasoningEffort } from "@/domain/model/model";
 
 export const configuredProviderProtocols: ConfiguredProviderProtocol[] = [
   "OpenAiChatCompletions", "OpenAiResponses", "AnthropicMessages", "GoogleGemini",
@@ -44,6 +46,7 @@ export interface ConfiguredProviderDraft {
   hasApiKey: boolean;
   apiKeySummary: string | null;
   enabled: boolean;
+  defaultReasoningEfforts: ReasoningEffort[];
   headers: ProviderHeaderDraft[];
   models: ProviderModelDraft[];
 }
@@ -54,7 +57,7 @@ export function draftRowId() { return `provider-draft-${++draftSequence}`; }
 export function emptyProviderModel(): ProviderModelDraft {
   return {
     rowId: draftRowId(), logicalModelCode: null, dimension: "", modelType: "Text", modelCode: null, modelId: "", name: "", contextWindowTokens: "",
-    maxOutputTokens: "", reasoning: false, supportsDeveloperRole: false,
+    maxOutputTokens: "", reasoning: false, supportedReasoningEfforts: [], defaultReasoningEffort: null, supportsDeveloperRole: false,
     inputCapabilities: ["Text"], enabled: true,
   };
 }
@@ -62,7 +65,7 @@ export function emptyProviderModel(): ProviderModelDraft {
 export function emptyProviderDraft(): ConfiguredProviderDraft {
   return {
     providerType: "custom", displayName: "", protocol: "OpenAiChatCompletions", baseUrl: "",
-    apiKey: "", hasApiKey: false, apiKeySummary: null, enabled: true, headers: [], models: [emptyProviderModel()],
+    apiKey: "", hasApiKey: false, apiKeySummary: null, enabled: true, defaultReasoningEfforts: [], headers: [], models: [emptyProviderModel()],
   };
 }
 
@@ -70,10 +73,13 @@ export function configuredProviderToDraft(record: ConfiguredProvider): Configure
   const { providerId: _providerId, ...connection } = record;
   return {
     ...connection, providerType: record.providerType ?? null, apiKey: "",
+    defaultReasoningEfforts: record.defaultReasoningEfforts ?? [],
     headers: Object.entries(record.requestHeaders).map(([name, value]) => ({ rowId: draftRowId(), name, value })),
     models: record.models.map((model) => ({
       ...model, dimension: model.dimension?.toString() ?? "", modelType: model.modelType ?? "Text", rowId: draftRowId(), contextWindowTokens: model.contextWindowTokens?.toString() ?? "",
       maxOutputTokens: model.maxOutputTokens?.toString() ?? "",
+      supportedReasoningEfforts: model.supportedReasoningEfforts ?? [],
+      defaultReasoningEffort: model.defaultReasoningEffort ?? null,
     })),
   };
 }
@@ -111,7 +117,7 @@ const forbiddenHeaders = new Set([
   "host", "content-length", "connection", "transfer-encoding", "upgrade", "trailer", "te",
 ]);
 
-export type ProviderDraftError = "logicalModelCode" | "displayName" | "baseUrl" | "modelsRequired" | "modelId" | "modelName" | "duplicateModel" | "contextRequired" | "tokenLimit" | "outputLimit" | "headers" | "inputCapabilities" | "modelType" | "dimension";
+export type ProviderDraftError = "logicalModelCode" | "displayName" | "baseUrl" | "modelsRequired" | "modelId" | "modelName" | "duplicateModel" | "contextRequired" | "tokenLimit" | "outputLimit" | "headers" | "inputCapabilities" | "modelType" | "dimension" | "reasoningEfforts";
 
 function tokenLimit(value: string): number | null {
   return value.trim() === "" ? null : Number(value);
@@ -141,6 +147,14 @@ export function validateProviderDraft(draft: ConfiguredProviderDraft): ProviderD
     if (["TextEmbedding", "TextRerank"].includes(model.modelType) && (model.inputCapabilities.length !== 1 || model.inputCapabilities[0] !== "Text")) return "inputCapabilities";
     if (isMultimodalModel(model.modelType) && !model.inputCapabilities.some(value => value !== "Text")) return "inputCapabilities";
     if (!model.inputCapabilities.length || (!isMediaModel(model.modelType) && !isMultimodalModel(model.modelType) && (!model.inputCapabilities.includes("Text") || model.inputCapabilities.some((value) => value === "Audio" || value === "Video")))) return "inputCapabilities";
+    const effectiveEfforts = model.supportedReasoningEfforts.length
+      ? model.supportedReasoningEfforts
+      : draft.defaultReasoningEfforts;
+    if (model.modelType !== "Text" || !model.reasoning) {
+      if (model.supportedReasoningEfforts.length || model.defaultReasoningEffort) return "reasoningEfforts";
+    } else if (model.defaultReasoningEffort && !effectiveEfforts.includes(model.defaultReasoningEffort)) {
+      return "reasoningEfforts";
+    }
   }
   const headerNames = new Set<string>();
   for (const header of draft.headers) {
@@ -156,10 +170,17 @@ export function providerDraftToPayload(draft: ConfiguredProviderDraft): Configur
     providerType: draft.providerType, displayName: draft.displayName.trim(), protocol: draft.protocol,
     baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey.trim() || null, enabled: draft.enabled,
     requestHeaders: Object.fromEntries(draft.headers.map((header) => [header.name.trim(), header.value])),
-    models: draft.models.map(({ rowId: _rowId, dimension, contextWindowTokens, maxOutputTokens, ...model }) => ({
-      dimension: ["TextEmbedding", "MultimodalEmbedding"].includes(model.modelType) ? tokenLimit(dimension) : null,
-      ...model, logicalModelCode: model.logicalModelCode?.trim() || null, modelId: model.modelId.trim(), name: model.name.trim(),
-      contextWindowTokens: tokenLimit(contextWindowTokens), maxOutputTokens: tokenLimit(maxOutputTokens),
-    })),
+    defaultReasoningEfforts: normalizeReasoningEfforts(draft.defaultReasoningEfforts),
+    models: draft.models.map(({ rowId: _rowId, dimension, contextWindowTokens, maxOutputTokens, ...model }) => {
+      const supportedReasoningEfforts = normalizeReasoningEfforts(model.supportedReasoningEfforts);
+      const effectiveEfforts = supportedReasoningEfforts.length ? supportedReasoningEfforts : draft.defaultReasoningEfforts;
+      return {
+        dimension: ["TextEmbedding", "MultimodalEmbedding"].includes(model.modelType) ? tokenLimit(dimension) : null,
+        ...model, logicalModelCode: model.logicalModelCode?.trim() || null, modelId: model.modelId.trim(), name: model.name.trim(),
+        supportedReasoningEfforts,
+        defaultReasoningEffort: model.defaultReasoningEffort && effectiveEfforts.includes(model.defaultReasoningEffort) ? model.defaultReasoningEffort : null,
+        contextWindowTokens: tokenLimit(contextWindowTokens), maxOutputTokens: tokenLimit(maxOutputTokens),
+      };
+    }),
   };
 }

@@ -1,4 +1,5 @@
 import { requestApi } from "@/shared/api/httpClient";
+import type { ReasoningEffort } from "@/domain/model/model";
 
 export type ConfiguredProviderProtocol =
   | "OpenAiChatCompletions"
@@ -20,6 +21,8 @@ export interface ConfiguredProviderModel {
   contextWindowTokens: number | null;
   maxOutputTokens: number | null;
   reasoning: boolean;
+  supportedReasoningEfforts: ReasoningEffort[];
+  defaultReasoningEffort: ReasoningEffort | null;
   supportsDeveloperRole: boolean;
   inputCapabilities: ProviderInputCapability[];
   enabled: boolean;
@@ -33,6 +36,7 @@ export interface ConfiguredProviderUpdate {
   apiKey: string | null;
   requestHeaders: Record<string, string>;
   enabled: boolean;
+  defaultReasoningEfforts: ReasoningEffort[];
   models: ConfiguredProviderModel[];
 }
 

@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use rand::RngCore;
 
@@ -6,10 +6,10 @@ use crate::{
     domain::{
         auth::AuthenticatedUser,
         workspace::{
-            Workspace, WorkspaceDetail, WorkspaceError, WorkspaceLifecycleResult,
-            WorkspaceLineageItem, WorkspaceListQuery, WorkspaceOption, WorkspaceStatus,
-            WorkspaceSwitcherData, WorkspaceSwitcherPrimarySpace, WorkspaceSwitcherSecondarySpace,
-            WorkspaceTreeNode,
+            Workspace, WorkspaceDeletionResult, WorkspaceDetail, WorkspaceError,
+            WorkspaceLifecycleResult, WorkspaceLineageItem, WorkspaceListQuery, WorkspaceOption,
+            WorkspaceStatus, WorkspaceSwitcherData, WorkspaceSwitcherPrimarySpace,
+            WorkspaceSwitcherSecondarySpace, WorkspaceTreeNode,
         },
     },
     shared::{
@@ -22,6 +22,7 @@ use crate::{
 const GENERATED_WORKSPACE_CODE_PREFIX: &str = "WS-";
 const WORKSPACE_CODE_GENERATION_ATTEMPTS: usize = 16;
 
+mod deletion_use_cases;
 mod events;
 mod hierarchy;
 mod lifecycle_use_cases;
@@ -57,6 +58,24 @@ pub trait WorkspaceReadRepository: Send + Sync {
     fn is_active(&self, workspace_code: &str) -> Result<bool, WorkspaceError>;
 }
 
+/// Permanent workspace deletion spans products whose data is stored outside
+/// the workspace tables. The host binds these ports once the owning services
+/// exist, so the workspace transaction remains the single cascade owner.
+pub trait WorkspaceSessionPurger: Send + Sync {
+    fn purge_workspace_sessions(&self, workspace_codes: &[String])
+    -> Result<usize, WorkspaceError>;
+}
+
+pub trait WorkspaceResourcePurger: Send + Sync {
+    fn purge_workspace_resources(&self, storage_locators: &[String]);
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct WorkspacePurgeOutcome {
+    pub affected_workspace_count: usize,
+    pub storage_locators: Vec<String>,
+}
+
 pub trait WorkspaceRepository: Send {
     fn reader(&self) -> Arc<dyn WorkspaceReadRepository>;
     fn list_workspaces(&mut self) -> Result<Vec<Workspace>, WorkspaceError>;
@@ -73,6 +92,10 @@ pub trait WorkspaceRepository: Send {
         workspace_codes: &[String],
         restored_at: &str,
     ) -> Result<usize, WorkspaceError>;
+    fn delete_subtree(
+        &mut self,
+        workspace_codes: &[String],
+    ) -> Result<WorkspacePurgeOutcome, WorkspaceError>;
 }
 
 #[derive(Clone)]
@@ -80,6 +103,8 @@ pub struct WorkspaceService {
     repository: Arc<Mutex<Box<dyn WorkspaceRepository>>>,
     reader: Arc<dyn WorkspaceReadRepository>,
     event_bus: EventBusHandle,
+    session_purger: Arc<OnceLock<Arc<dyn WorkspaceSessionPurger>>>,
+    resource_purger: Arc<OnceLock<Arc<dyn WorkspaceResourcePurger>>>,
 }
 
 impl WorkspaceService {
@@ -96,7 +121,17 @@ impl WorkspaceService {
             reader,
             repository: Arc::new(Mutex::new(Box::new(repository))),
             event_bus,
+            session_purger: Arc::new(OnceLock::new()),
+            resource_purger: Arc::new(OnceLock::new()),
         }
+    }
+
+    pub fn bind_session_purger(&self, purger: Arc<dyn WorkspaceSessionPurger>) {
+        let _ = self.session_purger.set(purger);
+    }
+
+    pub fn bind_resource_purger(&self, purger: Arc<dyn WorkspaceResourcePurger>) {
+        let _ = self.resource_purger.set(purger);
     }
 
     fn get_workspace_record(&self, workspace_code: &str) -> Result<Workspace, WorkspaceError> {

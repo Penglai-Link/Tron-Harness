@@ -1,6 +1,13 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LoaderCircle, PackageSearch, RefreshCw, Upload } from "lucide-react";
+import {
+  History,
+  ListChecks,
+  LoaderCircle,
+  PackageSearch,
+  RefreshCw,
+  Upload,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SelectInput } from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
@@ -8,9 +15,13 @@ import { SearchField } from "@/components/search-field/SearchField";
 import { TablePagination } from "@/components/table-pagination";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
-import { ApiError } from "@/shared/api/httpClient";
 import { useCapabilityCenter } from "../hooks/useCapabilityCenter";
+import { useCapabilityQueue } from "../hooks/useCapabilityQueue";
 import { CapabilityCenterList } from "../components/CapabilityCenterList";
+import {
+  CapabilityExecutionQueueDialog,
+  CapabilityOperationLogDialog,
+} from "../components/CapabilityQueueDialogs";
 import { CapabilityReleaseDialog } from "../components/CapabilityReleaseDialog";
 import type { CenterPack, CenterStatus } from "../api/capabilityCenterApi";
 
@@ -31,12 +42,15 @@ export function CapabilityPacksPage() {
     execute,
     refresh,
   } = useCapabilityCenter();
+  const queue = useCapabilityQueue();
   const [selected, setSelected] = useState<CenterPack | null>(null);
   const [remove, setRemove] = useState<CenterPack | null>(null);
   const [forceRemove, setForceRemove] = useState<CenterPack | null>(null);
   const [pendingImport, setPendingImport] = useState<File | null>(null);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const busy = mutation.isPending;
+  const busy = mutation.isPending || queue.pending;
   const data = page.data;
   const records = data?.records ?? [];
   const total = data?.total ?? 0;
@@ -71,7 +85,19 @@ export function CapabilityPacksPage() {
             </Button>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setQueueOpen(true)}
+          >
+            <ListChecks size={14} aria-hidden="true" />
+            {text("queue.title")}({queue.query.data?.items.length ?? 0})
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setLogOpen(true)}>
+            <History size={14} aria-hidden="true" />
+            {text("queue.log")}
+          </Button>
           <input
             ref={input}
             type="file"
@@ -238,8 +264,9 @@ export function CapabilityPacksPage() {
             <CapabilityCenterList
               records={records}
               busy={busy}
+              queuedPackIds={queue.pendingPackIds}
               onDetail={openDetail}
-              onToggle={(pack) => void execute({ kind: "toggle", pack })}
+              onToggle={(pack) => queue.toggle(pack)}
               onRemove={(pack) => {
                 mutation.reset();
                 setRemove(pack);
@@ -301,9 +328,7 @@ export function CapabilityPacksPage() {
       <ConfirmDialog
         open={!!remove}
         title={text("uninstallTitle")}
-        description={`${remove?.name ?? ""} — ${text("uninstallNotice")}${
-          mutation.error ? `\n${mutation.error.message}` : ""
-        }`}
+        description={`${remove?.name ?? ""} — ${text("uninstallNotice")}`}
         pending={busy}
         cancelText={text("cancel")}
         confirmText={text("uninstall")}
@@ -312,21 +337,17 @@ export function CapabilityPacksPage() {
         onConfirm={() => {
           const pack = remove;
           if (!pack) return;
-          void execute({ kind: "uninstall", pack }).then(({ ok, error }) => {
-            if (ok) {
+          void queue
+            .uninstall(pack)
+            .then((result) => {
               setRemove(null);
-              return;
-            }
-            // Unfinished durable runs still pin the package. Removing it needs
-            // an explicit second confirmation that drops those runs' versions.
-            if (
-              error instanceof ApiError &&
-              error.code === DURABLE_PACK_IN_USE
-            ) {
-              setRemove(null);
-              setForceRemove(pack);
-            }
-          });
+              // Unfinished durable runs still pin the package. Removing it needs
+              // an explicit second confirmation that drops those runs' versions.
+              if (result.code === DURABLE_PACK_IN_USE) {
+                setForceRemove(pack);
+              }
+            })
+            .catch(() => {});
         }}
       />
       <ConfirmDialog
@@ -341,12 +362,27 @@ export function CapabilityPacksPage() {
         onConfirm={() => {
           const pack = forceRemove;
           if (!pack) return;
-          void execute({ kind: "uninstall", pack, force: true }).then(
-            ({ ok }) => {
-              if (ok) setForceRemove(null);
-            }
-          );
+          void queue
+            .uninstall(pack, true)
+            .then(() => setForceRemove(null))
+            .catch(() => {});
         }}
+      />
+      <CapabilityExecutionQueueDialog
+        open={queueOpen}
+        onOpenChange={setQueueOpen}
+        snapshot={queue.query.data}
+        loading={queue.query.isLoading}
+        error={queue.query.isError ? queue.query.error.message : null}
+        onRetry={() => void queue.query.refetch()}
+      />
+      <CapabilityOperationLogDialog
+        open={logOpen}
+        onOpenChange={setLogOpen}
+        snapshot={queue.query.data}
+        loading={queue.query.isLoading}
+        error={queue.query.isError ? queue.query.error.message : null}
+        onRetry={() => void queue.query.refetch()}
       />
       <ConfirmDialog
         open={!!pendingImport}

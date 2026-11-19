@@ -63,8 +63,6 @@ interface EffortStep {
   value: ReasoningEffort | null;
 }
 
-const intelligenceFrom = "var(--chat-intelligence-from, #4f7cff)";
-const intelligenceTo = "var(--chat-intelligence-to, #a855f7)";
 const intelligenceAccent = "var(--chat-intelligence-accent, #8b5cf6)";
 
 function normalizedFuzzyValue(value: string) {
@@ -209,7 +207,7 @@ export function ChatModelEffortSelector({
       setSearchQuery("");
       return;
     }
-    setModelsOpen(!hasSlider);
+    setModelsOpen(false);
     if (!hasSlider) return;
     const frame = window.requestAnimationFrame(() => {
       document.getElementById(sliderId)?.focus({ preventScroll: true });
@@ -252,13 +250,6 @@ export function ChatModelEffortSelector({
         disabled={disabled}
         title={triggerTitle}
       >
-        <span
-          aria-hidden="true"
-          className="relative flex size-3.5 flex-none items-center justify-center rounded-full"
-          style={{ background: `linear-gradient(135deg, ${intelligenceFrom}, ${intelligenceTo})` }}
-        >
-          <span className="size-1 rounded-full bg-white/90" />
-        </span>
         <span className="min-w-0 truncate font-medium">{selectedModelLabel}</span>
         {hasSlider ? (
           <>

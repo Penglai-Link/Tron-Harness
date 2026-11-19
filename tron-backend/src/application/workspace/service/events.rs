@@ -25,6 +25,29 @@ impl WorkspaceService {
         );
     }
 
+    pub(super) fn publish_workspace_deletion_event(
+        &self,
+        event_name: &'static str,
+        summary: &'static str,
+        actor: &AuthenticatedUser,
+        result: &WorkspaceDeletionResult,
+    ) {
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit(event_name, "workspace_service")
+                .subject("workspace", result.workspace_code.clone())
+                .actor(actor)
+                .summary(summary)
+                .attr(
+                    "affectedWorkspaceCount",
+                    result.affected_workspace_count.to_string(),
+                )
+                .attr(
+                    "deletedSessionCount",
+                    result.deleted_session_count.to_string(),
+                ),
+        );
+    }
+
     pub(super) fn publish_workspace_lifecycle_event(
         &self,
         event_name: &'static str,

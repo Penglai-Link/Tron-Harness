@@ -44,6 +44,10 @@ pub trait ChatRepository: Send {
         self.delete_session(session_code)
     }
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError>;
+    fn session_codes_by_workspaces(
+        &mut self,
+        workspace_codes: &[String],
+    ) -> Result<Vec<String>, ChatError>;
     fn list_managed_sessions(
         &mut self,
         workspace_code: Option<&str>,

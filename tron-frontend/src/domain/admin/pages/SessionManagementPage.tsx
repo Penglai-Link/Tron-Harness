@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Archive,
+  CircleStop,
   FolderInput,
   LoaderCircle,
   RefreshCw,
-  Square,
   Trash2,
 } from "lucide-react";
 
@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/shared";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { fetchWorkspaceOptions } from "@/domain/admin/api";
@@ -55,6 +56,39 @@ function displayTimestamp(value: number) {
   return new Date(value).toLocaleString(
     document.documentElement.lang || undefined,
     { timeZone: getUserTimeZone() },
+  );
+}
+
+function RowActionButton({
+  label,
+  disabled,
+  danger = false,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  danger?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      {/* 包一层 span，禁用按钮不接收指针事件，Tooltip 仍能在包裹层上触发。 */}
+      <TooltipTrigger render={<span className="inline-flex" />}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={danger ? "text-[var(--color-error)]" : undefined}
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -89,10 +123,14 @@ export function SessionManagementPage() {
     () => new Map(workspaceOptions.map((workspace) => [workspace.workspaceCode, workspace.label || workspace.name])),
     [workspaceOptions],
   );
+  const activeWorkspaceOptions = useMemo(
+    () => workspaceOptions.filter((workspace) => workspace.status === "Active"),
+    [workspaceOptions],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    void fetchWorkspaceOptions({ includeArchived: false }).then((options) => {
+    void fetchWorkspaceOptions({ includeArchived: true }).then((options) => {
       if (!cancelled) setWorkspaceOptions(options);
     }).catch(() => {
       if (!cancelled) toast.error(getErrorMessage(null, t("sessionManagement.loadFailed")));
@@ -289,7 +327,7 @@ export function SessionManagementPage() {
                 onValueChange={(value) => setWorkspaceCode(value === "__all__" ? "" : String(value))}
               >
                 <SelectItem value="__all__">{t("sessionManagement.allWorkspaces")}</SelectItem>
-                {workspaceOptions.map((workspace) => <SelectItem key={workspace.workspaceCode} value={workspace.workspaceCode}>{workspace.label || workspace.name}</SelectItem>)}
+                {activeWorkspaceOptions.map((workspace) => <SelectItem key={workspace.workspaceCode} value={workspace.workspaceCode}>{workspace.label || workspace.name}</SelectItem>)}
               </SelectInput>
               <SelectInput
                 aria-label={t("sessionManagement.status")}
@@ -372,14 +410,12 @@ export function SessionManagementPage() {
               ),
             },
             {
-              id: "workspace", header: t("sessionManagement.workspace"), width: "160px", render: (session) => {
+              id: "workspace", header: t("sessionManagement.workspace"), width: "190px", render: (session) => {
                 const workspace = workspaceLabels.get(session.workspaceCode) ?? session.workspaceCode;
                 return (
                   <div className="min-w-0">
                     <p className="truncate" title={workspace}>{workspace}</p>
-                    {session.projectCode
-                      ? <p className="truncate text-xs text-[var(--color-on-surface-variant)]" title={session.projectCode}>{t("sessionManagement.inTopic")}</p>
-                      : <p className="truncate text-xs text-[var(--color-on-surface-variant)]">{t("sessionManagement.quickChat")}</p>}
+                    <p className="truncate text-xs text-[var(--color-on-surface-variant)]" title={session.workspaceCode}>{session.workspaceCode}</p>
                   </div>
                 );
               },
@@ -403,10 +439,29 @@ export function SessionManagementPage() {
             },
             { id: "updatedAt", header: t("sessionManagement.updatedAt"), width: "200px", render: (session) => <time className="text-xs">{displayTimestamp(session.updatedAt)}</time> },
             {
-              id: "actions", header: t("sessionManagement.actions"), width: "130px", align: "right", headerClassName: "sticky right-0 z-20 border-l border-[var(--color-outline-variant)] bg-[var(--tron-table-header-bg,var(--color-elevated-surface))]", cellClassName: "sticky right-0 z-10 border-l border-[var(--color-outline-variant)] bg-[var(-- _tron-row-bg)]", render: (session) => <div className="flex justify-end gap-1">
-                <Button variant="ghost" size="icon" title={t("sessionManagement.stop")} aria-label={t("sessionManagement.stop")} disabled={busy || !session.running} onClick={() => setStopPending([session.sessionCode])}><Square /></Button>
-                <Button variant="ghost" size="icon" title={t("sessionManagement.archive")} aria-label={t("sessionManagement.archive")} disabled={busy || session.status === "ARCHIVED"} onClick={() => setArchivePending([session.sessionCode])}><Archive /></Button>
-                <Button variant="ghost" size="icon" className="text-[var(--color-error)]" title={t("sessionManagement.delete")} aria-label={t("sessionManagement.delete")} disabled={busy} onClick={() => setDeletePending([session.sessionCode])}><Trash2 /></Button>
+              id: "actions", header: t("sessionManagement.actions"), width: "130px", align: "right", headerClassName: "sticky right-0 z-20 border-l border-[var(--color-outline-variant)] bg-[var(--tron-table-header-bg,var(--color-elevated-surface))]", cellClassName: "sticky right-0 z-10 border-l border-[var(--color-outline-variant)] bg-[var(--_tron-row-bg)]", render: (session) => <div className="flex justify-end gap-1">
+                <RowActionButton
+                  label={t("sessionManagement.stop")}
+                  disabled={busy || !session.running}
+                  onClick={() => setStopPending([session.sessionCode])}
+                >
+                  <CircleStop aria-hidden="true" />
+                </RowActionButton>
+                <RowActionButton
+                  label={t("sessionManagement.archive")}
+                  disabled={busy || session.status === "ARCHIVED"}
+                  onClick={() => setArchivePending([session.sessionCode])}
+                >
+                  <Archive aria-hidden="true" />
+                </RowActionButton>
+                <RowActionButton
+                  label={t("sessionManagement.delete")}
+                  disabled={busy}
+                  danger
+                  onClick={() => setDeletePending([session.sessionCode])}
+                >
+                  <Trash2 aria-hidden="true" />
+                </RowActionButton>
               </div>,
             },
           ]}
@@ -438,7 +493,7 @@ export function SessionManagementPage() {
                 onValueChange={(value) => { setMoveWorkspace(value === "__all__" ? "" : String(value)); setMoveProject(""); }}
               >
                 <SelectItem value="__all__">{t("sessionManagement.selectWorkspace")}</SelectItem>
-                {workspaceOptions.map((workspace) => <SelectItem key={workspace.workspaceCode} value={workspace.workspaceCode}>{workspace.label || workspace.name}</SelectItem>)}
+                {activeWorkspaceOptions.map((workspace) => <SelectItem key={workspace.workspaceCode} value={workspace.workspaceCode}>{workspace.label || workspace.name}</SelectItem>)}
               </SelectInput>
             </div>
             <div>

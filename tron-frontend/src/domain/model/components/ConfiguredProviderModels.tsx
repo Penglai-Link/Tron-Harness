@@ -7,6 +7,8 @@ import { SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
 import type { ConfiguredProviderModelType, ConfiguredProviderProtocol, ProviderInputCapability } from "@/domain/model/api/configuredProviderApi";
+import { normalizeReasoningEfforts, reasoningEffortOptions } from "@/domain/model/constants/modelPageOptions";
+import type { ReasoningEffort } from "@/domain/model/model";
 import { configuredProviderModelTypes, emptyProviderModel, isMediaModel, isMultimodalModel, supportsModelType, type ProviderModelDraft } from "./configuredProviderForm";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 
@@ -90,18 +92,22 @@ function ModelInputCapabilities({ model, number, disabled, onChange }: {
   </fieldset>;
 }
 
-export function ConfiguredProviderModels({ presetId, models, protocol, disabled, onChange }: {
+export function ConfiguredProviderModels({ presetId, models, protocol, disabled, defaultReasoningEfforts, onDefaultReasoningEffortsChange, onChange }: {
   presetId?: string | null;
   models: ProviderModelDraft[];
   protocol: ConfiguredProviderProtocol;
   disabled: boolean;
+  defaultReasoningEfforts: ReasoningEffort[];
+  onDefaultReasoningEffortsChange: (efforts: ReasoningEffort[]) => void;
   onChange: (models: ProviderModelDraft[]) => void;
 }) {
   const { t } = useTranslation("pages");
   const editorPrefix = useId();
   const [editingRowId, setEditingRowId] = useState<string | null>(() => models.find(model => !model.modelId.trim())?.rowId ?? null);
   const text = (key: string) => t(`configuredProviders.${key}`);
+  const effortLabel = (value: ReasoningEffort) => t(`common:reasoningEffort.values.${value}`);
   const update = (rowId: string, patch: Partial<ProviderModelDraft>) => onChange(models.map((model) => model.rowId === rowId ? { ...model, ...patch } : model));
+  const effortValues = (values: Iterable<string>) => normalizeReasoningEfforts(Array.from(values) as ReasoningEffort[]);
   return (
     <section className="space-y-4 border-t border-[var(--color-outline-variant)] pt-6" aria-labelledby="provider-models-heading">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -111,6 +117,13 @@ export function ConfiguredProviderModels({ presetId, models, protocol, disabled,
         </div>
         <Button type="button" variant="secondary" disabled={disabled} onClick={() => { const model = emptyProviderModel(); setEditingRowId(model.rowId); onChange([...models, model]); }}>{text("models.add")}</Button>
       </div>
+      <Field label={<span className="inline-flex items-center gap-1">{text("models.providerReasoningEfforts")}<InfoTooltip ariaLabel={text("models.providerReasoningEfforts")}>{text("models.providerReasoningEffortsHint")}</InfoTooltip></span>}>
+        <SelectInput multiple aria-label={text("models.providerReasoningEfforts")}
+          value={defaultReasoningEfforts} disabled={disabled}
+          onValueChange={(values) => onDefaultReasoningEffortsChange(effortValues(values ?? []))}>
+          {reasoningEffortOptions.map((option) => <SelectItem key={option.value} value={option.value}>{effortLabel(option.value)}</SelectItem>)}
+        </SelectInput>
+      </Field>
       <ProviderModelPicker key={presetId ?? "manual"} presetId={presetId} models={models} protocol={protocol} disabled={disabled} onChange={onChange} />
       {models.map((model, index) => (
         <div key={model.rowId} className="min-w-0 border-b border-[var(--color-outline-variant)] py-2 last:border-b-0">
@@ -137,7 +150,7 @@ export function ConfiguredProviderModels({ presetId, models, protocol, disabled,
                   if (!value) return;
                   const modelType = value as ConfiguredProviderModelType;
                   update(model.rowId, modelType === "Text" ? { modelType, inputCapabilities: ["Text"] } : {
-                    modelType, reasoning: false, supportsDeveloperRole: false,
+                    modelType, reasoning: false, supportedReasoningEfforts: [], defaultReasoningEffort: null, supportsDeveloperRole: false,
                     inputCapabilities: isMultimodalModel(modelType) ? ["Text", "Image"] : modelType === "SpeechRecognition" ? ["Audio"] : modelType === "RealtimeSpeech" ? ["Text", "Audio"] : ["Text"],
                     maxOutputTokens: "", contextWindowTokens: "",
                   });
@@ -173,10 +186,42 @@ export function ConfiguredProviderModels({ presetId, models, protocol, disabled,
             <ToggleSwitch label={text("models.enabled")} ariaLabel={t("configuredProviders.models.enabledNumber", { number: index + 1 })}
               checked={model.enabled} disabled={disabled} onCheckedChange={(enabled) => update(model.rowId, { enabled })} />
             {model.modelType === "Text" && <ToggleSwitch label={text("models.reasoning")} ariaLabel={t("configuredProviders.models.reasoningNumber", { number: index + 1 })}
-              checked={model.reasoning} disabled={disabled} onCheckedChange={(reasoning) => update(model.rowId, { reasoning })} />}
+              checked={model.reasoning} disabled={disabled} onCheckedChange={(reasoning) => update(model.rowId, { reasoning, ...(reasoning ? {} : { supportedReasoningEfforts: [], defaultReasoningEffort: null }) })} />}
             {protocol === "OpenAiChatCompletions" && model.modelType === "Text" && <ToggleSwitch label={text("models.developerRole")} ariaLabel={t("configuredProviders.models.developerNumber", { number: index + 1 })}
               checked={model.supportsDeveloperRole} disabled={disabled} onCheckedChange={(supportsDeveloperRole) => update(model.rowId, { supportsDeveloperRole })} />}
           </div>
+          {model.modelType === "Text" && model.reasoning ? (() => {
+            const effectiveEfforts = model.supportedReasoningEfforts.length
+              ? model.supportedReasoningEfforts
+              : defaultReasoningEfforts;
+            return <div className="grid gap-4 md:grid-cols-2">
+              <Field label={text("models.reasoningEfforts")} hint={text("models.reasoningEffortsHint")} hintAriaLabel={text("models.reasoningEfforts")}>
+                <SelectInput multiple aria-label={t("configuredProviders.models.reasoningEffortsNumber", { number: index + 1 })}
+                  value={model.supportedReasoningEfforts} disabled={disabled}
+                  onValueChange={(values) => {
+                    const supportedReasoningEfforts = effortValues(values ?? []);
+                    update(model.rowId, {
+                      supportedReasoningEfforts,
+                      defaultReasoningEffort: model.defaultReasoningEffort && supportedReasoningEfforts.includes(model.defaultReasoningEffort)
+                        ? model.defaultReasoningEffort
+                        : null,
+                    });
+                  }}>
+                  {reasoningEffortOptions.map((option) => <SelectItem key={option.value} value={option.value}>{effortLabel(option.value)}</SelectItem>)}
+                </SelectInput>
+              </Field>
+              <Field label={text("models.defaultReasoningEffort")} hint={text("models.defaultReasoningEffortHint")} hintAriaLabel={text("models.defaultReasoningEffort")}>
+                <SelectInput aria-label={t("configuredProviders.models.defaultReasoningEffortNumber", { number: index + 1 })}
+                  value={model.defaultReasoningEffort ?? "__provider_default__"} disabled={disabled || effectiveEfforts.length === 0}
+                  onValueChange={(value) => update(model.rowId, { defaultReasoningEffort: value === "__provider_default__" ? null : value as ReasoningEffort })}>
+                  <SelectItem value="__provider_default__">{t("common:reasoningEffort.providerDefault")}</SelectItem>
+                  {reasoningEffortOptions.filter((option) => effectiveEfforts.includes(option.value)).map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{effortLabel(option.value)}</SelectItem>
+                  ))}
+                </SelectInput>
+              </Field>
+            </div>;
+          })() : null}
           <ModelInputCapabilities model={model} number={index + 1} disabled={disabled}
             onChange={(inputCapabilities) => update(model.rowId, { inputCapabilities })} />
           </fieldset>}

@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import {
   archiveWorkspace,
   createWorkspace,
+  deleteWorkspace,
   fetchWorkspaceDetail,
   fetchWorkspaceTree,
   moveWorkspace,
@@ -20,6 +21,7 @@ import {
 import {
   archiveWorkspaceRecord,
   createWorkspaceRecord,
+  deleteWorkspaceRecord,
   getWorkspaceDetail,
   getWorkspaceTree,
   moveWorkspaceRecord,
@@ -74,6 +76,8 @@ export function WorkspaceManagementPage() {
   const [boundFlowCode, setBoundFlowCode] = useState("");
   const [flowLoading, setFlowLoading] = useState(false);
   const [flowConfirmOpen, setFlowConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -116,7 +120,7 @@ export function WorkspaceManagementPage() {
     setExpandedCodes(current => new Set([...current, ...ancestors]));
   }, [search, status, visibleTree]);
 
-  const loadTree = async () => {
+  const loadTree = async (selectFirst = false) => {
     setLoading(true);
     try {
       const nextTree = isApiMode
@@ -124,7 +128,7 @@ export function WorkspaceManagementPage() {
         : getWorkspaceTree();
       setTree(nextTree);
       setExpandedCodes((current) => current.size ? current : new Set(nextTree.filter((record) => record.children.length).map((record) => record.workspaceCode)));
-      if (!selectedCode && nextTree[0]) setSelectedCode(nextTree[0].workspaceCode);
+      if ((selectFirst || !selectedCode) && nextTree[0]) setSelectedCode(nextTree[0].workspaceCode);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("workspaceManagement.requestFailed"));
     } finally {
@@ -223,6 +227,28 @@ export function WorkspaceManagementPage() {
     void runMutation(() => isApiMode
       ? moveWorkspace(detail.workspaceCode, { parentWorkspaceCode: parentCode === ROOT_PARENT ? null : parentCode })
       : Promise.resolve(moveWorkspaceRecord(detail.workspaceCode, parentCode === ROOT_PARENT ? null : parentCode)));
+  };
+
+  const deleteSelected = async () => {
+    if (!detail || deleting) return;
+    setDeleting(true);
+    try {
+      if (isApiMode) await deleteWorkspace(detail.workspaceCode);
+      else deleteWorkspaceRecord(detail.workspaceCode);
+      setDeleteConfirmOpen(false);
+      setDetail(null);
+      setSelectedCode(null);
+      setMode("edit");
+      setName("");
+      setDescription("");
+      setParentCode(ROOT_PARENT);
+      await loadTree(true);
+      toast.success(t("workspaceManagement.deleted"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("workspaceManagement.requestFailed"));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const changeStatus = () => {
@@ -332,6 +358,11 @@ export function WorkspaceManagementPage() {
                     {detail.status === "Active" ? <>{t("workspaceManagement.archive")}</> : <>{t("workspaceManagement.restore")}</>}
                   </Button>
                 ) : null}
+                {mode === "edit" && detail && archived ? (
+                  <Button variant="destructive" onClick={() => setDeleteConfirmOpen(true)} disabled={saving || deleting}>
+                    {t("workspaceManagement.delete")}
+                  </Button>
+                ) : null}
                 <Button onClick={save} disabled={saving || archived || (mode === "create" && !flows.some((flow) => flow.flowCode === flowCode))}>{mode === "create" ? t("workspaceManagement.create") : t("workspaceManagement.save")}</Button>
               </div>
             </>
@@ -347,6 +378,7 @@ export function WorkspaceManagementPage() {
           </div>
         </section>
         <ConfirmDialog open={flowConfirmOpen} title={flowT("confirm.switchTitle", "Switch workflow")} description={flowT("confirm.switchDescription", "Every task in the current workspace must be closed.")} cancelText={flowT("actions.cancel", "Cancel")} confirmText={flowT("actions.switch", "Switch")} pending={saving} onCancel={() => setFlowConfirmOpen(false)} onConfirm={() => void switchFlow()} />
+        <ConfirmDialog open={deleteConfirmOpen} title={t("workspaceManagement.deleteTitle")} description={t("workspaceManagement.deleteDescription", { name: detail?.name ?? "" })} cancelText={t("workspaceManagement.cancel")} confirmText={t("workspaceManagement.delete")} pendingText={t("workspaceManagement.deleting")} pending={deleting} onCancel={() => { if (!deleting) setDeleteConfirmOpen(false); }} onConfirm={() => void deleteSelected()} />
     </div>
   );
 }

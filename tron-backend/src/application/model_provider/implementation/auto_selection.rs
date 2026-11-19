@@ -312,6 +312,8 @@ impl ModelProviderService {
                         input_coefficient: None,
                         cache_hit_coefficient: None,
                         output_coefficient: None,
+                        supported_reasoning_efforts: Vec::new(),
+                        default_reasoning_effort: None,
                     })
                 })
                 .collect()

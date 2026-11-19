@@ -17,6 +17,10 @@ impl ModelService {
                     .model_code
                     .as_ref()
                     .ok_or(ModelError::StorageFailure)?;
+                let supported_reasoning_efforts = provider.effective_reasoning_efforts(model);
+                let default_reasoning_effort = model
+                    .default_reasoning_effort
+                    .filter(|effort| supported_reasoning_efforts.contains(effort));
                 options.push(ModelSelectOption {
                     option_code: code.clone(),
                     model_code: code.clone(),
@@ -41,8 +45,8 @@ impl ModelService {
                     input_coefficient: None,
                     cache_hit_coefficient: None,
                     output_coefficient: None,
-                    supported_reasoning_efforts: Vec::new(),
-                    default_reasoning_effort: None,
+                    supported_reasoning_efforts,
+                    default_reasoning_effort,
                     is_default: false,
                 });
             }
@@ -71,6 +75,10 @@ impl ModelService {
                     .ok_or(ModelError::StorageFailure)?;
                 if model.model_type.model_type() != ModelType::Text
                     || (reasoning.is_some() && !model.reasoning)
+                    || reasoning.is_some_and(|effort| {
+                        let supported = provider.effective_reasoning_efforts(model);
+                        !supported.is_empty() && !supported.contains(&effort)
+                    })
                     || !model.enabled
                     || !model.context_window_tokens.is_some_and(|size| size > 0)
                     || (!allowed.is_empty() && !allowed.iter().any(|value| value == code))
@@ -150,6 +158,12 @@ impl ModelService {
     ) -> Result<AgentModelConfig, ModelError> {
         if reasoning.is_some() && !model.reasoning {
             return Err(ModelError::ReasoningEffortUnsupported);
+        }
+        if let Some(effort) = reasoning {
+            let supported = provider.effective_reasoning_efforts(model);
+            if !supported.is_empty() && !supported.contains(&effort) {
+                return Err(ModelError::ReasoningEffortUnsupported);
+            }
         }
         let protocol = match provider.protocol.model_protocol() {
             ModelProtocol::OpenAiCompatible => AgentModelProtocol::ChatCompletions,

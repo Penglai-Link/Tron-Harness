@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, HashSet};
 use super::*;
 use crate::domain::model::{
     ConfiguredModelProvider, ConfiguredProviderError, ConfiguredProviderModel,
-    ConfiguredProviderProtocol, ModelInputCapability,
+    ConfiguredProviderModelType, ConfiguredProviderProtocol, ModelInputCapability,
 };
+use crate::domain::reasoning::ReasoningEffort;
 use url::Url;
 
 #[derive(Clone)]
@@ -16,6 +17,7 @@ pub struct ConfiguredProviderCommand {
     pub api_key: Option<String>,
     pub request_headers: BTreeMap<String, String>,
     pub enabled: bool,
+    pub default_reasoning_efforts: Vec<ReasoningEffort>,
     pub models: Vec<ConfiguredProviderModel>,
 }
 
@@ -225,6 +227,8 @@ impl ModelService {
                 .filter(|code| !code.is_empty());
             config.model_id = config.model_id.trim().to_owned();
             config.name = config.name.trim().to_owned();
+            config.supported_reasoning_efforts =
+                ReasoningEffort::normalize(&config.supported_reasoning_efforts);
             if config.model_code.is_none() {
                 config.model_code = Some(format!("MODEL-{:032x}", rand::random::<u128>()));
             }
@@ -241,6 +245,9 @@ impl ModelService {
             api_key_summary,
             request_headers: command.request_headers,
             enabled: command.enabled,
+            default_reasoning_efforts: ReasoningEffort::normalize(
+                &command.default_reasoning_efforts,
+            ),
             models: command.models,
             created_at: previous
                 .as_ref()
@@ -337,6 +344,7 @@ fn validate_provider(
     }
     let mut ids = HashSet::new();
     let mut codes = HashSet::new();
+    let provider_default_efforts = ReasoningEffort::normalize(&command.default_reasoning_efforts);
     for model in &command.models {
         if model.model_type.protocol(command.protocol).is_none()
             || (model.model_type != crate::domain::model::ConfiguredProviderModelType::Text
@@ -347,6 +355,23 @@ fn validate_provider(
                         && model.input_capabilities != [ModelInputCapability::Text])))
         {
             return Err(ConfiguredProviderError::InvalidModels);
+        }
+        let supported_efforts = ReasoningEffort::normalize(&model.supported_reasoning_efforts);
+        let is_reasoning_chat =
+            model.model_type == ConfiguredProviderModelType::Text && model.reasoning;
+        if !is_reasoning_chat {
+            if !supported_efforts.is_empty() || model.default_reasoning_effort.is_some() {
+                return Err(ConfiguredProviderError::InvalidModels);
+            }
+        } else if let Some(default) = model.default_reasoning_effort {
+            let effective = if supported_efforts.is_empty() {
+                &provider_default_efforts
+            } else {
+                &supported_efforts
+            };
+            if !effective.contains(&default) {
+                return Err(ConfiguredProviderError::InvalidModels);
+            }
         }
         if model.model_type.is_multimodal()
             && !model

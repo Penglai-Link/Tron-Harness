@@ -12,19 +12,12 @@ import {
   installCenterRelease,
   isCenterReleaseUnavailable,
   type CenterQuery,
-  type CenterPack,
 } from "../api/capabilityCenterApi";
-import {
-  importCapabilityPack,
-  setCapabilityPackEnabled,
-  uninstallCapabilityPack,
-} from "../api/capabilityApi";
+import { importCapabilityPack } from "../api/capabilityApi";
 
 export type CenterAction =
   | { kind: "install"; releaseId: string; installedVersion: string | null }
-  | { kind: "import"; file: File }
-  | { kind: "toggle"; pack: CenterPack }
-  | { kind: "uninstall"; pack: CenterPack; force?: boolean };
+  | { kind: "import"; file: File };
 
 export function useCapabilityCenter() {
   const { t, i18n } = useTranslation("pages");
@@ -83,22 +76,11 @@ export function useCapabilityCenter() {
     mutationFn: async (action: CenterAction) => {
       if (action.kind === "install")
         return installCenterRelease(action.releaseId, action.installedVersion);
-      if (action.kind === "import") return importCapabilityPack(action.file);
-      if (action.kind === "uninstall")
-        return uninstallCapabilityPack(action.pack.packId, action.force);
-      return setCapabilityPackEnabled(action.pack.packId, !action.pack.enabled);
+      return importCapabilityPack(action.file);
     },
     onSuccess: (_, action) => {
       const key =
-        action.kind === "install"
-          ? "installedNotice"
-          : action.kind === "import"
-          ? "importedNotice"
-          : action.kind === "uninstall"
-          ? "uninstalledNotice"
-          : action.pack.enabled
-          ? "disabledNotice"
-          : "enabledNotice";
+        action.kind === "install" ? "installedNotice" : "importedNotice";
       toast.success(t(`capabilityCenter.${key}`));
     },
     onError: (error) =>

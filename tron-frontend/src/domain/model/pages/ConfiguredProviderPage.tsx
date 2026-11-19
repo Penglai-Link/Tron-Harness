@@ -17,6 +17,7 @@ import {
   configuredProviderToDraft, emptyProviderDraft, presetToDraft,
   providerDraftToPayload, validateProviderDraft, type ConfiguredProviderDraft,
 } from "@/domain/model/components/configuredProviderForm";
+import type { ReasoningEffort } from "@/domain/model/model";
 
 export function CreateConfiguredProviderPage() {
   return <ConfiguredProviderPage />;
@@ -60,6 +61,22 @@ export function ConfiguredProviderPage({ providerId }: { providerId?: string }) 
     });
     return () => controller.abort();
   }, [providerId, revision]);
+
+  function changeDefaultReasoningEfforts(defaultReasoningEfforts: ReasoningEffort[]) {
+    setDraft((current) => ({
+      ...current,
+      defaultReasoningEfforts,
+      models: current.models.map((model) => (
+        model.reasoning
+          && model.modelType === "Text"
+          && !model.supportedReasoningEfforts.length
+          && model.defaultReasoningEffort
+          && !defaultReasoningEfforts.includes(model.defaultReasoningEffort)
+          ? { ...model, defaultReasoningEffort: null }
+          : model
+      )),
+    }));
+  }
 
   async function save() {
     const validation = validateProviderDraft(draft);
@@ -112,6 +129,8 @@ export function ConfiguredProviderPage({ providerId }: { providerId?: string }) 
               {providerId && <div className="space-y-1 text-sm"><p className="font-medium">{text("providerType")}</p><p>{typeName}</p>{!draft.providerType && <select aria-label={text("providerType")} value="" onChange={(event) => setDraft((current) => ({ ...current, providerType: event.target.value || null }))} className="w-full rounded border bg-transparent p-2"><option value="">{text("providerTypeUnknown")}</option><option value="custom">{text("custom")}</option>{presets.filter((preset) => preset.supported).map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select>}</div>}
               <ConfiguredProviderFields draft={draft} disabled={busy} onChange={setDraft} />
               <ConfiguredProviderModels key={modelSectionRevision} presetId={presetId} models={draft.models} protocol={draft.protocol} disabled={busy}
+                defaultReasoningEfforts={draft.defaultReasoningEfforts}
+                onDefaultReasoningEffortsChange={changeDefaultReasoningEfforts}
                 onChange={(models) => setDraft((current) => ({ ...current, models }))} />
               </>}
               {error && <p role="alert" className="text-sm text-[var(--color-error)]">{error}</p>}

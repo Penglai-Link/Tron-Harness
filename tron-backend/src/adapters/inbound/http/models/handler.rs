@@ -170,8 +170,8 @@ pub async fn list_select_options(
             input_coefficient: record.input_coefficient,
             cache_hit_coefficient: record.cache_hit_coefficient,
             output_coefficient: record.output_coefficient,
-            supported_reasoning_efforts: Vec::new(),
-            default_reasoning_effort: None,
+            supported_reasoning_efforts: record.supported_reasoning_efforts,
+            default_reasoning_effort: record.default_reasoning_effort,
             is_default: record.is_default,
         }
     }));

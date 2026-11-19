@@ -116,6 +116,14 @@ pub struct WorkspaceLifecycleResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkspaceDeletionResult {
+    pub workspace_code: String,
+    pub affected_workspace_count: usize,
+    pub deleted_session_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PagedWorkspaceRecords<T> {
     pub current: usize,
     pub size: usize,
@@ -140,6 +148,9 @@ pub enum WorkspaceError {
     WorkspaceNameRequired,
     InvalidHierarchy,
     ArchivedMutationDenied,
+    ActiveWorkspaceDeleteDenied,
+    WorkspaceSessionsBusy,
+    SessionCleanupFailed,
     StorageFailure,
 }
 
@@ -153,6 +164,13 @@ impl fmt::Display for WorkspaceError {
             Self::InvalidHierarchy => formatter.write_str("invalid workspace hierarchy"),
             Self::ArchivedMutationDenied => {
                 formatter.write_str("archived workspace cannot be modified")
+            }
+            Self::ActiveWorkspaceDeleteDenied => {
+                formatter.write_str("only archived workspaces can be deleted")
+            }
+            Self::WorkspaceSessionsBusy => formatter.write_str("workspace has running sessions"),
+            Self::SessionCleanupFailed => {
+                formatter.write_str("workspace sessions could not be deleted")
             }
             Self::StorageFailure => formatter.write_str("workspace storage failure"),
         }

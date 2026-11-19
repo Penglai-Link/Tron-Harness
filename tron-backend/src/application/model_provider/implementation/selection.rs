@@ -1,4 +1,24 @@
 use super::*;
+use crate::domain::reasoning::ReasoningEffort;
+
+/// PersonAI accepts prompt-level reasoning controls. The fixed levels keep the
+/// composer simple because the SDK catalogue does not publish per-model efforts.
+const PERSON_AI_REASONING_EFFORTS: [ReasoningEffort; 3] = [
+    ReasoningEffort::Low,
+    ReasoningEffort::High,
+    ReasoningEffort::Max,
+];
+
+fn person_ai_reasoning_efforts(model: Option<&ProviderCatalogModelView>) -> Vec<ReasoningEffort> {
+    match model {
+        // The automatic route can land on any reasoning-capable chat model.
+        None => PERSON_AI_REASONING_EFFORTS.to_vec(),
+        Some(model) if model.tags.iter().any(|tag| tag == "deep_thinking") => {
+            PERSON_AI_REASONING_EFFORTS.to_vec()
+        }
+        _ => Vec::new(),
+    }
+}
 
 impl ModelProviderService {
     /// Resolve the Auto catalog in one database operation, not one lookup per model.
@@ -135,6 +155,8 @@ impl ModelProviderService {
                         input_coefficient: None,
                         cache_hit_coefficient: None,
                         output_coefficient: None,
+                        supported_reasoning_efforts: person_ai_reasoning_efforts(None),
+                        default_reasoning_effort: None,
                     });
                 }
                 for model in read_chat_catalog_models(&connection, ModelProviderCode::PersonAi)? {
@@ -172,6 +194,8 @@ impl ModelProviderService {
                         input_coefficient: model.input_coefficient,
                         cache_hit_coefficient: model.cache_hit_coefficient,
                         output_coefficient: model.output_coefficient,
+                        supported_reasoning_efforts: person_ai_reasoning_efforts(Some(&model)),
+                        default_reasoning_effort: None,
                     });
                 }
                 Ok(options)

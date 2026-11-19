@@ -18,6 +18,10 @@ const BUSINESS_MIGRATIONS: &[(&str, &str)] = &[
         "0004_remove_prd_agent",
         include_str!("../../../../../migrations/0004_remove_prd_agent.sql"),
     ),
+    (
+        "0005_capability_queue",
+        include_str!("../../../../../migrations/0005_capability_queue.sql"),
+    ),
 ];
 
 pub(crate) fn initialize_business(connection: &Connection) -> rusqlite::Result<()> {

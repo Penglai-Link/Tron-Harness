@@ -222,3 +222,13 @@ impl ResourceService {
         operation(&mut **repository)
     }
 }
+
+impl crate::application::workspace::WorkspaceResourcePurger for ResourceService {
+    fn purge_workspace_resources(&self, storage_locators: &[String]) {
+        for locator in storage_locators {
+            if let Err(error) = self.remove_managed_binary_object(locator) {
+                tracing::warn!(%error, %locator, "workspace resource cleanup failed");
+            }
+        }
+    }
+}

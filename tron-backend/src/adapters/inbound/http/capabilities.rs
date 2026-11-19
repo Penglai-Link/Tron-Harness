@@ -13,10 +13,12 @@ use axum::{
 use serde::Deserialize;
 
 mod center;
+mod queue;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .merge(center::routes())
+        .merge(queue::routes())
         .route("/api/v1/capabilities/packs", get(list_capability_packs))
         .route(
             "/api/v1/capabilities/packs/{id}/pages/{page}",
@@ -214,56 +216,58 @@ async fn list_extension_implementations_for(state: AppState, locale: &str) -> Re
 struct EnabledRequest {
     enabled: bool,
 }
+/// Both the synchronous enable endpoint and the queued endpoint reject a
+/// package that is neither built in nor installed. Keeping one check means the
+/// queued path cannot enqueue a target that the direct path would refuse.
+async fn ensure_pack_available(state: &AppState, id: &str, locale: &str) -> Result<(), Response> {
+    if crate::application::agent::capability_pack_catalog()
+        .iter()
+        .any(|pack| pack.id == id)
+    {
+        return Ok(());
+    }
+    let root = state.agent_framework.pack_root().to_path_buf();
+    let package = id.to_owned();
+    let installed = crate::app::telemetry::spawn_blocking_traced(move || {
+        eliteforge_agent_capability_runtime::CapabilityPackManager::new(root).and_then(|manager| {
+            manager
+                .installed()
+                .map(|packs| packs.into_iter().any(|pack| pack.manifest.id == package))
+        })
+    });
+    match installed.await {
+        Ok(Ok(true)) => Ok(()),
+        Ok(Ok(false)) => Err(failure(
+            StatusCode::NOT_FOUND,
+            "CAPABILITY_PACK_NOT_FOUND",
+            tron_i18n::t!("capabilities.pack_not_installed", locale = locale).into_owned(),
+        )),
+        Ok(Err(error)) => Err(failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CAPABILITY_LIST_FAILED",
+            error.to_string(),
+        )),
+        Err(error) => Err(failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CAPABILITY_LIST_FAILED",
+            error.to_string(),
+        )),
+    }
+}
+
 async fn set_pack_enabled(
     State(state): State<AppState>,
     Path(id): Path<String>,
     headers: HeaderMap,
     Json(request): Json<EnabledRequest>,
 ) -> Response {
-    let is_builtin = crate::application::agent::capability_pack_catalog()
-        .iter()
-        .any(|p| p.id == id);
-    if !is_builtin {
-        let root = state.agent_framework.pack_root().to_path_buf();
-        let package = id.clone();
-        let installed = crate::app::telemetry::spawn_blocking_traced(move || {
-            eliteforge_agent_capability_runtime::CapabilityPackManager::new(root).and_then(
-                |manager| {
-                    manager
-                        .installed()
-                        .map(|packs| packs.into_iter().any(|pack| pack.manifest.id == package))
-                },
-            )
-        });
-        match installed.await {
-            Ok(Ok(true)) => {}
-            Ok(Ok(false)) => {
-                let locale = crate::shared::locale::resolve_request_locale(
-                    headers
-                        .get(axum::http::header::ACCEPT_LANGUAGE)
-                        .and_then(|value| value.to_str().ok()),
-                );
-                return failure(
-                    StatusCode::NOT_FOUND,
-                    "CAPABILITY_PACK_NOT_FOUND",
-                    tron_i18n::t!("capabilities.pack_not_installed", locale = &locale).into_owned(),
-                );
-            }
-            Ok(Err(error)) => {
-                return failure(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "CAPABILITY_LIST_FAILED",
-                    error.to_string(),
-                );
-            }
-            Err(error) => {
-                return failure(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "CAPABILITY_LIST_FAILED",
-                    error.to_string(),
-                );
-            }
-        }
+    let locale = crate::shared::locale::resolve_request_locale(
+        headers
+            .get(axum::http::header::ACCEPT_LANGUAGE)
+            .and_then(|value| value.to_str().ok()),
+    );
+    if let Err(response) = ensure_pack_available(&state, &id, &locale).await {
+        return response;
     }
     match state
         .agent_framework

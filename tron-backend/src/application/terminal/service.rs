@@ -208,6 +208,9 @@ fn map_workspace_error(error: WorkspaceError) -> TerminalError {
         | WorkspaceError::WorkspaceNameRequired
         | WorkspaceError::InvalidHierarchy
         | WorkspaceError::ArchivedMutationDenied
+        | WorkspaceError::ActiveWorkspaceDeleteDenied
+        | WorkspaceError::WorkspaceSessionsBusy
+        | WorkspaceError::SessionCleanupFailed
         | WorkspaceError::StorageFailure => TerminalError::StorageFailure,
     }
 }

@@ -164,8 +164,12 @@ pub(super) fn map_workspace_error(error: WorkspaceError) -> AutomationError {
     match error {
         WorkspaceError::NotFound
         | WorkspaceError::InvalidWorkspaceCode
-        | WorkspaceError::ArchivedMutationDenied => AutomationError::InvalidWorkspace,
-        WorkspaceError::StorageFailure => AutomationError::StorageFailure,
+        | WorkspaceError::ArchivedMutationDenied
+        | WorkspaceError::ActiveWorkspaceDeleteDenied
+        | WorkspaceError::WorkspaceSessionsBusy => AutomationError::InvalidWorkspace,
+        WorkspaceError::StorageFailure | WorkspaceError::SessionCleanupFailed => {
+            AutomationError::StorageFailure
+        }
         WorkspaceError::DuplicateWorkspaceCode
         | WorkspaceError::WorkspaceNameRequired
         | WorkspaceError::InvalidHierarchy => AutomationError::InvalidWorkspace,

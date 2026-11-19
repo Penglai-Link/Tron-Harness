@@ -19,6 +19,7 @@ export const adminApiEndpoints = {
   moveWorkspace: "POST /api/v1/admin/workspaces/{workspaceCode}/move",
   archiveWorkspace: "POST /api/v1/admin/workspaces/{workspaceCode}/archive",
   restoreWorkspace: "POST /api/v1/admin/workspaces/{workspaceCode}/restore",
+  deleteWorkspace: "DELETE /api/v1/admin/workspaces/{workspaceCode}",
 } as const;
 
 type AdminEndpointParams = Record<string, string | number | boolean | null | undefined>;
@@ -52,6 +53,12 @@ export interface CreateWorkspacePayload {
 export interface UpdateWorkspacePayload {
   name: string;
   description?: string | null;
+}
+
+export interface WorkspaceDeletionResult {
+  workspaceCode?: string;
+  affectedWorkspaceCount?: number;
+  deletedSessionCount?: number;
 }
 
 export interface MoveWorkspacePayload {
@@ -118,6 +125,12 @@ export function archiveWorkspace(workspaceCode: string) {
 
 export function restoreWorkspace(workspaceCode: string) {
   return requestAdminApi<WorkspaceLifecycleResult>(adminApiEndpoints.restoreWorkspace, {
+    pathParams: { workspaceCode },
+  });
+}
+
+export function deleteWorkspace(workspaceCode: string) {
+  return requestAdminApi<WorkspaceDeletionResult>(adminApiEndpoints.deleteWorkspace, {
     pathParams: { workspaceCode },
   });
 }

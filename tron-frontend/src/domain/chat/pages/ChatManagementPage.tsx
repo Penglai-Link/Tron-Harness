@@ -77,6 +77,7 @@ import { AgentChatWindow, type AgentChatSubmitter } from "@/domain/chat/componen
 import { ChatWorkingDirectoryControl } from "@/domain/chat/components/ChatWorkingDirectoryControl";
 import { ChatDraftResources } from "../model/chatDraftResources";
 import { ChatExecutionModeSelector } from "../components/ChatExecutionModeSelector";
+import { ChatPlanReviewCard } from "../components/ChatPlanReviewCard";
 import { ChatModelEffortSelector } from "../components/ChatModelEffortSelector";
 import { useChatExecutionMode } from "../hooks/useChatExecutionMode";
 import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
@@ -92,6 +93,7 @@ import {
   type ChatUserInputLabels,
   type ChatRuntimeRunState,
   type ChatSession as RuntimeChatSession,
+  type ToolExecutionMode,
 } from "@tron/chat-core";
 import { contextBlockPlacements, truncateLabel, type ContextBlockPlacement } from "@personai/agent-ui-chat-core";
 import { inferChatAgentCodeFromModel } from "../model/chatAgentCode";
@@ -945,8 +947,9 @@ function mergeTranscriptAguiEvents<T extends TranscriptAguiEvent>(...sources: T[
 function availableChatModels(models: ModelSelectOption[]) {
   // Keep unavailable fixed models in this list. A persisted session selection
   // must remain visible (and disabled) instead of silently falling back.
-  return models.filter((model) => model.modelType === "TEXT"
-    && !(model.modelSelection?.kind === "ProviderRoute" && model.modelSelection.routeCode === "ChatAuto"));
+  // Keep the PersonAI ChatAuto option too: modelsForAgent reads its reasoning
+  // efforts for the synthetic automatic route and filters it out of the list.
+  return models.filter((model) => model.modelType === "TEXT");
 }
 
 interface ChatModelOption {
@@ -1049,7 +1052,11 @@ function normalizeModelSelection(model: ModelSelectOption): ModelSelection {
 
 function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOption | null, automaticModelLabel: string): ChatModelOption[] {
   if (!selectedAgent || selectedAgent.kind === "internal") {
-    const fixedModels = models.map((model) => ({
+    const autoSource = models.find((model) => model.modelSelection?.kind === "ProviderRoute"
+      && model.modelSelection.routeCode === "ChatAuto") ?? null;
+    const fixedModels = models
+      .filter((model) => model !== autoSource)
+      .map((model) => ({
       accessPlatform: model.accessPlatform ?? null,
       cacheHitCoefficient: model.cacheHitCoefficient ?? null,
       contextWindowTokens: model.contextWindowTokens ?? null,
@@ -1071,7 +1078,11 @@ function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOpt
       outputCoefficient: model.outputCoefficient ?? null,
       vendor: model.vendor ?? null,
     }));
-    return [autoChatModelOption(selectedAgent?.agentCode ?? mainChatAgentOption.agentCode, automaticModelLabel), ...fixedModels];
+    return [autoChatModelOption(
+      selectedAgent?.agentCode ?? mainChatAgentOption.agentCode,
+      automaticModelLabel,
+      autoSource,
+    ), ...fixedModels];
   }
 
   return selectedAgent.models.map((model) => ({
@@ -1098,12 +1109,16 @@ function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOpt
   }));
 }
 
-function autoChatModelOption(agentCode: string, displayName: string): ChatModelOption {
+function autoChatModelOption(
+  agentCode: string,
+  displayName: string,
+  source: ModelSelectOption | null,
+): ChatModelOption {
   return {
     accessPlatform: null,
     cacheHitCoefficient: null,
     contextWindowTokens: null,
-    defaultReasoningEffort: null,
+    defaultReasoningEffort: source?.defaultReasoningEffort ?? null,
     displayName,
     enabled: true,
     inputCoefficient: null,
@@ -1122,7 +1137,7 @@ function autoChatModelOption(agentCode: string, displayName: string): ChatModelO
     remoteStatus: null,
     qualityType: null,
     source: "internal-agent",
-    supportedReasoningEfforts: [],
+    supportedReasoningEfforts: source?.supportedReasoningEfforts ?? [],
     upstreamVendorName: null,
     outputCoefficient: null,
     vendor: null,
@@ -2532,7 +2547,11 @@ export function ChatManagementPage() {
       : undefined
   );
   const [runtimeRunState, setRuntimeRunState] = useState<ChatRuntimeRunState | null>(null);
-  const { mode: executionMode, saving: savingExecutionMode, changeMode: changeExecutionMode } = useChatExecutionMode(
+  // A plan-mode turn that finished is waiting for the user to confirm its plan.
+  const [planReview, setPlanReview] = useState<{ sessionCode: string } | null>(null);
+  const [planReviewApproving, setPlanReviewApproving] = useState(false);
+  const planRunRef = useRef<{ sessionId: string; planned: boolean } | null>(null);
+  const { mode: executionMode, saving: savingExecutionMode, changeMode: changeExecutionMode, applyMode: applyExecutionMode } = useChatExecutionMode(
     activeSession,
     isDraft ? requestedDraftCode : "",
     useStableCallback((updated: ChatSession) => {
@@ -2543,6 +2562,14 @@ export function ChatManagementPage() {
     }),
   );
   const currentSessionRunActive = Boolean(runtimeRunState?.active && runtimeRunState.sessionCode === activeSession?.sessionCode);
+  // The run captures its tool policy when it starts, so remember whether this
+  // turn began in plan mode before offering its plan for review.
+  const executionModeRef = useRef(executionMode);
+  executionModeRef.current = executionMode;
+  useEffect(() => {
+    setPlanReview(null);
+    planRunRef.current = null;
+  }, [activeSession?.sessionCode]);
   useChatGeneratedTitle(activeSession, useStableCallback((updated: ChatSession) => {
     window.dispatchEvent(new CustomEvent("tron:chat-session-updated", {
       detail: { session: updated },
@@ -2724,14 +2751,19 @@ export function ChatManagementPage() {
     };
   }
 
-  // `/plan` mirrors the composer command menu: it switches the plan mode of the
-  // current session (or the draft default) instead of sending a chat message.
-  const togglePlanMode = useStableCallback(() => {
-    const next = executionMode === "PLAN" ? "CONTROLLED" : "PLAN";
-    toast.info(next === "PLAN"
-      ? t("chat.management.composer.planModeEntered")
-      : t("chat.management.composer.planModeExited"));
-    void changeExecutionMode(next);
+  // `/plan` mirrors the composer command menu. A bare `/plan` toggles plan mode;
+  // `/plan <description>` switches plan mode on before the description is sent,
+  // so the run is admitted with the mode already stored on the session.
+  const runPlanCommand = useStableCallback(async (session: RuntimeChatSession, intent: "toggle" | "ensure") => {
+    const current = session.executionMode ?? executionMode;
+    const next: ToolExecutionMode = intent === "ensure" ? "PLAN" : current === "PLAN" ? "CONTROLLED" : "PLAN";
+    if (!(await applyExecutionMode(session, next))) return false;
+    if (next !== current) {
+      toast.info(next === "PLAN"
+        ? t("chat.management.composer.planModeEntered")
+        : t("chat.management.composer.planModeExited"));
+    }
+    return true;
   });
 
   const createRuntimeSendInput = useCallback(
@@ -2778,13 +2810,59 @@ export function ChatManagementPage() {
     const timer = window.setInterval(() => setGoalPollKey((key) => key + 1), 3000);
     return () => window.clearInterval(timer);
   }, [activeSession?.sessionCode, currentSessionRunActive]);
-  const handleRuntimeRunStateChange = useCallback((state: ChatRuntimeRunState) => {
+  const handleRuntimeRunStateChange = useStableCallback((state: ChatRuntimeRunState) => {
     setRuntimeRunState(state);
     if (state.sessionCode) {
       setActiveChatDataRefreshKey((current) => current + 1);
       setShortTermMemoryRefreshKey((current) => current + 1);
     }
-  }, []);
+    if (state.active) {
+      // Latch the mode on the first active event so a later mode change mid-run
+      // neither invents nor hides the review.
+      if (state.sessionCode && !planRunRef.current) {
+        planRunRef.current = { sessionId: state.sessionCode, planned: executionModeRef.current === "PLAN" };
+        setPlanReview(null);
+      }
+      return;
+    }
+    const run = planRunRef.current;
+    if (!run || !state.sessionCode || run.sessionId !== state.sessionCode) return;
+    planRunRef.current = null;
+    if (run.planned) setPlanReview({ sessionCode: state.sessionCode });
+  });
+
+  const approvePlanReview = useStableCallback(async () => {
+    const session = activeSession;
+    if (!session || !planReview || planReview.sessionCode !== session.sessionCode || planReviewApproving) return;
+    setPlanReviewApproving(true);
+    try {
+      if (!(await applyExecutionMode(session, "CONTROLLED"))) return;
+      setPlanReview(null);
+      const sent = await (submitterRef.current?.submit({ content: t("chat.management.planReview.followUp") }) ?? false);
+      if (sent) {
+        toast.success(t("chat.management.planReview.approved"));
+        return;
+      }
+      // The next run reads the persisted mode, so restore plan mode before retrying.
+      await applyExecutionMode({ sessionCode: session.sessionCode, executionMode: "CONTROLLED" }, "PLAN");
+      setPlanReview({ sessionCode: session.sessionCode });
+      toast.error(t("chat.management.planReview.approveFailed"));
+    } finally {
+      setPlanReviewApproving(false);
+    }
+  });
+
+  const keepPlanning = useStableCallback(() => {
+    setPlanReview(null);
+    composerRef.current?.focus();
+  });
+
+  const planReviewVisible = Boolean(activeSession)
+    && executionMode === "PLAN"
+    && planReview?.sessionCode === activeSession?.sessionCode
+    && !sending
+    && !savingExecutionMode
+    && activeSession?.lastRunStatus !== "AWAITING_USER_INPUT";
 
   async function uploadAttachmentForActiveSession(
     file: File,
@@ -3123,6 +3201,15 @@ export function ChatManagementPage() {
   useEffect(() => {
     setSelectedReasoningEffort(null);
   }, [composerSessionCode, selectedModel?.optionCode, selectedMainAgentModel?.optionCode]);
+
+  useEffect(() => {
+    if (
+      selectedReasoningEffort &&
+      !selectedReasoningEffortOptions.some((option) => option.value === selectedReasoningEffort)
+    ) {
+      setSelectedReasoningEffort(null);
+    }
+  }, [selectedReasoningEffort, selectedReasoningEffortOptions]);
 
   useEffect(() => {
     if (isDraft || requestedSessionCode || requestedSourceTab || activeSessionCode) return;
@@ -3485,7 +3572,7 @@ export function ChatManagementPage() {
             autoFocusComposer={shouldAutoFocusChatComposer()}
             composerRef={composerRef}
             submitterRef={submitterRef}
-            onPlanCommand={togglePlanMode}
+            onPlanCommand={runPlanCommand}
             config={{
               agentCode: effectiveAgentCode,
               disabledInput: creatingSession || savingExecutionMode || !selectedModel?.enabled,
@@ -3513,7 +3600,14 @@ export function ChatManagementPage() {
             pendingAttachments={pendingAttachments}
             showAttachmentControl={false}
             showHeader={false}
-            composerTop={<fieldset disabled={compactingSessionCode === activeSession?.sessionCode}
+            composerTop={<>
+              {planReviewVisible && <ChatPlanReviewCard
+                approving={planReviewApproving}
+                approveDisabled={!selectedModel?.enabled || creatingSession}
+                onApprove={() => { void approvePlanReview(); }}
+                onKeepPlanning={keepPlanning}
+              />}
+              <fieldset disabled={compactingSessionCode === activeSession?.sessionCode}
               className="m-0 flex min-w-0 flex-wrap items-center gap-1 border-0 px-1 pb-2 pt-0">
               {(isDraft || activeSession?.sourceType?.toUpperCase() === "MANUAL") ? <ChatWorkingDirectoryControl
               session={activeSession} workspaceCode={activeWorkspaceCode} draftProjectCode={draftProjectCode} draftDirectoryCode={draftDirectoryCode}
@@ -3524,7 +3618,8 @@ export function ChatManagementPage() {
                 <ChatAgentSelector locked={agentSelectionLocked} loading={agentsLoading}
                   agents={chatAgents} selectedAgentCode={selectedAgentCode} onSelect={handleAgentSelect} />
               </div>
-            </fieldset>}
+            </fieldset>
+            </>}
             footerAddon={transcriptFooterAddon}
             goal={activeGoal && activeGoal.goal.sessionCode === activeSession?.sessionCode && activeGoal.goal.status !== "CLEARED" ? {
               label: t("chat.shortTermMemory.goal"),

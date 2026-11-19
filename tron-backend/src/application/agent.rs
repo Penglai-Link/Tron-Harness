@@ -15,8 +15,9 @@ pub use execution_context::{
     execution_context_message, project_instructions_message, refresh_execution_context,
 };
 pub use framework_runtime::{
-    AssistantThreadCatalogItem, CapabilityPackInfo, ExtensionImplementationInfo, FrameworkHost,
-    SubagentRecord, SubagentView, ThreadFeedback, ThreadFeedbackSink, capability_pack_catalog,
+    AssistantThreadCatalogItem, CapabilityPackInfo, CapabilityQueueEnqueueError,
+    CapabilityQueueSnapshot, ExtensionImplementationInfo, FrameworkHost, SubagentRecord,
+    SubagentView, ThreadFeedback, ThreadFeedbackSink, capability_pack_catalog,
     capability_pack_catalog_with_state, extension_implementation_catalog,
     extension_implementation_catalog_with_state, install_capability_pack,
     installed_capability_packs, installed_extension_implementations,
