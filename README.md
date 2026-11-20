@@ -22,14 +22,22 @@
 ## 界面预览
 
 <p align="center">
-  <img src="docs/images/workspace.png" alt="Tron 工作台：让想法成为现实" width="880">
+  <img src="docs/images/workspace.png" alt="Tron 工作台：浅色主题" width="49%">
+  <img src="docs/images/workspace2.png" alt="Tron 工作台：Matrix 深色主题" width="49%">
 </p>
-<p align="center"><sub>工作台：从一句话开始，随聊、新建工作主题或添加工作区</sub></p>
+<p align="center"><sub>简约大方的现代UI，支持自定义主题</sub></p>
 
 <p align="center">
-  <img src="docs/images/capability-center.png" alt="Tron 能力中心：内置与外部能力包" width="880">
+  <img src="docs/images/agents.png" alt="统一管理智能体" width="49%">
+  <img src="docs/images/new-agents.png" alt="装配自定义智能体" width="49%">
 </p>
-<p align="center"><sub>能力中心：内置与外部能力包，按需启用</sub></p>
+<p align="center"><sub>统一管理和装配智能体</sub></p>
+
+<p align="center">
+  <img src="docs/images/capability-center.png" alt="能力中心" width="49%">
+  <img src="docs/images/tools.png" alt="工具领域配置" width="49%">
+</p>
+<p align="center"><sub>按需扩展</sub></p>
 
 桌面端支持 macOS Apple Silicon、Windows 和 Linux；Windows 用户既可以使用原生客户端，也可以通过 WSL2 使用。
 

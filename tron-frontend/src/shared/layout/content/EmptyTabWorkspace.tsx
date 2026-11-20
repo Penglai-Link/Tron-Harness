@@ -13,8 +13,8 @@ export function EmptyTabWorkspace() {
   const newSessionBinding = bindings.newSession;
   return (
     <section className="tron-workspace-start" aria-label={t("shell:workspaceStart.title")} data-testid="tron-empty-tab-workspace">
-      <MotionReveal className="flex w-full max-w-[36rem] flex-col items-center text-center">
-        <h1 className="text-[clamp(1.5rem,3vw,2.5rem)] font-semibold leading-tight tracking-tight">{t("shell:workspaceStart.title")}</h1>
+      <MotionReveal className="flex w-full flex-col items-center text-center">
+        <h1 className="w-fit max-w-[48rem] text-balance text-[clamp(1.5rem,3vw,2.5rem)] font-semibold leading-tight tracking-tight">{t("shell:workspaceStart.title")}</h1>
         <Button
           className="mt-8 min-h-12 min-w-40 gap-3 px-8 text-base"
           onClick={actions?.createQuickChat}
@@ -29,7 +29,7 @@ export function EmptyTabWorkspace() {
           <span>{t("shell:workspaceStart.newChat")}</span>
           <ShortcutHint action="newSession" />
         </Button>
-        <div className="mt-10 w-full space-y-3 text-left" data-testid="tron-empty-tab-shortcuts">
+        <div className="mt-10 w-full max-w-[36rem] space-y-3 text-left" data-testid="tron-empty-tab-shortcuts">
           {(["newTopic", "newDirectory"] as const).map((action) => (
             <Button
               key={action}

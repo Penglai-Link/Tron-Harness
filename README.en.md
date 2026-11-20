@@ -22,14 +22,22 @@
 ## Interface Preview
 
 <p align="center">
-  <img src="docs/images/workspace-en.png" alt="Tron workspace: turn ideas into reality" width="880">
+  <img src="docs/images/workspace-en.png" alt="Tron workspace in the light theme" width="49%">
+  <img src="docs/images/workspace2-en.png" alt="Tron workspace with the Matrix dark theme" width="49%">
 </p>
-<p align="center"><sub>Workspace: start from a single sentence—chat right away, create a work topic, or add a workspace</sub></p>
+<p align="center"><sub>Clean, modern UI with custom themes</sub></p>
 
 <p align="center">
-  <img src="docs/images/capability-center-en.png" alt="Tron Capability Center: built-in and external capability packs" width="880">
+  <img src="docs/images/agents-en.png" alt="Manage agents in one place" width="49%">
+  <img src="docs/images/new-agents-en.png" alt="Create and configure a custom agent" width="49%">
 </p>
-<p align="center"><sub>Capability Center: built-in and external capability packs, enabled on demand</sub></p>
+<p align="center"><sub>Manage and assemble agents in one place</sub></p>
+
+<p align="center">
+  <img src="docs/images/capability-center-en.png" alt="Tron Capability Center" width="49%">
+  <img src="docs/images/tools-en.png" alt="Tool domain configuration" width="49%">
+</p>
+<p align="center"><sub>Extend on demand</sub></p>
 
 The desktop app supports macOS Apple Silicon, Windows, and Linux. Windows users can run the native client or work through WSL2.
 
