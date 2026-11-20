@@ -371,6 +371,22 @@ impl TaskService {
         self.publish_task_lifecycle_event("task.restored", "Restored task", &result);
         Ok(result)
     }
+
+    pub fn delete_task(&self, task_code: &str) -> Result<(), TaskError> {
+        let task = self.get_task_record(task_code)?;
+        let has_subtasks = self.all_tasks()?.iter().any(|candidate| {
+            candidate.parent_task_code.as_deref() == Some(task.task_code.as_str())
+        });
+        if has_subtasks {
+            return Err(TaskError::SubtaskExists);
+        }
+        self.repository
+            .lock()
+            .expect("task repository mutex poisoned")
+            .delete_task(&task.task_code)?;
+        self.publish_task_deleted_event(&task);
+        Ok(())
+    }
 }
 
 fn sort_kanban_task_items(items: &mut [TaskListItem]) {

@@ -9,6 +9,12 @@
   padding-block: 1.25rem;
 }
 
+/* A tab strip directly above the section already separates the groups, so a
+   flush card must not repeat that spacing as an empty band. */
+[data-settings-content] [data-slot="surface-card"][data-settings-flush] {
+  padding-block: 0 !important;
+}
+
 [data-settings-content] :is([data-slot="surface-card"], [data-slot="card"], [data-settings-section]):not([data-settings-card]) + :is([data-slot="surface-card"], [data-slot="card"], [data-settings-section]):not([data-settings-card]) {
   border-top: 1px solid var(--color-outline-variant) !important;
 }

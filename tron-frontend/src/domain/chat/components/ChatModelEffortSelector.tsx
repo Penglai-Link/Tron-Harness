@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -463,9 +464,21 @@ function IntelligenceSlider({
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [trackWidth, setTrackWidth] = useState(0);
   const lastStep = steps.length - 1;
   const safeValue = Math.min(Math.max(value, 0), Math.max(lastStep, 0));
   const ratio = lastStep > 0 ? safeValue / lastStep : 1;
+
+  // The network is laid out in real pixels, so it needs the measured track width.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const measure = () => setTrackWidth(track.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, []);
 
   function commitAt(clientX: number) {
     const track = trackRef.current;
@@ -591,14 +604,7 @@ function IntelligenceSlider({
               boxShadow: "inset 0 1px 0 rgb(255 255 255 / 0.22)",
             }}
           >
-            <span
-              aria-hidden="true"
-              className="chat-intelligence-sparks absolute inset-0 opacity-40"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at 18% 32%, rgb(255 255 255 / 0.35) 0 0.5px, transparent 1.5px), radial-gradient(circle at 42% 72%, rgb(255 255 255 / 0.28) 0 0.5px, transparent 1.5px), radial-gradient(circle at 68% 28%, rgb(255 255 255 / 0.32) 0 0.5px, transparent 1.5px), radial-gradient(circle at 84% 66%, rgb(255 255 255 / 0.25) 0 0.5px, transparent 1.5px)",
-              }}
-            />
+            <IntelligenceNetwork width={trackWidth} />
           </span>
           <span
             aria-hidden="true"
@@ -619,5 +625,194 @@ function IntelligenceSlider({
         />
       </div>
     </div>
+  );
+}
+
+const intelligenceNetHeight = 32;
+
+/** Deterministic pseudo-random so the constellation is identical on every render. */
+function netNoise(seed: number) {
+  const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+interface IntelligenceNetNode {
+  hub: boolean;
+  index: number;
+  t: number;
+  x: number;
+  y: number;
+}
+
+interface IntelligenceNetLink {
+  delay: string;
+  d: string;
+  key: string;
+  opacity: number;
+}
+
+interface IntelligenceNetGraph {
+  chain: { d: string; length: number } | null;
+  links: IntelligenceNetLink[];
+  nodes: IntelligenceNetNode[];
+}
+
+/**
+ * Lays out a connected mesh: two bands per column, each node linked to the
+ * nearest node of the next column, and a hub short of the deep end. Everything
+ * is deterministic for a given width, so it can be cached across renders.
+ */
+function buildIntelligenceNet(width: number): IntelligenceNetGraph | null {
+  if (width < 96) return null;
+
+  const columns = Math.max(5, Math.min(9, Math.round((width - 30) / 38)));
+  const firstX = 20;
+  const step = (width - 40) / (columns - 1);
+  const grid: IntelligenceNetNode[][] = [];
+  const nodes: IntelligenceNetNode[] = [];
+
+  for (let column = 0; column < columns; column += 1) {
+    const t = column / (columns - 1);
+    const x = firstX + column * step + (netNoise(column * 7 + 2) - 0.5) * 8;
+    const bands = [{ base: 8.5, row: 0 }, { base: 23.5, row: 1 }];
+    if (t > 0.55 && netNoise(column * 4 + 9) > 0.6) bands.push({ base: 16, row: 2 });
+    grid.push(bands.map(({ base, row }) => {
+      const node: IntelligenceNetNode = {
+        hub: false,
+        index: nodes.length,
+        t,
+        x,
+        y: Math.max(4.5, Math.min(27.5, base + (netNoise(column * 13 + row * 5) - 0.5) * 7)),
+      };
+      nodes.push(node);
+      return node;
+    }));
+  }
+
+  const hub = grid[columns - 2][0];
+  hub.hub = true;
+
+  const links: IntelligenceNetLink[] = [];
+  const edges: Array<[number, number]> = [];
+  const seen = new Set<string>();
+  const addLink = (from: IntelligenceNetNode, to: IntelligenceNetNode) => {
+    const key = from.index < to.index ? `${from.index}-${to.index}` : `${to.index}-${from.index}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push([from.index, to.index]);
+    const midX = (from.x + to.x) / 2 + (netNoise(from.index * 13 + to.index) - 0.5) * 6;
+    const midY = (from.y + to.y) / 2 + (netNoise(from.index * 7 + to.index * 3) - 0.5) * 9;
+    links.push({
+      d: `M${from.x.toFixed(1)} ${from.y.toFixed(1)} Q${midX.toFixed(1)} ${midY.toFixed(1)} ${to.x.toFixed(1)} ${to.y.toFixed(1)}`,
+      delay: `${(-netNoise(from.index * 1.7 + to.index) * 6.8).toFixed(2)}s`,
+      key,
+      opacity: 0.24 + 0.32 * from.t,
+    });
+  };
+
+  for (let column = 0; column < columns - 1; column += 1) {
+    const t = column / (columns - 1);
+    const nextColumn = grid[column + 1];
+    grid[column].forEach((from) => {
+      const sorted = [...nextColumn].sort(
+        (left, right) => Math.abs(left.y - from.y) - Math.abs(right.y - from.y),
+      );
+      addLink(from, sorted[0]);
+      if (t > 0.45) addLink(from, sorted[1] ?? sorted[0]);
+    });
+    if (t > 0.6) addLink(grid[column][0], grid[column][grid[column].length - 1]);
+  }
+
+  // A shortest path through the mesh; the travelling spark rides along it.
+  const adjacency = new Map<number, number[]>();
+  nodes.forEach((node) => adjacency.set(node.index, []));
+  edges.forEach(([from, to]) => {
+    adjacency.get(from)?.push(to);
+    adjacency.get(to)?.push(from);
+  });
+
+  const startNode = grid[Math.min(2, columns - 1)][0];
+  const previous = new Map<number, number>([[startNode.index, -1]]);
+  const queue = [startNode.index];
+  while (queue.length) {
+    const current = queue.shift();
+    if (current === undefined || current === hub.index) break;
+    for (const next of adjacency.get(current) ?? []) {
+      if (previous.has(next)) continue;
+      previous.set(next, current);
+      queue.push(next);
+    }
+  }
+
+  let chain: IntelligenceNetGraph["chain"] = null;
+  if (previous.has(hub.index)) {
+    const path: IntelligenceNetNode[] = [];
+    let cursor = hub.index;
+    while (cursor !== -1) {
+      path.push(nodes[cursor]);
+      cursor = previous.get(cursor) ?? -1;
+    }
+    path.reverse();
+    if (path.length > 1) {
+      const d = path
+        .map((node, index) => `${index ? "L" : "M"}${node.x.toFixed(1)} ${node.y.toFixed(1)}`)
+        .join(" ");
+      const length = path.slice(1).reduce(
+        (sum, node, index) => sum + Math.hypot(node.x - path[index].x, node.y - path[index].y),
+        0,
+      );
+      chain = { d, length };
+    }
+  }
+
+  return { chain, links, nodes };
+}
+
+/** Decorative thought-web inside the fill; motion is pure CSS and aria-hidden. */
+function IntelligenceNetwork({ width }: { width: number }) {
+  const graph = useMemo(() => buildIntelligenceNet(width), [width]);
+  if (!graph) return null;
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="chat-intelligence-net"
+      height={intelligenceNetHeight}
+      viewBox={`0 0 ${Math.round(width)} ${intelligenceNetHeight}`}
+      width={width}
+    >
+      {graph.links.map((link) => (
+        <path
+          className="chat-intelligence-net-link"
+          d={link.d}
+          key={link.key}
+          strokeOpacity={link.opacity}
+          style={{ animationDelay: link.delay }}
+        />
+      ))}
+      {graph.nodes.map((node) => (
+        <g key={node.index}>
+          {node.hub ? (
+            <circle cx={node.x} cy={node.y} fill="rgb(255 255 255 / 0.15)" r={6} />
+          ) : null}
+          <circle
+            className="chat-intelligence-net-node"
+            cx={node.x}
+            cy={node.y}
+            fill="#fff"
+            fillOpacity={0.6 + 0.35 * node.t}
+            r={node.hub ? 2.6 : 1.1 + 1.05 * node.t}
+            style={{ animationDelay: `${(-netNoise(node.index * 2.3) * 5.4).toFixed(2)}s` }}
+          />
+        </g>
+      ))}
+      {graph.chain ? (
+        <path
+          className="chat-intelligence-net-spark"
+          d={graph.chain.d}
+          style={{ "--chat-net-length": `${graph.chain.length.toFixed(1)}px` } as CSSProperties}
+        />
+      ) : null}
+    </svg>
   );
 }

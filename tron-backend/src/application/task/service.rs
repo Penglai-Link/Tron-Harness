@@ -149,6 +149,8 @@ pub trait TaskRepository: Send {
     fn next_id(&mut self) -> Result<i64, TaskError>;
     fn create_task(&mut self, task: &Task) -> Result<(), TaskError>;
     fn update_task(&mut self, task: &Task) -> Result<(), TaskError>;
+    /// Delete the task row together with its link sets.
+    fn delete_task(&mut self, task_code: &str) -> Result<(), TaskError>;
     /// Create the task row and replace all link sets in one storage
     /// transaction. Every storage adapter must implement this atomic operation.
     fn create_task_with_links(

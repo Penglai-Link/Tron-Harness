@@ -357,6 +357,13 @@ export function restoreMockTask(taskCode: string): TaskLifecycleResult {
   return { archivedAt: task.archivedAt, previousStatus: task.previousStatus, status: task.status, taskCode };
 }
 
+export function deleteMockTask(taskCode: string): void {
+  const task = getTaskDetail(taskCode);
+  const hasSubtasks = tasks.some((candidate) => candidate.parentTaskCode === task.taskCode);
+  if (hasSubtasks) throw new Error("delete the task subtasks before deleting the parent task");
+  tasks = tasks.filter((candidate) => candidate.taskCode !== task.taskCode);
+}
+
 export function executeMockTask(taskCode: string): TaskExecutionResult {
   const task = getTaskDetail(taskCode);
   if (task.archivedAt) {

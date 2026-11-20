@@ -22,6 +22,10 @@ const BUSINESS_MIGRATIONS: &[(&str, &str)] = &[
         "0005_capability_queue",
         include_str!("../../../../../migrations/0005_capability_queue.sql"),
     ),
+    (
+        "0006_assistant_heartbeat_default",
+        include_str!("../../../../../migrations/0006_assistant_heartbeat_default.sql"),
+    ),
 ];
 
 pub(crate) fn initialize_business(connection: &Connection) -> rusqlite::Result<()> {

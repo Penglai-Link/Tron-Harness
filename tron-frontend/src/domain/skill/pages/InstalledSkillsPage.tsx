@@ -133,8 +133,8 @@ function InstalledSkillList() {
         </p>
       ) : null}
       <div>
-        <SurfaceCard className="p-0">
-          <div className="flex flex-wrap items-center justify-end gap-3 p-4">
+        <SurfaceCard data-settings-flush className="p-0">
+          <div className="flex flex-wrap items-center justify-end gap-3 px-4 pb-4">
             <SearchField
               className="w-full max-w-80"
               ariaLabel={text("search")}

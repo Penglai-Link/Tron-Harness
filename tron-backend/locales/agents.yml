@@ -258,6 +258,10 @@ tron.task.active_subtask_exists:
   en: "Archive active subtasks before archiving the parent task"
   zh-CN: "归档父任务前请先归档进行中的子任务"
 
+tron.task.subtask_exists:
+  en: "Delete the task subtasks before deleting the parent task"
+  zh-CN: "删除父任务前请先删除其子任务"
+
 tron.task.archived_invalid:
   en: "Restore archived task before modifying it"
   zh-CN: "修改已归档任务前请先恢复任务"

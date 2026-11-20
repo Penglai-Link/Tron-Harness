@@ -363,6 +363,30 @@ impl SqliteTaskRepositorySql<'_> {
         update_task_row(self.connection, task)
     }
 
+    fn delete_task(&mut self, task_code: &str) -> Result<(), TaskError> {
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+            self.connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM task_agent_links WHERE task_code = ?1",
+                [task_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM task_app_links WHERE task_code = ?1",
+                [task_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute("DELETE FROM tasks WHERE task_code = ?1", [task_code])
+            .map_err(storage_error)?;
+        transaction.commit().map_err(storage_error)
+    }
+
     fn list_user_assignments(
         &mut self,
         _task_code: &str,
@@ -783,6 +807,13 @@ impl TaskRepository for SqliteTaskRepository {
         let task = task.to_owned();
         self.connection.call(
             move |connection| SqliteTaskRepositorySql { connection }.update_task(&task),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_task(&mut self, task_code: &str) -> Result<(), TaskError> {
+        let task_code = task_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.delete_task(&task_code),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }

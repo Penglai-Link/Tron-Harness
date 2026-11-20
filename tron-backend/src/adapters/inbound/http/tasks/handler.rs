@@ -348,6 +348,19 @@ pub async fn execute_task(
     .into_response()
 }
 
+pub async fn delete_task(
+    State(tasks): State<TaskService>,
+    Path(task_code): Path<String>,
+) -> Response {
+    match tasks.delete_task(&task_code) {
+        Ok(()) => Json(ApiResponse::success(
+            serde_json::json!({ "taskCode": task_code }),
+        ))
+        .into_response(),
+        Err(error) => task_error_response(error),
+    }
+}
+
 pub async fn archive_task(
     State(tasks): State<TaskService>,
     Path(task_code): Path<String>,

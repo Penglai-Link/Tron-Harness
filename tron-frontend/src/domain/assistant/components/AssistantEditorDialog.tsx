@@ -55,7 +55,7 @@ export function AssistantEditorDialog({
     avatarId: assistant?.avatarId ?? "robot",
     candidateModelCodes: assistant?.candidateModelCodes ?? [],
     enabled: assistant?.enabled ?? true,
-    heartbeatMinutes: assistant?.heartbeatMinutes ?? 30,
+    heartbeatMinutes: assistant?.heartbeatMinutes ?? 10,
     memoryAutoApprove: assistant?.memoryAutoApprove ?? false,
     kind: assistant?.kind === "Memory" ? "Memory" : "Custom",
   }));

@@ -275,7 +275,7 @@ impl AssistantService {
             if self.get(code).is_ok() { continue; }
             self.management.initialize_assistant_definition(code,name,Some(prompt)).map_err(|_|AssistantError::Storage)?;
             let now=chrono::Utc::now().timestamp_millis();
-            self.repo()?.save(&Assistant{assistant_code:code.into(),kind,enabled:true,heartbeat_minutes:if kind==AssistantKind::Memory{360}else{5},memory_auto_approve:false,is_main:false,created_at:now,updated_at:now})?;
+            self.repo()?.save(&Assistant{assistant_code:code.into(),kind,enabled:true,heartbeat_minutes:if kind==AssistantKind::Memory{360}else{10},memory_auto_approve:false,is_main:false,created_at:now,updated_at:now})?;
         }
         if self.main().is_err() {
             self.designate_main("main-assistant")?;

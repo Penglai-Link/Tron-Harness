@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import {
+  Archive,
   Plus,
   RefreshCcw,
 } from "lucide-react";
@@ -181,11 +182,13 @@ function KanbanCard({
   selected,
   agentAvatarId,
   agentName,
+  archived,
   task,
 }: {
   task: TaskListItem;
   agentAvatarId?: string;
   agentName: string;
+  archived: boolean;
   selected: boolean;
   compact: boolean;
   dense: boolean;
@@ -210,7 +213,7 @@ function KanbanCard({
       )}
       data-theme-anchor="card"
       data-testid={`task-kanban-card-${task.taskCode}`}
-      draggable={!pending}
+      draggable={!pending && !archived}
       type="button"
       onDragEnd={onDragEnd}
       onDragStart={onDragStart}
@@ -218,7 +221,14 @@ function KanbanCard({
     >
       <div className={cn("flex min-w-0 items-center justify-between gap-[12px]", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
-        <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={priorityLabel} variant={taskPriorityTone(task.priority)}>{priorityLabel}</Badge>
+        <div className="flex shrink-0 items-center gap-1">
+          {archived ? (
+            <Badge className="whitespace-nowrap px-2 text-[11px]" variant="outline">
+              {t("pages:tasks.kanban.archivedBadge", "Archived")}
+            </Badge>
+          ) : null}
+          <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={priorityLabel} variant={taskPriorityTone(task.priority)}>{priorityLabel}</Badge>
+        </div>
       </div>
       <div className={cn("flex min-w-0 items-start gap-[12px]", dense ? "mb-1.5" : compact ? "mb-2" : "mb-3")}>
         <span
@@ -251,6 +261,7 @@ export function TasksKanbanPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [taskType, setTaskType] = useState<TaskType | "">("");
   const [priority, setPriority] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
   const [draggedTask, setDraggedTask] = useState<TaskListItem | null>(null);
   const [dragOverState, setDragOverState] = useState<{ allowed: boolean; status: TaskStatus } | null>(null);
@@ -330,12 +341,13 @@ export function TasksKanbanPage() {
   }, [searchInput]);
 
   const taskQuery = useMemo(() => ({
+    includeArchived: showArchived || undefined,
     parentTaskCode: ROOT_PARENT_TASK_FILTER,
     priority: priority || undefined,
     search: debouncedSearch,
     taskType: taskType || undefined,
     workspaceCode,
-  }), [debouncedSearch, priority, taskType, workspaceCode]);
+  }), [debouncedSearch, priority, showArchived, taskType, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
   const [optimisticColumns, setOptimisticColumns] = useState<KanbanColumn[] | null>(null);
   const internalAgentsByCode = useMemo(
@@ -432,7 +444,7 @@ export function TasksKanbanPage() {
   useEffect(() => cleanupDragPreview, [cleanupDragPreview]);
 
   const handleCardDragStart = useCallback((task: TaskListItem, event: React.DragEvent<HTMLButtonElement>) => {
-    if (pendingTaskCode) {
+    if (pendingTaskCode || task.archivedAt) {
       event.preventDefault();
       return;
     }
@@ -513,6 +525,16 @@ export function TasksKanbanPage() {
             {options.priorities.map((item) => <SelectItem key={item} value={item}>{t(`pages:tasks.priorities.${item}`, item)}</SelectItem>)}
           </SelectInput>
         </div>
+        <Button
+          aria-pressed={showArchived}
+          className="shrink-0"
+          size="lg"
+          variant={showArchived ? "secondary" : "outline"}
+          onClick={() => setShowArchived((value) => !value)}
+        >
+          <Archive size={14} aria-hidden="true" />
+          {t("pages:tasks.kanban.showArchived", "Show archived")}
+        </Button>
         <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="ml-auto w-40 shrink-0 bg-[var(--color-elevated-surface)]" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
           <SelectItem value="fit">{t("pages:tasks.taskFlows.fit", "Fit ({{percent}}%)", { percent: boardScalePercent })}</SelectItem>
           {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
@@ -589,6 +611,7 @@ export function TasksKanbanPage() {
                   <KanbanCard
                     key={task.taskCode}
                     task={task}
+                    archived={Boolean(task.archivedAt)}
                     agentAvatarId={agent?.avatarId}
                     agentName={agent?.name || task.agentCode}
                     compact={boardLayout.compact}

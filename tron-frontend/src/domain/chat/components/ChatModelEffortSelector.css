@@ -12,13 +12,44 @@
   }
 }
 
-@keyframes chat-intelligence-twinkle {
+@keyframes chat-intelligence-node {
   0%,
   100% {
-    opacity: 0.42;
+    opacity: 0.5;
   }
   50% {
-    opacity: 0.82;
+    opacity: 1;
+  }
+}
+
+@keyframes chat-intelligence-link {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* A dot riding the mesh from the shallow end to the hub: the "it clicked" beat.
+   `--chat-net-length` is the polyline length set inline by the component. */
+@keyframes chat-intelligence-spark {
+  0% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+  6% {
+    opacity: 0.95;
+  }
+  84% {
+    stroke-dashoffset: calc(var(--chat-net-length, 320px) * -1);
+    opacity: 0.95;
+  }
+  92%,
+  100% {
+    stroke-dashoffset: calc(var(--chat-net-length, 320px) * -1);
+    opacity: 0;
   }
 }
 
@@ -26,13 +57,53 @@
   animation: chat-intelligence-glow 2.8s ease-in-out infinite;
 }
 
-.chat-intelligence-sparks {
-  animation: chat-intelligence-twinkle 5.5s ease-in-out infinite;
+.chat-intelligence-net {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.chat-intelligence-net-node {
+  animation: chat-intelligence-node 5.4s ease-in-out infinite;
+}
+
+.chat-intelligence-net-link {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.8;
+  stroke-linecap: round;
+  animation: chat-intelligence-link 6.8s ease-in-out infinite;
+}
+
+.chat-intelligence-net-spark {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 1200;
+  animation: chat-intelligence-spark 4.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .chat-intelligence-glow-pulse,
-  .chat-intelligence-sparks {
+  .chat-intelligence-net-node,
+  .chat-intelligence-net-link,
+  .chat-intelligence-net-spark {
     animation: none;
   }
+}
+
+:root[data-tron-motion-policy="off"] .chat-intelligence-net-node,
+:root[data-tron-motion-policy="off"] .chat-intelligence-net-link,
+:root[data-tron-motion-policy="off"] .chat-intelligence-net-spark {
+  animation: none;
+}
+
+:root[data-tron-motion-policy="reduced"] .chat-intelligence-net-node,
+:root[data-tron-motion-policy="reduced"] .chat-intelligence-net-link,
+:root[data-tron-motion-policy="reduced"] .chat-intelligence-net-spark {
+  animation-duration: 120ms;
+  animation-iteration-count: 1;
 }

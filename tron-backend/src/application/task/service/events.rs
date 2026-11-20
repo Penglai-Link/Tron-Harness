@@ -35,6 +35,19 @@ impl TaskService {
         );
     }
 
+    pub(super) fn publish_task_deleted_event(&self, task: &Task) {
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit("task.deleted", "task_service")
+                .subject("task", task.task_code.clone())
+                .summary("Deleted task")
+                .attr(
+                    "workspaceCode",
+                    task.workspace_code.clone().unwrap_or_default(),
+                )
+                .attr("status", task.status.clone()),
+        );
+    }
+
     pub(super) fn publish_task_lifecycle_event(
         &self,
         event_name: &'static str,

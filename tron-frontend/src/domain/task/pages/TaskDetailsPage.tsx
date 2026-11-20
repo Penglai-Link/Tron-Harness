@@ -1,5 +1,6 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Maximize2, X } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Archive, Maximize2, RotateCcw, Trash2, X } from "lucide-react";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import {
   useCallback,
@@ -29,14 +30,20 @@ import { InspectorPanel } from "@/components/inspector";
 import { useToast } from "@/components/ui/toast";
 
 import {
+  archiveTask,
   createTask,
+  deleteTask,
   executeTask,
+  restoreTask,
   updateTask,
   updateTaskStatus,
 } from "@/domain/task/api";
 import {
+  archiveMockTask,
   createMockTask,
+  deleteMockTask,
   executeMockTask,
+  restoreMockTask,
   updateMockTask,
   updateMockTaskStatus,
 } from "@/domain/task/mock/data";
@@ -81,10 +88,6 @@ function ProgressBar({ value }: { value: number }) {
 
 function toggleCode(codes: string[], code: string) {
   return codes.includes(code) ? codes.filter((item) => item !== code) : [...codes, code];
-}
-
-function splitCodes(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function sameCodes(left: string[], right: string[]) {
@@ -141,7 +144,8 @@ export function TaskDetailsPage() {
   const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchModelSelectOptions>>>(() => []);
   const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
   const [executing, setExecuting] = useState(false);
-  const [agentCodesInput, setAgentCodesInput] = useState(task.agentCodes.join(", "));
+  const [lifecyclePending, setLifecyclePending] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedAppCodes, setSelectedAppCodes] = useState(task.appCodes);
   const [childTitle, setChildTitle] = useState("Follow-up subtask");
   const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
@@ -189,6 +193,10 @@ export function TaskDetailsPage() {
     })),
     [visibleAgentOptions],
   );
+  const executionAgentLabel = useMemo(() => {
+    const { agentCode, name } = configuredAgentOption;
+    return name && name !== agentCode ? `${name} (${agentCode})` : agentCode;
+  }, [configuredAgentOption]);
   const modelOptions = useMemo(
     () => automationModelOptionsForAgent(workspaceModelOptions, configuredAgentOption, pageT("values.automaticModel", "Conversation Automatic Routing")),
     [configuredAgentOption, pageT, workspaceModelOptions],
@@ -232,7 +240,6 @@ export function TaskDetailsPage() {
     setProgress(String(task.progress));
     setSelectedAgentCode(task.agentCode || mainAutomationAgentOption.agentCode);
     setSelectedModelOptionCode(optionCodeForAutomationModel(task.agentCode || mainAutomationAgentOption.agentCode, task.modelCode ?? null));
-    setAgentCodesInput(task.agentCodes.join(", "));
     setSelectedAppCodes(task.appCodes);
     setDescriptionFullscreenOpen(false);
     setExecutionResultFullscreenOpen(false);
@@ -304,7 +311,6 @@ export function TaskDetailsPage() {
   const detailEditable = editing && !archived;
   const updatesEditable = !archived;
   const progressManagedBySubtasks = task.subtasks.length > 0;
-  const nextAgentCodes = splitCodes(agentCodesInput);
   const nextAppCodes = Array.from(new Set(selectedAppCodes.map((code) => code.trim()).filter(Boolean)));
   const detailDirty = title !== task.title
     || description !== (task.description ?? "")
@@ -421,7 +427,6 @@ export function TaskDetailsPage() {
   }
 
   async function saveUpdateFields(overrides: Partial<{
-    agentCodes: string[];
     appCodes: string[];
     priority: TaskPriority;
     progress: number;
@@ -429,7 +434,6 @@ export function TaskDetailsPage() {
   }> = {}, options: { onError?: () => void } = {}) {
 
     const draft = {
-      agentCodes: nextAgentCodes,
       appCodes: nextAppCodes,
       priority,
       progress: progressValue(progress),
@@ -439,7 +443,6 @@ export function TaskDetailsPage() {
     const hasChanges = draft.priority !== task.priority
       || draft.status !== task.status
       || draft.progress !== task.progress
-      || !sameCodes(draft.agentCodes, task.agentCodes)
       || !sameCodes(draft.appCodes, task.appCodes);
 
     if (!hasChanges) return;
@@ -455,7 +458,6 @@ export function TaskDetailsPage() {
       }
 
       const payload: UpdateTaskPayload = {};
-      if (!sameCodes(draft.agentCodes, task.agentCodes)) payload.agentCodes = draft.agentCodes;
       if (appCodesChanged) payload.appCodes = draft.appCodes;
       if (draft.priority !== task.priority) payload.priority = draft.priority;
 
@@ -522,10 +524,6 @@ export function TaskDetailsPage() {
     setProgress(nextProgress);
   }
 
-  function handleAgentCodesBlur() {
-    void saveUpdateFields({ agentCodes: splitCodes(agentCodesInput) });
-  }
-
   function handleAppToggle(appCode: string) {
     const nextCodes = toggleCode(selectedAppCodes, appCode);
     setSelectedAppCodes(nextCodes);
@@ -573,6 +571,52 @@ export function TaskDetailsPage() {
     }
   }
 
+  async function handleArchive() {
+    if (lifecyclePending || archived) return;
+    setLifecyclePending(true);
+    try {
+      if (dataSource === "api") await archiveTask(task.taskCode);
+      else archiveMockTask(task.taskCode);
+      refresh();
+      toast.success(pageT("messages.archived", "Task {{code}} archived", { code: task.taskCode }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : pageT("errors.archive", "Task could not be archived"));
+    } finally {
+      setLifecyclePending(false);
+    }
+  }
+
+  async function handleRestore() {
+    if (lifecyclePending || !archived) return;
+    setLifecyclePending(true);
+    try {
+      if (dataSource === "api") await restoreTask(task.taskCode);
+      else restoreMockTask(task.taskCode);
+      refresh();
+      toast.success(pageT("messages.restored", "Task {{code}} restored", { code: task.taskCode }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : pageT("errors.restore", "Task could not be restored"));
+    } finally {
+      setLifecyclePending(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (lifecyclePending) return;
+    setLifecyclePending(true);
+    try {
+      if (dataSource === "api") await deleteTask(task.taskCode);
+      else deleteMockTask(task.taskCode);
+      setDeleteConfirmOpen(false);
+      toast.success(pageT("messages.deleted", "Task {{code}} deleted", { code: task.taskCode }));
+      navigate("/tasks");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : pageT("errors.delete", "Task could not be deleted"));
+    } finally {
+      setLifecyclePending(false);
+    }
+  }
+
   async function handleExecute() {
     if (executing || archived) return;
     setExecuting(true);
@@ -605,6 +649,21 @@ export function TaskDetailsPage() {
             ) : !archived ? (
               <Button size="lg" variant="outline" onClick={() => setEditing(true)}>{t("pages:tasks.detail.actions.edit", "Edit")}</Button>
             ) : null}
+            {archived ? (
+              <Button size="lg" variant="outline" disabled={lifecyclePending} onClick={() => void handleRestore()}>
+                <RotateCcw size={14} aria-hidden="true" />
+                {t("pages:tasks.detail.actions.restore", "Restore")}
+              </Button>
+            ) : (
+              <Button size="lg" variant="outline" disabled={lifecyclePending} onClick={() => void handleArchive()}>
+                <Archive size={14} aria-hidden="true" />
+                {t("pages:tasks.detail.actions.archive", "Archive")}
+              </Button>
+            )}
+            <Button size="lg" variant="destructive" disabled={lifecyclePending} onClick={() => setDeleteConfirmOpen(true)}>
+              <Trash2 size={14} aria-hidden="true" />
+              {t("pages:tasks.detail.actions.delete", "Delete")}
+            </Button>
           </>
         }
       />
@@ -668,22 +727,6 @@ export function TaskDetailsPage() {
                 <ReadValue>{task.progress}%</ReadValue>
               )}
             </Field>
-            <Field label={t("pages:tasks.fields.agentCodes", "Agent Codes")}>
-              {updatesEditable ? (
-                <TextInput
-                  aria-label={t("pages:tasks.detail.agentCodesAria", "Task detail agent codes")}
-                  placeholder={pageT("placeholders.agentCodes", "agent-reviewer, agent-builder")}
-                  value={agentCodesInput}
-                  onChange={(event) => setAgentCodesInput(event.target.value)}
-                  onBlur={handleAgentCodesBlur}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
-              ) : (
-                <ReadValue noneLabel={pageT("detail.none", "None")}>{task.agentCodes.join(", ")}</ReadValue>
-              )}
-            </Field>
             <Field label={pageT("fields.executionAgent", "Execution Agent")}>
               {detailEditable ? (
                 <OptionSelect
@@ -696,7 +739,7 @@ export function TaskDetailsPage() {
                   onChange={setSelectedAgentCode}
                 />
               ) : (
-                <ReadValue>{task.agentCode || "main-agent"}</ReadValue>
+                <ReadValue>{executionAgentLabel}</ReadValue>
               )}
             </Field>
             <Field label={pageT("fields.executionModel", "Execution Model")}>
@@ -840,6 +883,17 @@ export function TaskDetailsPage() {
           </DialogContent>
         </Dialog>
       ) : null}
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title={t("pages:tasks.detail.confirm.deleteTitle", "Delete task")}
+        description={t("pages:tasks.detail.confirm.deleteDescription", "Task {{code}} and its execution result will be permanently deleted. This action cannot be undone.", { code: task.taskCode })}
+        cancelText={t("pages:tasks.detail.confirm.cancel", "Cancel")}
+        confirmText={t("pages:tasks.detail.confirm.delete", "Delete")}
+        pendingText={t("pages:tasks.detail.confirm.deleting", "Deleting...")}
+        pending={lifecyclePending}
+        onCancel={() => { if (!lifecyclePending) setDeleteConfirmOpen(false); }}
+        onConfirm={() => void handleDelete()}
+      />
       {executionResultFullscreenOpen ? (
         <Dialog open={executionResultFullscreenOpen} onOpenChange={setExecutionResultFullscreenOpen}>
           <DialogContent showCloseButton={false}

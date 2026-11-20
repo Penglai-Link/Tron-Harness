@@ -5037,12 +5037,14 @@ export const pages = {
     kanban: {
       allPriorities: "All priorities",
       allTypes: "All",
+      archivedBadge: "Archived",
       errors: { status: "Task status could not be updated" },
       priority: "Priority",
       priorityFilter: "Task priority filter",
       scale: "Task board scale",
       search: "Search",
       searchPlaceholder: "Filter task code, title, or description...",
+      showArchived: "Show archived",
       subtasks: "{{count}} subtasks",
       taskType: "Task Type",
       taskTypeFilter: "Task type filter",
@@ -5063,11 +5065,25 @@ export const pages = {
       "Write the objective, deliverables, context, constraints, and variable references in a larger workspace.",
     descriptionHelp: "The description is included in the task context sent to the execution agent. Refer to configured variables by name, for example $VAR1; the description is not automatically substituted.",
     detail: {
-      actions: { edit: "Edit", execute: "Execute", executing: "Executing..." },
+      actions: {
+        archive: "Archive",
+        delete: "Delete",
+        edit: "Edit",
+        execute: "Execute",
+        executing: "Executing...",
+        restore: "Restore",
+      },
       addSubtask: "Add Subtask",
-      agentCodesAria: "Task detail agent codes",
       archivedAt: "Archived At",
       closeExecutionResultFullscreen: "Close execution result fullscreen",
+      confirm: {
+        cancel: "Cancel",
+        delete: "Delete",
+        deleteDescription:
+          "Task {{code}} and its execution result will be permanently deleted. This action cannot be undone.",
+        deleteTitle: "Delete task",
+        deleting: "Deleting...",
+      },
       create: "Create Task",
       created: "Created",
       descriptionAria: "Task detail description",
@@ -5110,8 +5126,11 @@ export const pages = {
       workspace: "Workspace",
     },
     errors: {
+      archive: "Task could not be archived",
       create: "Task could not be created",
+      delete: "Task could not be deleted",
       executionOptions: "Execution options could not be loaded",
+      restore: "Task could not be restored",
       subtask: "Subtask could not be created",
       update: "Task details could not be updated",
       updates: "Updates could not be saved",
@@ -5123,7 +5142,6 @@ export const pages = {
         "Select a workspace in the shell header to assign users.",
     },
     fields: {
-      agentCodes: "Agent Codes",
       apps: "Apps",
       assignedUsers: "Assigned Users",
       description: "Description",
@@ -5143,6 +5161,7 @@ export const pages = {
     messages: {
       archived: "Task {{code}} archived",
       created: "Task {{code}} created",
+      deleted: "Task {{code}} deleted",
       detailsSaved: "Task {{code}} details saved",
       executionStarted: "Task {{code}} execution started",
       restored: "Task {{code}} restored",
@@ -5150,7 +5169,6 @@ export const pages = {
       updatesSaved: "Task {{code}} updates saved",
     },
     placeholders: {
-      agentCodes: "agent-reviewer, agent-builder",
       assignedUsers: "Select assigned users",
       description:
         "Describe the outcome, expected deliverables, context, constraints, and variable references like $VAR1...",
