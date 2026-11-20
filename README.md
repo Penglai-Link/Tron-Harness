@@ -2,7 +2,7 @@
   <img src="electron/assets/tron.png" alt="Tron 黑洞标志" width="160">
   <h1>TRON Harness</h1>
   <p>
-    <a href="https://github.com/Penglai-Link/Tron-Harness/releases/latest"><img src="https://img.shields.io/github/v/release/Penglai-Link/Tron-Harness?style=flat-square&amp;label=Release&amp;color=2563EB" alt="Latest release"></a>
+    <a href="https://github.com/PersonAI-Official/Tron-Harness/releases/latest"><img src="https://img.shields.io/github/v/release/PersonAI-Official/Tron-Harness?style=flat-square&amp;label=Release&amp;color=2563EB" alt="Latest release"></a>
     <a href="https://personai.chat/person-ai-index/"><img src="https://img.shields.io/badge/Person--AI-Ecosystem-7C3AED?style=flat-square" alt="Person-AI Ecosystem"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="License: AGPL-3.0-only"></a>
     <a href="tron-backend"><img src="https://img.shields.io/badge/Rust-Backend-CE422B?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust Backend"></a>
@@ -14,52 +14,13 @@
     <a href="#wsl2"><img src="https://img.shields.io/badge/WSL2-Supported-FCC624?style=flat-square&amp;logo=linux&amp;logoColor=black" alt="WSL2 Supported"></a>
     <a href="#development"><img src="https://img.shields.io/badge/Contributions-AI--Friendly-16A34A?style=flat-square" alt="AI-Friendly Contributions"></a>
   </p>
-  <p><strong>Tron 是 <a href="https://personai.chat/person-ai-index/">Person-AI 团队</a>的生态产品之一。</strong></p>
-  <p><strong>在这里，打造自己的垂直领域。</strong></p>
-  <p>内置个人助手 · 垂直领域能力包 · Agent 原生应用 · Windows + WSL2</p>
-  <p>
-    <a href="#three-ways">三种用法</a> ·
-    <a href="#buddy">认识个人助手</a> ·
-    <a href="#wsl2">WSL</a> ·
-    <a href="#capability-packs">能力包</a> ·
-    <a href="#quick-start">快速开始</a> ·
-    <a href="#development">参与开发</a>
-  </p>
+  <p><strong>在这里，打造自己的垂直领域AI工作流。</strong></p>
+  <p>🎉 项目正在持续开发。我们欢迎你与智能体一起贡献源码。o7</p>
 </div>
 
-<a id="three-ways"></a>
-
-## 一套能力，三种用法
-
-**Tron Harness 是一个开源、可扩展的多智能体工作平台。** 它把 Agent 完成一类工作所需的能力——工具、技能、菜单、页面与权限——收进能力包。
-
-一个能力包，就是一个可安装、可改造、可交付的「垂直领域」。同一套能力，你可以直接使用，可以改成自己的，也可以做成独立应用自己部署。
-
-<p align="center">
-  <img src="docs/images/capability-three-ways.jpg" alt="安装领域能力包、打造并分享能力包、生成独立 Agent 应用" width="880">
-</p>
-
-三种用法不是彼此独立的：今天安装的包，可以改成自己的；改好的包，可以继续长成应用。
-
-### 安装领域能力包
-
-装上之后，它就是一套完整的工作环境：Agent 知道这类工作该怎么做，手上有对应的工具，界面里也有入口。到能力中心挑一个，安装、启用，然后从一个具体目标开始——不用先研究框架，也不用从零配置。
-
-### 打造并分享能力包
-
-现成的能力包解决共性问题，剩下的差异留给你。用自然语言描述你的流程、资料和判断标准，Agent 会生成能力包，补齐工具、技能、菜单与页面，并在使用中继续调整。打磨成熟后发布到能力中心，别人也能安装。
-
-### 生成独立 Agent 应用
-
-当一套能力要部署到 Tron 之外，它就该有自己的形态。让 Agent 把它做成一个 Agent 原生应用：应用的主入口就是 Agent，而不是传统界面上的一个聊天框；界面、工具、技能与运行逻辑打包进一个可独立部署的工程。部署到你自己的服务器、内网或电脑上。
-
-桌面端支持 macOS（Apple Silicon / Intel）、Windows 和 Linux；Windows 用户既可以使用原生客户端，也可以通过 WSL2 使用。
-
-> 延续 [Person-AI](https://personai.chat/person-ai-index/) 的愿景：Agent 不只是工具，也能成为每个人触手可及的伙伴、同事与知己。
-
-*🎉 项目正在持续开发。我们欢迎你与智能体一起贡献源码。o7*
-
 ## 界面预览
+
+> 桌面端支持 macOS（Apple Silicon / Intel）、Windows 和 Linux；Windows 用户既可以使用原生客户端，也可以通过 WSL2 使用。
 
 <p align="center">
   <img src="docs/images/workspace.png" alt="Tron 工作台：让想法成为现实" width="880">
@@ -72,6 +33,30 @@
 <p align="center"><sub>能力中心：内置与外部能力包，按需启用</sub></p>
 
 <a id="buddy"></a>
+
+<a id="three-ways"></a>
+
+## 一套能力，三种用法
+
+**Tron Harness 是一个开源、可扩展的多智能体工作平台。** 它把 Agent 完成一类工作所需的能力——工具、技能、菜单、页面与权限——收进能力包。
+
+一个能力包，就是一个可安装、可改造、可交付的「垂直领域」。同一套能力，你可以直接使用，可以再次改造并共享，甚至可以做成独立应用自己部署。
+
+<p align="center">
+  <img src="docs/images/capability-three-ways.jpg" alt="安装领域能力包、打造并分享能力包、生成独立 Agent 应用" width="880">
+</p>
+
+### 安装能力包
+
+装上之后，立刻生效：Agent 知道这类工作该怎么做，手上有对应的工具，界面里也有入口。到能力中心挑一个，安装、启用，然后从一个具体目标开始——不用先研究框架，也不用从零配置。
+
+### 打造并分享能力包
+
+现成的能力包解决共性问题，剩下的差异留给你。用自然语言描述你的流程、资料和判断标准，Agent 会生成新的能力包，补齐工具、技能、菜单与页面，并在使用中继续调整。打磨成熟后发布到能力中心，别人也能安装。
+
+### 生成独立 Agent 应用
+
+当一套能力要部署到 Tron 之外，它就该有自己的形态。复用框架的能力，让 Agent 把它做成一个 Agent 原生应用：应用的主入口就是 Agent，而不是传统界面上的一个聊天框；界面、工具、技能与运行逻辑打包进一个可独立部署的工程。部署到你自己的服务器、内网或电脑上。
 
 ## PersonAI：你的内置个人助手
 
@@ -197,7 +182,7 @@ make capability-pages-example
 准备 **Git、GNU Make、Node.js 与 npm、Rust/Cargo、sccache**。当前 CI 使用 **Node.js 24、Rust 1.95.0**；Rust 构建还需要对应平台的原生编译工具，Linux CI 额外安装 `libwayland-dev`。仓库的 Cargo 配置已启用 `sccache`，请确保它在 `PATH` 中。
 
 ```sh
-git clone https://github.com/Penglai-Link/Tron-Harness.git
+git clone https://github.com/PersonAI-Official/Tron-Harness.git
 cd Tron-Harness
 make dev-api
 ```
