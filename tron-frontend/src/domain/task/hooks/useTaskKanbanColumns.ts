@@ -23,7 +23,7 @@ export function useTaskKanbanColumns(query: TaskListQuery): TaskKanbanResult {
   const dataSource = getServiceDataSource("task");
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const mockColumns = useMemo(() => listKanbanColumns(query), [query]);
+  const mockColumns = useMemo(() => listKanbanColumns(query), [query, reloadKey]);
   const [columns, setColumns] = useState(() => (dataSource === "api" ? [] : mockColumns));
   const queryKey = JSON.stringify(query);
 

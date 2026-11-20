@@ -169,13 +169,13 @@ export function toUiEvent(event: ProtocolEvent, agentName?: string): Ui.ChatAgui
   const { result, ...rest } = event;
   const host = isRecord(event.metadata) && isRecord(event.metadata.tron) ? event.metadata.tron : null;
   const traceId = typeof host?.traceId === "string" ? host.traceId : "";
-  const diagnostic = /^[a-f0-9]{32}$/.test(traceId) && !/^0+$/.test(traceId) ? {
+  const diagnostic = /^[a-f0-9]{32}$/.test(traceId) && !/^0+$/.test(traceId) ? Ui.parseChatRunDiagnostic({
     traceId,
     href: `/settings/observability/traces?${new URLSearchParams({
       category: "Agent", traceId,
       ...(typeof host?.workspaceCode === "string" ? { workspaceCode: host.workspaceCode } : {}),
     })}`,
-  } : undefined;
+  }) : undefined;
   return { ...rest, ...(diagnostic ? { diagnostic } : {}), ...(typeof event.name === "string" ? { name: eventNames[event.name] ?? event.name } : {}),
     outcome: event.outcome?.type === "interrupt" ? {
       ...event.outcome,

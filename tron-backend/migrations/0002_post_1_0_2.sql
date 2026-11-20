@@ -1,3 +1,25 @@
+-- Unreleased changes after 1.0.2. Section markers retain compatibility with development databases.
+
+-- tron:migration:0002_rename_topics_menu
+-- Rename the built-in Topics menu to Work Topics. 0001_init.sql still seeds the
+-- original label, so this migration also covers fresh databases. User-customized
+-- labels and descriptions are preserved.
+
+UPDATE navigation_menu_translations
+SET label = CASE locale WHEN 'zh-CN' THEN '工作主题' ELSE 'Work Topics' END
+WHERE menu_id = (SELECT id FROM navigation_menus
+                 WHERE menu_code = 'CHAT_PROJECTS' AND source = 'BuiltIn')
+  AND ((locale = 'zh-CN' AND label = '主题')
+    OR (locale = 'en-US' AND label = 'Topics'));
+
+UPDATE navigation_menus
+SET description_zh_cn = CASE WHEN description_zh_cn = '查看主题及其关联的会话。'
+        THEN '查看工作主题及其关联的会话。' ELSE description_zh_cn END,
+    description_en_us = CASE WHEN description_en_us = 'Browse topics and their associated conversations.'
+        THEN 'Browse work topics and their associated conversations.' ELSE description_en_us END
+WHERE menu_code = 'CHAT_PROJECTS' AND source = 'BuiltIn';
+
+-- tron:migration:0003_rename_dude_to_assistant
 -- Rename the built-in Dude / 好兄弟 assistant domain to Assistant / PersonAI.
 -- 0001_init.sql still seeds the original identifiers, menu labels and default
 -- name, so this migration also covers databases created from scratch.
@@ -214,3 +236,78 @@ UPDATE navigation_menu_translations SET label = CASE locale
         WHEN 'zh-CN' THEN '个人助手' ELSE 'PersonAI' END
 WHERE menu_id = (SELECT id FROM navigation_menus WHERE menu_code = 'ASSISTANTS' AND source = 'BuiltIn')
   AND ((locale = 'zh-CN' AND label = '好兄弟') OR (locale = 'en-US' AND label = 'Dude'));
+
+-- tron:migration:0004_remove_prd_agent
+-- Remove the built-in prd-agent (杨布斯) platform agent. It no longer ships
+-- with the product, so rows persisted by earlier versions are cleared with the
+-- same statement set as the platform agent delete flow. Historical chat records
+-- keep their agent_code and behave like sessions of any deleted agent.
+
+DELETE FROM platform_internal_agent_configs WHERE agent_code = 'prd-agent';
+DELETE FROM agent_skill_assignments WHERE agent_code = 'prd-agent';
+DELETE FROM workspace_internal_agent_mcp_server_assignments WHERE agent_code = 'prd-agent';
+DELETE FROM workspace_internal_agent_tool_assignments WHERE agent_code = 'prd-agent';
+DELETE FROM workspace_internal_agent_policies WHERE agent_code = 'prd-agent';
+DELETE FROM workspace_internal_agent_definitions WHERE agent_code = 'prd-agent';
+DELETE FROM agent_workspace_grants WHERE agent_code = 'prd-agent';
+DELETE FROM agent_workspace_grant_policies WHERE agent_code = 'prd-agent';
+DELETE FROM knowledge_base_grants WHERE agent_code = 'prd-agent';
+
+-- tron:migration:0005_capability_queue
+-- Durable queue for capability operations that must wait until every internal
+-- Agent is idle. The queue and its bounded result log belong to the business
+-- database so ordering, de-duplication and retention are transactional.
+--
+-- `operation` is one of `enable`, `disable` or `uninstall`; `force` is only
+-- meaningful for uninstall and records an explicit user confirmation.
+
+CREATE TABLE capability_queue_items (
+    sequence   INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id    TEXT NOT NULL UNIQUE,
+    pack_id    TEXT NOT NULL,
+    pack_name  TEXT NOT NULL,
+    operation  TEXT NOT NULL,
+    force      INTEGER NOT NULL DEFAULT 0,
+    locale     TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+-- One pending operation per package and kind. Enable and disable may both wait
+-- so a later explicit request still wins in submission order.
+CREATE UNIQUE INDEX capability_queue_items_pending_target
+    ON capability_queue_items(pack_id, operation);
+
+CREATE TABLE capability_operation_log (
+    sequence    INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id     TEXT NOT NULL UNIQUE,
+    pack_id     TEXT NOT NULL,
+    pack_name   TEXT NOT NULL,
+    operation   TEXT NOT NULL,
+    force       INTEGER NOT NULL DEFAULT 0,
+    succeeded   INTEGER NOT NULL,
+    error       TEXT,
+    error_code  TEXT,
+    finished_at INTEGER NOT NULL
+);
+
+CREATE INDEX capability_operation_log_finished
+    ON capability_operation_log(sequence DESC);
+
+-- tron:migration:0006_assistant_heartbeat_default
+-- Raise the old 5-minute PersonAI heartbeat default to 10 minutes. Only rows
+-- still on the previous default are touched, so explicitly chosen intervals
+-- survive. record_json is the read model, so keep it in sync with the indexed
+-- column, and restart the schedule from now using the new interval.
+
+UPDATE assistants
+SET heartbeat_minutes = 10,
+    record_json = json_set(record_json, '$.heartbeatMinutes', 10),
+    next_heartbeat_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000 + 600000
+WHERE heartbeat_minutes = 5;
+
+-- tron:migration:0007_rename_quick_chats_menu
+UPDATE navigation_menu_translations
+SET label = 'Chats'
+WHERE menu_id = (SELECT id FROM navigation_menus
+                 WHERE menu_code = 'CHAT_RECENTS' AND source = 'BuiltIn')
+  AND locale = 'en-US' AND label = 'Quick Chats';

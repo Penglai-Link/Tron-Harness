@@ -182,7 +182,7 @@ export function CreateTaskPage() {
     try {
       const created = dataSource === "api" ? await createTask(payload) : createMockTask(payload);
       toast.success(pageT("messages.created", "Task {{code}} created", { code: created.taskCode }));
-      navigate(`/tasks/detail?taskCode=${encodeURIComponent(created.taskCode)}`);
+      navigate("/tasks");
     } catch (error) {
       const message = error instanceof Error ? error.message : pageT("errors.create", "Task could not be created");
       toast.error(message);

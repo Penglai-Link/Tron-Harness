@@ -230,6 +230,8 @@ export interface ChatRunNoticeLabels {
   compactionDetailsUnavailable?: string;
   presentationIncomplete?: string;
   presentationIncompleteDetail?: string;
+  traceId?: (traceId: string) => string;
+  viewTrace?: string;
   compactionRequested: string;
   compactionStarted: string;
   compactionCompleted: string;

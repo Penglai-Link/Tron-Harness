@@ -14,6 +14,14 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { SelectInput } from "@/components/forms";
 import { SearchField } from "@/components/search-field";
 import {
@@ -37,8 +45,22 @@ import {
   taskFlowErrorMessage,
   taskFlowStatusDisplayName,
 } from "@/domain/task/model";
-import { fetchWorkspaceTaskFlow, updateTaskStatus } from "@/domain/task/api";
-import { getMockWorkspaceTaskFlow, updateMockTaskStatus } from "@/domain/task/mock/data";
+import {
+  archiveTask,
+  deleteTask,
+  executeTask,
+  fetchWorkspaceTaskFlow,
+  restoreTask,
+  updateTaskStatus,
+} from "@/domain/task/api";
+import {
+  archiveMockTask,
+  deleteMockTask,
+  executeMockTask,
+  getMockWorkspaceTaskFlow,
+  restoreMockTask,
+  updateMockTaskStatus,
+} from "@/domain/task/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { cn } from "@/shared/lib/utils";
 import { SelectItem } from "@/components/ui/select";
@@ -49,12 +71,12 @@ import { listWorkspaceInternalAgentsMock } from "@/domain/agent/mock";
 import type { WorkspaceInternalAgentRecord } from "@/domain/agent/model";
 
 type BoardScalePreset = "fit" | "100" | "90" | "80" | "70" | "60" | "50";
+type ArchivedFilter = "all" | "archived" | "active";
 
 const BOARD_SCALE_STORAGE_KEY = "tron.tasks.boardScale";
 const BOARD_BASE_COLUMN_WIDTH = 320;
 const BOARD_BASE_GAP = 16;
 const BOARD_BASE_COLUMN_PADDING = 12;
-const BOARD_MIN_SCALE = 0.5;
 const ROOT_PARENT_TASK_FILTER = "__ROOT__";
 const BOARD_SCALE_PRESETS: Array<{ label: string; value: Exclude<BoardScalePreset, "fit"> }> = [
   { label: "100%", value: "100" },
@@ -73,10 +95,6 @@ function resolveStoredBoardScale(value: string | null): BoardScalePreset {
 function presetScaleFactor(preset: BoardScalePreset) {
   if (preset === "fit") return null;
   return Number(preset) / 100;
-}
-
-function clampBoardScale(value: number) {
-  return Math.min(1, Math.max(BOARD_MIN_SCALE, value));
 }
 
 function ProgressBar({ className, value }: { className?: string; value: number }) {
@@ -175,8 +193,12 @@ function KanbanCard({
   compact,
   dense,
   dragging,
+  onArchive,
+  onDelete,
   onDragEnd,
   onDragStart,
+  onExecute,
+  onRestore,
   onSelect,
   pending,
   selected,
@@ -194,14 +216,20 @@ function KanbanCard({
   dense: boolean;
   dragging: boolean;
   pending: boolean;
+  onArchive: () => void;
+  onDelete: () => void;
   onDragEnd: () => void;
   onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void;
+  onExecute: () => void;
+  onRestore: () => void;
   onSelect: () => void;
 }) {
   const { t } = useTranslation(["pages"]);
   const priorityLabel = t(`pages:tasks.priorities.${task.priority}`, task.priority);
   const taskTypeLabel = t(`pages:tasks.types.${task.taskType}`, task.taskType);
   return (
+    <ContextMenu>
+      <ContextMenuTrigger className="block w-full text-left">
     <button
       aria-busy={pending}
       className={cn(
@@ -210,8 +238,12 @@ function KanbanCard({
         selected ? "border-[var(--color-primary)] shadow-[0_2px_6px_rgba(15,23,42,0.05)]" : "border-[var(--color-outline-variant)]",
         dragging ? "translate-y-0 border-dashed border-[var(--color-primary)]/35 bg-[var(--color-primary)]/5 shadow-none hover:translate-y-0 hover:shadow-none" : "",
         pending ? "cursor-wait opacity-70" : "cursor-grab active:cursor-grabbing",
+        archived
+          ? "cursor-pointer overflow-hidden border-dashed border-[var(--color-outline)] bg-[var(--color-surface-container)] shadow-none hover:border-[var(--color-outline)] hover:shadow-none"
+          : "",
       )}
       data-theme-anchor="card"
+      data-archived={archived || undefined}
       data-testid={`task-kanban-card-${task.taskCode}`}
       draggable={!pending && !archived}
       type="button"
@@ -219,13 +251,23 @@ function KanbanCard({
       onDragStart={onDragStart}
       onClick={onSelect}
     >
+      {archived ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[inherit] bg-[var(--color-surface-container)]/35"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(135deg, var(--color-outline-variant) 0 1px, transparent 1px 10px)",
+          }}
+        >
+          <Archive className="size-7 text-[var(--color-on-surface-variant)] opacity-20" />
+        </span>
+      ) : null}
       <div className={cn("flex min-w-0 items-center justify-between gap-[12px]", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
         <div className="flex shrink-0 items-center gap-1">
           {archived ? (
-            <Badge className="whitespace-nowrap px-2 text-[11px]" variant="outline">
-              {t("pages:tasks.kanban.archivedBadge", "Archived")}
-            </Badge>
+            <span className="sr-only">{t("pages:tasks.kanban.archivedBadge", "Archived")}</span>
           ) : null}
           <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={priorityLabel} variant={taskPriorityTone(task.priority)}>{priorityLabel}</Badge>
         </div>
@@ -248,6 +290,27 @@ function KanbanCard({
         />
       </div>
     </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem disabled={pending || archived} onClick={onExecute}>
+          {t("pages:tasks.detail.actions.execute", "Execute")}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={pending || archived} onClick={onArchive}>
+          {t("pages:tasks.detail.actions.archive", "Archive")}
+        </ContextMenuItem>
+        <ContextMenuItem disabled={pending || !archived} onClick={onRestore}>
+          {t("pages:tasks.detail.actions.restore", "Restore")}
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="text-[var(--color-error)]"
+          disabled={pending}
+          onClick={onDelete}
+        >
+          {t("pages:tasks.detail.actions.delete", "Delete")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -261,11 +324,13 @@ export function TasksKanbanPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [taskType, setTaskType] = useState<TaskType | "">("");
   const [priority, setPriority] = useState("");
-  const [showArchived, setShowArchived] = useState(false);
+  const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>("active");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
   const [draggedTask, setDraggedTask] = useState<TaskListItem | null>(null);
   const [dragOverState, setDragOverState] = useState<{ allowed: boolean; status: TaskStatus } | null>(null);
   const [pendingTaskCode, setPendingTaskCode] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TaskListItem | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
   const [boardScalePreset, setBoardScalePreset] = useState<BoardScalePreset>(() => {
     if (typeof window === "undefined") return "fit";
     return resolveStoredBoardScale(window.localStorage.getItem(BOARD_SCALE_STORAGE_KEY));
@@ -341,13 +406,13 @@ export function TasksKanbanPage() {
   }, [searchInput]);
 
   const taskQuery = useMemo(() => ({
-    includeArchived: showArchived || undefined,
+    includeArchived: archivedFilter === "active" ? undefined : true,
     parentTaskCode: ROOT_PARENT_TASK_FILTER,
     priority: priority || undefined,
     search: debouncedSearch,
     taskType: taskType || undefined,
     workspaceCode,
-  }), [debouncedSearch, priority, showArchived, taskType, workspaceCode]);
+  }), [archivedFilter, debouncedSearch, priority, taskType, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
   const [optimisticColumns, setOptimisticColumns] = useState<KanbanColumn[] | null>(null);
   const internalAgentsByCode = useMemo(
@@ -368,13 +433,18 @@ export function TasksKanbanPage() {
         flowT,
         workspaceFlowCode,
       ),
-      tasks: column.tasks.filter((task) => !task.parentTaskCode),
+      tasks: column.tasks.filter((task) => {
+        if (task.parentTaskCode) return false;
+        if (archivedFilter === "archived") return Boolean(task.archivedAt);
+        if (archivedFilter === "active") return !task.archivedAt;
+        return true;
+      }),
     }))
-  ), [displayedColumns, flowT, workspaceFlowCode]);
+  ), [archivedFilter, displayedColumns, flowT, workspaceFlowCode]);
 
   useEffect(() => {
     setSelectedTaskCode(null);
-  }, [taskType, workspaceCode]);
+  }, [archivedFilter, taskType, workspaceCode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -403,8 +473,7 @@ export function TasksKanbanPage() {
   const fitBoardScale = useMemo(() => {
     if (!columns.length || boardViewportWidth <= 0) return 1;
     const naturalBoardWidth = columns.length * BOARD_BASE_COLUMN_WIDTH + Math.max(0, columns.length - 1) * BOARD_BASE_GAP;
-    // Keep automatic fitting readable; explicit zoom presets remain available.
-    return Math.max(0.8, clampBoardScale(boardViewportWidth / naturalBoardWidth));
+    return Math.min(1, boardViewportWidth / naturalBoardWidth);
   }, [boardViewportWidth, columns.length]);
 
   const boardScale = presetScaleFactor(boardScalePreset) ?? fitBoardScale;
@@ -412,9 +481,9 @@ export function TasksKanbanPage() {
   const boardLayout = useMemo(() => ({
     compact: boardScale < 0.86,
     dense: boardScale < 0.68,
-    columnGap: Math.max(8, Math.round(BOARD_BASE_GAP * boardScale)),
-    columnPadding: Math.max(6, Math.round(BOARD_BASE_COLUMN_PADDING * boardScale)),
-    columnWidth: Math.max(160, Math.round(BOARD_BASE_COLUMN_WIDTH * boardScale)),
+    columnGap: BOARD_BASE_GAP * boardScale,
+    columnPadding: BOARD_BASE_COLUMN_PADDING * boardScale,
+    columnWidth: BOARD_BASE_COLUMN_WIDTH * boardScale,
   }), [boardScale]);
 
   const parseDraggedTask = useCallback((event: React.DragEvent<HTMLElement>) => {
@@ -458,6 +527,80 @@ export function TasksKanbanPage() {
     dragPreviewRef.current = dragPreview.preview;
     event.dataTransfer.setDragImage(dragPreview.preview, dragPreview.previewOffsetX, dragPreview.previewOffsetY);
   }, [clearDragState, pendingTaskCode]);
+
+  const runTaskLifecycle = useCallback(async (
+    task: TaskListItem,
+    action: () => Promise<unknown>,
+    successMessage: string,
+    errorMessage: string,
+  ) => {
+    if (pendingTaskCode) return;
+    setPendingTaskCode(task.taskCode);
+    try {
+      await action();
+      refresh();
+      toast.success(successMessage);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : errorMessage);
+    } finally {
+      setPendingTaskCode(null);
+    }
+  }, [pendingTaskCode, refresh, toast]);
+
+  const handleArchiveTask = useCallback((task: TaskListItem) => {
+    void runTaskLifecycle(
+      task,
+      () => dataSource === "api" ? archiveTask(task.taskCode) : Promise.resolve(archiveMockTask(task.taskCode)),
+      t("pages:tasks.messages.archived", "Task {{code}} archived", { code: task.taskCode }),
+      t("pages:tasks.errors.archive", "Task could not be archived"),
+    );
+  }, [dataSource, runTaskLifecycle, t]);
+
+  const handleRestoreTask = useCallback((task: TaskListItem) => {
+    void runTaskLifecycle(
+      task,
+      () => dataSource === "api" ? restoreTask(task.taskCode) : Promise.resolve(restoreMockTask(task.taskCode)),
+      t("pages:tasks.messages.restored", "Task {{code}} restored", { code: task.taskCode }),
+      t("pages:tasks.errors.restore", "Task could not be restored"),
+    );
+  }, [dataSource, runTaskLifecycle, t]);
+
+  const handleExecuteTask = useCallback(async (task: TaskListItem) => {
+    if (pendingTaskCode || task.archivedAt) return;
+    setPendingTaskCode(task.taskCode);
+    try {
+      const result = dataSource === "api"
+        ? await executeTask(task.taskCode)
+        : executeMockTask(task.taskCode);
+      refresh();
+      toast.success(
+        t("pages:tasks.messages.executionStarted", "Task {{code}} execution started", { code: result.taskCode }),
+        { title: result.runCode },
+      );
+      navigate(`/chats?sessionCode=${encodeURIComponent(result.sessionCode)}&sourceTab=chat`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("pages:tasks.detail.errors.execution", "Task execution failed"));
+    } finally {
+      setPendingTaskCode(null);
+    }
+  }, [dataSource, navigate, pendingTaskCode, refresh, t, toast]);
+
+  const handleDeleteTask = useCallback(async () => {
+    const target = deleteTarget;
+    if (!target || deletePending) return;
+    setDeletePending(true);
+    try {
+      if (dataSource === "api") await deleteTask(target.taskCode);
+      else deleteMockTask(target.taskCode);
+      setDeleteTarget(null);
+      refresh();
+      toast.success(t("pages:tasks.messages.deleted", "Task {{code}} deleted", { code: target.taskCode }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("pages:tasks.errors.delete", "Task could not be deleted"));
+    } finally {
+      setDeletePending(false);
+    }
+  }, [dataSource, deletePending, deleteTarget, refresh, t, toast]);
 
   const handleColumnDragOver = useCallback((status: TaskStatus, event: React.DragEvent<HTMLElement>) => {
     const task = parseDraggedTask(event);
@@ -525,16 +668,13 @@ export function TasksKanbanPage() {
             {options.priorities.map((item) => <SelectItem key={item} value={item}>{t(`pages:tasks.priorities.${item}`, item)}</SelectItem>)}
           </SelectInput>
         </div>
-        <Button
-          aria-pressed={showArchived}
-          className="shrink-0"
-          size="lg"
-          variant={showArchived ? "secondary" : "outline"}
-          onClick={() => setShowArchived((value) => !value)}
-        >
-          <Archive size={14} aria-hidden="true" />
-          {t("pages:tasks.kanban.showArchived", "Show archived")}
-        </Button>
+        <div className="w-40 shrink-0">
+          <SelectInput aria-label={t("pages:tasks.kanban.archivedFilter", "Task archive filter")} value={archivedFilter} onValueChange={(event) => setArchivedFilter(event as ArchivedFilter)}>
+            <SelectItem value="all">{t("pages:tasks.kanban.archivedFilterAll", "All")}</SelectItem>
+            <SelectItem value="archived">{t("pages:tasks.kanban.archivedFilterArchived", "Archived")}</SelectItem>
+            <SelectItem value="active">{t("pages:tasks.kanban.archivedFilterActive", "Not archived")}</SelectItem>
+          </SelectInput>
+        </div>
         <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="ml-auto w-40 shrink-0 bg-[var(--color-elevated-surface)]" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
           <SelectItem value="fit">{t("pages:tasks.taskFlows.fit", "Fit ({{percent}}%)", { percent: boardScalePercent })}</SelectItem>
           {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
@@ -547,7 +687,7 @@ export function TasksKanbanPage() {
           <section
             aria-label={t("pages:tasks.taskFlows.aria.taskColumn", "{{name}} task column", { name: column.title })}
             className={cn(
-              "flex shrink-0 grow flex-col rounded-2xl bg-[var(--color-surface-container)] transition-[background-color,box-shadow,border-color] duration-150",
+              "flex min-w-0 shrink-0 grow flex-col overflow-hidden rounded-2xl bg-[var(--color-surface-container)] transition-[background-color,box-shadow,border-color] duration-150",
               dragOverState?.status === column.status
                 ? dragOverState.allowed
                   ? "bg-[var(--color-primary)]/6 ring-1 ring-inset ring-[var(--color-primary)]/20"
@@ -572,7 +712,7 @@ export function TasksKanbanPage() {
             }}
           >
             <div className="flex items-center justify-between border-b-2 border-[var(--color-outline-variant)] px-1 py-1">
-              <h2 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</h2>
+              <h2 className="min-w-0 truncate text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]" title={column.title}>{column.title}</h2>
               <span
                 className={cn(
                   "rounded-full px-2.5 py-0.5 text-[11px] transition-colors",
@@ -612,6 +752,10 @@ export function TasksKanbanPage() {
                     key={task.taskCode}
                     task={task}
                     archived={Boolean(task.archivedAt)}
+                    onArchive={() => handleArchiveTask(task)}
+                    onDelete={() => setDeleteTarget(task)}
+                    onExecute={() => void handleExecuteTask(task)}
+                    onRestore={() => handleRestoreTask(task)}
                     agentAvatarId={agent?.avatarId}
                     agentName={agent?.name || task.agentCode}
                     compact={boardLayout.compact}
@@ -634,6 +778,17 @@ export function TasksKanbanPage() {
           </section>
         ))}
       </div>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title={t("pages:tasks.detail.confirm.deleteTitle", "Delete task")}
+        description={t("pages:tasks.detail.confirm.deleteDescription", "Task {{code}} and its execution result will be permanently deleted. This action cannot be undone.", { code: deleteTarget?.taskCode ?? "" })}
+        cancelText={t("pages:tasks.detail.confirm.cancel", "Cancel")}
+        confirmText={t("pages:tasks.detail.confirm.delete", "Delete")}
+        pendingText={t("pages:tasks.detail.confirm.deleting", "Deleting...")}
+        pending={deletePending}
+        onCancel={() => { if (!deletePending) setDeleteTarget(null); }}
+        onConfirm={() => void handleDeleteTask()}
+      />
     </div>
   );
 }

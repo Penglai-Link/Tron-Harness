@@ -114,6 +114,8 @@ export function useChatWorkRailLabels() {
         resolveName: resolveToolName,
       },
       notices: {
+        traceId: (traceId) => t("chat.workRail.traceId", { traceId }),
+        viewTrace: t("chat.workRail.viewTrace"),
         compactionBlock: (block) => t(block.kind === "summary" ? "chat.workRail.compactionSummary" : "chat.workRail.compactionBlock", {
           name: contextBlockName(block.id, (key, options) => t(key, options)),
           before: number.format(block.beforeTokens), after: number.format(block.afterTokens),

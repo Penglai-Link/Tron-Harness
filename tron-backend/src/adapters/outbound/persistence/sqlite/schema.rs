@@ -5,28 +5,8 @@ use super::framework_storage::business_transaction;
 
 const INITIAL_SCHEMA: &str = include_str!("../../../../../migrations/0001_init.sql");
 const PROFILE_SECTION: &str = "-- tron:profiles\n";
-const BUSINESS_MIGRATIONS: &[(&str, &str)] = &[
-    (
-        "0002_rename_topics_menu",
-        include_str!("../../../../../migrations/0002_rename_topics_menu.sql"),
-    ),
-    (
-        "0003_rename_dude_to_assistant",
-        include_str!("../../../../../migrations/0003_rename_dude_to_assistant.sql"),
-    ),
-    (
-        "0004_remove_prd_agent",
-        include_str!("../../../../../migrations/0004_remove_prd_agent.sql"),
-    ),
-    (
-        "0005_capability_queue",
-        include_str!("../../../../../migrations/0005_capability_queue.sql"),
-    ),
-    (
-        "0006_assistant_heartbeat_default",
-        include_str!("../../../../../migrations/0006_assistant_heartbeat_default.sql"),
-    ),
-];
+const BUSINESS_MIGRATIONS: &str = include_str!("../../../../../migrations/0002_post_1_0_2.sql");
+const MIGRATION_SECTION: &str = "-- tron:migration:";
 
 pub(crate) fn initialize_business(connection: &Connection) -> rusqlite::Result<()> {
     let (business, _) = INITIAL_SCHEMA
@@ -117,7 +97,9 @@ fn refresh_builtin_run_count_defaults(connection: &Connection) -> rusqlite::Resu
 // Apply each business migration once. The marker holds the migration file stem
 // so a migration never runs twice, including on databases created from 0001.
 fn apply_business_migrations(connection: &Connection) -> rusqlite::Result<()> {
-    for (name, sql) in BUSINESS_MIGRATIONS {
+    for section in BUSINESS_MIGRATIONS.split(MIGRATION_SECTION).skip(1) {
+        let (name, sql) = section.split_once('\n').expect("migration section name");
+        let name = name.trim();
         let applied: bool = connection.query_row(
             "SELECT EXISTS(SELECT 1 FROM tron_schema_initialized WHERE scope = ?1)",
             [name],
