@@ -568,9 +568,9 @@ impl FrameworkHost {
                 .map_err(|error| error.to_string())?,
             )
             .plugin(self.storage().await.map_err(|e| e.to_string())?.plugin())
-            // Stable two-tool gateway: every other provider's bindings become
-            // wrapped inventory so `request.tools` stays the same pair for the
-            // whole run and provider prompt caches survive tool growth.
+            // Stable gateway: every other provider's bindings become wrapped
+            // inventory so `request.tools` stays the three base entries plus
+            // the run's native whitelist and provider prompt caches survive.
             .plugin(eliteforge_agent_official_plugin_tools_discovery::ToolDiscoveryPlugin::new())
             .plugin(fw::AgentLoopPlugin::named(
                 "framework.react",

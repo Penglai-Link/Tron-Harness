@@ -42,9 +42,9 @@ eliteforge-agent-official-plugin-tools-agents = { git = "https://gitee.com/perso
 tron-harness-capability = { path = "crates/tron-harness-capability" }
 tron-i18n = { path = "crates/i18n" }
 tron-remote-pack = { path = "crates/tron-remote-pack" }
-eliteforge-agent-remote-protocol = { path = "../../eliteforge-agent-framework/crates/remote/eliteforge-agent-remote-protocol" }
-eliteforge-agent-remote-rpc = { path = "../../eliteforge-agent-framework/crates/remote/eliteforge-agent-remote-rpc" }
-eliteforge-agent-remote-server = { path = "../../eliteforge-agent-framework/crates/remote/eliteforge-agent-remote-server" }
+eliteforge-agent-remote-protocol = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-remote-rpc = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
+eliteforge-agent-remote-server = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
 eliteforge-agent-capability-remote-access = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
 eliteforge-agent-capability-development = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }
 eliteforge-agent-core = { git = "https://gitee.com/person-ai/eliteforge-agent-framework.git", tag = "1.0.0" }

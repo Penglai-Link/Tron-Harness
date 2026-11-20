@@ -206,9 +206,11 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
 }
 
 pub(super) fn official_schema(name: &str) -> serde_json::Value {
-    eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
+    let tool = eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
         .into_iter()
         .find(|tool| tool.call_name == name)
-        .expect("official local tool catalog entry")
-        .input_schema
+        .expect("official local tool catalog entry");
+    // Catalog records are model-facing; use the narrower projection when the
+    // tool keeps legacy fields only for executor-side rejection.
+    tool.model_input_schema.unwrap_or(tool.input_schema)
 }

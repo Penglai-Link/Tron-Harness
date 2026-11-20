@@ -576,7 +576,7 @@ impl AgentRunContextBuilder {
                 .push(Some(managed_system_prompt_source("chat.ask-user", &locale)));
         }
         if gateway_enabled {
-            // The gateway hides every wrapped tool behind `tool_search`, so the
+            // The gateway hides every wrapped tool behind discovery, so the
             // run instructions must carry the authorized domain inventory:
             // otherwise the model cannot see the scope of its own abilities.
             // Deriving it from the run's authorized tools (not the whole

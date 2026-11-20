@@ -57,6 +57,24 @@ fn failed(error: impl ToString) -> fw::ToolError {
     fw::ToolError::Failed(error.to_string())
 }
 
+/// Command tools exposed directly beside the gateway for every native run.
+/// The Framework allowlist only selects already admitted bindings; it never
+/// registers an executor or grants permission, so authorization and approval
+/// still decide whether each ID is actually present.
+pub(crate) const NATIVE_COMMAND_TOOLS: [(&str, &str); 3] = [
+    ("system.command.exec", "command_exec"),
+    ("system.command.task.read", "command_exec_read"),
+    ("system.command.task.stop", "command_exec_stop"),
+];
+
+pub(crate) fn native_tool_whitelist() -> fw::NativeToolWhitelist {
+    let mut whitelist = fw::NativeToolWhitelist::new();
+    for (id, _) in NATIVE_COMMAND_TOOLS {
+        whitelist.insert(id);
+    }
+    whitelist
+}
+
 /// Attach the catalog domain to a binding so the gateway's `domainCode` search
 /// can list it. Blank labels stay unlabeled, exactly like bindings the host
 /// never classified; the binding's executor and exposure are preserved.
@@ -129,7 +147,7 @@ impl local::LocalToolScopeProvider for LocalScope {
             return Ok(local::LocalToolGrant {
                 terminal_owner: None,
                 filesystem: local::FileSystemToolsConfig::new("."),
-                commands: local::SystemCommandConfig::restricted(std::iter::empty::<String>()),
+                commands: local::SystemCommandConfig::new(),
                 tool_ids: BTreeSet::new(),
                 call_names: BTreeMap::new(),
                 exposed_tool_ids: None,

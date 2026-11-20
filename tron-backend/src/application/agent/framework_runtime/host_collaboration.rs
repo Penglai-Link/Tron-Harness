@@ -661,6 +661,11 @@ impl Runtime {
         request
             .extensions
             .insert(super::super::tools::tool_group_labels(context));
+        // Child runs expose the same admitted command trio; their own
+        // authorization scope still decides which bindings exist.
+        request
+            .extensions
+            .insert(super::super::tools::native_tool_whitelist());
         host.attach_memory_backend(context, &mut request.extensions);
         request.extensions.insert(HostExecution {
             harness: harness.clone(),

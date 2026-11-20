@@ -1777,8 +1777,8 @@ agent.toolCatalog.tools.bash.exec.name:
   zh-CN: "执行命令"
 
 agent.toolCatalog.tools.bash.exec.description:
-  en: "Run an executable with literal arguments. If it is still running after 10 seconds, return its taskId and captured output. Use command_exec_read to check status and read more output, or command_exec_stop to stop it. The Agent configuration can restrict executable names. This is not a sandbox. For elevated commands set sudo=true and supply the underlying command without sudo; the host requests passwords privately. Never request a sudo password through ask_user or include one in tool arguments."
-  zh-CN: "在当前执行目录运行命令；持续运行时返回任务编号，可继续读取输出或发送输入。"
+  en: "Run a complete command string in the current authorized working directory. The host shell interprets chaining, pipes, redirections, quoting and paths with spaces; pass the entire command in command. If it is still running after 10 seconds, return its taskId and captured output. A nonzero exit code is a command result, not a tool failure. Use command_exec_read to check status and read more output, or command_exec_stop to stop it. This is not a sandbox. For elevated commands set sudo=true and supply the underlying command without sudo; the host requests passwords privately. Never request a sudo password through ask_user or include one in tool arguments. The args field is no longer accepted."
+  zh-CN: "在当前授权执行目录运行完整命令字符串；命令串联、管道、重定向、引号和含空格路径由宿主命令解释器处理，请把完整命令放在 command 中。10 秒内未结束时返回 taskId 和已捕获输出；非零退出码属于命令结果，不是工具调用失败。这不是沙箱。需要提权时设置 sudo=true 并提供不含 sudo 的实际命令，密码由宿主私密输入，不要通过 ask_user 或工具参数传递。不再接受 args。"
 
 agent.toolCatalog.tools.bash.task_read.name:
   en: "System Command Task Read"

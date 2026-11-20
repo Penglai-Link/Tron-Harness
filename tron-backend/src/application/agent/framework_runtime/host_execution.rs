@@ -434,6 +434,12 @@ impl FrameworkHost {
         request
             .extensions
             .insert(super::super::tools::tool_group_labels(&context));
+        // Expose the admitted command trio directly; the Framework allowlist
+        // does not add authority, so policy and the effective catalog still
+        // decide which IDs are present.
+        request
+            .extensions
+            .insert(super::super::tools::native_tool_whitelist());
         self.attach_memory_backend(&context, &mut request.extensions);
         request.extensions.insert(HostExecution {
             harness: harness.clone(),

@@ -28,16 +28,7 @@ pub(super) fn normalize(response: &mut ModelResponse, tools: &[EffectiveTool]) {
                 } = envelope;
                 if let Some(tool) = tools.iter().find(|tool| tool.tool_name == name) {
                     let mut normalized = arguments;
-                    if let Some(items) = normalized.get_mut("items") {
-                        normalize_value(
-                            items,
-                            &serde_json::json!({
-                                "type": "array", "items": tool.input_schema,
-                            }),
-                        );
-                    } else {
-                        normalize_value(&mut normalized, &tool.input_schema);
-                    }
+                    normalize_arguments(&mut normalized, &tool.input_schema);
                     *input = serde_json::json!({
                         "tool": name,
                         "arguments": normalized,
@@ -49,7 +40,24 @@ pub(super) fn normalize(response: &mut ModelResponse, tools: &[EffectiveTool]) {
         let Some(tool) = tools.iter().find(|tool| tool.tool_name == *tool_name) else {
             continue;
         };
-        normalize_value(input, &tool.input_schema);
+        // Direct native calls and wrapped calls share the same schema-driven
+        // normalization; no tool name or separate batch wrapper is involved.
+        normalize_arguments(input, &tool.input_schema);
+    }
+}
+
+/// Normalize one tool's arguments against its real schema: a batch schema is
+/// consumed as-is, while an atomic schema projects the arguments' `items` array.
+fn normalize_arguments(value: &mut Value, schema: &Value) {
+    if schema.pointer("/properties/items").is_some() {
+        normalize_value(value, schema);
+    } else if let Some(items) = value.get_mut("items") {
+        normalize_value(
+            items,
+            &serde_json::json!({"type": "array", "items": schema}),
+        );
+    } else {
+        normalize_value(value, schema);
     }
 }
 

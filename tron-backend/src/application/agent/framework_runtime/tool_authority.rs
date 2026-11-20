@@ -48,7 +48,7 @@ pub(crate) fn map_authorized_descriptor(
     descriptor: &fw::ToolDescriptor,
     extensions: &fw::Extensions,
 ) -> Result<EffectiveTool, fw::AgentError> {
-    // The stable gateway pair is host infrastructure, not a business tool:
+    // The stable gateway trio is host infrastructure, not a business tool:
     // it is always visible and carries no product ACL entry.
     if eliteforge_agent_core::is_gateway_descriptor(descriptor) {
         return Ok(EffectiveTool {
@@ -167,7 +167,7 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         {
             return Ok(fw::ToolBindingAdmission::Exclude);
         }
-        // The stable gateway pair is host infrastructure: assignment modes and
+        // The stable gateway trio is host infrastructure: assignment modes and
         // the persisted platform tool table never scope or revoke it. Inner
         // tools are still fully checked below after envelope unwrapping.
         if eliteforge_agent_core::is_gateway_descriptor(&binding.descriptor) {
@@ -406,7 +406,7 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 .into_owned(),
             ));
         }
-        // The stable gateway pair is host infrastructure: executing discovery
+        // The stable gateway trio is host infrastructure: executing discovery
         // (or the defensive execute executor) never requires product tool
         // authority, mirroring the admission-side exemption.
         if eliteforge_agent_core::is_gateway_descriptor(invocation.descriptor) {
